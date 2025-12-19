@@ -1,0 +1,18 @@
+<svg width="1920" height="960" viewBox="0 0 1920 960" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="1920" height="960" fill="#0F172A"/>
+<circle cx="218" cy="184" r="300" fill="#4F46E5" fill-opacity="0.2"/>
+<circle cx="1650" cy="800" r="400" fill="#9333EA" fill-opacity="0.2"/>
+<g style="mix-blend-mode:overlay" opacity="0.3">
+<rect x="1460" y="180" width="300" height="400" rx="16" fill="white"/>
+<rect x="200" y="500" width="400" height="250" rx="16" fill="white"/>
+</g>
+<text x="960" y="460" font-family="Inter, sans-serif" font-weight="800" font-size="160" fill="white" text-anchor="middle" letter-spacing="-4">Genable</text>
+<text x="960" y="580" font-family="Inter, sans-serif" font-weight="500" font-size="48" fill="#94A3B8" text-anchor="middle">Design with AI. Chat to Create.</text>
+<path d="M960 220L985 305L1070 330L985 355L960 440L935 355L850 330L935 305L960 220Z" fill="url(#paint0_linear)"/>
+<defs>
+<linearGradient id="paint0_linear" x1="850" y1="220" x2="1070" y2="440" gradientUnits="userSpaceOnUse">
+<stop stop-color="#4F46E5"/>
+<stop offset="1" stop-color="#9333EA"/>
+</linearGradient>
+</defs>
+</svg>

@@ -1,0 +1,37 @@
+{
+  "dependencies": {
+    "@create-figma-plugin/ui": "^4.0.3",
+    "@create-figma-plugin/utilities": "^4.0.3",
+    "@google/generative-ai": "^0.24.1",
+    "preact": ">=10",
+    "prismjs": "1.29.0",
+    "react-simple-code-editor": "0.13.1",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@create-figma-plugin/build": "^4.0.3",
+    "@create-figma-plugin/tsconfig": "^4.0.3",
+    "@figma/plugin-typings": "1.109.0",
+    "@types/prismjs": "1.26.3",
+    "typescript": ">=5"
+  },
+  "scripts": {
+    "build": "build-figma-plugin --typecheck --minify",
+    "watch": "build-figma-plugin --typecheck --watch"
+  },
+  "figma-plugin": {
+    "editorType": [
+      "figma"
+    ],
+    "id": "1583731690321161934",
+    "name": "Genable",
+    "main": "src/main.ts",
+    "ui": "src/ui.tsx",
+    "documentAccess": "dynamic-page",
+    "networkAccess": {
+      "allowedDomains": [
+        "https://generativelanguage.googleapis.com"
+      ]
+    }
+  }
+}

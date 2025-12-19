@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+*.css.d.ts
+/build/
+/manifest.json
+node_modules/
+dist/
+coverage/
+.env
+.idea/
+.vscode/

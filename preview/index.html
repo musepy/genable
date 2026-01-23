@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Figma Plugin UI Preview</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        background: #1a1a1a;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .preview-container {
+        width: 320px;
+        height: 600px;
+        background: #2d2d2d;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        position: relative;
+      }
+
+      .preview-header {
+        background: #333;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid #444;
+      }
+
+      .preview-header-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .preview-header-dot.red {
+        background: #ff5f57;
+      }
+      .preview-header-dot.yellow {
+        background: #febc2e;
+      }
+      .preview-header-dot.green {
+        background: #28c840;
+      }
+
+      .preview-header-title {
+        flex: 1;
+        text-align: center;
+        color: #888;
+        font-size: 11px;
+      }
+
+      #app {
+        height: calc(100% - 33px);
+        overflow: hidden; /* Prevent double scrollbar, let plugin handle internal scrolling */
+        position: relative;
+        
+        /* 
+         * CRITICAL: Create a new stacking context for position:fixed elements.
+         * In real Figma, the plugin runs in an isolated iframe where fixed = relative to iframe.
+         * In Preview, we simulate this by creating a containing block for fixed descendants.
+         * transform: translateZ(0) forces a new stacking context without visual side effects.
+         */
+        transform: translateZ(0);
+      }
+      
+      /* Force plugin root to fit container instead of using 100vh */
+      #app > div {
+        height: 100% !important;
+      }
+
+      .controls {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 12px;
+        background: #333;
+        padding: 12px 20px;
+        border-radius: 8px;
+      }
+
+      .controls button {
+        background: #4a4a4a;
+        color: #fff;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .controls button:hover {
+        background: #5a5a5a;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-container">
+      <div class="preview-header">
+        <div class="preview-header-dot red"></div>
+        <div class="preview-header-dot yellow"></div>
+        <div class="preview-header-dot green"></div>
+        <span class="preview-header-title">Figma Plugin Preview</span>
+      </div>
+      <div id="app"></div>
+    </div>
+
+    <div class="controls">
+      <button onclick="toggleTheme()">Toggle Theme</button>
+      <button onclick="simulateSelection()">Mock Selection</button>
+    </div>
+
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

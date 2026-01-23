@@ -1,0 +1,403 @@
+[
+  {
+    "id": "1",
+    "type": "Trend Over Time",
+    "keywords": [
+      "trend",
+      "time-series",
+      "line",
+      "growth",
+      "timeline",
+      "progress"
+    ],
+    "bestChart": "Line Chart",
+    "secondaryOptions": "Area Chart, Smooth Area",
+    "colors": "Primary: #0080FF. Multiple series: use distinct colors. Fill: 20% opacity",
+    "performance": "⚡ Excellent (optimized)",
+    "accessibility": "✓ Clear line patterns for colorblind users. Add pattern overlays.",
+    "library": "Chart.js, Recharts, ApexCharts",
+    "interaction": "Hover + Zoom"
+  },
+  {
+    "id": "2",
+    "type": "Compare Categories",
+    "keywords": [
+      "compare",
+      "categories",
+      "bar",
+      "comparison",
+      "ranking"
+    ],
+    "bestChart": "Bar Chart (Horizontal or Vertical)",
+    "secondaryOptions": "Column Chart, Grouped Bar",
+    "colors": "Each bar: distinct color. Category: grouped same color. Sorted: descending order",
+    "performance": "⚡ Excellent",
+    "accessibility": "✓ Easy to compare. Add value labels on bars for clarity.",
+    "library": "Chart.js, Recharts, D3.js",
+    "interaction": "Hover + Sort"
+  },
+  {
+    "id": "3",
+    "type": "Part-to-Whole",
+    "keywords": [
+      "part-to-whole",
+      "pie",
+      "donut",
+      "percentage",
+      "proportion",
+      "share"
+    ],
+    "bestChart": "Pie Chart or Donut",
+    "secondaryOptions": "Stacked Bar, Treemap",
+    "colors": "Colors: 5-6 max. Contrasting palette. Large slices first. Use labels.",
+    "performance": "⚡ Good (limit 6 slices)",
+    "accessibility": "⚠ Hard for accessibility. Better: Stacked bar with legend. Avoid pie if >5 items.",
+    "library": "Chart.js, Recharts, D3.js",
+    "interaction": "Hover + Drill"
+  },
+  {
+    "id": "4",
+    "type": "Correlation/Distribution",
+    "keywords": [
+      "correlation",
+      "distribution",
+      "scatter",
+      "relationship",
+      "pattern"
+    ],
+    "bestChart": "Scatter Plot or Bubble Chart",
+    "secondaryOptions": "Heat Map, Matrix",
+    "colors": "Color axis: gradient (blue-red). Size: relative. Opacity: 0.6-0.8 to show density",
+    "performance": "⚠ Moderate (many points)",
+    "accessibility": "⚠ Provide data table alternative. Use pattern + color distinction.",
+    "library": "D3.js, Plotly, Recharts",
+    "interaction": "Hover + Brush"
+  },
+  {
+    "id": "5",
+    "type": "Heatmap/Intensity",
+    "keywords": [
+      "heatmap",
+      "heat-map",
+      "intensity",
+      "density",
+      "matrix"
+    ],
+    "bestChart": "Heat Map or Choropleth",
+    "secondaryOptions": "Grid Heat Map, Bubble Heat",
+    "colors": "Gradient: Cool (blue) to Hot (red). Scale: clear legend. Divergent for ±data",
+    "performance": "⚡ Excellent (color CSS)",
+    "accessibility": "⚠ Colorblind: Use pattern overlay. Provide numerical legend.",
+    "library": "D3.js, Plotly, ApexCharts",
+    "interaction": "Hover + Zoom"
+  },
+  {
+    "id": "6",
+    "type": "Geographic Data",
+    "keywords": [
+      "geographic",
+      "map",
+      "location",
+      "region",
+      "geo",
+      "spatial"
+    ],
+    "bestChart": "Choropleth Map, Bubble Map",
+    "secondaryOptions": "Geographic Heat Map",
+    "colors": "Regional: single color gradient or categorized colors. Legend: clear scale",
+    "performance": "⚠ Moderate (rendering)",
+    "accessibility": "⚠ Include text labels for regions. Provide data table alternative.",
+    "library": "D3.js, Mapbox, Leaflet",
+    "interaction": "Pan + Zoom + Drill"
+  },
+  {
+    "id": "7",
+    "type": "Funnel/Flow",
+    "keywords": [
+      "funnel/flow"
+    ],
+    "bestChart": "Funnel Chart, Sankey",
+    "secondaryOptions": "Waterfall (for flows)",
+    "colors": "Stages: gradient (starting color → ending color). Show conversion %",
+    "performance": "⚡ Good",
+    "accessibility": "✓ Clear stage labels + percentages. Good for accessibility if labeled.",
+    "library": "D3.js, Recharts, Custom SVG",
+    "interaction": "Hover + Drill"
+  },
+  {
+    "id": "8",
+    "type": "Performance vs Target",
+    "keywords": [
+      "performance-vs-target"
+    ],
+    "bestChart": "Gauge Chart or Bullet Chart",
+    "secondaryOptions": "Dial, Thermometer",
+    "colors": "Performance: Red→Yellow→Green gradient. Target: marker line. Threshold colors",
+    "performance": "⚡ Good",
+    "accessibility": "✓ Add numerical value + percentage label beside gauge.",
+    "library": "D3.js, ApexCharts, Custom SVG",
+    "interaction": "Hover"
+  },
+  {
+    "id": "9",
+    "type": "Time-Series Forecast",
+    "keywords": [
+      "time-series-forecast"
+    ],
+    "bestChart": "Line with Confidence Band",
+    "secondaryOptions": "Ribbon Chart",
+    "colors": "Actual: solid line #0080FF. Forecast: dashed #FF9500. Band: light shading",
+    "performance": "⚡ Good",
+    "accessibility": "✓ Clearly distinguish actual vs forecast. Add legend.",
+    "library": "Chart.js, ApexCharts, Plotly",
+    "interaction": "Hover + Toggle"
+  },
+  {
+    "id": "10",
+    "type": "Anomaly Detection",
+    "keywords": [
+      "anomaly-detection"
+    ],
+    "bestChart": "Line Chart with Highlights",
+    "secondaryOptions": "Scatter with Alert",
+    "colors": "Normal: blue #0080FF. Anomaly: red #FF0000 circle/square marker + alert",
+    "performance": "⚡ Good",
+    "accessibility": "✓ Circle/marker for anomalies. Add text alert annotation.",
+    "library": "D3.js, Plotly, ApexCharts",
+    "interaction": "Hover + Alert"
+  },
+  {
+    "id": "11",
+    "type": "Hierarchical/Nested Data",
+    "keywords": [
+      "hierarchical/nested-data"
+    ],
+    "bestChart": "Treemap",
+    "secondaryOptions": "Sunburst, Nested Donut, Icicle",
+    "colors": "Parent: distinct hues. Children: lighter shades. White borders 2-3px.",
+    "performance": "⚠ Moderate",
+    "accessibility": "⚠ Poor - provide table alternative. Label large areas.",
+    "library": "D3.js, Recharts, ApexCharts",
+    "interaction": "Hover + Drilldown"
+  },
+  {
+    "id": "12",
+    "type": "Flow/Process Data",
+    "keywords": [
+      "flow/process-data"
+    ],
+    "bestChart": "Sankey Diagram",
+    "secondaryOptions": "Alluvial, Chord Diagram",
+    "colors": "Gradient from source to target. Opacity 0.4-0.6 for flows.",
+    "performance": "⚠ Moderate",
+    "accessibility": "⚠ Poor - provide flow table alternative.",
+    "library": "D3.js (d3-sankey), Plotly",
+    "interaction": "Hover + Drilldown"
+  },
+  {
+    "id": "13",
+    "type": "Cumulative Changes",
+    "keywords": [
+      "cumulative-changes"
+    ],
+    "bestChart": "Waterfall Chart",
+    "secondaryOptions": "Stacked Bar, Cascade",
+    "colors": "Increases: #4CAF50. Decreases: #F44336. Start: #2196F3. End: #0D47A1.",
+    "performance": "⚡ Good",
+    "accessibility": "✓ Good - clear directional colors with labels.",
+    "library": "ApexCharts, Highcharts, Plotly",
+    "interaction": "Hover"
+  },
+  {
+    "id": "14",
+    "type": "Multi-Variable Comparison",
+    "keywords": [
+      "multi-variable-comparison"
+    ],
+    "bestChart": "Radar/Spider Chart",
+    "secondaryOptions": "Parallel Coordinates, Grouped Bar",
+    "colors": "Single: #0080FF 20% fill. Multiple: distinct colors per dataset.",
+    "performance": "⚡ Good",
+    "accessibility": "⚠ Moderate - limit 5-8 axes. Add data table.",
+    "library": "Chart.js, Recharts, ApexCharts",
+    "interaction": "Hover + Toggle"
+  },
+  {
+    "id": "15",
+    "type": "Stock/Trading OHLC",
+    "keywords": [
+      "stock/trading-ohlc"
+    ],
+    "bestChart": "Candlestick Chart",
+    "secondaryOptions": "OHLC Bar, Heikin-Ashi",
+    "colors": "Bullish: #26A69A. Bearish: #EF5350. Volume: 40% opacity below.",
+    "performance": "⚡ Good",
+    "accessibility": "⚠ Moderate - provide OHLC data table.",
+    "library": "Lightweight Charts (TradingView), ApexCharts",
+    "interaction": "Real-time + Hover + Zoom"
+  },
+  {
+    "id": "16",
+    "type": "Relationship/Connection Data",
+    "keywords": [
+      "relationship/connection-data"
+    ],
+    "bestChart": "Network Graph",
+    "secondaryOptions": "Hierarchical Tree, Adjacency Matrix",
+    "colors": "Node types: categorical colors. Edges: #90A4AE 60% opacity.",
+    "performance": "❌ Poor (500+ nodes struggles)",
+    "accessibility": "❌ Very Poor - provide adjacency list alternative.",
+    "library": "D3.js (d3-force), Vis.js, Cytoscape.js",
+    "interaction": "Drilldown + Hover + Drag"
+  },
+  {
+    "id": "17",
+    "type": "Distribution/Statistical",
+    "keywords": [
+      "distribution/statistical"
+    ],
+    "bestChart": "Box Plot",
+    "secondaryOptions": "Violin Plot, Beeswarm",
+    "colors": "Box: #BBDEFB. Border: #1976D2. Median: #D32F2F. Outliers: #F44336.",
+    "performance": "⚡ Excellent",
+    "accessibility": "✓ Good - include stats table (min, Q1, median, Q3, max).",
+    "library": "Plotly, D3.js, Chart.js (plugin)",
+    "interaction": "Hover"
+  },
+  {
+    "id": "18",
+    "type": "Performance vs Target (Compact)",
+    "keywords": [
+      "performance-vs-target-(compact)"
+    ],
+    "bestChart": "Bullet Chart",
+    "secondaryOptions": "Gauge, Progress Bar",
+    "colors": "Ranges: #FFCDD2, #FFF9C4, #C8E6C9. Performance: #1976D2. Target: black 3px.",
+    "performance": "⚡ Excellent",
+    "accessibility": "✓ Excellent - compact with clear values.",
+    "library": "D3.js, Plotly, Custom SVG",
+    "interaction": "Hover"
+  },
+  {
+    "id": "19",
+    "type": "Proportional/Percentage",
+    "keywords": [
+      "proportional/percentage"
+    ],
+    "bestChart": "Waffle Chart",
+    "secondaryOptions": "Pictogram, Stacked Bar 100%",
+    "colors": "10x10 grid. 3-5 categories max. 2-3px spacing between squares.",
+    "performance": "⚡ Good",
+    "accessibility": "✓ Good - better than pie for accessibility.",
+    "library": "D3.js, React-Waffle, Custom CSS Grid",
+    "interaction": "Hover"
+  },
+  {
+    "id": "20",
+    "type": "Hierarchical Proportional",
+    "keywords": [
+      "hierarchical-proportional"
+    ],
+    "bestChart": "Sunburst Chart",
+    "secondaryOptions": "Treemap, Icicle, Circle Packing",
+    "colors": "Center to outer: darker to lighter. 15-20% lighter per level.",
+    "performance": "⚠ Moderate",
+    "accessibility": "⚠ Poor - provide hierarchy table alternative.",
+    "library": "D3.js (d3-hierarchy), Recharts, ApexCharts",
+    "interaction": "Drilldown + Hover"
+  },
+  {
+    "id": "21",
+    "type": "Root Cause Analysis",
+    "keywords": [
+      "root cause",
+      "decomposition",
+      "tree",
+      "hierarchy",
+      "drill-down",
+      "ai-split"
+    ],
+    "bestChart": "Decomposition Tree",
+    "secondaryOptions": "Decision Tree, Flow Chart",
+    "colors": "Nodes: #2563EB (Primary) vs #EF4444 (Negative impact). Connectors: Neutral grey.",
+    "performance": "⚠ Moderate (calculation heavy)",
+    "accessibility": "✓ clear hierarchy. Allow keyboard navigation for nodes.",
+    "library": "Power BI (native), React-Flow, Custom D3.js",
+    "interaction": "Drill + Expand"
+  },
+  {
+    "id": "22",
+    "type": "3D Spatial Data",
+    "keywords": [
+      "3d",
+      "spatial",
+      "immersive",
+      "terrain",
+      "molecular",
+      "volumetric"
+    ],
+    "bestChart": "3D Scatter/Surface Plot",
+    "secondaryOptions": "Volumetric Rendering, Point Cloud",
+    "colors": "Depth cues: lighting/shading. Z-axis: color gradient (cool to warm).",
+    "performance": "❌ Heavy (WebGL required)",
+    "accessibility": "❌ Poor - requires alternative 2D view or data table.",
+    "library": "Three.js, Deck.gl, Plotly 3D",
+    "interaction": "Rotate + Zoom + VR"
+  },
+  {
+    "id": "23",
+    "type": "Real-Time Streaming",
+    "keywords": [
+      "streaming",
+      "real-time",
+      "ticker",
+      "live",
+      "velocity",
+      "pulse"
+    ],
+    "bestChart": "Streaming Area Chart",
+    "secondaryOptions": "Ticker Tape, Moving Gauge",
+    "colors": "Current: Bright Pulse (#00FF00). History: Fading opacity. Grid: Dark.",
+    "performance": "⚡ Optimized (canvas/webgl)",
+    "accessibility": "⚠ Flashing elements - provide pause button. High contrast.",
+    "library": "Smoothed D3.js",
+    "interaction": "CanvasJS"
+  },
+  {
+    "id": "24",
+    "type": "Sentiment/Emotion",
+    "keywords": [
+      "sentiment",
+      "emotion",
+      "nlp",
+      "opinion",
+      "feeling"
+    ],
+    "bestChart": "Word Cloud with Sentiment",
+    "secondaryOptions": "Sentiment Arc, Radar Chart",
+    "colors": "Positive: #22C55E. Negative: #EF4444. Neutral: #94A3B8. Size = Frequency.",
+    "performance": "⚡ Good",
+    "accessibility": "⚠ Word clouds poor for screen readers. Use list view.",
+    "library": "D3-cloud, Highcharts, Nivo",
+    "interaction": "Hover + Filter"
+  },
+  {
+    "id": "25",
+    "type": "Process Mining",
+    "keywords": [
+      "process",
+      "mining",
+      "variants",
+      "path",
+      "bottleneck",
+      "log"
+    ],
+    "bestChart": "Process Map / Graph",
+    "secondaryOptions": "Directed Acyclic Graph (DAG), Petri Net",
+    "colors": "Happy path: #10B981 (Thick). Deviations: #F59E0B (Thin). Bottlenecks: #EF4444.",
+    "performance": "⚠ Moderate to Heavy",
+    "accessibility": "⚠ Complex graphs hard to navigate. Provide path summary.",
+    "library": "React-Flow, Cytoscape.js, Recharts",
+    "interaction": "Drag + Node-Click"
+  }
+]

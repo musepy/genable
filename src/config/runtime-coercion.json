@@ -1,0 +1,31 @@
+{
+  "propertyAliases": {
+    "blur": "radius",
+    "shadowRadius": "radius",
+    "background": "fills",
+    "backgroundColor": "fills",
+    "border": "strokes",
+    "borderColor": "strokes",
+    "borderWidth": "strokeWeight"
+  },
+  "fontWeightMapping": {
+    "defaultFamily": "Inter",
+    "map": {
+      "100": "Thin",
+      "200": "Extra Light",
+      "300": "Light",
+      "400": "Regular",
+      "500": "Medium",
+      "600": "Semi Bold",
+      "700": "Bold",
+      "800": "Extra Bold",
+      "900": "Black",
+      "normal": "Regular",
+      "bold": "Bold"
+    }
+  },
+  "defaults": {
+    "lineHeightUnit": "PERCENT",
+    "textAutoResize": "WIDTH_AND_HEIGHT"
+  }
+}

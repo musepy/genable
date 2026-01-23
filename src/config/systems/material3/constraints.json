@@ -1,0 +1,148 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Material Design 3 semantic constraints",
+  "constraints": {
+    "BUTTON": {
+      "hMin": 24,
+      "hMax": 64,
+      "hDefault": 40,
+      "wMin": 64,
+      "paddingHorizontal": 24,
+      "gapDefault": 8,
+      "layoutSizingHorizontal": "HUG",
+      "layoutSizingVertical": "FIXED",
+      "cornerRadius": 20,
+      "priority": 8,
+      "variants": {
+        "compact": { "height": 32 },
+        "standard": { "height": 40 },
+        "extended": { "height": 56 }
+      }
+    },
+    "ICON_BUTTON": {
+      "hMin": 24,
+      "hMax": 64,
+      "hDefault": 40,
+      "aspectRatio": 1,
+      "layoutSizingVertical": "FIXED",
+      "priority": 8
+    },
+    "FAB": {
+      "hMin": 40,
+      "hMax": 96,
+      "hDefault": 56,
+      "aspectRatio": 1,
+      "cornerRadius": 16,
+      "layoutSizingVertical": "FIXED",
+      "priority": 9
+    },
+    "TEXT_FIELD": {
+      "hMin": 40,
+      "hMax": 72,
+      "hDefault": 56,
+      "wMin": 120,
+      "wDefault": 320,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "FIXED",
+      "cornerRadius": 4,
+      "priority": 7
+    },
+    "TEXT_AREA": {
+      "hMin": 80,
+      "hDefault": 120,
+      "wMin": 200,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "HUG",
+      "priority": 7
+    },
+    "SEARCH_BAR": {
+      "hMin": 40,
+      "hMax": 64,
+      "hDefault": 56,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "FIXED",
+      "priority": 7
+    },
+    "AVATAR": {
+      "wMin": 24,
+      "wMax": 128,
+      "wDefault": 40,
+      "aspectRatio": 1,
+      "cornerRadius": 999,
+      "layoutSizingHorizontal": "FIXED",
+      "layoutSizingVertical": "FIXED",
+      "priority": 6
+    },
+    "DIVIDER": {
+      "hFixed": 1,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "FIXED",
+      "priority": 10
+    },
+    "CARD": {
+      "paddingMin": 16,
+      "cornerRadius": 12,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "HUG",
+      "priority": 4
+    },
+    "SECTION": {
+      "paddingMin": 16,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "HUG",
+      "priority": 3
+    },
+    "NAV_BAR": {
+      "hMin": 48,
+      "hMax": 120,
+      "hDefault": 64,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "HUG",
+      "priority": 6
+    },
+    "ACTION_BAR": {
+      "hMin": 48,
+      "hMax": 96,
+      "hDefault": 56,
+      "paddingMin": 12,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "HUG",
+      "priority": 7
+    },
+    "MODAL": {
+      "paddingMin": 24,
+      "cornerRadius": 28,
+      "layoutSizingVertical": "HUG",
+      "priority": 8
+    },
+    "DATA_TABLE": {
+      "paddingMin": 0,
+      "layoutSizingHorizontal": "FILL",
+      "layoutSizingVertical": "HUG",
+      "gapDefault": 0,
+      "priority": 5
+    },
+    "BADGE": {
+      "hMin": 16,
+      "hMax": 32,
+      "layoutSizingHorizontal": "HUG",
+      "layoutSizingVertical": "FIXED",
+      "cornerRadius": 999,
+      "priority": 7
+    },
+    "CHIP": {
+      "hMin": 24,
+      "hMax": 48,
+      "hDefault": 32,
+      "layoutSizingHorizontal": "HUG",
+      "layoutSizingVertical": "FIXED",
+      "cornerRadius": 8,
+      "priority": 7
+    },
+    "DEFAULT": {
+      "layoutSizingHorizontal": "HUG",
+      "layoutSizingVertical": "HUG",
+      "priority": 0
+    }
+  }
+}

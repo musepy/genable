@@ -1,0 +1,26 @@
+{
+    "patterns": {
+        "COMPONENT_IDENTIFIERS": {
+            "BUTTON": "BUTTON",
+            "CARD": "CARD",
+            "INPUT": "INPUT",
+            "AVATAR": "AVATAR"
+        },
+        "NAMING_PATTERNS": {
+            "BUTTON": ["btn", "button", "cta", "action"],
+            "AVATAR": ["avatar", "user-image", "profile-pic"],
+            "CARD": ["card", "panel", "surface"]
+        },
+        "INTENT_KEYWORDS": {
+            "targets": {
+                "BUTTON": ["button", "fab", "chip"],
+                "CARD": ["card", "surface", "container"],
+                "SWITCH": ["switch", "toggle"]
+            },
+            "modifiers": {
+                "PRIMARY": ["primary", "filled", "tonal"],
+                "SECONDARY": ["secondary", "outlined", "text"]
+            }
+        }
+    }
+}

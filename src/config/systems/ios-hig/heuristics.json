@@ -1,0 +1,26 @@
+{
+    "heuristics": {
+        "appearance": {
+            "darkLuminanceThreshold": 0.35,
+            "subtleShadowOpacity": "0.1",
+            "defaultShadowColor": "#000000"
+        },
+        "text": {
+            "paragraphMinLength": 80,
+            "longTextThreshold": 40
+        },
+        "layout": {
+            "defaultCardPadding": 20,
+            "defaultCardRadius": 10,
+            "defaultButtonHeight": 44,
+            "containerWidth": 1140,
+            "smallComponentWidth": 100,
+            "wideComponentWidth": 760,
+            "emptyHeight": 180
+        },
+        "scoring": {
+            "standardSpacing": [4, 8, 10, 12, 16, 20, 24, 32, 40],
+            "standardRadii": [0, 5, 8, 10, 12, 20]
+        }
+    }
+}

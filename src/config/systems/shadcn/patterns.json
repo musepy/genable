@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Identity patterns for shadcn components",
+  "patterns": {
+    "COMPONENT_IDENTIFIERS": {
+      "BUTTON": "\\b(button|btn|cta|action)\\b",
+      "LIST_ITEM": "\\b(item|row|list|task|entry)\\b",
+      "SHADCN": "shadcn|tailwind|radix ui",
+      "IOS_STYLE": "\\b(ios|apple|app-icon|squircle)\\b",
+      "LAYOUT_COLUMN": "\\d+",
+      "DSL_START": "^(FRAME|TEXT|RECT|ICON|VEC)\\b"
+    },
+    "NAMING_PATTERNS": {
+      "button": ["button", "btn", "cta", "submit", "action", "按钮"],
+      "avatar": ["avatar", "profile", "user-image", "photo", "头像"],
+      "input": ["input", "textfield", "field", "search", "输入框"],
+      "card": ["card", "tile", "panel", "box", "卡片", "面板"],
+      "nav_bar": ["navbar", "nav-bar", "header", "topbar", "导航栏"],
+      "primary_action": ["follow", "submit", "primary", "sign in", "login", "register", "main", "filled", "solid", "主要", "蓝色", "实心"]
+    },
+    "INTENT_KEYWORDS": {
+      "targets": {
+        "Badge": ["tag", "badge", "chip", "label", "pill", "标签", "徽章"],
+        "Button": ["button", "btn", "cta", "按钮"],
+        "Card": ["card", "panel", "container", "box", "卡片", "面板"],
+        "Input": ["input", "textfield", "field", "输入框"]
+      },
+      "modifiers": {
+        "outline": ["outline", "bordered", "stroke", "边框", "描边", "空心"],
+        "ghost": ["ghost", "transparent", "flat", "text only", "透明", "纯文本"],
+        "destructive": ["danger", "error", "red", "delete", "remove", "warning", "红色", "删除", "警告"],
+        "success": ["success", "done", "check", "green", "绿色", "完成"],
+        "secondary": ["secondary", "gray", "grey", "muted", "次要", "灰色"],
+        "primary": ["primary", "main", "blue", "filled", "solid", "主要", "蓝色", "实心"],
+        "sm": ["small", "tiny", "mini", "compact", "小", "迷你"],
+        "lg": ["large", "big", "huge", "giant", "大", "巨大"],
+        "pill": ["pill", "rounded", "round", "circle", "circular", "圆角", "圆形"]
+      }
+    }
+  }
+}

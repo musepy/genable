@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "description": "Cross-session state sync for b35e03cd, generated from 0754d321",
+    "lastUpdated": "2026-01-21T13:22:00+08:00",
+    "sourceSession": "0754d321-8829-4856-a742-a509372426ea"
+  },
+  
+  "focus": {
+    "current": "知识合一 & 架构演进",
+    "attention": ["SHADCN/Anatomy 合并", "启用 PostProcessor"],
+    "parked": ["P3 用户意图标记"]
+  },
+
+  "hypotheses": [
+    {"id": "H-L", "name": "布局推导", "confidence": 95, "status": "已验证"},
+    {"id": "H-X", "name": "语义模板", "confidence": 90, "status": "已实现"},
+    {"id": "H-Z", "name": "最小工程化", "confidence": 95, "status": "核心原则"},
+    {"id": "H-DS", "name": "Schema 过度约束", "confidence": 95, "status": "已禁用"},
+    {"id": "H-100px", "name": "100px 魔法数字治理", "confidence": 99, "status": "已解决 (0754d321)"},
+    {"id": "H-Dual-Track", "name": "知识双轨制冲突", "confidence": 98, "status": "已诊断 (0754d321)"}
+  ],
+
+  "implementation": {
+    "queue": [
+      {"id": "知识合一", "name": "合并 SHADCN_PRESET 到 ANATOMY_REGISTRY", "status": "待启动"},
+      {"id": "语义检索", "name": "迁移 Anatomy 到 KnowledgeHub.searchAnatomy()", "status": "待设计"}
+    ],
+    "completed": [
+      {"id": "P0", "name": "移除 layoutMode required"},
+      {"id": "P1", "name": "扩展 ANATOMY_REGISTRY (7→24)"},
+      {"id": "P2", "name": "CorrectionLog 反馈"},
+      {"id": "方案A", "name": "统一后处理入口"},
+      {"id": "Zero-100px", "name": "100px 源头治理 (resize 1x1 + HUG 回退)"},
+      {"id": "Intent-First", "name": "意图优先方言映射"}
+    ]
+  },
+
+  "decisions": [
+    {"date": "2026-01-21", "decision": "Zero-100px Initiative", "rationale": "Figma 默认 100x100 是工具噪声"},
+    {"date": "2026-01-21", "decision": "识别知识双轨制", "rationale": "SHADCN_PRESET 与 ANATOMY_REGISTRY 冲突导致 Prompt 冗余"}
+  ]
+}

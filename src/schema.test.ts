@@ -1,0 +1,216 @@
+/**
+ * @file schema.test.ts
+ * @description Unit tests for DSL Schema validation and auto-healing (M2 Elastic Validation)
+ */
+
+import { describe, it, expect } from 'vitest';
+import { 
+  NodeSchema,
+  coerceNodeLayer,
+  NodeLayer
+} from './schema/layerSchema';
+
+// Helper to simulate the pipeline: Coerce -> Parse
+function parseElastic(input: any): NodeLayer {
+  const coerced = coerceNodeLayer(input);
+  return NodeSchema.parse(coerced);
+}
+
+describe('M2 Elastic Validation Strategy', () => {
+
+  describe('Layout Normalization', () => {
+    it('should normalize layout values to uppercase', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layout: 'vertical' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutMode).toBe('VERTICAL');
+    });
+
+    it('should map ROW aliases to HORIZONTAL', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layout: 'row' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutMode).toBe('HORIZONTAL');
+    });
+
+    it('should map COL aliases to VERTICAL', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layout: 'col' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutMode).toBe('VERTICAL');
+    });
+
+    it('should fallback to NONE for invalid values', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layout: 'spiral' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutMode).toBe('NONE');
+    });
+  });
+
+  describe('Semantic Type Normalization', () => {
+    it('should pass through valid semantic types', () => {
+      const input = { type: 'FRAME', props: { name: 'btn', semantic: 'BUTTON' } };
+      const result = parseElastic(input);
+      expect(result.props.semantic).toBe('BUTTON');
+    });
+
+    it('should normalize case', () => {
+      const input = { type: 'FRAME', props: { name: 'card', semantic: 'Card' } };
+      const result = parseElastic(input);
+      expect(result.props.semantic).toBe('CARD');
+    });
+
+    it('should resolve aliases (PARAGRAPH -> BODY)', () => {
+      const input = { type: 'TEXT', props: { content: 'p', semantic: 'PARAGRAPH' } };
+      const result = parseElastic(input);
+      expect(result.props.semantic).toBe('BODY');
+    });
+
+    it('should fallback to DEFAULT for unknown types', () => {
+      const input = { type: 'FRAME', props: { name: 'box', semantic: 'UNKNOWN_THING' } };
+      const result = parseElastic(input);
+      expect(result.props.semantic).toBe('DEFAULT');
+    });
+  });
+
+  describe('Sizing Mode Normalization', () => {
+    it('should normalize valid values to uppercase', () => {
+      const input = { type: 'FRAME', props: { name: 'box', layoutSizingHorizontal: 'fixed' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutSizingHorizontal).toBe('FIXED');
+    });
+
+    it('should map AUTO to HUG', () => {
+      const input = { type: 'FRAME', props: { name: 'box', layoutSizingVertical: 'auto' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutSizingVertical).toBe('HUG');
+    });
+
+    it('should map STRETCH to FILL', () => {
+      const input = { type: 'FRAME', props: { name: 'box', layoutSizingHorizontal: 'stretch' } };
+      const result = parseElastic(input);
+      expect(result.props.layoutSizingHorizontal).toBe('FILL');
+    });
+  });
+
+  describe('Numeric Coercion', () => {
+    it('should parse numeric strings for dimensions', () => {
+      const input = { 
+        type: 'FRAME', 
+        props: { 
+          name: 'box', 
+          width: '100', 
+          height: '50px',
+          gap: '8' 
+        } 
+      };
+      const result = parseElastic(input);
+      expect(result.props.width).toBe(100);
+      expect(result.props.height).toBe(50);
+      expect(result.props.gap).toBe(8);
+    });
+
+    it('should handle lineHeight percent strings', () => {
+      const input = { type: 'TEXT', props: { content: 'txt', lineHeight: '1.5' } };
+      const result = parseElastic(input);
+      // coerceNodeLayer logic: 1.5 -> 150%
+      expect(result.props.lineHeight).toEqual({ value: 150, unit: 'PERCENT' });
+    });
+  });
+
+  describe('Font Weight Auto-Healing', () => {
+    it('should convert numeric weights to names', () => {
+      const input = { type: 'TEXT', props: { content: 'txt', fontWeight: 700 } };
+      const result = parseElastic(input);
+      expect(result.props.fontWeight).toBe('Bold');
+    });
+
+    it('should normalize string weight names', () => {
+      const input = { type: 'TEXT', props: { content: 'txt', fontWeight: 'semibold' } };
+      const result = parseElastic(input);
+      expect(result.props.fontWeight).toBe('SemiBold');
+    });
+  });
+  
+  describe('Structure Validation', () => {
+     it('should validate valid FRAME node', () => {
+      const node = {
+        type: 'FRAME',
+        props: {
+          name: 'Container',
+          layout: 'VERTICAL',
+          width: 200,
+          height: 100
+        },
+        children: []
+      };
+
+      const result = parseElastic(node);
+      expect(result.type).toBe('FRAME');
+      expect(result.props.layoutMode).toBe('VERTICAL');
+    });
+
+    it('should handle missing optional properties with defaults', () => {
+      const node = {
+        type: 'TEXT',
+        props: {}
+      };
+
+      const result = parseElastic(node);
+      expect(result.props.characters).toBe('Text');
+      expect(result.props.semantic).toBe('DEFAULT');
+    });
+  });
+
+  describe('LLM Output Edge Cases', () => {
+    it('should wrap array output in FRAME container', () => {
+      // LLM sometimes returns an array instead of an object
+      const arrayInput = [
+        { type: 'TEXT', props: { content: 'Hello' } },
+        { type: 'TEXT', props: { content: 'World' } }
+      ];
+
+      const result = parseElastic(arrayInput);
+      expect(result.type).toBe('FRAME');
+      expect(result.props.name).toBe('Generated Container');
+      expect(result.children).toHaveLength(2);
+    });
+
+    it('should generate name for TEXT nodes from content', () => {
+      const input = {
+        type: 'TEXT',
+        props: { content: 'This is a long description text that should be truncated' }
+      };
+
+      const result = parseElastic(input);
+      expect(result.props.name).toBe('This is a long descr...');
+    });
+
+    it('should add layout to FRAME with children', () => {
+      const input = {
+        type: 'FRAME',
+        props: { name: 'Container' },
+        children: [
+          { type: 'TEXT', props: { content: 'Child 1' } }
+        ]
+      };
+
+      const result = parseElastic(input);
+      expect(result.props.layoutMode).toBe('VERTICAL');
+    });
+
+    it('should remove width when layoutSizingHorizontal is HUG', () => {
+      const input = {
+        type: 'FRAME',
+        props: { 
+          name: 'HugFrame',
+          layoutSizingHorizontal: 'HUG',
+          width: 200,  // This should be removed
+          layout: 'VERTICAL'
+        }
+      };
+
+      const result = parseElastic(input);
+      expect(result.props.layoutSizingHorizontal).toBe('HUG');
+      expect(result.props.width).toBeUndefined();
+    });
+  });
+
+});

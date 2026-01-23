@@ -1,32 +1,94 @@
-# Genable
+# Figma AI Generator (Genable)
 
 ![Cover](./assets/cover.svg)
 
-**Genable** is a Figma plugin that uses Google's Gemini AI to generate editable UI components from text prompts.
+**Figma AI Generator** is an advanced Figma plugin that leverages Google's Gemini AI to generate semantically correct, editable UI components from natural language prompts. It features a dual-thread architecture and a "Pure Trust" sanitization engine to ensure high-fidelity design reproduction.
 
-## Features
+---
 
--   **AI-Powered Generation:** Create complex layouts (Forms, Cards, Dashboards) using natural language.
--   **Native Figma Nodes:** Outputs Auto Layout frames, Text nodes, and basic Vectors.
--   **Context Awareness:** Can read styles (Colors, Fonts) from your current selection to match the generated design.
--   **Privacy Focused:** Your API key is stored locally in `localStorage`.
+## 🌟 Key Features (v1.0.0)
 
-## Installation
+-   **Intelligent Intent Recognition:** Uses dynamic pattern matching to understand user intent (e.g., "Create a dashboard" vs. "Add a button") rather than heuristic guessing.
+-   **Pure Trust Engine:** Respects LLM design intent by preserving stylistic choices (strokes, fills) on generic frames, avoiding aggressive over-sanitization.
+-   **Unified Property Mapping:** Standardized DSL layer ensures consistent property translation between the Gemini LLM and Figma's SceneGraph.
+-   **Knowledge-Driven Generation:** RAG-enhanced generation using a curated component knowledge base (`src/knowledge`).
+-   **Native Figma Quality:** Outputs production-ready Auto Layout frames, responsive text, and vector networks.
 
-1.  Clone this repository.
-2.  Run `npm install`.
-3.  Run `npm run build`.
-4.  In Figma, go to **Plugins > Development > Import plugin from manifest...** and select `manifest.json`.
+---
 
-## Usage
+## 🏗 Architecture
 
-1.  Open the plugin "Genable".
-2.  Paste your Gemini API Key.
-3.  Type a prompt like: *"A mobile profile screen with a circular avatar, stats row, and a settings list."*
-4.  Hit Generate.
+This plugin adopts Figma's **dual-thread architecture** to ensure performance and security:
 
-## Roadmap
+```mermaid
+graph LR
+    subgraph "UI Thread (React/Preact)"
+        A[ui.tsx] --> B[Context Builder]
+        B --> C[Gemini API Client]
+        C --> D[Schema Validator]
+    end
+    
+    subgraph "Sandbox Thread (Figma)"
+        E[main.ts] --> F[Layer Renderer]
+        F --> G[Figma Scene Graph]
+    end
+    
+    D -->|postMessage| E
+    E -->|postMessage| A
+```
 
--   **v1.1:** Streaming responses (visual feedback while generating).
--   **v1.2:** Support for Figma styles (Effect Styles, Text Styles).
--   **v2.0:** "Refine" mode – modifying existing designs via chat.
+| Thread | Responsibility | Access |
+|--------|----------------|--------|
+| **UI Thread** | Prompt processing, LLM communication, State management | Network, LocalStorage |
+| **Sandbox Thread** | Node creation, Layout engine, Property application | Figma Document API |
+
+---
+
+## 🚀 Usage
+
+1.  **Install**: Load the plugin manifest in Figma Desktop (`Plugins > Development > Import manifest...`).
+2.  **Configure**: Enter your Gemini API Key (stored locally).
+3.  **Generate**:
+    -   *Simple*: "A primary button with an icon."
+    -   *Complex*: "A dark-mode analytics dashboard with a sidebar, header, and data grid."
+4.  **Refine**: The plugin uses context from your current selection to match styles.
+
+---
+
+## 🛠 Development
+
+### Prerequisites
+- Node.js v18+
+- Figma Desktop App
+
+### Setup
+```bash
+git clone <repo-url>
+npm install
+npm run build
+```
+
+### Folder Structure
+- `src/main.ts`: Sandbox thread entry point.
+- `src/ui.tsx`: UI thread entry point.
+- `src/engine/`: Core logic for layout, rendering, and LLM client.
+- `src/knowledge/`: Component patterns and anatomy registry.
+
+### Releasing
+Run the standard build command to generate the `dist/` artifacts:
+```bash
+npm run build
+```
+
+---
+
+## 🔒 Security & Privacy
+
+-   **Local Key Storage**: API keys are stored in `localStorage` and never transmitted to our servers.
+-   **Direct Communication**: The plugin communicates directly with Google's Generative AI API.
+
+---
+
+## 📜 License
+
+[MIT](./LICENSE)

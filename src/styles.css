@@ -1,10 +1,19 @@
+/* ================================================
+   GENABLE PLUGIN - Minimal Base Styles
+   ================================================ */
+
+/* Reset/Normalize */
+* {
+  box-sizing: border-box;
+}
+
+/* Legacy support for code editor component */
 .container {
   overflow: auto;
-  height: 164px;
 }
 
 .editor {
   min-height: 100%;
-  font-family: var(--font-family-code);
-  font-size: var(--font-size-12);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, monospace;
+  font-size: 11px;
 }

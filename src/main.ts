@@ -1,7 +1,10 @@
+import './utils/compatibility';
 import { on, showUI, emit } from '@create-figma-plugin/utilities'
-import { 
+import type { 
   CloseHandler, 
+  ClearStreamHandler,
   CreateLayersHandler, 
+  StreamLayersHandler,
   NodeLayer, 
   GetVariablesHandler, 
   SendVariablesHandler,
@@ -18,139 +21,206 @@ import {
   GetLocalComponentsHandler,
   SendLocalComponentsHandler
 } from './types'
-import { parseColor } from './utils/colorUtils';
-import { DesignSystemConfig } from './types/designSystem';
 import { figmaVariableCache } from './engine/figma-adapter/caches/figmaVariableCache'
 import { getActiveEngineConfig } from './engine/engineConfig'
-import { renderNodeDSL, initializeRenderers } from './engine/figma-adapter/renderers'
+import { renderOrchestrator } from './engine/pipeline/RenderOrchestrator'
+import { initializeRenderers } from './engine/figma-adapter/renderers'
 import { NodeSerializer } from './engine/figma-adapter/nodeSerializer';
+import { TreeReconstructor } from './engine/figma-adapter/treeReconstructor';
 import { DEFAULT_MODEL } from './ui/constants/models'
+import { PaintResolver } from './engine/pipeline/PaintResolver';
+import { RenderLifecycleManager } from './engine/pipeline/RenderLifecycleManager';
+import { StreamBufferManager } from './engine/pipeline/StreamBufferManager';
+import { generateLayout } from './engine/llm-client/generator';
+import { GenerationPhase } from './engine/llm-client/types';
+import { throttle } from './utils/throttle';
 
-// Build Version (replaced at build time by build.js)
-// Handles Variables, Styles, and Literal colors using SSOT
-async function createPaint(input: any, config?: DesignSystemConfig): Promise<Paint | null> {
-    if (!input) return null;
-
-    if (typeof input === 'string') {
-        const normalized = input.trim().toLowerCase();
-        
-        // 1. Explicit Variable Binding
-        if (normalized.startsWith('variable:')) {
-            const varName = input.split(':').slice(1).join(':').trim();
-            const foundVar = figmaVariableCache.getVariable(varName);
-            if (foundVar && foundVar.resolvedType === 'COLOR') {
-                const paint: SolidPaint = { type: 'SOLID', color: { r: 0, g: 0, b: 0 } };
-                return figma.variables.setBoundVariableForPaint(paint, 'color', foundVar);
-            }
-        }
-
-        // 2. Token/Style Resolution
-        const isLiteral = normalized.startsWith('#') || normalized.startsWith('rgba') || normalized.startsWith('rgb');
-        if (!isLiteral) {
-            // Check Variables Map
-            const foundVar = figmaVariableCache.getVariable(normalized);
-            if (foundVar && foundVar.resolvedType === 'COLOR') {
-                const paint: SolidPaint = { type: 'SOLID', color: { r: 0, g: 0, b: 0 } };
-                return figma.variables.setBoundVariableForPaint(paint, 'color', foundVar);
-            }
-            // Check Paint Styles
-            const style = figmaVariableCache.getStyle(normalized);
-            if (style && style.paints.length > 0) return style.paints[0];
-        }
-    }
-
-    // 3. Literal Color Fallback
-    try {
-        const c = parseColor(input);
-        return { type: 'SOLID', color: { r: c.r, g: c.g, b: c.b }, opacity: c.a };
-    } catch (e) {
-        return null;
-    }
-}
+const streamRoots = new Map<string, SceneNode>();
+const throttledRenderers = new Map<string, (...args: any[]) => void>();
 
 export default function () {
-  // 🔧 Startup Log: Verify if new code is running
-  console.log(`[Genable] 🚀 Plugin started | Strategy-Registry Active`);
+  console.log(`[Genable] 🚀 Plugin started | State-Driven Architecture`);
 
-  on<CreateLayersHandler>('CREATE_LAYERS', async function (data: any) {
-    const { 
-      designSystemId, 
-      renderContext, 
-      __traceId,     
-      ...layerData   
-    } = data;
-    
-    const activeConfig = getActiveEngineConfig(designSystemId);
+  initializeRenderers(
+      (color) => PaintResolver.resolve(color),
+      []
+  );
 
-    // [P8.2] Initialize Renderers with dynamic dependencies
-    initializeRenderers(
-        (color) => createPaint(color, activeConfig),
-        [] // Components will be fetched if needed
-    );
-
-    const explicitContext = {
-      parent: figma.currentPage,
-      depth: 0,
-      designSystem: activeConfig,
-      viewport: renderContext ? {
-          width: renderContext.width,
-          height: renderContext.height,
-          isMobile: renderContext.isMobile
-      } : undefined
-    };
-
-    emit<SendLogHandler>('SEND_LOG', { 
-        message: `Generating Layers (${layerData.name || 'Untitled'})...`, 
-        type: 'info' 
-    });
-
-    try {
-      await figmaVariableCache.warmup();
-
-      const fontsToLoad = [
-        { family: 'Inter', style: 'Regular' },
-        { family: 'Inter', style: 'Medium' },
-        { family: 'Inter', style: 'SemiBold' },
-        { family: 'Inter', style: 'Bold' }
-      ];
-      await Promise.all(fontsToLoad.map(font => 
-        figma.loadFontAsync(font).catch(err => console.warn(`[Main] Font load failed: ${font.family} ${font.style}`, err))
-      ));
-      
-      const viewportCenter = figma.viewport.center;
-      
-      // [V6] Use Strategy-Registry Pattern
-      const rootNode = await renderNodeDSL(layerData, explicitContext as any);
-      
-      if (rootNode) {
-        // [FIX] Position at captured viewport center
-        const center = viewportCenter;
-        const positionedNode = rootNode as SceneNode & { x: number, y: number };
-
-        if ('width' in rootNode && 'height' in rootNode) {
-            positionedNode.x = center.x - (rootNode.width / 2);
-            positionedNode.y = center.y - (rootNode.height / 2);
-        } else {
-            positionedNode.x = center.x;
-            positionedNode.y = center.y;
-        }
-
-        figma.currentPage.selection = [rootNode];
-        figma.viewport.scrollAndZoomIntoView([rootNode]);
-        
-        emit<SendLogHandler>('SEND_LOG', { 
-            message: `Generation Complete!`, 
-            type: 'success' 
-        });
-      }
-    } catch (error: any) {
-        console.error('Render Error:', error);
-        emit<SendLogHandler>('SEND_LOG', { 
-            message: `Error: ${error.message}`, 
-            type: 'warn' 
-        });
+  on<ClearStreamHandler>('CLEAR_STREAM', function (data: { streamSessionId: string }) {
+    const existing = streamRoots.get(data.streamSessionId);
+    if (existing) {
+      RenderLifecycleManager.safeRemove(existing);
+      streamRoots.delete(data.streamSessionId);
     }
-  })
+    StreamBufferManager.clear(data.streamSessionId);
+  });
+
+  /**
+   * Unified Generation Entry Point
+   * Now driven by internal state.
+   */
+  async function generate(options: {
+    apiKey: string,
+    modelName: string,
+    systemPrompt: string,
+    userPrompt: string,
+    designSystemId: string,
+    sessionId: string,
+    streaming?: boolean
+  }) {
+      try {
+          const result = await generateLayout({
+              ...options,
+              onStateChange: (state: any) => {
+                  // 1. Sync State Manager
+                  StreamBufferManager.updateState(state.sessionId, state);
+                  
+                  // 2. Handle Progress Logging (UI Feedback)
+                  if (state.progress) {
+                      emit<SendLogHandler>('SEND_LOG', { 
+                          message: state.progress, 
+                          type: state.phase === GenerationPhase.ERROR ? 'warn' : 'info' 
+                      });
+                  }
+
+                  // 3. Handle Streaming Render (Throttled Declarative Trigger)
+                  const node = (state as any).node;
+                  if (node) {
+                      const root = StreamBufferManager.addNode(state.sessionId, node);
+                      if (root) {
+                          // Get or create throttled renderer for this session
+                          // 150ms is a good balance between responsiveness and flicker reduction
+                          let throttled = throttledRenderers.get(state.sessionId);
+                          if (!throttled) {
+                              throttled = throttle((data: any) => {
+                                  handleUnifiedRender(data, true);
+                              }, 150);
+                              throttledRenderers.set(state.sessionId, throttled);
+                          }
+
+                          throttled({ 
+                              ...root, 
+                              designSystemId: options.designSystemId,
+                              streamSessionId: state.sessionId 
+                          });
+                      }
+                  }
+              }
+          });
+
+          // Final Render for non-streaming or completion
+          // Ensure we clear the throttled renderer for this session
+          throttledRenderers.delete(options.sessionId);
+
+          handleUnifiedRender({
+              ...result.data,
+              designSystemId: options.designSystemId,
+              streamSessionId: options.sessionId
+          }, false);
+
+      } catch (error: any) {
+          emit<SendLogHandler>('SEND_LOG', { message: `Error: ${error.message}`, type: 'warn' });
+      }
+  }
+
+  /**
+   * Internal Rendering Core
+   */
+  async function handleUnifiedRender(data: any, isStream: boolean) {
+      const { 
+        designSystemId, 
+        renderContext, 
+        streamSessionId,
+        meta,
+        __modifyMode,
+        __modifyTargetId,
+        ...layerData   
+      } = data;
+      
+      const currentStreamId = streamSessionId || meta?.replaceStreamSessionId;
+      const existingStreamRoot = currentStreamId ? streamRoots.get(currentStreamId) : null;
+      
+      const placement = RenderLifecycleManager.resolvePlacement(
+          (__modifyMode && __modifyTargetId) ? figma.getNodeById(__modifyTargetId) as SceneNode : null,
+          existingStreamRoot as SceneNode
+      );
+
+      const activeConfig = getActiveEngineConfig(designSystemId);
+      const traceId = streamSessionId || meta?.traceId || 'unified';
+
+      const rootNode = await renderOrchestrator.process({
+          layerData: layerData as NodeLayer,
+          designSystemId,
+          designSystemConfig: activeConfig,
+          renderContext: renderContext,
+          meta: { 
+              traceId, 
+              isStream, 
+              position: placement.position,
+              positionStrategy: placement.strategy as any,
+              viewportCenter: figma.viewport.center,
+              parent: placement.parent,
+              insertIndex: placement.index
+          }
+      });
+
+      if (rootNode) {
+          if (existingStreamRoot && rootNode !== existingStreamRoot) {
+            RenderLifecycleManager.safeRemove(existingStreamRoot);
+          }
+          
+          if (isStream && streamSessionId) {
+            streamRoots.set(streamSessionId, rootNode);
+          } else if (!isStream) {
+            if (meta?.replaceStreamSessionId) {
+              streamRoots.delete(meta.replaceStreamSessionId);
+              StreamBufferManager.clear(meta.replaceStreamSessionId);
+            }
+            figma.currentPage.selection = [rootNode];
+            figma.viewport.scrollAndZoomIntoView([rootNode]);
+            emit<SendLogHandler>('SEND_LOG', { message: `Generation Complete!`, type: 'success' });
+          }
+      }
+  }
+
+  // Simplified entry points mapping directly from UI events
+  on<StreamLayersHandler>('STREAM_LAYERS', (data: any) => {
+      const { streamSessionId, designSystemId, renderContext, ...node } = data;
+      
+      if (streamSessionId) {
+          const root = StreamBufferManager.addNode(streamSessionId, node as any);
+          if (root) {
+              let throttled = throttledRenderers.get(streamSessionId);
+              if (!throttled) {
+                  throttled = throttle((renderData: any) => {
+                      handleUnifiedRender(renderData, true);
+                  }, 150);
+                  throttledRenderers.set(streamSessionId, throttled);
+              }
+              throttled({ 
+                  ...root, 
+                  designSystemId: designSystemId || 'vanilla',
+                  streamSessionId: streamSessionId,
+                  renderContext,
+                  meta: { traceId: streamSessionId }
+              });
+          }
+      } else {
+          handleUnifiedRender({
+            ...data,
+            meta: { ...data.meta, traceId: data.streamSessionId || data.meta?.traceId }
+          }, true);
+      }
+  });
+  
+  on<CreateLayersHandler>('CREATE_LAYERS', (data) => {
+      // Same here - handle it if it's already pre-parsed data, 
+      // but usually the generation starts from LLM.
+      handleUnifiedRender(data, false);
+  });
+
+  // [TODO]: Add on('START_GENERATION') for the new coordinated flow
+
 
   on<GetVariablesHandler>('GET_VARIABLES', async function () {
     try {
@@ -178,13 +248,8 @@ export default function () {
     };
 
     if (selection.length > 0) {
-        // Use Unified Serializer to capture full context
         styles.selectionNodes = selection.map(node => NodeSerializer.serialize(node));
-        
-        // Extract top-level layout as reference
-        const primary = selection[0];
         const serialized = styles.selectionNodes[0];
-        
         if (serialized.props) {
             styles.referenceLayout = {
                 width: serialized.props.width || 0,
@@ -199,22 +264,6 @@ export default function () {
                 }
             };
         }
-
-        // Aggregate styles for legacy UI compatibility
-        styles.selectionNodes.forEach(node => {
-            const p = node.props as any;
-            if (p.fills && Array.isArray(p.fills)) {
-                p.fills.forEach((f: string) => {
-                    if (!styles.colors.includes(f)) styles.colors.push(f);
-                });
-            }
-            if (p.cornerRadius && !styles.cornerRadius.includes(p.cornerRadius)) {
-                styles.cornerRadius.push(p.cornerRadius);
-            }
-            if (p.fontFamily && !styles.fonts.includes(p.fontFamily)) {
-                styles.fonts.push(p.fontFamily);
-            }
-        });
     }
 
     emit<SendSelectionStylesHandler>('SEND_SELECTION_STYLES', styles);
@@ -235,26 +284,47 @@ export default function () {
     figma.closePlugin()
   })
 
-
   on<GetLibraryResourcesHandler>('GET_LIBRARY_RESOURCES', async function () {
-    // [Implementation]: Fetch available library variables/styles
-    // For now, we return specific keys if needed, or empty list
-    // This is a placeholder for future Context Awareness
     emit<SendLibraryResourcesHandler>('SEND_LIBRARY_RESOURCES', { resources: [] });
   })
 
   on<GetLocalComponentsHandler>('GET_LOCAL_COMPONENTS', async function () {
-    // [Implementation]: Fetch local components for reference
-    // [Fix]: Limit search to current page to comply with 'dynamic-page' access
     const localComponents = figma.currentPage.findAllWithCriteria({ types: ['COMPONENT', 'COMPONENT_SET'] });
     const componentsData = localComponents.map(c => ({
         key: c.key,
         name: c.name,
         description: c.description,
-        type: c.type,
+        type: c.type as any,
         isLibrary: false
     }));
     emit<SendLocalComponentsHandler>('SEND_LOCAL_COMPONENTS', { components: componentsData });
+  })
+
+  // Dogfood/Dev Feature: Manual JSON Import
+  on<import('./types').ImportJsonHandler>('IMPORT_JSON', function (data: { jsonString: string }) {
+    try {
+      console.log('[Genable] Importing JSON layers...');
+      const flatNodes = JSON.parse(data.jsonString);
+      
+      // Reconstruct Tree from Flat JSON
+      const { root } = new TreeReconstructor().reconstruct(flatNodes);
+      
+      if (root) {
+        // Reuse unified render flow
+        handleUnifiedRender({
+          ...root,
+          designSystemId: 'vanilla',
+          streamSessionId: 'manual-import-' + Date.now(),
+          meta: { traceId: 'manual-import' }
+        }, false);
+        emit<SendLogHandler>('SEND_LOG', { message: 'JSON Imported Successfully', type: 'success' });
+      } else {
+        emit<SendLogHandler>('SEND_LOG', { message: 'Failed to reconstruct node tree', type: 'warn' });
+      }
+    } catch (e: any) {
+      console.error('JSON Import Error', e);
+      emit<SendLogHandler>('SEND_LOG', { message: `Import Failed: ${e.message}`, type: 'warn' });
+    }
   })
 
   showUI({
@@ -262,9 +332,3 @@ export default function () {
     width: 340
   })
 }
-
-function rgbToHex(r: number, g: number, b: number): string {
-    const toHex = (c: number) => Math.round(c * 255).toString(16).padStart(2, '0');
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
-}
-

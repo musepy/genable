@@ -47,9 +47,17 @@ export class FlowObserver {
      * Start a new trace session or resume an existing one
      */
     public startTrace(id?: string): string {
-        this.traceId = id || Math.random().toString(36).substring(2, 9).toUpperCase();
-        this.events = [];
-        this.log(FlowPhase.PROMPT, `${id ? 'Resuming' : 'Starting new'} generation trace: ${this.traceId}`);
+        const newTraceId = id || Math.random().toString(36).substring(2, 9).toUpperCase();
+        
+        // Only reset if it's actually a new or different trace
+        if (newTraceId !== this.traceId) {
+            this.traceId = newTraceId;
+            this.events = [];
+            this.log(FlowPhase.PROMPT, `${id ? 'Resuming' : 'Starting new'} generation trace: ${this.traceId}`);
+        } else {
+            this.log(FlowPhase.PROMPT, `Continuing current trace: ${this.traceId}`);
+        }
+        
         return this.traceId;
     }
 

@@ -14,6 +14,8 @@ export interface ParseResult {
   format?: 'json';
   warnings?: string[];
   error?: string;
+  rawJson?: string;
+  cleanedText?: string;
 }
 
 /**
@@ -42,38 +44,97 @@ export function parseHybrid(text: string): ParseResult {
 
   // Strategy: JSON only
   if (isJSONFormat(cleaned)) {
-    return tryParseJSON(cleaned);
+    const direct = tryParseJSON(cleaned, cleaned);
+    if (direct.success) {
+      return direct;
+    }
+    const extracted = extractJsonBlock(cleaned);
+    if (extracted && extracted !== cleaned) {
+      return tryParseJSON(extracted, cleaned);
+    }
+    return direct;
   }
 
-  // Fallback if not starting with {
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    return tryParseJSON(jsonMatch[0]);
+  const extracted = extractJsonBlock(cleaned);
+  if (extracted) {
+    return tryParseJSON(extracted, cleaned);
   }
 
   return {
     success: false,
     error: 'Failed to find valid JSON in response',
+    cleanedText: cleaned
   };
 }
 
 /**
  * Try to parse as JSON with coercion
  */
-function tryParseJSON(text: string): ParseResult {
+function tryParseJSON(text: string, cleanedText: string): ParseResult {
   try {
     const data = JSON.parse(text);
     return {
       success: true,
       data,
       format: 'json',
+      rawJson: text,
+      cleanedText
     };
   } catch (e) {
     return {
       success: false,
       error: (e as Error).message,
+      rawJson: text,
+      cleanedText
     };
   }
+}
+
+function extractJsonBlock(text: string): string | null {
+  const startIndex = text.search(/[\[{]/);
+  if (startIndex === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        isEscaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{' || char === '[') {
+      depth++;
+      continue;
+    }
+
+    if (char === '}' || char === ']') {
+      depth--;
+      if (depth === 0) {
+        return text.slice(startIndex, i + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 /**

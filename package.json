@@ -14,7 +14,8 @@
     "prismjs": "1.29.0",
     "react-markdown": "^10.1.0",
     "react-simple-code-editor": "0.13.1",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "valibot": "^1.2.0"
   },
   "devDependencies": {
     "@create-figma-plugin/build": "^4.0.3",
@@ -38,8 +39,7 @@
     "typescript": ">=5",
     "vite": "^6.2.0",
     "vitest": "^4.0.16",
-    "ws": "^8.18.3",
-    "zod": "^4.2.1"
+    "ws": "^8.18.3"
   },
   "scripts": {
     "build": "node build.js",

@@ -12,9 +12,10 @@ export interface Settings {
 }
 
 export interface SelectionStyles {
-  colors: string[];
-  fonts: string[];
-  cornerRadius: number[];
+  // Aggregate styles for legacy UI compatibility (Deprecated - favor selectionNodes)
+  colors?: string[];
+  fonts?: string[];
+  cornerRadius?: number[];
   selectedName?: string; // For UI feedback
   // Context: The layout structure of the user's selection (if any)
   referenceLayout?: {
@@ -51,8 +52,29 @@ export interface CreateLayersHandler extends EventHandler {
       width: number;
       height: number;
       isMobile: boolean;
-    }
+    };
+    meta?: {
+      replaceStreamSessionId?: string;
+    };
   }) => void;
+}
+
+export interface StreamLayersHandler extends EventHandler {
+  name: 'STREAM_LAYERS';
+  handler: (data: NodeLayer & { 
+    designSystemId?: string; 
+    streamSessionId: string;
+    renderContext?: {
+      width: number;
+      height: number;
+      isMobile: boolean;
+    };
+  }) => void;
+}
+
+export interface ClearStreamHandler extends EventHandler {
+  name: 'CLEAR_STREAM';
+  handler: (data: { streamSessionId: string }) => void;
 }
 
 export interface CloseHandler extends EventHandler {
@@ -157,6 +179,11 @@ export interface GetLocalComponentsHandler extends EventHandler {
 export interface SendLocalComponentsHandler extends EventHandler {
   name: 'SEND_LOCAL_COMPONENTS';
   handler: (data: { components: LocalComponent[] }) => void;
+}
+
+export interface ImportJsonHandler extends EventHandler {
+  name: 'IMPORT_JSON';
+  handler: (data: { jsonString: string }) => void;
 }
 
 // ==========================================

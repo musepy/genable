@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import * as v from 'valibot';
 import { NodeLayerSchema, coerceNodeLayer } from './schema/layerSchema';
 import { NODE_TYPES, PROPS } from './constants/figma-api';
 
 function parseElastic(input: any) {
   const coerced = coerceNodeLayer(input);
-  return NodeLayerSchema.parse(coerced);
+  return v.parse(NodeLayerSchema, coerced);
 }
 
 describe('Phase 2: New Node Types Schema Validation', () => {

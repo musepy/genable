@@ -35,12 +35,18 @@ function resolveIconIdentity(node: NodeLayer): IconIdentity {
   const props = node.props || {};
   const name = props.name || '';
   const iconNameProp = (props as any).iconName;
+  const normalizeIconName = (iconName: string | undefined): string | undefined => {
+    if (!iconName) return undefined;
+    const trimmed = iconName.trim().replace(/\s+/g, '-');
+    if (trimmed.includes(':')) return trimmed;
+    return `lucide:${trimmed}`;
+  };
 
   // 1. Check Semantic Tag (Future-proof)
   if (props.semantic === 'ICON') {
     return { 
       isIcon: true, 
-      iconName: iconNameProp || name,
+      iconName: normalizeIconName(iconNameProp || name),
       originalProps: props 
     };
   }
@@ -49,7 +55,7 @@ function resolveIconIdentity(node: NodeLayer): IconIdentity {
   if (node.type === 'ICON') {
     return { 
       isIcon: true, 
-      iconName: iconNameProp,
+      iconName: normalizeIconName(iconNameProp || name),
       originalProps: props 
     };
   }
@@ -61,7 +67,7 @@ function resolveIconIdentity(node: NodeLayer): IconIdentity {
     if (isIconifyName) {
       return { 
         isIcon: true, 
-        iconName: name, 
+        iconName: normalizeIconName(name), 
         originalProps: props 
       };
     }

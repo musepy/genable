@@ -98,6 +98,19 @@ export class IconRenderer extends BaseRenderer {
     frame.resize(width, height);
     frame.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 } }];
     frame.cornerRadius = 4;
+    
+    // V6.1: Observability Label
+    const text = figma.createText();
+    // FontBus ensures Inter Regular is loaded
+    text.fontName = { family: 'Inter', style: 'Regular' };
+    text.characters = `Icon: ${name}\nNot Found`;
+    text.fontSize = Math.max(4, width / 6);
+    text.textAlignHorizontal = 'CENTER';
+    text.textAlignVertical = 'CENTER';
+    
+    frame.appendChild(text);
+    text.resize(width, height);
+    
     return frame;
   }
 

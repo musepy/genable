@@ -33,7 +33,12 @@ export class FigmaVariableCache {
             if (typeof figma !== 'undefined' && figma.variables) {
                 const variables = await figma.variables.getLocalVariablesAsync();
                 variables.forEach(v => {
-                    this.variableMap.set(v.name.toLowerCase(), v);
+                    const fullName = v.name.toLowerCase();
+                    this.variableMap.set(fullName, v);
+                    const shortName = fullName.split('/').pop();
+                    if (shortName && !this.variableMap.has(shortName)) {
+                        this.variableMap.set(shortName, v);
+                    }
                 });
             }
 
@@ -41,7 +46,12 @@ export class FigmaVariableCache {
             if (typeof figma !== 'undefined') {
                 const paintStyles = await figma.getLocalPaintStylesAsync();
                 paintStyles.forEach(s => {
-                    this.styleMap.set(s.name.toLowerCase(), s);
+                    const fullName = s.name.toLowerCase();
+                    this.styleMap.set(fullName, s);
+                    const shortName = fullName.split('/').pop();
+                    if (shortName && !this.styleMap.has(shortName)) {
+                        this.styleMap.set(shortName, s);
+                    }
                 });
             }
 

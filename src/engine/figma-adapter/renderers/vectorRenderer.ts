@@ -86,11 +86,11 @@ export class VectorRenderer extends BaseRenderer {
         // 2. Partial Resizing
         // If semantic 'h1' (height=1) is present but width is 'FILL' (undefined),
         // we must still apply the height constraint.
-        const targetW = props.width ?? r.width;
-        const targetH = props.height ?? r.height;
+        const targetW = PropertyTransformer.deserialize(props.width ?? node.width, PROPS.width);
+        const targetH = PropertyTransformer.deserialize(props.height ?? node.height, PROPS.height);
 
         if (props.width !== undefined || props.height !== undefined) {
-            r.resize(targetW, targetH);
+            r.resize(Math.max(1, targetW), Math.max(1, targetH));
         }
 
         // ========== Strokes ==========

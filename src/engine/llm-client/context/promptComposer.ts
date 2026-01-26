@@ -1,38 +1,31 @@
-
-import { PromptDependencies, FeatureFlags } from '../../../types/context';
+import { PromptDependencies } from '../../../types/context';
 import { PROMPT_SECTION_REGISTRY } from './sectionRegistry';
-import { isEnabled } from '../../../constants/featureFlags';
+import { configManager } from '../../../config/configManager';
 
-/**
- * Composes the final System Prompt by assembling active sections from the registry.
- * 
- * @param deps Explicit dependencies required by sections
- * @param extraContext Additional dynamic context (like isModifyMode, originalTextContent)
- * @returns The fully assembled system prompt string
- */
 export function composeSystemPrompt(
     deps: PromptDependencies,
     extraContext: Record<string, any> = {}
 ): string {
-    // 1. Gather Feature Flags
-    const flags: FeatureFlags = {
-        USE_TOKEN_SLOT_SYSTEM: isEnabled('USE_TOKEN_SLOT_SYSTEM'),
-        // Add other flags as needed
+    // 1. Resolve State from Config & Context
+    const activeFlags: Record<string, boolean> = {
+        USE_TOKEN_SLOT_SYSTEM: configManager.isEnabled('USE_TOKEN_SLOT_SYSTEM'),
+        USE_PHYSICS_ENGINE_V2: configManager.isEnabled('USE_PHYSICS_ENGINE_V2'),
+        TRUST_LLM_SEMANTIC_FIRST: configManager.isEnabled('TRUST_LLM_SEMANTIC_FIRST')
     };
 
     // 2. Filter & Sort Sections
     const activeSections = PROMPT_SECTION_REGISTRY
-        .filter(section => {
+        .filter((section: any) => {
             // If enabled predicate exists, check it
             if (section.enabled) {
-                return section.enabled(flags);
+                return section.enabled(activeFlags as any);
             }
             return true; // Default to enabled
         })
-        .sort((a, b) => a.priority - b.priority);
+        .sort((a: any, b: any) => a.priority - b.priority);
 
     // 3. Build Content
-    const parts = activeSections.map(section => {
+    const parts = activeSections.map((section: any) => {
         try {
            return section.builder(deps, extraContext);
         } catch (error) {

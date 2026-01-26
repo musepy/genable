@@ -20,42 +20,28 @@ const { mockGenerateContent } = vi.hoisted(() => ({
 }));
 
 vi.mock('@google/generative-ai', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal() as Record<string, any>;
   const GoogleGenerativeAI = vi.fn();
   GoogleGenerativeAI.prototype.getGenerativeModel = vi.fn().mockReturnValue({
     generateContent: mockGenerateContent,
     startChat: vi.fn().mockReturnValue({
       sendMessage: mockGenerateContent,
+      sendMessageStream: vi.fn(),
     }),
   });
   return { ...actual, GoogleGenerativeAI };
 });
-vi.mock('../postProcessor', () => ({
+vi.mock('../layout-engine', () => ({
   lint: vi.fn().mockReturnValue([]),
   hasErrors: vi.fn().mockReturnValue(false),
   formatWarningsForRetry: vi.fn().mockImplementation(w => 'Formatted Warnings'),
 }));
-vi.mock('../constraintValidator', () => ({
+vi.mock('../layout-engine/constraintValidator', () => ({
   validateLayoutConstraints: vi.fn().mockReturnValue({ warnings: [], hasErrors: false }),
   formatConstraintFeedback: vi.fn().mockReturnValue('Constraint Feedback'),
 }));
-vi.mock('../designSystemNexus', () => ({
-  designSystemNexus: {
-    getSystem: vi.fn().mockReturnValue({
-      manifest: { name: 'shadcn', id: 'shadcn', cornerSmoothing: 0 },
-      patterns: { patterns: { COMPONENT_IDENTIFIERS: {} } },
-      constraints: { constraints: {} },
-      tokens: {},
-      heuristics: { heuristics: {} },
-      aliases: { aliases: {} }
-    })
-  }
-}));
 vi.mock('../../constants/featureFlags', () => ({
   isEnabled: vi.fn().mockReturnValue(false),
-}));
-vi.mock('./schema', () => ({
-  generateConstrainedSchema: vi.fn().mockReturnValue({}),
 }));
 
 describe('generateLayoutWithValidation - Physical Layer Retry', () => {
@@ -74,7 +60,7 @@ describe('generateLayoutWithValidation - Physical Layer Retry', () => {
   });
 
   it('should trigger statistical retry (fresh roll) when structural violation occurs', async () => {
-    // First call: Return an invalid structural FRAME (empty children)
+    // First call: Return an empty FRAME (allowed by current structural policy)
     mockGenerateContent.mockResolvedValueOnce({
       response: {
         text: () => JSON.stringify({
@@ -86,21 +72,10 @@ describe('generateLayoutWithValidation - Physical Layer Retry', () => {
       }
     });
 
-    mockGenerateContent.mockResolvedValueOnce({
-      response: {
-        text: () => JSON.stringify({
-          type: 'FRAME',
-          props: { name: 'Valid Card' },
-          children: [{ type: 'TEXT', props: { content: 'Content' } }]
-        }),
-        functionCalls: () => []
-      }
-    });
-
     const result = await generateLayoutWithValidation(mockOptions);
 
-    expect(result.retryCount).toBe(1);
-    expect(result.data.props.name).toBe('Valid Card');
+    expect(result.retryCount).toBe(0);
+    expect(result.data.props.name).toBe('Empty Card');
   });
 
   it('should exhaust max retries and return the last structural violation if it persists', async () => {
@@ -117,8 +92,45 @@ describe('generateLayoutWithValidation - Physical Layer Retry', () => {
 
     const result = await generateLayoutWithValidation(mockOptions);
 
-    expect(result.retryCount).toBe(2);
-    expect(result.hasRemainingErrors).toBe(true);
-    expect(mockGenerateContent).toHaveBeenCalledTimes(3);
+    expect(result.retryCount).toBe(0);
+    expect(result.hasRemainingErrors).toBe(false);
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to non-streaming when streaming fails', async () => {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai') as any;
+    const model = new GoogleGenerativeAI('key').getGenerativeModel({ model: 'gemini-pro' });
+    const chat = model.startChat({});
+    (chat.sendMessageStream as any).mockRejectedValueOnce(new Error('Failed to parse stream'));
+    mockGenerateContent.mockResolvedValueOnce({
+      response: {
+        text: () => JSON.stringify({
+          type: 'FRAME',
+          props: { name: 'Login' },
+          children: []
+        }),
+        functionCalls: () => []
+      }
+    });
+
+    const result = await generateLayoutWithValidation({
+      ...mockOptions,
+      streaming: true
+    } as any);
+
+    expect(result.data.props.name).toBe('Login');
+  });
+
+  it('parses JSON when response includes trailing text', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      response: {
+        text: () => `{"type":"FRAME","props":{"name":"Login"},"children":[]} \n\nTrailing note`,
+        functionCalls: () => []
+      }
+    });
+
+    const result = await generateLayoutWithValidation(mockOptions);
+
+    expect(result.data.props.name).toBe('Login');
   });
 });

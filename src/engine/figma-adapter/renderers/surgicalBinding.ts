@@ -120,10 +120,13 @@ export async function swapWithInstance(
     localComponents: ComponentMap[]
 ): Promise<InstanceNode | null> {
     // 1. Precise Match: Search for a component whose name matches the frame name or semantic intent
-    const target = localComponents.find(c => 
-        c.name.toLowerCase() === frame.name.toLowerCase() || 
-        c.name.toLowerCase() === semanticType.toLowerCase()
-    );
+    const frameNameLower = String(frame.name || '').toLowerCase();
+    const semanticTypeLower = String(semanticType || '').toLowerCase();
+
+    const target = localComponents.find(c => {
+        const componentNameLower = String(c.name || '').toLowerCase();
+        return componentNameLower === frameNameLower || componentNameLower === semanticTypeLower;
+    });
 
     if (!target) return null;
 

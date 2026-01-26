@@ -8,24 +8,25 @@
 
 import { PROP_METADATA, PROPS } from '../../constants/figma-api';
 import { rgbToHex } from '../../utils/colorUtils';
+import { FigmaNodeData } from './figmaNodeData';
 
 export class PropertyTransformer {
     /**
      * SERIALIZE: Figma API -> DSL
-     * Extracts a property from a Figma node and converts it to its DSL representation.
+     * Extracts a property from a Figma node data and converts it to its DSL representation.
      * 
-     * @param node - The source Figma node
+     * @param nodeData - The source Figma node data (IR)
      * @param dslKey - The target key in our DSL (from PROPS)
      * @returns The DSL-compatible value
      */
-    static serialize(node: SceneNode, dslKey: string): any {
+    static serialize(nodeData: FigmaNodeData, dslKey: string): any {
         const meta = PROP_METADATA[dslKey];
         if (!meta) return undefined;
 
         // 1. Direct Field Extraction (if not virtual)
         let figmaValue: any = undefined;
         if (meta.type !== 'virtual') {
-            figmaValue = (node as any)[meta.figmaKey];
+            figmaValue = nodeData[meta.figmaKey];
         }
 
         // 2. Transformation Logic based on type
@@ -55,7 +56,7 @@ export class PropertyTransformer {
 
             case 'virtual':
                 // Logic for properties that don't exist directly on the node object
-                return this.extractVirtualProperty(node, dslKey);
+                return this.extractVirtualProperty(nodeData, dslKey);
 
             case 'array':
                 // For complex arrays like effects
@@ -92,9 +93,14 @@ export class PropertyTransformer {
                 return dslValue;
 
             case 'scalar':
+                if (dslValue === null || dslValue === undefined) return 0;
                 if (typeof dslValue === 'string' && !dslValue.startsWith('$')) {
                     const parsed = parseFloat(dslValue);
                     return isNaN(parsed) ? 0 : parsed;
+                }
+                // V6.1 FIX: Prevent number NaN leak
+                if (typeof dslValue === 'number') {
+                    return isNaN(dslValue) ? 0 : dslValue;
                 }
                 return dslValue;
 
@@ -109,12 +115,12 @@ export class PropertyTransformer {
     /**
      * Internal: Handle properties that require specific logic to extract
      */
-    private static extractVirtualProperty(node: SceneNode, dslKey: string): any {
+    private static extractVirtualProperty(nodeData: FigmaNodeData, dslKey: string): any {
         switch (dslKey) {
             case PROPS.fontFamily:
-                return 'fontName' in node ? (node.fontName as FontName).family : undefined;
+                return nodeData.fontName ? (nodeData.fontName as FontName).family : undefined;
             case PROPS.fontWeight:
-                return 'fontName' in node ? (node.fontName as FontName).style : undefined;
+                return nodeData.fontName ? (nodeData.fontName as FontName).style : undefined;
             case PROPS.semantic:
                 // [PURE TRUST] Removed naming-based inference. Trusted to LLM/props only.
                 return undefined;
@@ -144,5 +150,36 @@ export class PropertyTransformer {
             });
         }
         return figmaValue;
+    }
+
+    /**
+     * DIFF: compare DSL value with existing Figma node state
+     * Returns true if they are functionally equal, allowing the renderer to skip the write.
+     */
+    static isEqual(nodeData: FigmaNodeData, dslKey: string, dslValue: any): boolean {
+        // 1. Serialize current state
+        const currentState = this.serialize(nodeData, dslKey);
+
+        // 2. Perform comparison based on prop type
+        const meta = PROP_METADATA[dslKey];
+        if (!meta) return false;
+
+        if (meta.type === 'scalar' || meta.type === 'string' || meta.type === 'enum') {
+            return currentState === dslValue;
+        }
+
+        if (meta.type === 'color') {
+            // Colors are often arrays of hex strings ["#FFFFFF"]
+            if (!Array.isArray(currentState) || !Array.isArray(dslValue)) return false;
+            if (currentState.length !== dslValue.length) return false;
+            return currentState.every((v, i) => String(v).toUpperCase() === String(dslValue[i]).toUpperCase());
+        }
+
+        if (meta.type === 'array') {
+            // Complex arrays like effects require deep comparison
+            return JSON.stringify(currentState) === JSON.stringify(dslValue);
+        }
+
+        return false;
     }
 }

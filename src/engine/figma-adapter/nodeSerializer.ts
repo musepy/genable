@@ -6,9 +6,10 @@
  * This ensures the LLM receives data in the EXACT same format it is expected to output.
  */
 
-import { NodeLayer } from '../../schema/layerSchema';
-import { PROPS, NODE_TYPES } from '../../constants/figma-api';
+import type { NodeLayer } from '../../schema/layerSchema';
+import { PROPS, NODE_TYPES, PROP_METADATA } from '../../constants/figma-api';
 import { PropertyTransformer } from './propertyTransformer';
+import { extractFigmaNodeData } from './figmaNodeData';
 
 export class NodeSerializer {
     /**
@@ -24,11 +25,13 @@ export class NodeSerializer {
         // 2. Extract Properties using Unified Transformer
         const props: Record<string, any> = {};
         
+        // [V8] Extract plain data IR first
+        const nodeData = extractFigmaNodeData(node, Object.values(PROP_METADATA).map(m => m.figmaKey));
+
         // We iterate over PROPS (our SSOT allowlist) to ensure we only extract what we support
         Object.values(PROPS).forEach(dslKey => {
-            const value = PropertyTransformer.serialize(node, dslKey);
+            const value = PropertyTransformer.serialize(nodeData, dslKey);
             if (value !== undefined && value !== null) {
-                // Skip empty arrays for cleaner output
                 if (Array.isArray(value) && value.length === 0) return;
                 
                 props[dslKey] = value;

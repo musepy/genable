@@ -289,21 +289,46 @@ export class FrameRenderer extends BaseRenderer {
         }
 
         const f = node as FrameNode;
+        const previousChildren = [...f.children];
+        const currentFigmaChildren = new Set<SceneNode>();
+
         const childContext: RenderContext = {
             parent: f,
             depth: context.depth + 1,
-            // [FIX] SSOT: Use actual node layout mode
             parentLayoutMode: f.layoutMode,
-            // [P7.1] [FIX] SSOT: Use actual node sizing for HUG/FILL paradox detection
-            parentSizingHorizontal: f.layoutSizingHorizontal,
-            parentSizingVertical: f.layoutSizingVertical,
-            // [P7.2] Pass viewport context through the tree
             viewport: context.viewport,
             designSystem: context.designSystem
         };
 
-        for (const childDSL of dsl.children) {
-            await this.childRendererFn(childDSL, childContext);
+        // 1. Render/Update Children
+        for (let i = 0; i < dsl.children.length; i++) {
+            const childDSL = dsl.children[i];
+            const childNode = await this.childRendererFn(childDSL, childContext);
+            if (childNode) {
+                currentFigmaChildren.add(childNode);
+                
+                // [V7] Ensure Order Consistency (Z-Index)
+                // If it's not at the correct index, move it
+                if (f.children[i] !== childNode) {
+                    f.insertChild(i, childNode);
+                }
+            }
+        }
+
+        // 2. UNMOUNT Logic: Remove children that are no longer in DSL
+        // We ONLY remove them if they are in our Registry (managed by us)
+        const { isNodeManaged } = require('../../pipeline/RenderOrchestrator');
+
+        for (const existingChild of previousChildren) {
+            if (!currentFigmaChildren.has(existingChild) && isNodeManaged(existingChild)) {
+                try {
+                    if (!existingChild.removed) {
+                        existingChild.remove();
+                    }
+                } catch (e) {
+                    // Node already removed or inaccessible
+                }
+            }
         }
     }
 }

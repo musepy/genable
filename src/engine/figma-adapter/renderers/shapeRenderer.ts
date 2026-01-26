@@ -29,9 +29,12 @@ export class ShapeRenderer extends BaseRenderer {
         const props = dsl.props;
 
         // 1. Resize (Handled here as shapes are not always AutoLayout)
-        if (props.width !== undefined && props.height !== undefined) {
+        const targetW = PropertyTransformer.deserialize(props.width ?? (node as any).width, PROPS.width);
+        const targetH = PropertyTransformer.deserialize(props.height ?? (node as any).height, PROPS.height);
+
+        if (props.width !== undefined || props.height !== undefined) {
              if ('resize' in node) {
-                node.resize(props.width, props.height);
+                (node as any).resize(Math.max(1, targetW), Math.max(1, targetH));
              }
         }
 

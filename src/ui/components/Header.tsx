@@ -7,7 +7,9 @@
  */
 
 import { h } from 'preact';
-import { Plus, Settings, Sun, Moon } from 'lucide-preact';
+import { Plus, Settings, Sun, Moon, Braces } from 'lucide-preact';
+import { emit } from '@create-figma-plugin/utilities';
+import { ImportJsonHandler } from '../../types';
 import { tokens, componentStyles } from '../design-system/tokens';
 import { headerStyle } from '../styles';
 import { t } from '../i18n';
@@ -108,6 +110,91 @@ export function Header({
         title="Settings"
       >
         <Settings size={16} strokeWidth={2} />
+      </button>
+
+      {/* Dev: Import JSON */}
+      <button
+        style={{
+          width: 28, // Match height of tokens
+          height: 28,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+          color: tokens.colors.textSecondary,
+          border: 'none',
+          borderRadius: 'var(--radius-full)',
+          cursor: 'pointer',
+          transition: 'var(--transition-crisp)',
+          marginRight: tokens.space[1],
+        }}
+        onClick={() => {
+          const json = window.prompt("Paste Genable JSON here:");
+          if (json) {
+            try {
+              // Validate JSON structure simply
+              JSON.parse(json);
+              emit<ImportJsonHandler>('IMPORT_JSON', { jsonString: json });
+            } catch (e) {
+              console.error('Invalid JSON', e);
+              // Simple feedback
+              // alert('Invalid JSON'); // Alert might be blocked or ugly
+            }
+          }
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = tokens.colors.surface;
+          e.currentTarget.style.color = tokens.colors.textPrimary;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = tokens.colors.textSecondary;
+        }}
+        title="Result JSON (Dev)"
+      >
+        <Braces size={16} strokeWidth={2} />
+      </button>
+
+      {/* Dev: Import JSON */}
+      <button
+        style={{
+          width: 28, // Match height of tokens
+          height: 28,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+          color: tokens.colors.textSecondary,
+          border: 'none',
+          borderRadius: 'var(--radius-full)',
+          cursor: 'pointer',
+          transition: 'var(--transition-crisp)',
+          marginRight: tokens.space[1],
+        }}
+        onClick={() => {
+          const json = window.prompt("Paste Genable JSON here:");
+          if (json) {
+            // Lazy import emit to avoid circular deps if any, or just assume it's global? 
+            // Header is a dumb component, usually callbacks are passed in.
+            // But for this Dev feature, we'll emit directly or better, pass a handler.
+            // Requirement said "Robust". Passing handler is better but involves plumbing.
+            // Given "Don't create helper scripts... use standard tools", and `emit` is a standard tool here.
+            // Need to import `emit`.
+            // Wait, Header.tsx doesn't import `emit`.
+            // Let's modify imports first.
+          }
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = tokens.colors.surface;
+          e.currentTarget.style.color = tokens.colors.textPrimary;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = tokens.colors.textSecondary;
+        }}
+        title="Import JSON (Dev)"
+      >
+        <Braces size={16} strokeWidth={2} />
       </button>
       
       {/* Theme Toggle */}

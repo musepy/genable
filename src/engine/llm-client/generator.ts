@@ -16,11 +16,12 @@ import { FlatNode, coerceNodeLayer } from '../../schema/layerSchema';
 
 import { GEMINI_CONFIG, DEFAULT_THINKING_LEVEL } from './config';
 import { isGemini3Model } from './modelFilter';
-import { GenerateLayoutOptions, SafeCandidate, GenerateLayoutWithRetryOptions, GenerateLayoutWithRetryResult } from './types';
+import { GenerateLayoutOptions, SafeCandidate, GenerateLayoutWithRetryOptions, GenerateLayoutWithRetryResult, GenerationPhase } from './types';
 import { lint, hasErrors, formatWarningsForRetry } from '../layout-engine';
 import { validateLayoutConstraints, formatConstraintFeedback, ConstraintValidationResult } from '../layout-engine/constraintValidator';
 import { parseHybrid } from './hybridParser';
 import { isEnabled } from '../../constants/featureFlags';
+import { JsonStreamParser } from '../../utils/jsonStreamParser';
 
 /**
  * Generate layout from user prompt using Gemini API
@@ -36,12 +37,26 @@ export async function generateLayout(
     history = [],
     onProgress,
     onThinking,
+    onStreamNode,
+    onStateChange,
     streaming = false,
     thinkingLevel = DEFAULT_THINKING_LEVEL,
     designSystemId = 'vanilla',
   } = options;
   
-  onProgress?.('Understanding your design...');
+  const sessionId = (options as any).sessionId || 'default';
+
+  const updateState = (phase: GenerationPhase, progress?: string, extra?: Record<string, any>) => {
+    onStateChange?.({
+      sessionId,
+      phase,
+      progress,
+      ...extra
+    });
+    if (progress) onProgress?.(progress);
+  };
+
+  updateState(GenerationPhase.UNDERSTANDING, 'Understanding your design...');
   
   let text = '';
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -55,19 +70,18 @@ export async function generateLayout(
     generationConfig.thinkingConfig = { thinkingLevel };
   }
 
-  // Always request JSON format (prompt-only guidance; no responseJsonSchema)
-  generationConfig.responseMimeType = 'application/json';
-  // Intentionally avoid responseJsonSchema + tool calling.
-  // These features have shown poor stability (especially when combined).
+  if (!streaming) {
+    generationConfig.responseMimeType = 'application/json';
+  }
 
   const model = genAI.getGenerativeModel({ 
     model: modelName,
     generationConfig: generationConfig as any,
   });
 
-  console.log(`[Generator] Active Config: MaxTokens=${GEMINI_CONFIG.MAX_OUTPUT_TOKENS}, Timeout=${GEMINI_CONFIG.REQUEST_TIMEOUT_MS}ms`);
+  console.log(`[Generator] Active Config: MaxTokens=${GEMINI_CONFIG.MAX_OUTPUT_TOKENS}`);
 
-  onProgress?.('Preparing context...');
+  updateState(GenerationPhase.PREPARING, 'Preparing context...');
   
   const chat = model.startChat({
     history: [
@@ -77,47 +91,100 @@ export async function generateLayout(
     ],
   });
 
-  onProgress?.('Generating layout...');
+  updateState(GenerationPhase.GENERATING, 'Generating layout...');
   
-  if (streaming && onThinking) {
-    const stream = await chat.sendMessageStream(userPrompt);
-    for await (const chunk of stream.stream) {
-      text += chunk.text();
-      const candidate = chunk.candidates?.[0] as SafeCandidate | undefined;
-      const thoughts = candidate?.content?.thoughts;
-      if (thoughts && Array.isArray(thoughts)) {
-        onThinking(thoughts.join('\n'));
-      } else if (text.length > 0) {
-        onThinking(`Generating... ${text.length} chars`);
+  if (streaming) {
+    let streamError: any = null;
+    let stream: any;
+    const parser = new JsonStreamParser();
+
+    try {
+      stream = await chat.sendMessageStream(userPrompt);
+    } catch (e: any) {
+      streamError = e;
+    }
+
+    if (options.onStreamNode) {
+      parser.onValue = (value: any) => {
+        try {
+          if (!value || typeof value !== 'object') return;
+          options.onStreamNode?.(value);
+          updateState(GenerationPhase.GENERATING, undefined, { node: value });
+        } catch (e) {}
+      };
+    }
+
+    if (!streamError && stream?.stream) {
+      try {
+        for await (const chunk of stream.stream) {
+          const chunkText = chunk.text();
+          text += chunkText;
+          
+          try {
+            parser.feed(chunkText);
+          } catch(e) {}
+
+          const candidate = chunk.candidates?.[0] as SafeCandidate | undefined;
+          const thoughts = candidate?.content?.thoughts;
+          if (thoughts && Array.isArray(thoughts)) {
+            const thoughtStr = thoughts.join('\n');
+            onThinking?.(thoughtStr);
+            updateState(GenerationPhase.GENERATING, `Generating... ${text.length} chars`, { 
+                thoughts: thoughtStr,
+                count: text.length 
+            });
+          } else if (text.length > 0) {
+            onThinking?.(`Generating... ${text.length} chars`);
+            updateState(GenerationPhase.GENERATING, `Generating... ${text.length} chars`, { count: text.length });
+          }
+        }
+      } catch (e: any) {
+        streamError = e;
+      }
+    }
+
+    if (streamError) {
+      updateState(GenerationPhase.GENERATING, 'Streaming failed, falling back...', { error: streamError?.message });
+      console.warn('[Generator] Streaming failed, falling back to non-streaming:', streamError?.message);
+      try {
+        updateState(GenerationPhase.GENERATING, 'Waiting for Gemini response...');
+        const result = await chat.sendMessage(userPrompt);
+        const response = await result.response;
+        text = response.text();
+      } catch (e: any) {
+        updateState(GenerationPhase.ERROR, 'Generation failed', { error: e.message });
+        throw e;
       }
     }
   } else {
     try {
-      onProgress?.('Waiting for Gemini response...');
-      // [Gemini Protocol] No client-side timeout. Trust the model and network.
+      updateState(GenerationPhase.GENERATING, 'Waiting for Gemini response...');
       const result = await chat.sendMessage(userPrompt);
-
       const response = await result.response;
       text = response.text();
-    } finally {}
+    } catch (e: any) {
+      updateState(GenerationPhase.ERROR, 'Generation failed', { error: e.message });
+      throw e;
+    }
   }
   
-  onProgress?.('Parsing response...');
+  updateState(GenerationPhase.PARSING, 'Parsing response...');
   text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
   const parseResult = parseHybrid(text);
+  const parsedJson = parseResult.rawJson ?? text;
   const isFlatMode = Array.isArray(parseResult.data);
 
-  if (isTruncatedOutput(text)) {
+  if (isTruncatedOutput(parsedJson)) {
     if (isFlatMode && parseResult.data.length > 0) {
         onProgress?.('Recovering from truncation...');
     } else {
-        throw new Error(formatErrorForUser(createTruncatedError(text)));
+        throw new Error(formatErrorForUser(createTruncatedError(parsedJson)));
     }
   }
   
   if (!parseResult.success || !parseResult.data) {
-    throw new Error(formatErrorForUser(createParseError(new Error(parseResult.error), text)));
+    throw new Error(formatErrorForUser(createParseError(new Error(parseResult.error), parsedJson)));
   }
   
   let finalData: NodeLayer;
@@ -128,13 +195,11 @@ export async function generateLayout(
     finalData = coerceNodeLayer(parseResult.data);
   }
   
-  onProgress?.('Rendering to Figma...');
+  updateState(GenerationPhase.COMPLETE, 'Generation Complete!');
   return { data: finalData, rawText: text };
 }
 
 function isStructuralViolation(node: any): boolean {
-  // [Pure Trust] Empty containers are valid architectural choices.
-  // Structural violation is now only triggered by critical data corruption (not shown here).
   return false;
 }
 
@@ -142,13 +207,8 @@ export async function generateLayoutWithValidation(
   options: GenerateLayoutWithRetryOptions
 ): Promise<GenerateLayoutWithRetryResult> {
   const { maxRetries = 2, designSystemId = 'shadcn', enableRetry = true, ...baseOptions } = options;
-  // designSystemLoader removed. Nexus handles registry.
   
-  // Check if Self-Correction is disabled via feature flag
   const selfCorrectionDisabled = isEnabled('DISABLE_SELF_CORRECTION');
-  if (selfCorrectionDisabled) {
-    console.log('[Generator] ⚠️ Self-Correction DISABLED (DISABLE_SELF_CORRECTION flag is ON)');
-  }
   
   let attempt = 0;
   let history = [...(options.history || [])];
@@ -184,10 +244,9 @@ export async function generateLayoutWithValidation(
     const feedback = buildValidationFeedback(lintWarnings, constraintResult);
     options.onRetry?.(lastWarnings, attempt);
     
-    // [History Compaction] Strip massive JSON to prevent token window overflow
     history = [
       ...history,
-      { role: 'model' as const, text: `[PREVIOUS OUTPUT OMITTED: CONTAINED ${lastWarnings.length} ERRORS]` },
+      { role: 'model' as const, text: `[PREVIOUS OUTPUT OMITTED]` },
       { role: 'user' as const, text: feedback }
     ];
   }

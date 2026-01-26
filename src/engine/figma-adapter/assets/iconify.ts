@@ -30,9 +30,11 @@ export type IconPrefix = keyof typeof ICON_SETS;
  * - Converts underscores to dashes (LLM tends to output underscore format)
  * - Maps common Material-style names to Lucide equivalents
  */
-function normalizeIconName(prefix: string, name: string): string {
+function normalizeIconName(prefix: string, name: any): string {
+  // Safe casting to string before manipulation
+  const nameStr = String(name || '');
   // Convert underscores to dashes (universal normalization)
-  let normalized = name.replace(/_/g, '-');
+  let normalized = nameStr.replace(/_/g, '-').toLowerCase().trim();
   
   // Lucide-specific mappings (Material → Lucide semantic equivalents)
   if (prefix === 'lucide') {

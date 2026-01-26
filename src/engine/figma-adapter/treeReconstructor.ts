@@ -1,5 +1,18 @@
-import { FlatNode, NodeLayer } from '../../schema/layerSchema';
 import { NODE_TYPES } from '../../constants/figma-api';
+
+export type NodeLayer = {
+    id?: string;
+    type: string;
+    props: Record<string, any>;
+    children?: NodeLayer[];
+};
+
+export type FlatNode = {
+    id: string;
+    parent: string | null;
+    type: string;
+    props: Record<string, any>;
+};
 
 /**
  * Result of the reconstruction process
@@ -23,9 +36,10 @@ export class TreeReconstructor {
      * Converts an array of FlatNode objects into a single NodeLayer tree.
      * 
      * @param nodes - Array of flat nodes from the LLM
+     * @param options - Additional options for reconstruction
      * @returns ReconstructionResult containing the root node and any issues
      */
-    reconstruct(nodes: FlatNode[]): ReconstructionResult {
+    reconstruct(nodes: FlatNode[], options?: { wrapperId?: string, forceWrapper?: boolean }): ReconstructionResult {
         const errors: string[] = [];
         const warnings: string[] = [];
         const nodeMap = new Map<string, NodeLayer>();
@@ -51,6 +65,7 @@ export class TreeReconstructor {
 
             // Create the NodeLayer object (shallow copy of props, empty children)
             const nodeLayer: NodeLayer = {
+                id: node.id,
                 type: node.type,
                 props: { 
                     name: (node.props as any).name || node.id, // [FIX] Preserve ID as layer name
@@ -96,9 +111,20 @@ export class TreeReconstructor {
             return { root: null, errors, warnings };
         }
 
-        // [Robustness] Multiple roots handling (common in truncated LLM output)
-        if (roots.length > 1) {
-            warnings.push(`${roots.length} top-level nodes detected. The system will render all as siblings. (Pure Trust: No automatic container)`);
+        if (roots.length > 1 || options?.forceWrapper) {
+            if (roots.length > 1) {
+                warnings.push(`${roots.length} root-level nodes detected. Wrapping in a container frame.`);
+            }
+            const wrapper: NodeLayer = {
+                id: options?.wrapperId || 'stream-root-wrapper',
+                type: NODE_TYPES.FRAME,
+                props: { 
+                    name: 'Generated Layout',
+                    semantic: 'STREAM_WRAPPER' 
+                },
+                children: roots
+            };
+            return { root: wrapper, errors, warnings };
         }
 
         return { root: roots[0], errors, warnings };

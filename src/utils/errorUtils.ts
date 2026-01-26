@@ -38,9 +38,15 @@ export function createParseError(error: Error, rawText: string): GenerationError
   };
 }
 
-export function createSchemaError(zodError: { issues: Array<{ path: PropertyKey[]; message: string }> }): GenerationError {
-  const issue = zodError.issues[0];
-  const path = issue.path.map(p => String(p)).join('.');
+export type ValidationIssue = {
+  path?: Array<{ key: string | number }>;
+  message: string;
+};
+
+export function createSchemaError(issues: ValidationIssue[]): GenerationError {
+  const issue = issues[0];
+  // Valibot path is an array of objects with 'key'
+  const path = issue.path?.map(p => String(p.key)).join('.') || 'root';
   
   return {
     type: 'SCHEMA_VIOLATION',

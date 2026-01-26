@@ -12,6 +12,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import * as v from 'valibot';
 import { NodeSchema, NodeLayer } from '../src/schema/layerSchema';
 
 // ==========================================
@@ -189,7 +190,7 @@ export async function runPromptTest(
 
       // Parse and validate
       const json = JSON.parse(text);
-      const parsed = NodeSchema.parse(json);
+      const parsed = v.parse(NodeSchema, json);
 
       // Emit render event if callback provided
       if (onRender) {

@@ -1,6 +1,8 @@
 {
   "extends": "@create-figma-plugin/tsconfig",
   "compilerOptions": {
+    "target": "ES2018",
+    "lib": ["ES2018", "DOM"],
     "paths": {
       "react": ["./node_modules/preact/compat"],
       "react-dom": ["./node_modules/preact/compat"]

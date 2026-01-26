@@ -3,30 +3,19 @@ import { PromptDependencies, PromptSection, FeatureFlags } from '../../../types/
 import { isEnabled } from '../../../constants/featureFlags';
 
 import { PROPS, NODE_TYPES } from '../../../constants/figma-api';
-import { ICON_SEMANTIC_TEMPLATE } from '../../../constants/prompts';
+import { ICON_SEMANTIC_TEMPLATE, JSON_FORMAT_RULES } from '../../../constants/prompts';
 import { renderTemplate } from './templateLoader';
 import { knowledgeHub, ReasoningRule, TypographyPairing, StyleDefinition, LandingPagePattern, ANATOMY_REGISTRY, FigmaLayoutRule, AnatomyBlueprint } from '../knowledge/knowledgeHub';
 
 
 // Role section template (embedded for build compatibility)
-const ROLE_TEMPLATE = `You are an expert Figma UI designer. Your task is to generate production-ready, responsive Figma designs using a FLAT ADJACENCY LIST format.
+const ROLE_TEMPLATE = `You are an expert Figma UI designer. Your task is to generate production-ready, responsive Figma designs.
+
+{{{formatRules}}}
 
 ### MODE: {{#if isModifyMode}}MODIFY EXISTING{{else}}CREATE NEW{{/if}} DESIGN
-- Output format: Flat array of JSON objects with "id" and "parent" properties.
-- This creates a robust hierarchy that avoids nesting syntax errors and truncation failures.
-
-### RELATIONSHIP SCHEMA
-Each node object must have:
-- "id": A unique string (e.g., "hero-section", "hero-title").
-- "parent": The "id" of its containing node, or null if it's the root.
-- "type": The Figma node type.
-- "props": Aesthetic and layout properties.
-
-### CRITICAL RULES
-1. **NO NESTING**: NEVER use a "children" property. All relationships must be via "id" and "parent" references in a flat list.
-2. **ORDER**: Output nodes in a logical order (Parent before its children).
-3. **CONTENT**: Every TEXT node MUST have "{{PROPS_characters}}" with actual text.
-4. Return ONLY valid JSON array.`;
+- Output nodes in a logical order (Parent before its children).
+- Return ONLY the valid JSON array.`;
 
 // ==========================================
 // Section Builders
@@ -34,19 +23,17 @@ Each node object must have:
 
 function buildRoleSection(_deps: PromptDependencies, context: { isModifyMode: boolean }): string {
     return renderTemplate(ROLE_TEMPLATE, {
-        isModifyMode: context?.isModifyMode ?? false
+        isModifyMode: context?.isModifyMode ?? false,
+        formatRules: JSON_FORMAT_RULES
     });
 }
 
 const CONSTRAINT_TEMPLATE = `
 ### OUTPUT CONSTRAINTS
-1. **Adjacency List Strategy**: Output a flat array. To build a hierarchy, create a container node (e.g. id: "card") and then children nodes (e.g. id: "card-title", parent: "card").
-2. **Flexible Values**: You may use direct hex codes (#RRGGBB) or design system tokens (e.g. "$primary", "$space-4") if provided in the context. 
-3. **Layout Sizing Properties**: 
-   - Use "layoutSizingHorizontal" and "layoutSizingVertical" (values: "FIXED", "HUG", "FILL")
-   - DO NOT use "primaryAxisSizingMode" or "counterAxisSizingMode"
-4. **Hierarchy**: Ensure every container has at least one child node pointing to it as its parent.
-5. **Format**: Return ONLY a valid JSON array. No prose.`;
+1. **Adjacency List Strategy**: ALWAYS output a flat array.
+2. **Flexible Values**: You may use direct hex codes (#RRGGBB) or design system tokens (e.g. "$primary") if provided. 
+3. **Sizing**: Use "layoutSizingHorizontal" and "layoutSizingVertical".
+4. **Format**: Return ONLY a valid JSON array. No markdown code blocks.`;
 
 function buildConstraintSection(deps: PromptDependencies): string {
     return renderTemplate(CONSTRAINT_TEMPLATE, {

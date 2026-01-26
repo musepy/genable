@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { composeSystemPrompt } from '../promptComposer';
 import { PROMPT_SECTION_REGISTRY } from '../sectionRegistry';
-import { PromptDependencies } from '../../../types/context';
+import { PromptDependencies } from '../../../../types/context';
 
 // ==========================================
 // REGISTRY SSOT TESTS
@@ -26,22 +26,15 @@ const createMockDeps = (overrides?: Partial<PromptDependencies>): PromptDependen
         goldenTemplates: []
     },
     intent: {
-        type: 'GENERAL',
-        target: null,
+        type: 'UNKNOWN',
         confidence: 0,
-        modifiers: {}
+        target: undefined,
+        modifiers: {},
+        matchedKeywords: []
     },
     designSystemContext: {
-        skillInstructions: 'MOCK_SKILL_INSTRUCTIONS',
-        skillName: 'MOCK_SYSTEM',
-        tokenSlotSnippet: '',
-        tokens: {
-            colorRoles: { text: { primary: 'foreground' } },
-            spacing: { base: 4 }
-        } as any
+        skillName: 'MOCK_SYSTEM'
     },
-    iconAllowlist: [],
-    designContextPrompt: null,
     globalContext: {},
     ...overrides
 });
@@ -53,9 +46,7 @@ const createMockDeps = (overrides?: Partial<PromptDependencies>): PromptDependen
         // 1. Role Section (Priority 10)
         expect(prompt).toContain('You are an expert Figma UI designer');
         
-        // 2. Design System (Priority 20)
-        expect(prompt).toContain('DESIGN SYSTEM: MOCK_SYSTEM');
-        expect(prompt).toContain('MOCK_SKILL_INSTRUCTIONS');
+        expect(prompt).toContain('### OUTPUT CONSTRAINTS');
     });
 
     it('should handle Modify Mode', () => {
@@ -69,9 +60,10 @@ const createMockDeps = (overrides?: Partial<PromptDependencies>): PromptDependen
         const deps = createMockDeps({
             intent: {
                  type: 'GENERATE_COMPONENT',
-                 target: 'Button', // Now uses ANATOMY_REGISTRY
+                 target: 'Button',
                  confidence: 0.9,
-                 modifiers: {}
+                 modifiers: {},
+                 matchedKeywords: ['button']
             }
         });
         
@@ -81,34 +73,10 @@ const createMockDeps = (overrides?: Partial<PromptDependencies>): PromptDependen
         expect(prompt).toContain('STRUCTURAL ANATOMY BLUEPRINT');
     });
 
-    it('should inject Token Slots', () => {
-        const deps = createMockDeps({
-            designSystemContext: {
-                skillInstructions: '',
-                skillName: 'M3',
-                tokenSlotSnippet: 'AVAILABLE_SLOTS: [Action, Surface]'
-            }
-        });
-    
+    it('should include Icon Semantic Naming section', () => {
+        const deps = createMockDeps();
         const prompt = composeSystemPrompt(deps);
-        expect(prompt).toContain('AVAILABLE_SLOTS: [Action, Surface]');
-    });
-
-    it('should handle Icon Allowlist modes', () => {
-        // Case A: Strict List
-        const depsStrict = createMockDeps({
-            iconAllowlist: ['lucide:home', 'lucide:user']
-        });
-        const promptStrict = composeSystemPrompt(depsStrict);
-        expect(promptStrict).toContain('ICON ALLOWLIST (STRICT');
-        expect(promptStrict).toContain('lucide:home');
-    
-        // Case B: Semantic (Empty List)
-        const depsSemantic = createMockDeps({
-            iconAllowlist: []
-        });
-        const promptSemantic = composeSystemPrompt(depsSemantic);
-        expect(promptSemantic).toContain('ICON USAGE (Semantic Naming)');
+        expect(prompt).toContain('ICON USAGE (Semantic Naming)');
     });
 
     it('should respect Section Priority', () => {

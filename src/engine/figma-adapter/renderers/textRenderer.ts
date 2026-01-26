@@ -7,6 +7,7 @@
  */
 
 import { BaseRenderer, NodeLayer, RenderContext, NodeLayerProps } from './baseRenderer';
+import { fontBus } from '../resources/FontBus';
 import { PropertyTransformer } from '../propertyTransformer';
 import { PROPS } from '../../../constants/figma-api';
 
@@ -28,7 +29,8 @@ export class TextRenderer extends BaseRenderer {
         const family = PropertyTransformer.deserialize(dsl.props.fontFamily || 'Inter', PROPS.fontFamily);
         const style = PropertyTransformer.deserialize(dsl.props.fontWeight || 'Regular', PROPS.fontWeight);
 
-        await this.loadFont(family, style);
+        // [FontBus] Centralized Loading
+        await fontBus.getOrLoad(family, style);
         return figma.createText();
     }
 
@@ -45,15 +47,15 @@ export class TextRenderer extends BaseRenderer {
         const style = PropertyTransformer.deserialize(props.fontWeight || 'Regular', PROPS.fontWeight);
 
         try {
-            t.fontName = { family, style };
-        } catch (e) {
-            // Fallback to Inter Regular
-            try {
-                await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-                t.fontName = { family: 'Inter', style: 'Regular' };
-            } catch (e2) {
-                console.warn('Failed to load fallback font');
+            // Check if font is actually loaded via Bus
+            if (fontBus.isLoaded(family, style)) {
+                t.fontName = { family, style };
+            } else {
+                throw new Error('Font not in Bus');
             }
+        } catch (e) {
+            // Fallback to Inter Regular (Bus ensures it's always ready during warmup)
+            t.fontName = { family: 'Inter', style: 'Regular' };
         }
 
         // ========== Content ==========
@@ -115,12 +117,15 @@ export class TextRenderer extends BaseRenderer {
             t.textAutoResize = 'WIDTH_AND_HEIGHT';
         } else if (hSizing === 'FIXED' && props.width) {
             t.textAutoResize = 'HEIGHT';
-            t.resize(props.width, t.height || 20);
+            const targetW = PropertyTransformer.deserialize(props.width, PROPS.width);
+            t.resize(Math.max(1, targetW), t.height || 20);
         }
         
         // Explicit dimensions override (for FIXED mode)
         if (props.width && props.height && hSizing === 'FIXED') {
-            t.resize(props.width, props.height);
+            const targetW = PropertyTransformer.deserialize(props.width, PROPS.width);
+            const targetH = PropertyTransformer.deserialize(props.height, PROPS.height);
+            t.resize(Math.max(1, targetW), Math.max(1, targetH));
             t.textAutoResize = 'NONE';
         }
 
@@ -164,28 +169,11 @@ export class TextRenderer extends BaseRenderer {
     // PRIVATE HELPERS
     // ==========================================
 
+    /**
+     * @deprecated Use FontBus.getOrLoad
+     */
     private async loadFont(family: string, style: string): Promise<void> {
-        const key = `${family}:${style}`;
-        if (this.loadedFonts.has(key)) return;
-
-        try {
-            await figma.loadFontAsync({ family, style });
-            this.loadedFonts.add(key);
-        } catch (e) {
-            // Try common fallbacks
-            const fallbacks = [
-                { family, style: 'Regular' },
-                { family: 'Inter', style: 'Regular' }
-            ];
-
-            for (const fb of fallbacks) {
-                try {
-                    await figma.loadFontAsync(fb);
-                    this.loadedFonts.add(`${fb.family}:${fb.style}`);
-                    return;
-                } catch (e2) { }
-            }
-        }
+        await fontBus.getOrLoad(family, style);
     }
 
     private applyLineHeight(t: TextNode, props: NodeLayerProps): void {

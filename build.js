@@ -30,17 +30,18 @@ if (!isWatch) buildArgs.push('--minify');
 if (isWatch) buildArgs.push('--watch');
 
 /**
- * Inject version into output file by replacing placeholder
+ * Inject version into output file
  */
-function injectVersion() {
+function injectMetaData() {
   const outputPath = path.join(__dirname, 'build', 'main.js');
   if (fs.existsSync(outputPath)) {
     let content = fs.readFileSync(outputPath, 'utf8');
+    
+    // Replace Version
     const newContent = content.replace(/__BUILD_VERSION__/g, buildTime);
-    if (content !== newContent) {
-      fs.writeFileSync(outputPath, newContent);
-      console.log(`✅ Version injected: ${buildTime}`);
-    }
+    
+    fs.writeFileSync(outputPath, newContent);
+    console.log(`✅ Artifacts injected: ${buildTime}`);
   }
 }
 
@@ -54,7 +55,7 @@ if (isWatch) {
   fs.watch(path.dirname(outputPath), (event, filename) => {
     if (filename === 'main.js') {
       clearTimeout(debounce);
-      debounce = setTimeout(injectVersion, 100);
+      debounce = setTimeout(injectMetaData, 100);
     }
   });
   
@@ -63,7 +64,7 @@ if (isWatch) {
   // One-shot build
   try {
     execSync(`npx ${buildArgs.join(' ')}`, { stdio: 'inherit' });
-    injectVersion();
+    injectMetaData();
     console.log(`\n✅ Build complete!`);
   } catch (e) {
     process.exit(1);

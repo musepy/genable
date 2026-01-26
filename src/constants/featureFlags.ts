@@ -125,6 +125,7 @@ export const FEATURE_FLAGS = {
      *  @experiment E1: Pure Prompt vs Schema-constrained output
      */
     DISABLE_RESPONSE_SCHEMA: true,
+    STREAM_RENDERING: true,
 
 } as const;
 

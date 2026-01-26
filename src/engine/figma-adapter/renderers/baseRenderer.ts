@@ -14,13 +14,16 @@
 // TYPES (Imported from Schema - Single Source of Truth)
 // ==========================================
 
-import {
+import type {
     NodeLayer,
     LayoutSizing,
     LayoutMode
 } from '../../../schema/layerSchema';
 import { PropertyTransformer } from '../propertyTransformer';
+import { extractFigmaNodeData } from '../figmaNodeData';
 import { PROP_METADATA, PROPS } from '../../../constants/figma-api';
+import { findNodeById, registerNode } from '../../pipeline/RenderOrchestrator';
+import { renderNodeDSL } from './index';
 
 export type {
     NodeLayer,
@@ -36,20 +39,15 @@ export type NodeLayerProps = NodeLayer['props'];
  * [P7] Extended with viewport and parentSizing for architecture fixes
  */
 export interface RenderContext {
-    parent: SceneNode & ChildrenMixin;
+    parent: (SceneNode & ChildrenMixin) | PageNode;
     depth: number;
     parentLayoutMode?: 'VERTICAL' | 'HORIZONTAL' | 'NONE';
-    // [P7.1] Parent sizing mode for HUG/FILL paradox detection
-    parentSizingHorizontal?: 'HUG' | 'FILL' | 'FIXED';
-    parentSizingVertical?: 'HUG' | 'FILL' | 'FIXED';
-    // [P7.2] Viewport context for root node sizing (replaces hardcoded 360x640)
+    designSystem?: import('../../../types/designSystem').DesignSystemConfig;
     viewport?: {
         width: number;
         height: number;
         isMobile: boolean;
     };
-    // [P8] Explicit Design System Context for Renderers
-    designSystem?: import('../../../types/designSystem').DesignSystemConfig;
 }
 
 
@@ -69,25 +67,51 @@ export abstract class BaseRenderer {
     }
 
     /**
-     * The main render method - Template Method pattern
+     * The main render method - Reconciliation Lifecycle (V7)
      */
     async render(dsl: NodeLayer, context: RenderContext): Promise<SceneNode | null> {
         try {
-            // 1. Create the Figma node
-            const node = await this.createNode(dsl);
+            // [V7] STEP 1: Find or Create
+            let node = dsl.id ? findNodeById(dsl.id) : null;
+            let isNew = false;
+
+            if (node) {
+                try {
+                    // Type mismatch check - if type changed, we must recreate
+                    const expectedType = this.getExpectedFigmaType(dsl.type);
+                    if (node.removed || node.type !== expectedType) {
+                        if (!node.removed) node.remove();
+                        node = await this.createNode(dsl);
+                        isNew = true;
+                    }
+                } catch (e) {
+                    node = await this.createNode(dsl);
+                    isNew = true;
+                }
+            } else {
+                node = await this.createNode(dsl);
+                isNew = true;
+            }
+
             if (!node) return null;
 
-            // 2. Add to parent BEFORE property application
-            // This allows properties like layoutSizing="FILL" to validate correctly in Figma
-            context.parent.appendChild(node);
+            // [V7] STEP 2: Registry Sync
+            if (dsl.id) registerNode(dsl.id, node);
 
-            // 3. Apply common properties
+            // [V7] STEP 3: Structural Integration
+            // Always ensure the node is attached to the correct parent.
+            // Figma's appendChild handles moving the node if it's already attached elsewhere.
+            if ('appendChild' in context.parent && node.parent !== context.parent) {
+                context.parent.appendChild(node);
+            }
+
+            // [V7] STEP 4: Property Application (Patching)
+            // We apply common and specific props. 
+            // The renderers themselves handle the "Diff" by only writing if needed (SSOT).
             await this.applyCommonProps(node, dsl, context);
-
-            // 4. Apply type-specific properties (now safe for layout sizing)
             await this.applyTypeSpecificProps(node, dsl, context);
 
-            // 5. Render children recursively
+            // [V7] STEP 5: Render children recursively
             await this.renderChildren(node, dsl, context);
 
             return node;
@@ -95,6 +119,17 @@ export abstract class BaseRenderer {
             console.warn(`[${this.getRendererName()}] Render failed:`, error);
             return null;
         }
+    }
+
+    /**
+     * Helper to map DSL types to Figma types for reconciliation matching
+     */
+    private getExpectedFigmaType(dslType: string): string {
+        const map: Record<string, string> = {
+            'FRAME': 'FRAME', 'TEXT': 'TEXT', 'VECTOR': 'VECTOR', 'RECTANGLE': 'RECTANGLE',
+            'LINE': 'LINE', 'ELLIPSE': 'ELLIPSE', 'GROUP': 'GROUP', 'SECTION': 'SECTION', 'ICON': 'FRAME'
+        };
+        return map[dslType] || 'FRAME';
     }
 
     // ==========================================
@@ -135,11 +170,19 @@ export abstract class BaseRenderer {
         // We handle standard common props using the Transformer
         const commonProps = [PROPS.name, PROPS.visible, PROPS.opacity, PROPS.rotation];
         
+        // [V8] Extract node data IR for diffing
+        const nodeData = extractFigmaNodeData(node, Object.values(PROP_METADATA).map(m => m.figmaKey));
+
         commonProps.forEach(dslKey => {
             if (props[dslKey] !== undefined) {
                 const meta = PROP_METADATA[dslKey];
                 if (meta && meta.figmaKey in node) {
                     try {
+                        // [V7] DIFF CHECK: Only write if value actually changed
+                        if (PropertyTransformer.isEqual(nodeData, dslKey, props[dslKey])) {
+                            return;
+                        }
+
                         const figmaValue = PropertyTransformer.deserialize(props[dslKey], dslKey);
                         (node as any)[meta.figmaKey] = figmaValue;
                     } catch (e) {

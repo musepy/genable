@@ -71,13 +71,34 @@ export function useChat({
     setError(null)
   }
 
-// [Phase 2] Use Orchestrator for generation
+  // [Phase 2] Use Orchestrator for generation
   const generate = async () => {
     if (!prompt.trim()) return
     
     setLoading(true)
     setError(null)
     const currentPrompt = prompt
+
+    // Dogfood Feature: Auto-JSON Recognition
+    if (currentPrompt.trim().startsWith('[') && currentPrompt.trim().endsWith(']')) {
+      try {
+        const parsed = JSON.parse(currentPrompt);
+        if (Array.isArray(parsed)) {
+          console.log('[Dogfood] Detected JSON Array, bypassing LLM for direct import.');
+          emit<import('../../types').ImportJsonHandler>('IMPORT_JSON', { jsonString: currentPrompt });
+          
+          setHistory(prev => [...prev, { role: 'user', text: '(Imported JSON Data)' }]);
+          setHistory(prev => [...prev, { role: 'model', text: '✅ Detected JSON layout data. Importing directly into Figma...' }]);
+          
+          setPrompt('');
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        // Not a valid JSON or not an array, proceed as normal prompt
+        console.log('[Dogfood] Input starts with [ but is not a valid JSON array. Proceeding with LLM.');
+      }
+    }
 
     // Add user message
     setHistory(prev => [...prev, { role: 'user', text: currentPrompt }])

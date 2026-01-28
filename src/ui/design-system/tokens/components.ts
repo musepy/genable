@@ -22,10 +22,10 @@ export const componentStyles = {
   },
   // Card base - used for message bubbles, prompt cards
   cardBase: {
-    background: 'var(--card)',
+    background: 'var(--color-surface)',
     borderRadius: '12px',  // tokens.radii.lg
     padding: 16,  // tokens.space.md
-    boxShadow: 'var(--card-shadow)',
+    boxShadow: 'var(--color-shadow)',
   },
   // Bubble base - for chat messages
   bubbleBase: {
@@ -90,8 +90,8 @@ export const componentStyles = {
       transition: 'var(--transition-crisp, all 150ms ease)',
     },
     active: {
-      background: 'var(--solid)',
-      border: '1.5px solid var(--solid)',
+      background: 'var(--gray-12)',
+      border: '1.5px solid var(--gray-12)',
       cursor: 'pointer',
     },
     // 禁用态：容器用 border 色，图标用 card 色，形成“镂空”效果
@@ -110,8 +110,8 @@ export const componentStyles = {
   inputArea: {
     container: {
       position: 'relative' as const,
-      background: 'var(--card)',
-      border: '1px solid var(--border)',
+      background: 'var(--color-surface)',
+      border: '1px solid var(--gray-6)',
       borderRadius: 'var(--radius-lg)',
       // 注意：不设置 overflow:hidden，允许内部 Popover 溢出
     },
@@ -124,7 +124,7 @@ export const componentStyles = {
       paddingBottom: 36, // 确保滚动到底时内容不被按钮遮挡
       fontSize: 12,
       background: 'transparent',
-      color: 'var(--foreground)',
+      color: 'var(--gray-12)',
       border: 'none',
       outline: 'none',
       resize: 'none' as const,
@@ -147,7 +147,7 @@ export const componentStyles = {
       padding: '4px 8px',
       background: 'transparent',
       border: 'none',
-      color: 'var(--muted-foreground)',
+      color: 'var(--gray-11)',
       fontSize: 11,
       fontWeight: tokens.fontWeight.medium,
       cursor: 'pointer',
@@ -157,8 +157,8 @@ export const componentStyles = {
     },
     // Hover 状态：添加背景色
     ghostHover: {
-      background: 'var(--muted)',
-      color: 'var(--foreground)',
+      background: 'var(--gray-3)',
+      color: 'var(--gray-12)',
     },
     // Popover 向上弹出的定位
     popoverTop: {

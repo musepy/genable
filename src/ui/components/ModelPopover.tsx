@@ -113,9 +113,9 @@ export function ModelPopover({
         alignItems: 'center',
         gap: tokens.space[1],
         padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-        background: tokens.colors.bg2, // Migrated from colors.card
+        background: tokens.colors.surface, // Migrated from colors.card
         color: tokens.colors.textPrimary,
-        border: `1px solid ${tokens.colors.border}`,
+        border: `1px solid ${tokens.colors.grayBorder}`,
         borderRadius: 'var(--radius-full)',
         fontSize: tokens.fontSize[1],
         fontWeight: tokens.fontWeight.medium,
@@ -148,12 +148,12 @@ export function ModelPopover({
         onMouseEnter={(e) => {
           if (disabled) return;
           if (variant === 'chip') {
-            e.currentTarget.style.borderColor = tokens.colors.borderHover;
+            e.currentTarget.style.borderColor = tokens.colors.grayBorderHover;
           }
         }}
         onMouseLeave={(e) => {
           if (variant === 'chip') {
-            e.currentTarget.style.borderColor = tokens.colors.border;
+            e.currentTarget.style.borderColor = tokens.colors.grayBorder;
           }
         }}
         aria-haspopup="listbox"
@@ -172,7 +172,7 @@ export function ModelPopover({
             ...popoverPositionStyle,
             width: 'min(260px, calc(100vw - 32px))', // Responsive: max 260px, respects container
             minWidth: 200,
-            background: tokens.colors.bg2, // Migrated from colors.card
+            background: tokens.colors.surface, // Migrated from colors.card
             borderRadius: 'var(--radius-5)',
             boxShadow: tokens.colors.shadow, // Replaced rgba(0,0,0,0.12)
             zIndex: 50,
@@ -225,7 +225,7 @@ export function ModelPopover({
           {/* Settings Section (Apple HIG: settings at bottom) */}
           <div style={{ 
             padding: tokens.space[1],
-            borderTop: hasApiKey ? `1px solid ${tokens.colors.borderLight}` : 'none',
+            borderTop: hasApiKey ? `1px solid ${tokens.colors.grayBorder}` : 'none',
           }}>
             {hasApiKey ? (
               // API Key Settings link
@@ -265,8 +265,8 @@ export function ModelPopover({
                       flex: 1,
                       padding: tokens.space[1],
                       fontSize: tokens.fontSize[1],
-                      background: tokens.colors.bg1, // Migrated from colors.background
-                      border: `1px solid ${tokens.colors.border}`,
+                      background: tokens.colors.background, // Migrated from colors.background
+                      border: `1px solid ${tokens.colors.grayBorder}`,
                       borderRadius: 'var(--radius-4)',
                       outline: 'none',
                       color: tokens.colors.textPrimary,
@@ -277,8 +277,8 @@ export function ModelPopover({
                     disabled={localApiKey.length < 20}
                     style={{
                       padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-                      background: localApiKey.length >= 20 ? tokens.colors.solid : tokens.colors.surface,
-                      color: localApiKey.length >= 20 ? tokens.colors.solidForeground : tokens.colors.textSecondary,
+                      background: localApiKey.length >= 20 ? tokens.colors.accent : tokens.colors.surface,
+                      color: localApiKey.length >= 20 ? tokens.colors.accentContrast : tokens.colors.textSecondary,
                       border: 'none',
                       borderRadius: 'var(--radius-4)',
                       fontSize: tokens.fontSize[1],

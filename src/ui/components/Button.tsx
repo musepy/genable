@@ -44,19 +44,19 @@ export function Button({
   // Variant styles
   const variantStyles: Record<NonNullable<ButtonProps['variant']>, h.JSX.CSSProperties> = {
     primary: {
-      background: tokens.colors.solid, // Black in light, White in dark
-      color: tokens.colors.solidForeground,
+      background: tokens.colors.accent,
+      color: tokens.colors.accentContrast,
       border: 'none',
     },
     secondary: {
-      background: tokens.colors.secondary,
-      color: tokens.colors.secondaryForeground,
-      border: `1px solid ${tokens.colors.border}`,
+      background: tokens.colors.grayMuted,
+      color: tokens.colors.textPrimary,
+      border: `1px solid ${tokens.colors.grayBorder}`,
     },
     outline: {
       background: 'transparent',
       color: tokens.colors.textPrimary,
-      border: `1px solid ${tokens.colors.border}`,
+      border: `1px solid ${tokens.colors.grayBorder}`,
     },
     ghost: {
       background: 'transparent',
@@ -64,8 +64,8 @@ export function Button({
       border: 'none',
     },
     destructive: {
-      background: tokens.colors.destructive,
-      color: tokens.colors.destructiveMuted,
+      background: tokens.colors.error,
+      color: tokens.colors.accentContrast, // Error background usually has white text
       border: 'none',
     },
   };

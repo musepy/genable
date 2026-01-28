@@ -27,7 +27,7 @@ export function RawOutputPanel({ content, isExpanded, onToggle }: RawOutputPanel
       style={{ 
         marginTop: isExpanded ? tokens.space[1] : 0,
         background: 'transparent',
-        border: isExpanded ? `1px solid ${tokens.colors.border}` : 'none',
+        border: isExpanded ? `1px solid ${tokens.colors.grayBorder}` : 'none',
         borderRadius: 'var(--radius-2)',
         overflow: 'hidden',
         // Motion System: Smooth Expansion
@@ -47,7 +47,7 @@ export function RawOutputPanel({ content, isExpanded, onToggle }: RawOutputPanel
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-        borderBottom: `1px solid ${tokens.colors.border}`,
+        borderBottom: `1px solid ${tokens.colors.grayBorder}`,
       }}>
         <span style={{ fontSize: 'var(--font-size-1)', color: tokens.colors.textSecondary }}>
           Raw Output ({content.length} chars)
@@ -61,7 +61,7 @@ export function RawOutputPanel({ content, isExpanded, onToggle }: RawOutputPanel
               border: 'none', 
               cursor: 'pointer', 
               fontSize: tokens.fontSize[1], // was 10
-              color: status === 'success' ? tokens.colors.primary : tokens.colors.textSecondary,
+              color: status === 'success' ? tokens.colors.accent : tokens.colors.textSecondary,
               fontWeight: status === 'success' ? 600 : 400,
               transition: 'var(--transition-crisp)'
             }}

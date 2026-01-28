@@ -52,7 +52,7 @@ export function ModelSelector({
     return (
       <div style={{ 
         padding: tokens.space[4], // Migrated from space.md 
-        border: `1px dashed ${tokens.colors.border}`, 
+        border: `1px dashed ${tokens.colors.grayBorder}`, 
         borderRadius: 'var(--radius-2)', 
         textAlign: 'center',
         color: tokens.colors.textSecondary,

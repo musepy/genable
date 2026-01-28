@@ -81,7 +81,7 @@ export function PromptChips({
               flex: '0 0 auto',
               maxWidth: 120,
               background: 'transparent', // P0: De-noise - was tokens.colors.card
-              border: `0.5px solid ${tokens.colors.borderLight}`,
+              border: `0.5px solid ${tokens.colors.grayBorder}`,
               boxShadow: tokens.colors.shadow,
               borderRadius: 'var(--radius-2)',
               padding: `${tokens.space[1]}px ${tokens.space[2]}px`,

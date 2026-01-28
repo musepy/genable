@@ -43,9 +43,9 @@ const tagStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: tokens.space[1],
   padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-  background: tokens.colors.primaryMuted,
-  color: tokens.colors.primary,
-  border: `1px solid ${tokens.colors.primaryBorder}`,
+  background: tokens.colors.accentMuted,
+  color: tokens.colors.accent,
+  border: `1px solid ${tokens.colors.accentBorder}`,
   borderRadius: 'var(--radius-full)',
   fontSize: 'var(--font-size-1)',
   fontWeight: tokens.fontWeight.medium,
@@ -72,7 +72,7 @@ const moreTagStyle: React.CSSProperties = {
   ...tagStyle,
   background: tokens.colors.surface,
   color: tokens.colors.textSecondary,
-  border: `1px solid ${tokens.colors.border}`,
+  border: `1px solid ${tokens.colors.grayBorder}`,
   cursor: 'default',
 };
 

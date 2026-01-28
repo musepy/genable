@@ -13,7 +13,11 @@ import { MessageRenderer } from '../../ui/components/MessageRenderer'
 import { ThinkingStream } from '../../ui/components/ThinkingStream'
 import { RawOutputPanel } from '../../ui/components/RawOutputPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
-import { Button } from '../../ui/components/Button' // Added Button
+import { Button } from '../../ui/components/Button'
+import { Copy, Code } from 'lucide-preact'
+import { on, emit } from '@create-figma-plugin/utilities'
+import { SendSerializedSelectionHandler, SerializeSelectionHandler } from '../../types'
+import { useClipboard } from '../../ui/hooks/useClipboard'
 import type { PluginState } from '../../ui/index'
 
 import { useChat, UseChatProps } from './useChat'
@@ -43,8 +47,8 @@ const messageBubbleUserStyle = {
 };
 
 const messageBubbleModelStyle = {
-  background: tokens.colors.bg2,
-  border: `1px solid ${tokens.colors.border}`,
+  background: tokens.colors.surface,
+  border: `1px solid ${tokens.colors.grayBorder}`,
   borderRadius: 'var(--radius-5)',
   padding: tokens.space[4],
   alignSelf: 'flex-start' as const,
@@ -89,6 +93,16 @@ export function ChatFeature(props: UseChatProps) {
     suggestedModels,
     onOpenSettings,
   } = useChat(props)
+
+  const { copy } = useClipboard()
+
+  useEffect(() => {
+    return on<SendSerializedSelectionHandler>('SEND_SERIALIZED_SELECTION', (data) => {
+      copy(data.jsonString);
+      // Optional: also put it in the prompt to show it works
+      setPrompt(data.jsonString);
+    });
+  }, [copy, setPrompt]);
 
   const messagesEndRef = { current: null as HTMLDivElement | null };
   
@@ -174,7 +188,7 @@ export function ChatFeature(props: UseChatProps) {
             textAlign: 'center',
             paddingTop: tokens.space[5],
           }}>
-            <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.primary }} />
+            <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.accent }} />
             <span style={{ fontSize: tokens.fontSize[2] }}>{t.emptyStateHint}</span>
             
             <PromptChips
@@ -282,8 +296,8 @@ export function ChatFeature(props: UseChatProps) {
               transform: 'translateX(-50%)',
               padding: `${tokens.space[1]}px ${tokens.space[3]}px`,
               borderRadius: 'var(--radius-full)',
-              background: tokens.colors.solid,
-              color: tokens.colors.solidForeground,
+              background: tokens.colors.accent,
+              color: tokens.colors.accentContrast,
               fontSize: tokens.fontSize[1],
               display: 'flex',
               alignItems: 'center',
@@ -371,16 +385,45 @@ export function ChatFeature(props: UseChatProps) {
           placeholder={t.placeholder}
           canSubmit={canSubmit}
           leftElement={
-            <ModelPopover
-              currentModel={modelName}
-              apiKey={apiKey}
-              availableModels={suggestedModels}
-              onSelectModel={setModelName || (() => {})}
-              onApiKeyChange={setApiKey || (() => {})}
-              onOpenSettings={onOpenSettings}
-              placement="top"
-              variant="ghost"
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[1] }}>
+              <ModelPopover
+                currentModel={modelName}
+                apiKey={apiKey}
+                availableModels={suggestedModels}
+                onSelectModel={setModelName || (() => {})}
+                onApiKeyChange={setApiKey || (() => {})}
+                onOpenSettings={onOpenSettings}
+                placement="top"
+                variant="ghost"
+              />
+              <button
+                className="ghost-btn"
+                onClick={() => emit<SerializeSelectionHandler>('SERIALIZE_SELECTION')}
+                title="Serialize Selection to DSL (Dogfood)"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.space[1],
+                  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+                  background: 'transparent',
+                  border: 'none',
+                  color: tokens.colors.textSecondary,
+                  cursor: 'pointer',
+                  borderRadius: 'var(--radius-1)',
+                  transition: 'var(--transition-crisp)',
+                }}
+                onMouseEnter={(e) => {
+                   e.currentTarget.style.color = tokens.colors.textPrimary;
+                   e.currentTarget.style.background = tokens.colors.surface;
+                }}
+                onMouseLeave={(e) => {
+                   e.currentTarget.style.color = tokens.colors.textSecondary;
+                   e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <Code size={14} />
+              </button>
+            </div>
           }
         />
       </div>

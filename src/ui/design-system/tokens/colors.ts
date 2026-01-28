@@ -10,91 +10,67 @@
  */
 
 export const colors = {
-  // === Backgrounds (step 1-2) ===
-  bg1: 'var(--background)',           // gray-1: Page background
-  bg2: 'var(--card)',                 // gray-2: Secondary background
-  
-  // === Surface (step 3-5) ===
-  surface: 'var(--muted)',            // gray-3: Component default
-  surfaceHover: 'var(--gray-4)',      // gray-4: Hover state
-  surfaceActive: 'var(--gray-5)',     // gray-5: Active/pressed state
-  
-  // === Borders (step 6-8) ===
-  borderLight: 'var(--border-subtle)', // gray-4: Subtle border
-  border: 'var(--border)',            // gray-6: Default border
-  borderHover: 'var(--border-strong)', // gray-7: Hover border
-  
-  // === Text (step 11-12) ===
-  textSecondary: 'var(--muted-foreground)', // gray-11: Secondary text
-  textPrimary: 'var(--foreground)',         // gray-12: Primary text
-  
-  // === Shadows ===
-  shadow: 'var(--card-shadow)',
-  
-  // === P3: Alpha Tokens (transparent overlays) ===
-  alpha: {
-    1: 'var(--gray-a1)',   // Extremely subtle
-    2: 'var(--gray-a2)',   // Very subtle
-    3: 'var(--gray-a3)',   // Ghost hover
-    4: 'var(--gray-a4)',   // Disabled bg
-    5: 'var(--gray-a5)',   // Subtle shadows
-    8: 'var(--gray-a8)',   // Medium overlay
-    11: 'var(--gray-a11)', // Disabled text
-    12: 'var(--gray-a12)', // Strong overlay
-  },
-  disabled: 'var(--gray-a4)',       // Disabled background
-  disabledText: 'var(--gray-a11)',  // Disabled text
-  
-  // === Semantic Colors ===
-  primary: 'var(--primary)',
-  primaryForeground: 'var(--primary-foreground)',
-  primaryMuted: 'var(--primary-muted)',
-  primaryBorder: 'var(--primary-border)',
-  
-  secondary: 'var(--secondary)',
-  secondaryForeground: 'var(--secondary-foreground)',
-  
-  solid: 'var(--solid)',
-  solidForeground: 'var(--solid-foreground)',
-  
-  accent: 'var(--accent)',
-  ring: 'var(--ring)',
-  
-  success: 'var(--success)',
-  successMuted: 'var(--success-muted)',
-  successBorder: 'var(--success-border)',
-  
-  warning: 'var(--warning)',
-  warningMuted: 'var(--warning-muted)',
-  warningBorder: 'var(--warning-border)',
-  
-  destructive: 'var(--destructive)',
-  destructiveMuted: 'var(--destructive-muted)',
-  destructiveBorder: 'var(--destructive-border)',
-  
-  // === Error Aliases (semantic) ===
-  error: 'var(--destructive)',          // Alias for destructive
-  errorMuted: 'var(--destructive-muted)',
-  errorBorder: 'var(--destructive-border)',
+  // === Radix Themes UI Roles ===
+  background: 'var(--color-background)',
+  surface: 'var(--color-surface)',
+  surfaceHover: 'var(--gray-4)',
+  surfaceActive: 'var(--gray-5)',
+  panel: 'var(--color-panel)',
+  overlay: 'var(--color-overlay)',
+  shadow: 'var(--color-shadow)',
+  disabled: 'var(--gray-a4)',
+  disabledText: 'var(--gray-a11)',
 
-  // === Legacy Aliases (for gradual migration) ===
-  /** @deprecated Use bg1 */
-  background: 'var(--background)',
-  /** @deprecated Use textPrimary */
-  foreground: 'var(--foreground)',
-  /** @deprecated Use bg2 */
-  card: 'var(--card)',
-  /** @deprecated Use textPrimary */
-  cardForeground: 'var(--card-foreground)',
-  /** @deprecated Use shadow */
-  cardShadow: 'var(--card-shadow)',
-  /** @deprecated Use surface */
-  muted: 'var(--muted)',
-  /** @deprecated Use textSecondary */
-  mutedForeground: 'var(--muted-foreground)',
-  /** @deprecated Use borderLight */
-  borderSubtle: 'var(--border-subtle)',
-  /** @deprecated Use borderHover */
-  borderStrong: 'var(--border-strong)',
+  // === Accent Scale (Interactive) ===
+  accent: 'var(--accent-9)',
+  accentContrast: '#ffffff',
+  accentMuted: 'var(--accent-3)',
+  accentBorder: 'var(--accent-6)',
+  accentBorderHover: 'var(--accent-7)',
+  ring: 'var(--accent-a8)',
+  
+  // === Gray Scale (Neutral) ===
+  gray: 'var(--gray-9)',
+  grayContrast: '#ffffff',
+  grayMuted: 'var(--gray-3)',
+  grayBorder: 'var(--gray-6)',
+  grayBorderHover: 'var(--gray-7)',
+  textPrimary: 'var(--gray-12)',
+  textSecondary: 'var(--gray-11)',
+  
+  // === Functional Scales ===
+  success: 'var(--success-9)',
+  successMuted: 'var(--success-3)',
+  successBorder: 'var(--success-6)',
+  
+  warning: 'var(--warning-9)',
+  warningMuted: 'var(--warning-3)',
+  warningBorder: 'var(--warning-6)',
+  
+  error: 'var(--error-9)',
+  errorMuted: 'var(--error-3)',
+  errorBorder: 'var(--error-6)',
+
+  // === Alpha Tokens ===
+  alpha: {
+    1: 'var(--gray-a1)',
+    2: 'var(--gray-a2)',
+    3: 'var(--gray-a3)',
+    4: 'var(--gray-a4)',
+    5: 'var(--gray-a5)',
+    8: 'var(--gray-a8)',
+    11: 'var(--gray-a11)',
+    12: 'var(--gray-a12)',
+  },
+  accentAlpha: {
+    1: 'var(--accent-a1)',
+    2: 'var(--accent-a2)',
+    3: 'var(--accent-a3)',
+    4: 'var(--accent-a4)',
+    5: 'var(--accent-a5)',
+    8: 'var(--accent-a8)',
+    11: 'var(--accent-a11)',
+    12: 'var(--accent-a12)',
+  },
 } as const;
 

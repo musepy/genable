@@ -12,6 +12,9 @@
 import { h } from 'preact';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { emit } from '@create-figma-plugin/utilities';
+import { Button } from './Button';
+import { ImportJsonHandler } from '../../types';
 import { tokens } from '../design-system/tokens';
 
 // ============================================
@@ -76,7 +79,7 @@ const paragraphStyle: React.CSSProperties = {
 };
 
 const linkStyle: React.CSSProperties = {
-  color: tokens.colors.primary,
+  color: tokens.colors.accent,
   textDecoration: 'underline',
 };
 
@@ -88,7 +91,7 @@ const tableStyle: React.CSSProperties = {
 };
 
 const thStyle: React.CSSProperties = {
-  border: `1px solid ${tokens.colors.border}`,
+  border: `1px solid ${tokens.colors.grayBorder}`,
   padding: tokens.space[2],
   background: tokens.colors.surface,
   textAlign: 'left',
@@ -96,7 +99,7 @@ const thStyle: React.CSSProperties = {
 };
 
 const tdStyle: React.CSSProperties = {
-  border: `1px solid ${tokens.colors.border}`,
+  border: `1px solid ${tokens.colors.grayBorder}`,
   padding: tokens.space[2],
 };
 
@@ -147,12 +150,50 @@ function renderL3(content: string) {
               </code>
             );
           }
+
+          const codeContent = String(children).replace(/\n$/, '');
+          const isJson = codeContent.trim().startsWith('[') || codeContent.trim().startsWith('{');
+          
+          const handleImport = () => {
+             emit<ImportJsonHandler>('IMPORT_JSON', { jsonString: codeContent });
+          };
+
           return (
-            <pre style={codeBlockStyle}>
-              <code className={className} {...props}>
-                {children}
-              </code>
-            </pre>
+            <div style={{ position: 'relative', margin: `${tokens.space[2]}px 0` }}>
+              {isJson && (
+                <div style={{ 
+                  position: 'absolute', 
+                  top: tokens.space[2], 
+                  right: tokens.space[2], 
+                  zIndex: 10
+                }}>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={handleImport}
+                    style={{ 
+                      height: 24, 
+                      padding: '0 8px', 
+                      fontSize: '10px',
+                      background: tokens.colors.surface,
+                      borderColor: tokens.colors.grayBorder
+                    }}
+                    leftIcon={
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    }
+                  >
+                    导入 Figma
+                  </Button>
+                </div>
+              )}
+              <pre style={{ ...codeBlockStyle, margin: 0 }}>
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              </pre>
+            </div>
           );
         },
         

@@ -52,9 +52,9 @@ export function Header({
           alignItems: 'center',
           gap: tokens.space[1],
           padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-          background: tokens.colors.bg2, // Migrated from colors.card
+          background: tokens.colors.surface, // Migrated from colors.card
           color: tokens.colors.textPrimary,
-          border: `1px solid ${tokens.colors.border}`,
+          border: `1px solid ${tokens.colors.grayBorder}`,
           borderRadius: 'var(--radius-full)',
           fontSize: tokens.fontSize[1],
           fontWeight: tokens.fontWeight.medium,
@@ -65,12 +65,12 @@ export function Header({
         onMouseEnter={(e) => {
           if (newChatEnabled) {
             e.currentTarget.style.background = tokens.colors.surface;
-            e.currentTarget.style.borderColor = tokens.colors.borderHover;
+            e.currentTarget.style.borderColor = tokens.colors.grayBorderHover;
           }
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.background = tokens.colors.bg2;
-          e.currentTarget.style.borderColor = tokens.colors.border;
+          e.currentTarget.style.background = tokens.colors.surface;
+          e.currentTarget.style.borderColor = tokens.colors.grayBorder;
         }}
         aria-label={t.newDesign}
         aria-disabled={!newChatEnabled}
@@ -80,7 +80,81 @@ export function Header({
       </button>
       
       {/* Spacer */}
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', paddingLeft: tokens.space[2] }}>
+        <div style={{
+          fontSize: '10px',
+          fontWeight: 700,
+          color: tokens.colors.accent,
+          background: tokens.colors.surface,
+          padding: '2px 6px',
+          borderRadius: 'var(--radius-1)',
+          border: `1px solid ${tokens.colors.grayBorder}`,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          opacity: 0.8
+        }}>
+          🧪 Dogfood
+        </div>
+      </div>
+
+      {/* Dogfood Tools */}
+      <div style={{ display: 'flex', gap: tokens.space[1], marginRight: tokens.space[1] }}>
+        <button
+          style={{
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            color: tokens.colors.textSecondary,
+            border: 'none',
+            borderRadius: 'var(--radius-full)',
+            cursor: 'pointer',
+            transition: 'var(--transition-crisp)',
+          }}
+          onClick={() => emit<import('../../types').SerializeSelectionHandler>('SERIALIZE_SELECTION')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = tokens.colors.surface;
+            e.currentTarget.style.color = tokens.colors.textPrimary;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = tokens.colors.textSecondary;
+          }}
+          title="Export Selection to DSL"
+        >
+          <Braces size={16} strokeWidth={2} />
+        </button>
+
+        <button
+          style={{
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            color: tokens.colors.textSecondary,
+            border: 'none',
+            borderRadius: 'var(--radius-full)',
+            cursor: 'pointer',
+            transition: 'var(--transition-crisp)',
+          }}
+          onClick={() => (window as any).toggleDeveloperPanel?.()}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = tokens.colors.surface;
+            e.currentTarget.style.color = tokens.colors.textPrimary;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = tokens.colors.textSecondary;
+          }}
+          title="Toggle Developer Sync Panel"
+        >
+          <Braces size={16} strokeWidth={2} />
+        </button>
+      </div>
 
       {/* Settings Button */}
       <button
@@ -112,90 +186,6 @@ export function Header({
         <Settings size={16} strokeWidth={2} />
       </button>
 
-      {/* Dev: Import JSON */}
-      <button
-        style={{
-          width: 28, // Match height of tokens
-          height: 28,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'transparent',
-          color: tokens.colors.textSecondary,
-          border: 'none',
-          borderRadius: 'var(--radius-full)',
-          cursor: 'pointer',
-          transition: 'var(--transition-crisp)',
-          marginRight: tokens.space[1],
-        }}
-        onClick={() => {
-          const json = window.prompt("Paste Genable JSON here:");
-          if (json) {
-            try {
-              // Validate JSON structure simply
-              JSON.parse(json);
-              emit<ImportJsonHandler>('IMPORT_JSON', { jsonString: json });
-            } catch (e) {
-              console.error('Invalid JSON', e);
-              // Simple feedback
-              // alert('Invalid JSON'); // Alert might be blocked or ugly
-            }
-          }
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = tokens.colors.surface;
-          e.currentTarget.style.color = tokens.colors.textPrimary;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = tokens.colors.textSecondary;
-        }}
-        title="Result JSON (Dev)"
-      >
-        <Braces size={16} strokeWidth={2} />
-      </button>
-
-      {/* Dev: Import JSON */}
-      <button
-        style={{
-          width: 28, // Match height of tokens
-          height: 28,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'transparent',
-          color: tokens.colors.textSecondary,
-          border: 'none',
-          borderRadius: 'var(--radius-full)',
-          cursor: 'pointer',
-          transition: 'var(--transition-crisp)',
-          marginRight: tokens.space[1],
-        }}
-        onClick={() => {
-          const json = window.prompt("Paste Genable JSON here:");
-          if (json) {
-            // Lazy import emit to avoid circular deps if any, or just assume it's global? 
-            // Header is a dumb component, usually callbacks are passed in.
-            // But for this Dev feature, we'll emit directly or better, pass a handler.
-            // Requirement said "Robust". Passing handler is better but involves plumbing.
-            // Given "Don't create helper scripts... use standard tools", and `emit` is a standard tool here.
-            // Need to import `emit`.
-            // Wait, Header.tsx doesn't import `emit`.
-            // Let's modify imports first.
-          }
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = tokens.colors.surface;
-          e.currentTarget.style.color = tokens.colors.textPrimary;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = tokens.colors.textSecondary;
-        }}
-        title="Import JSON (Dev)"
-      >
-        <Braces size={16} strokeWidth={2} />
-      </button>
       
       {/* Theme Toggle */}
       <button 
@@ -208,8 +198,8 @@ export function Header({
           height: 24,
           padding: '2px', // Optical adjustment: (24px - 20px) / 2 = 2px, not a spacing token
           borderRadius: 'var(--radius-full)',
-          background: theme === 'dark' ? tokens.colors.borderHover : tokens.colors.surface,
-          border: `1px solid ${tokens.colors.border}`,
+          background: theme === 'dark' ? tokens.colors.grayBorderHover : tokens.colors.surface,
+          border: `1px solid ${tokens.colors.grayBorder}`,
           display: 'flex',
           alignItems: 'center',
           cursor: 'pointer',
@@ -224,7 +214,7 @@ export function Header({
             width: 20,
             height: 20,
             borderRadius: '50%',
-            background: tokens.colors.bg2, // Migrated from colors.card
+            background: tokens.colors.surface, // Migrated from colors.card
             boxShadow: tokens.colors.shadow, // Replaced rgba(0,0,0,0.15)
             display: 'flex',
             alignItems: 'center',

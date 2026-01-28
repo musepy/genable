@@ -17,7 +17,7 @@ import { tokens } from './design-system/tokens';
 export const containerStyle = {
   display: 'flex',
   flexDirection: 'column' as const,
-  background: tokens.colors.bg1, // Migrated from colors.background
+  background: tokens.colors.background, // Migrated from colors.background
   color: tokens.colors.textPrimary,
   fontFamily: tokens.font.sans,
   fontSize: tokens.fontSize[1], // 12px - Token compliant
@@ -41,8 +41,8 @@ export const headerStyle = {
  * Used in: various card components
  */
 export const cardStyle = {
-  background: tokens.colors.bg2, // Migrated from colors.card
-  border: `1px solid ${tokens.colors.border}`,
+  background: tokens.colors.surface, // Migrated from colors.card
+  border: `1px solid ${tokens.colors.grayBorder}`,
   borderRadius: 'var(--radius-5)',
   padding: tokens.space[4], // Migrated from space.md
 };
@@ -59,8 +59,8 @@ export const btnPrimaryStyle = {
   padding: `${tokens.space[2]}px ${tokens.space[4]}px`, // Migrated from sm, md
   fontSize: tokens.fontSize[1], // 12px - Token compliant
   fontWeight: tokens.fontWeight.medium,
-  background: tokens.colors.primary,
-  color: tokens.colors.primaryForeground,
+  background: tokens.colors.accent,
+  color: tokens.colors.accentContrast,
   border: 'none',
   borderRadius: 'var(--radius-4)',
   cursor: 'pointer',

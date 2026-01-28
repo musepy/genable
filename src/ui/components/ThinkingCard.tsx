@@ -92,7 +92,7 @@ const gridContentStyle: React.CSSProperties = {
 
 const innerContentStyle: React.CSSProperties = {
   padding: `${tokens.space[2]}px ${tokens.space[1]}px`,
-  borderTop: `1px solid ${tokens.colors.borderLight}`,
+  borderTop: `1px solid ${tokens.colors.grayBorder}`,
   fontSize: 'var(--font-size-1)',
   color: tokens.colors.textSecondary,
   lineHeight: tokens.lineHeight[3],
@@ -106,7 +106,7 @@ const tagRowStyle: React.CSSProperties = {
 
 const tagStyle: React.CSSProperties = {
   padding: `2px ${tokens.space[2]}px`,
-  background: tokens.colors.bg2, // Migrated from colors.card
+  background: tokens.colors.surface, // Migrated from colors.card
   borderRadius: 'var(--radius-full)',
   fontSize: 'var(--font-size-1)',
   color: tokens.colors.textSecondary,
@@ -173,7 +173,7 @@ export function ThinkingCard({ summary, thinking }: ThinkingCardProps) {
               </div>
             )}
             {thinking.rationale && (
-              <div style={{ color: tokens.colors.primary }}>{thinking.rationale}</div>
+              <div style={{ color: tokens.colors.accent }}>{thinking.rationale}</div>
             )}
           </div>
         </div>

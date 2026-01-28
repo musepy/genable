@@ -48,7 +48,7 @@ export function ExperimentTab({
             Testing: <span style={{ color: tokens.colors.accent }}>{testProgress.variant}</span>
           </Text>
           <div style={{
-            background: tokens.colors.bg1, // Migrated from colors.background
+            background: tokens.colors.background, // Migrated from colors.background
             borderRadius: 'var(--radius-2)',
             height: tokens.space[2], // 8px
             overflow: 'hidden',
@@ -72,7 +72,7 @@ export function ExperimentTab({
           <Text style={{ fontWeight: 600, fontSize: tokens.fontSize[1], marginBottom: tokens.space[4] }}>Results</Text>
           <table style={{ width: '100%', fontSize: tokens.fontSize[1], borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: `1px solid ${tokens.colors.border}` }}>
+              <tr style={{ borderBottom: `1px solid ${tokens.colors.grayBorder}` }}>
                 <th style={{ textAlign: 'left', padding: `${tokens.space[1]}px 0`, color: tokens.colors.textSecondary }}>Variant</th>
                 <th style={{ textAlign: 'right', padding: `${tokens.space[1]}px 0`, color: tokens.colors.textSecondary }}>Button</th>
                 <th style={{ textAlign: 'right', padding: `${tokens.space[1]}px 0`, color: tokens.colors.textSecondary }}>Stats</th>
@@ -82,25 +82,25 @@ export function ExperimentTab({
             </thead>
             <tbody>
               {testSummaries.map(summary => (
-                <tr key={summary.variant} style={{ borderBottom: `1px solid ${tokens.colors.border}` }}>
+                <tr key={summary.variant} style={{ borderBottom: `1px solid ${tokens.colors.grayBorder}` }}>
                   <td style={{ padding: `${tokens.space[2]}px 0`, fontWeight: 600 }}>
                     {summary.variant === 'current' ? 'Current' : summary.variant === 'example-first' ? 'Example-First' : 'Constraint-First'}
                   </td>
                   <td style={{
                     textAlign: 'right',
-                    color: summary.buttonHeightAccuracy > 0.7 ? tokens.colors.success : tokens.colors.destructive
+                    color: summary.buttonHeightAccuracy > 0.7 ? tokens.colors.success : tokens.colors.error
                   }}>
                     {(summary.buttonHeightAccuracy * 100).toFixed(0)}%
                   </td>
                   <td style={{
                     textAlign: 'right',
-                    color: summary.statsLayoutAccuracy > 0.7 ? tokens.colors.success : tokens.colors.destructive
+                    color: summary.statsLayoutAccuracy > 0.7 ? tokens.colors.success : tokens.colors.error
                   }}>
                     {(summary.statsLayoutAccuracy * 100).toFixed(0)}%
                   </td>
                   <td style={{
                     textAlign: 'right',
-                    color: summary.avatarCornerAccuracy > 0.7 ? tokens.colors.success : tokens.colors.destructive
+                    color: summary.avatarCornerAccuracy > 0.7 ? tokens.colors.success : tokens.colors.error
                   }}>
                     {(summary.avatarCornerAccuracy * 100).toFixed(0)}%
                   </td>

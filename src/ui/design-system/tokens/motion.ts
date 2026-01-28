@@ -21,14 +21,14 @@ export const interactionTokens = {
   hover: {
     // Background overlay for interactive elements
     overlayOpacity: 0.08,  // 8% overlay per MD3
-    borderColor: 'var(--border-strong)',
+    borderColor: 'var(--gray-8)',
     shadow: '0 2px 4px rgba(0,0,0,0.08)',
   },
   pressed: {
     overlayOpacity: 0.12,  // 12% overlay per MD3
   },
   focused: {
-    ring: '0 0 0 2px var(--background), 0 0 0 4px var(--ring)',
+    ring: '0 0 0 2px var(--color-background), 0 0 0 4px var(--accent-a8)',
   },
   disabled: {
     opacity: 0.5,          // Unified disabled opacity

@@ -53,7 +53,7 @@ export function OnboardingView({
       justifyContent: 'center',
       height: '100%',
       padding: tokens.space[5],
-      background: 'var(--background)',
+      background: 'var(--color-background)',
     }}>
       <Card style={{ width: '100%', maxWidth: 360 }}>
         <CardHeader>
@@ -63,7 +63,7 @@ export function OnboardingView({
             gap: tokens.space[2],
             marginBottom: tokens.space[1],
           }}>
-            <Sparkles size={24} strokeWidth={1.5} style={{ color: 'var(--primary)' }} />
+            <Sparkles size={24} strokeWidth={1.5} style={{ color: 'var(--accent-9)' }} />
             <CardTitle>Connect Gemini AI</CardTitle>
           </div>
           <CardDescription>
@@ -73,7 +73,7 @@ export function OnboardingView({
               href="https://aistudio.google.com/apikey" 
               target="_blank" 
               rel="noopener noreferrer"
-              style={{ color: 'var(--primary)', textDecoration: 'underline' }}
+              style={{ color: 'var(--accent-9)', textDecoration: 'underline' }}
             >
               Google AI Studio
             </a>
@@ -88,16 +88,16 @@ export function OnboardingView({
               value={apiKey}
               onInput={(e) => setApiKey((e.target as HTMLInputElement).value)}
               style={{ 
-                borderColor: displayError ? 'var(--destructive)' : undefined,
+                borderColor: displayError ? 'var(--error-9)' : undefined,
               }}
             />
             
             {displayError && (
               <div style={{
                 fontSize: tokens.fontSize[1],
-                color: 'var(--destructive)',
+                color: 'var(--error-9)',
                 padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-                background: 'var(--destructive-muted)',
+                background: 'var(--error-3)',
                 borderRadius: 'var(--radius-2)',
               }}>
                 {displayError}

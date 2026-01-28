@@ -30,7 +30,7 @@ export function Input({
     fontFamily: tokens.font.sans,
     background: 'transparent', // Transparent to avoid dark mode issues
     color: tokens.colors.textPrimary,
-    border: `1px solid ${tokens.colors.border}`,
+    border: `1px solid ${tokens.colors.grayBorder}`,
     borderRadius: 'var(--radius-2)',
     outline: 'none',
     transition: 'border-color var(--duration-normal) var(--ease-default)',
@@ -54,7 +54,7 @@ export function Input({
           (e.target as HTMLInputElement).style.borderColor = tokens.colors.ring;
         }}
         onBlur={(e) => {
-          (e.target as HTMLInputElement).style.borderColor = tokens.colors.border;
+          (e.target as HTMLInputElement).style.borderColor = tokens.colors.grayBorder;
         }}
       />
       {rightElement && (

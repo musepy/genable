@@ -16,6 +16,7 @@ import { Input } from './components/Input';
 import { ModelSelector } from './components/ModelSelector';
 import { useDebounce } from './hooks/useDebounce';
 import { LocalComponent } from '../types';
+import { DeveloperPanel } from './components/DeveloperPanel';
 
 export interface SettingsPanelProps {
   apiKey: string;
@@ -70,7 +71,7 @@ export function SettingsPanel({
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      background: tokens.colors.bg1, // Migrated from colors.background
+      background: tokens.colors.background, // Migrated from colors.background
       fontFamily: tokens.font.sans,
       position: 'absolute',
       inset: 0,
@@ -80,7 +81,7 @@ export function SettingsPanel({
       {/* ===== HEADER (Simplified) ===== */}
       <div style={{ 
         padding: tokens.space[4],
-        borderBottom: `1px solid ${tokens.colors.border}`,
+        borderBottom: `1px solid ${tokens.colors.grayBorder}`,
         // No background - avoid dark mode color mismatch
       }}>
         <span style={{ 
@@ -120,7 +121,7 @@ export function SettingsPanel({
             placeholder="Enter Gemini API Key"
             fullWidth
             style={{
-              borderColor: fetchStatus === 'fail' ? tokens.colors.destructive : undefined
+              borderColor: fetchStatus === 'fail' ? tokens.colors.error : undefined
             }}
             rightElement={getStatusIndicator()}
           />
@@ -144,25 +145,26 @@ export function SettingsPanel({
             isLoading={fetchStatus === 'fetching'}
           />
         </div>
-
         {/* Error Display */}
         {settingsError && (
           <div style={{ 
-            color: tokens.colors.destructive,
+            color: tokens.colors.error,
             fontSize: tokens.fontSize[1],
             padding: tokens.space[2],
-            background: tokens.colors.destructiveMuted,
+            background: tokens.colors.errorMuted,
             borderRadius: 'var(--radius-4)',
           }}>
             {settingsError}
           </div>
         )}
+
+        <DeveloperPanel />
       </div>
 
       {/* ===== FOOTER ===== */}
       <div style={{ 
         padding: tokens.space[4],
-        borderTop: `1px solid ${tokens.colors.border}`,
+        borderTop: `1px solid ${tokens.colors.grayBorder}`,
         // No background - avoid dark mode color mismatch
       }}>
         <Button 

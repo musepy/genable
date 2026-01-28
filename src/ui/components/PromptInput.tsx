@@ -82,8 +82,8 @@ export function PromptInput({
     <div style={{
       ...componentStyles.inputArea.container,
       borderRadius: tokens.radii['2xl'], // 24px - Use token instead of hardcode
-      background: tokens.colors.bg2, // Migrated from colors.card
-      border: `1px solid ${tokens.colors.borderLight}`,
+      background: tokens.colors.surface, // Migrated from colors.card
+      border: `1px solid ${tokens.colors.grayBorder}`,
       boxShadow: tokens.colors.shadow, // Replaced rgba(0,0,0,0.08)
       // Note: Removed overflow: hidden to allow Popovers to float above
       // Note: margin removed - parent container controls spacing (隔离式原则)
@@ -141,7 +141,7 @@ export function PromptInput({
             height="16" 
             viewBox="0 0 24 24" 
             fill="none" 
-            stroke={canSubmit ? tokens.colors.solidForeground : tokens.colors.bg2} // Migrated from colors.card 
+            stroke={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface} // Migrated from colors.card 
             strokeWidth="2.5"
           >
              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/>

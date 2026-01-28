@@ -1,0 +1,915 @@
+{
+  "header": {
+    "name": "Plugin Header",
+    "layers": [
+      {
+        "type": "RECTANGLE",
+        "props": {
+          "name": "div",
+          "width": 0,
+          "height": 0,
+          "layoutMode": "HORIZONTAL",
+          "gap": 0,
+          "primaryAxisAlignItems": "MIN",
+          "counterAxisAlignItems": "CENTER",
+          "paddingTop": 16,
+          "paddingRight": 16,
+          "paddingBottom": 16,
+          "paddingLeft": 16
+        },
+        "children": [
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "button",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 4,
+              "paddingRight": 8,
+              "paddingBottom": 4,
+              "paddingLeft": 8
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "span",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "characters": "New design",
+                  "fontSize": null,
+                  "fontWeight": "",
+                  "fontFamily": ""
+                }
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "HORIZONTAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "MIN",
+              "counterAxisAlignItems": "CENTER",
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": 8
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": 2,
+                  "paddingRight": 6,
+                  "paddingBottom": 2,
+                  "paddingLeft": 6,
+                  "characters": "🧪 Dogfood",
+                  "fontSize": 10,
+                  "fontWeight": "700",
+                  "fontFamily": ""
+                }
+              }
+            ]
+          },
+          {
+            "type": "FRAME",
+            "props": {
+              "name": "button",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "HORIZONTAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "CENTER",
+              "counterAxisAlignItems": "CENTER",
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            }
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "button",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "HORIZONTAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "MIN",
+              "counterAxisAlignItems": "CENTER",
+              "paddingTop": 2,
+              "paddingRight": 2,
+              "paddingBottom": 2,
+              "paddingLeft": 2
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "CENTER",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "cornerRadius": 50
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-01-27T10:25:41.560Z"
+  },
+  "onboarding": {
+    "name": "Onboarding View",
+    "layers": [
+      {
+        "type": "RECTANGLE",
+        "props": {
+          "name": "div",
+          "width": 0,
+          "height": 0,
+          "layoutMode": "HORIZONTAL",
+          "gap": 0,
+          "primaryAxisAlignItems": "CENTER",
+          "counterAxisAlignItems": "CENTER",
+          "paddingTop": 24,
+          "paddingRight": 24,
+          "paddingBottom": 24,
+          "paddingLeft": 24
+        },
+        "children": [
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "VERTICAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "MIN",
+                  "counterAxisAlignItems": "MIN",
+                  "paddingTop": 24,
+                  "paddingRight": 24,
+                  "paddingBottom": 24,
+                  "paddingLeft": 24
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "layoutMode": "HORIZONTAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "CENTER",
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    },
+                    "children": [
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "h3",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null,
+                          "characters": "Connect Gemini AI",
+                          "fontSize": 16,
+                          "fontWeight": "600",
+                          "fontFamily": "Inter"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "p",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    },
+                    "children": [
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "a",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null,
+                          "characters": "Google AI Studio",
+                          "fontSize": null,
+                          "fontWeight": "",
+                          "fontFamily": ""
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": 0,
+                  "paddingRight": 24,
+                  "paddingBottom": 24,
+                  "paddingLeft": 24
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "layoutMode": "VERTICAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "MIN",
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    },
+                    "children": [
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "layoutMode": "HORIZONTAL",
+                          "gap": 0,
+                          "primaryAxisAlignItems": "MIN",
+                          "counterAxisAlignItems": "CENTER",
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null
+                        },
+                        "children": [
+                          {
+                            "type": "FRAME",
+                            "props": {
+                              "name": "input",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": 0,
+                              "paddingRight": 16,
+                              "paddingBottom": 0,
+                              "paddingLeft": 16
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "MIN",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": 0,
+                  "paddingRight": 24,
+                  "paddingBottom": 24,
+                  "paddingLeft": 24
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "button",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": 0,
+                      "paddingRight": 24,
+                      "paddingBottom": 0,
+                      "paddingLeft": 24,
+                      "characters": "Connect & Start",
+                      "fontSize": null,
+                      "fontWeight": "500",
+                      "fontFamily": "Inter"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-01-27T10:25:41.591Z"
+  },
+  "button": {
+    "name": "Standard Button",
+    "layers": [
+      {
+        "type": "RECTANGLE",
+        "props": {
+          "name": "button",
+          "width": 0,
+          "height": 0,
+          "paddingTop": 0,
+          "paddingRight": 16,
+          "paddingBottom": 0,
+          "paddingLeft": 16,
+          "characters": "Action Button",
+          "fontSize": null,
+          "fontWeight": "500",
+          "fontFamily": "Inter"
+        }
+      }
+    ],
+    "timestamp": "2026-01-27T10:25:41.597Z"
+  },
+  "prompt-input": {
+    "name": "Prompt Input",
+    "layers": [
+      {
+        "type": "RECTANGLE",
+        "props": {
+          "name": "div",
+          "width": 0,
+          "height": 0,
+          "paddingTop": null,
+          "paddingRight": null,
+          "paddingBottom": null,
+          "paddingLeft": null
+        },
+        "children": [
+          {
+            "type": "FRAME",
+            "props": {
+              "name": "textarea",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 12,
+              "paddingRight": 16,
+              "paddingBottom": 4,
+              "paddingLeft": 16
+            }
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "HORIZONTAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "SPACE_BETWEEN",
+              "counterAxisAlignItems": "CENTER",
+              "paddingTop": 8,
+              "paddingRight": 16,
+              "paddingBottom": 16,
+              "paddingLeft": 16
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                }
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "button",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "CENTER",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-01-27T10:25:41.608Z"
+  },
+  "settings-panel": {
+    "name": "Settings Panel",
+    "layers": [
+      {
+        "type": "RECTANGLE",
+        "props": {
+          "name": "div",
+          "width": 0,
+          "height": 0,
+          "layoutMode": "VERTICAL",
+          "gap": 0,
+          "primaryAxisAlignItems": "MIN",
+          "counterAxisAlignItems": "MIN",
+          "paddingTop": null,
+          "paddingRight": null,
+          "paddingBottom": null,
+          "paddingLeft": null
+        },
+        "children": [
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 16,
+              "paddingRight": 16,
+              "paddingBottom": 16,
+              "paddingLeft": 16
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "span",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "characters": "Settings",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                  "fontFamily": ""
+                }
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "VERTICAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "MIN",
+              "counterAxisAlignItems": "MIN",
+              "paddingTop": 16,
+              "paddingRight": 16,
+              "paddingBottom": 16,
+              "paddingLeft": 16
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "label",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null,
+                      "characters": "API Key",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "layoutMode": "HORIZONTAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "CENTER",
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    },
+                    "children": [
+                      {
+                        "type": "FRAME",
+                        "props": {
+                          "name": "input",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": 0,
+                          "paddingRight": 16,
+                          "paddingBottom": 0,
+                          "paddingLeft": 16
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "label",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null,
+                      "characters": "Model",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": 16,
+                      "paddingRight": 16,
+                      "paddingBottom": 16,
+                      "paddingLeft": 16,
+                      "characters": "Enter API Key to load models",
+                      "fontSize": 12,
+                      "fontWeight": "",
+                      "fontFamily": ""
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "VERTICAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "MIN",
+                  "counterAxisAlignItems": "MIN",
+                  "paddingTop": 16,
+                  "paddingRight": 16,
+                  "paddingBottom": 16,
+                  "paddingLeft": 16
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null,
+                      "characters": "🛠 开发者同步工具",
+                      "fontSize": 14,
+                      "fontWeight": "600",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "layoutMode": "VERTICAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "MIN",
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    },
+                    "children": [
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null
+                        },
+                        "children": [
+                          {
+                            "type": "RECTANGLE",
+                            "props": {
+                              "name": "button",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": 8,
+                              "paddingRight": 16,
+                              "paddingBottom": 8,
+                              "paddingLeft": 16,
+                              "characters": "推送 Code → Figma",
+                              "fontSize": 12,
+                              "fontWeight": "500",
+                              "fontFamily": ""
+                            }
+                          },
+                          {
+                            "type": "TEXT",
+                            "props": {
+                              "name": "button",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": 8,
+                              "paddingRight": 16,
+                              "paddingBottom": 8,
+                              "paddingLeft": 16,
+                              "characters": "拉取 Figma → Code",
+                              "fontSize": 12,
+                              "fontWeight": "500",
+                              "fontFamily": ""
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "layoutMode": "VERTICAL",
+                          "gap": 0,
+                          "primaryAxisAlignItems": "MIN",
+                          "counterAxisAlignItems": "MIN",
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null
+                        },
+                        "children": [
+                          {
+                            "type": "TEXT",
+                            "props": {
+                              "name": "button",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": 8,
+                              "paddingRight": 16,
+                              "paddingBottom": 8,
+                              "paddingLeft": 16,
+                              "characters": "📥 导入 JSON Tokens (DTCG)",
+                              "fontSize": 12,
+                              "fontWeight": "500",
+                              "fontFamily": ""
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "button",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": 8,
+                      "paddingRight": 16,
+                      "paddingBottom": 8,
+                      "paddingLeft": 16,
+                      "characters": "导出选中项为 Template",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "TEXT",
+                    "props": {
+                      "name": "button",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": 8,
+                      "paddingRight": 16,
+                      "paddingBottom": 8,
+                      "paddingLeft": 16,
+                      "characters": "📦 合并选中项为变体组 (Variants)",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    },
+                    "children": [
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "layoutMode": "HORIZONTAL",
+                          "gap": 0,
+                          "primaryAxisAlignItems": "MIN",
+                          "counterAxisAlignItems": "CENTER",
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null,
+                          "characters": "🏗️ 项目 UI 库 (Dogfooding)",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "fontFamily": ""
+                        }
+                      },
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "layoutMode": "VERTICAL",
+                          "gap": 0,
+                          "primaryAxisAlignItems": "MIN",
+                          "counterAxisAlignItems": "MIN",
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 16,
+              "paddingRight": 16,
+              "paddingBottom": 16,
+              "paddingLeft": 16
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "button",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": 0,
+                  "paddingRight": 24,
+                  "paddingBottom": 0,
+                  "paddingLeft": 24,
+                  "characters": "Save",
+                  "fontSize": null,
+                  "fontWeight": "500",
+                  "fontFamily": "Inter"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-01-27T10:25:41.640Z"
+  },
+  "chat-message": {
+    "name": "Chat Message",
+    "layers": [
+      {
+        "type": "RECTANGLE",
+        "props": {
+          "name": "div",
+          "width": 0,
+          "height": 0,
+          "paddingTop": null,
+          "paddingRight": null,
+          "paddingBottom": null,
+          "paddingLeft": null
+        },
+        "children": [
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "p",
+              "width": 0,
+              "height": 0,
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null,
+              "characters": "Hello, this is a captured message!",
+              "fontSize": null,
+              "fontWeight": "",
+              "fontFamily": ""
+            }
+          }
+        ]
+      }
+    ],
+    "timestamp": "2026-01-27T10:25:41.644Z"
+  }
+}

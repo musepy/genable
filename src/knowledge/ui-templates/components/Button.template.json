@@ -1,0 +1,113 @@
+{
+  "primary_default": {
+    "type": "FRAME",
+    "name": "Button",
+    "props": {
+      "layoutMode": "HORIZONTAL",
+      "primaryAxisAlignItems": "CENTER",
+      "counterAxisAlignItems": "CENTER",
+      "paddingLeft": 16,
+      "paddingRight": 16,
+      "height": 32,
+      "cornerRadius": 6,
+      "fills": ["solid"]
+    },
+    "children": [
+      {
+        "type": "TEXT",
+        "name": "Label",
+        "props": {
+          "characters": "Primary Button",
+          "fontSize": 13,
+          "fontFamily": "Inter",
+          "fills": ["solidForeground"],
+          "fontWeight": "MEDIUM"
+        }
+      }
+    ]
+  },
+  "primary_loading": {
+    "type": "FRAME",
+    "name": "Button",
+    "props": {
+      "layoutMode": "HORIZONTAL",
+      "primaryAxisAlignItems": "CENTER",
+      "counterAxisAlignItems": "CENTER",
+      "paddingLeft": 16,
+      "paddingRight": 16,
+      "height": 32,
+      "cornerRadius": 6,
+      "fills": ["solid"],
+      "opacity": 0.5
+    },
+    "children": [
+      {
+        "type": "TEXT",
+        "name": "Label",
+        "props": {
+          "characters": "Wait...",
+          "fontSize": 13,
+          "fontFamily": "Inter",
+          "fills": ["solidForeground"],
+          "fontWeight": "MEDIUM"
+        }
+      }
+    ]
+  },
+  "secondary_default": {
+    "type": "FRAME",
+    "name": "Button",
+    "props": {
+      "layoutMode": "HORIZONTAL",
+      "primaryAxisAlignItems": "CENTER",
+      "counterAxisAlignItems": "CENTER",
+      "paddingLeft": 16,
+      "paddingRight": 16,
+      "height": 32,
+      "cornerRadius": 6,
+      "fills": ["bg2"],
+      "strokes": ["border"],
+      "strokeWeight": 1
+    },
+    "children": [
+      {
+        "type": "TEXT",
+        "name": "Label",
+        "props": {
+          "characters": "Secondary Button",
+          "fontSize": 13,
+          "fontFamily": "Inter",
+          "fills": ["textPrimary"],
+          "fontWeight": "MEDIUM"
+        }
+      }
+    ]
+  },
+  "ghost_default": {
+    "type": "FRAME",
+    "name": "Button",
+    "props": {
+      "layoutMode": "HORIZONTAL",
+      "primaryAxisAlignItems": "CENTER",
+      "counterAxisAlignItems": "CENTER",
+      "paddingLeft": 12,
+      "paddingRight": 12,
+      "height": 32,
+      "cornerRadius": 6,
+      "fills": ["alpha/3"]
+    },
+    "children": [
+      {
+        "type": "TEXT",
+        "name": "Label",
+        "props": {
+          "characters": "Ghost Action",
+          "fontSize": 13,
+          "fontFamily": "Inter",
+          "fills": ["accent"],
+          "fontWeight": "MEDIUM"
+        }
+      }
+    ]
+  }
+}

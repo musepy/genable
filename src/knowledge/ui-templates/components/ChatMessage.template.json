@@ -1,0 +1,79 @@
+{
+  "type": "FRAME",
+  "name": "Chat History",
+  "props": {
+    "layoutMode": "VERTICAL",
+    "padding": 20,
+    "gap": 16,
+    "width": 340,
+    "fills": ["bg1"]
+  },
+  "children": [
+    {
+      "type": "FRAME",
+      "name": "User Message",
+      "props": {
+        "layoutMode": "HORIZONTAL",
+        "primaryAxisAlignItems": "MAX",
+        "layoutAlign": "STRETCH"
+      },
+      "children": [
+        {
+          "type": "FRAME",
+          "name": "Bubble",
+          "props": {
+            "padding": "10 12",
+            "cornerRadius": "16 16 0 16",
+            "fills": ["bg2"],
+            "strokes": ["border"],
+            "strokeWeight": 1
+          },
+          "children": [
+            {
+              "type": "TEXT",
+              "name": "Content",
+              "props": {
+                "characters": "Hello, how can I use dogfooding?",
+                "fontSize": 12,
+                "fills": ["textPrimary"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "FRAME",
+      "name": "Model Message",
+      "props": {
+        "layoutMode": "HORIZONTAL",
+        "primaryAxisAlignItems": "MIN",
+        "layoutAlign": "STRETCH"
+      },
+      "children": [
+        {
+          "type": "FRAME",
+          "name": "Bubble",
+          "props": {
+            "padding": "10 12",
+            "cornerRadius": "0 16 16 16",
+            "fills": ["bg1"],
+            "strokes": ["accentMuted"],
+            "strokeWeight": 1
+          },
+          "children": [
+            {
+              "type": "TEXT",
+              "name": "Response",
+              "props": {
+                "characters": "I can help you with that! Just pick a component from the list.",
+                "fontSize": 12,
+                "fills": ["textPrimary"]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

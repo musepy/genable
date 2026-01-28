@@ -1,0 +1,92 @@
+{
+  "type": "FRAME",
+  "name": "Settings Panel",
+  "props": {
+    "layoutMode": "VERTICAL",
+    "padding": 20,
+    "gap": 16,
+    "width": 340,
+    "fills": ["bg1"]
+  },
+  "children": [
+    {
+      "type": "TEXT",
+      "name": "Title",
+      "props": {
+        "characters": "Settings",
+        "fontSize": 16,
+        "fontWeight": "BOLD",
+        "fills": ["textPrimary"]
+      }
+    },
+    {
+      "type": "FRAME",
+      "name": "Field: API Key",
+      "props": {
+        "layoutMode": "VERTICAL",
+        "gap": 6,
+        "layoutAlign": "STRETCH"
+      },
+      "children": [
+        {
+          "type": "TEXT",
+          "name": "Label",
+          "props": {
+            "characters": "Gemini API Key",
+            "fontSize": 12,
+            "fills": ["textSecondary"]
+          }
+        },
+        {
+          "type": "FRAME",
+          "name": "Input",
+          "props": {
+            "padding": 10,
+            "cornerRadius": 6,
+            "fills": ["bg2"],
+            "strokes": ["border"],
+            "strokeWeight": 1,
+            "layoutAlign": "STRETCH"
+          },
+          "children": [
+            {
+              "type": "TEXT",
+              "name": "Value",
+              "props": {
+                "characters": "••••••••••••••••",
+                "fontSize": 12,
+                "fills": ["textSecondary"],
+                "opacity": 0.5
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "FRAME",
+      "name": "Save Button",
+      "props": {
+        "layoutMode": "HORIZONTAL",
+        "primaryAxisAlignItems": "CENTER",
+        "paddingTop": 10,
+        "paddingBottom": 10,
+        "cornerRadius": 999,
+        "fills": ["solid"],
+        "layoutAlign": "STRETCH"
+      },
+      "children": [
+        {
+          "type": "TEXT",
+          "name": "Label",
+          "props": {
+            "characters": "Save Settings",
+            "fontSize": 14,
+            "fills": ["solidForeground"],
+            "fontWeight": "MEDIUM"
+          }
+        }
+      ]
+    }
+  ]
+}

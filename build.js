@@ -63,6 +63,10 @@ if (isWatch) {
 } else {
   // One-shot build
   try {
+    console.log(`📸 Running UI Capture Engine...`);
+    execSync(`npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/capture-ui.ts`, { stdio: 'inherit' });
+    
+    console.log(`🔨 Running Figma Plugin Build...`);
     execSync(`npx ${buildArgs.join(' ')}`, { stdio: 'inherit' });
     injectMetaData();
     console.log(`\n✅ Build complete!`);

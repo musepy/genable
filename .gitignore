@@ -2,6 +2,11 @@
 *.log
 *.css.d.ts
 /build/
+combined_import.js
+verify_tokens.js
+temp_*.css
+reproduce_bug.js
+repro_*.ts
 
 node_modules/
 dist/

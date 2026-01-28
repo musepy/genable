@@ -36,18 +36,27 @@ export class PaintResolver {
             // 2. Token/Style Resolution (Implicit)
             const isLiteral = normalized.startsWith('#') || normalized.startsWith('rgba') || normalized.startsWith('rgb');
             if (!isLiteral) {
-                // Check Variables Map
-                const foundVar = figmaVariableCache.getVariable(normalized);
-                if (foundVar && foundVar.resolvedType === 'COLOR') {
-                    const paint: SolidPaint = { type: 'SOLID', color: { r: 0, g: 0, b: 0 } };
-                    return figma.variables.setBoundVariableForPaint(paint, 'color', foundVar);
+                // Determine search terms (original, lowercase, and relative paths)
+                const searchTerms = [normalized];
+                if (input.includes('/')) {
+                    searchTerms.push(input.split('/').pop()!.toLowerCase());
                 }
 
-                // Check Paint Styles
-                const style = figmaVariableCache.getStyle(normalized);
-                if (style && style.paints.length > 0) return style.paints[0];
+                for (const term of searchTerms) {
+                    // Check Variables Map
+                    const foundVar = figmaVariableCache.getVariable(term);
+                    if (foundVar && foundVar.resolvedType === 'COLOR') {
+                        const paint: SolidPaint = { type: 'SOLID', color: { r: 0, g: 0, b: 0 } };
+                        return figma.variables.setBoundVariableForPaint(paint, 'color', foundVar);
+                    }
+
+                    // Check Paint Styles
+                    const style = figmaVariableCache.getStyle(term);
+                    if (style && style.paints.length > 0) return style.paints[0];
+                }
                 
-                if (!normalized.includes(' ')) { // Avoid logging every sentence in text blocks
+                if (!normalized.includes(' ')) { 
+                     // Only log if it's a single word/path (potential token)
                      this.logFallback(input, `Token/Style "${normalized}" not found.`);
                 }
             }

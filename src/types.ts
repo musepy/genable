@@ -181,9 +181,110 @@ export interface SendLocalComponentsHandler extends EventHandler {
   handler: (data: { components: LocalComponent[] }) => void;
 }
 
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+  data?: NodeLayer; // Legacy single-state support
+  variants?: {      // New multi-state support
+    name: string;   // e.g. "Variant=Primary, State=Default"
+    data: NodeLayer;
+  }[];
+}
+
+export interface GetProjectTemplatesHandler extends EventHandler {
+  name: 'GET_PROJECT_TEMPLATES';
+  handler: () => void;
+}
+
+export interface SendProjectTemplatesHandler extends EventHandler {
+  name: 'SEND_PROJECT_TEMPLATES';
+  handler: (data: { templates: ProjectTemplate[] }) => void;
+}
+
+export interface ImportProjectTemplateHandler extends EventHandler {
+  name: 'IMPORT_PROJECT_TEMPLATE';
+  handler: (data: { templateId: string }) => void;
+}
+
 export interface ImportJsonHandler extends EventHandler {
   name: 'IMPORT_JSON';
   handler: (data: { jsonString: string }) => void;
+}
+
+export interface CombineVariantsHandler extends EventHandler {
+  name: 'COMBINE_VARIANTS';
+  handler: (data: { prefix: string }) => void;
+}
+
+export interface GetSnapshotHistoryHandler extends EventHandler {
+  name: 'GET_SNAPSHOT_HISTORY';
+  handler: () => void;
+}
+
+export interface SendSnapshotHistoryHandler extends EventHandler {
+  name: 'SEND_SNAPSHOT_HISTORY';
+  handler: (data: { history: any[] }) => void;
+}
+
+// Dogfooding: Figma to Code Serialization
+export interface SerializeSelectionHandler extends EventHandler {
+  name: 'SERIALIZE_SELECTION';
+  handler: () => void;
+}
+
+export interface SendSerializedSelectionHandler extends EventHandler {
+  name: 'SEND_SERIALIZED_SELECTION';
+  handler: (data: { jsonString: string }) => void;
+}
+
+export interface ImportTokensHandler extends EventHandler {
+  name: 'IMPORT_TOKENS';
+  handler: (data: { cssString: string, jsonString?: string }) => void;
+}
+
+export interface ExportTokensHandler extends EventHandler {
+  name: 'EXPORT_TOKENS';
+  handler: () => void;
+}
+
+export interface SendExportedTokensHandler extends EventHandler {
+  name: 'SEND_EXPORTED_TOKENS';
+  handler: (data: { tokens: any }) => void;
+}
+
+// ==========================================
+// Level 2: Automated Fidelity Capture
+// ==========================================
+
+/**
+ * Interface for components that can self-serialize to Figma DSL
+ */
+export interface ISerializableComponent {
+  toNodeLayer(): Promise<NodeLayer>;
+}
+
+/**
+ * Result of a DOM capture operation
+ */
+export interface CaptureResult {
+  success: boolean;
+  layers: NodeLayer[];
+  error?: string;
+}
+
+export interface CaptureUIHandler extends EventHandler {
+  name: 'CAPTURE_UI';
+  handler: (data: { componentId: string }) => void;
+}
+
+export interface SendCapturedUIHandler extends EventHandler {
+  name: 'SEND_CAPTURED_UI';
+  handler: (data: { 
+    templateId: string;
+    layers: NodeLayer[];
+  }) => void;
 }
 
 // ==========================================

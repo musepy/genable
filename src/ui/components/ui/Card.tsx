@@ -38,11 +38,11 @@ export interface CardFooterProps {
  */
 export function Card({ children, style, ...props }: CardProps) {
   const cardStyle: h.JSX.CSSProperties = {
-    background: 'var(--card)',
-    color: 'var(--card-foreground)',
+    background: 'var(--color-surface)',
+    color: 'var(--gray-12)',
     borderRadius: 'var(--radius-3)',
-    border: `1px solid var(--border)`,
-    boxShadow: 'var(--card-shadow)',
+    border: `1px solid var(--gray-6)`,
+    boxShadow: 'var(--color-shadow)',
     // Note: Removed overflow: hidden to allow Popovers to float above
     ...style,
   };
@@ -82,7 +82,7 @@ export function CardTitle({ children, style }: CardTitleProps) {
       fontWeight: tokens.fontWeight.semibold,
       lineHeight: tokens.lineHeight[1],
       fontFamily: tokens.font.sans,
-      color: 'var(--foreground)',
+      color: 'var(--gray-12)',
       ...style,
     }}>
       {children}
@@ -98,7 +98,7 @@ export function CardDescription({ children, style }: CardDescriptionProps) {
     <p style={{
       margin: 0,
       fontSize: tokens.fontSize[1],
-      color: 'var(--muted-foreground)',
+      color: 'var(--gray-11)',
       fontFamily: tokens.font.sans,
       lineHeight: tokens.lineHeight[2],
       ...style,

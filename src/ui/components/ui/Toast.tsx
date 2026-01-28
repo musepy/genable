@@ -137,24 +137,24 @@ function Toast({ data, onDismiss }: ToastProps) {
 
   const variantStyles: Record<ToastVariant, h.JSX.CSSProperties> = {
     default: {
-      background: 'var(--card)',
-      borderColor: 'var(--border)',
-      color: 'var(--foreground)',
+      background: 'var(--color-surface)',
+      borderColor: 'var(--gray-6)',
+      color: 'var(--gray-12)',
     },
     success: {
-      background: 'var(--success-muted)',
-      borderColor: 'var(--success-border)',
-      color: 'var(--success)',
+      background: 'var(--success-3)',
+      borderColor: 'var(--success-6)',
+      color: 'var(--success-9)',
     },
     error: {
-      background: 'var(--destructive-muted)',
-      borderColor: 'var(--destructive-border)',
-      color: 'var(--destructive)',
+      background: 'var(--error-3)',
+      borderColor: 'var(--error-6)',
+      color: 'var(--error-9)',
     },
     warning: {
-      background: 'var(--warning-muted)',
-      borderColor: 'var(--warning-border)',
-      color: 'var(--warning)',
+      background: 'var(--warning-3)',
+      borderColor: 'var(--warning-6)',
+      color: 'var(--warning-9)',
     },
   };
 

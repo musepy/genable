@@ -122,7 +122,7 @@ export function ModelSelector({
             <span style={{ 
               fontSize: tokens.fontSize[1], // Same as trigger (12px)
               color: tokens.colors.textPrimary,  // Unified color, no change on selection
-              fontWeight: tokens.fontWeight.normal,  // No font-weight change
+              fontWeight: tokens.fontWeight.regular,  // No font-weight change
             }}>
               {model.displayName || model.name}
             </span>

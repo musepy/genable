@@ -22,7 +22,7 @@ import type {
 import { PropertyTransformer } from '../propertyTransformer';
 import { extractFigmaNodeData } from '../figmaNodeData';
 import { PROP_METADATA, PROPS } from '../../../constants/figma-api';
-import { findNodeById, registerNode } from '../../pipeline/RenderOrchestrator';
+import { findNodeByIdAsync, registerNode } from '../../pipeline/RenderOrchestrator';
 import { renderNodeDSL } from './index';
 
 export type {
@@ -72,7 +72,7 @@ export abstract class BaseRenderer {
     async render(dsl: NodeLayer, context: RenderContext): Promise<SceneNode | null> {
         try {
             // [V7] STEP 1: Find or Create
-            let node = dsl.id ? findNodeById(dsl.id) : null;
+            let node = dsl.id ? await findNodeByIdAsync(dsl.id) : null;
             let isNew = false;
 
             if (node) {

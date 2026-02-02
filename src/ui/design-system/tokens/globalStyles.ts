@@ -1,0 +1,126 @@
+/**
+ * @file globals.css.ts
+ * @description Global CSS styles and component classes
+ */
+
+export const globalStyles = `
+  /* --- Global Styles --- */
+  * { box-sizing: border-box; }
+  body { 
+    margin: 0; 
+    font-family: var(--font-sans, Inter, system-ui, sans-serif); 
+    background-color: var(--color-background);
+    color: var(--gray-12);
+  }
+
+  /* --- Component Standard Classes --- */
+
+  /* --- Component Styles --- */
+  .header-container {
+    display: flex;
+    align-items: center;
+    height: var(--header-height);
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--header-border);
+    padding: 0 var(--space-3); /* 对齐设计稿的紧凑感 */
+    box-sizing: border-box;
+  }
+
+  .header-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    background: transparent; /* 默认 Ghost 风格 */
+    color: var(--text-primary);
+    border: 1px solid var(--header-border);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-1);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: var(--transition-crisp);
+  }
+  .header-chip:hover:not(.disabled),
+  .header-chip.is-hover:not(.disabled) {
+    background: var(--gray-a3); /* 仅在 Hover 时显现背景 */
+    border-color: var(--gray-a7);
+  }
+  .header-chip:active:not(.disabled),
+  .header-chip.is-pressed:not(.disabled) {
+    background: var(--gray-a5);
+  }
+  .header-chip.disabled,
+  .header-chip.is-disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .header-spacer {
+    flex: 1;
+  }
+
+  .header-icon-btn {
+    width: var(--header-icon-size);
+    height: var(--header-icon-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: var(--transition-crisp);
+  }
+  .header-icon-btn:hover,
+  .header-icon-btn.is-hover {
+    background: var(--gray-a3);
+    color: var(--text-primary);
+  }
+  .header-icon-btn:active,
+  .header-icon-btn.is-pressed {
+    background: var(--gray-a4);
+  }
+
+  .card {
+    background: var(--color-surface);
+    border-radius: var(--radius-5);
+    box-shadow: var(--color-shadow);
+  }
+
+  .chip {
+    background: var(--gray-3);
+    color: var(--gray-11);
+    border: 1px solid var(--gray-6);
+    transition: all 150ms ease;
+  }
+  .chip:hover {
+    background: var(--gray-4);
+    border-color: var(--gray-8);
+  }
+  .chip.active {
+    background: var(--accent-9);
+    color: white;
+    border-color: var(--accent-9);
+  }
+
+  .submit-btn-active {
+    background: var(--gray-12);
+    color: var(--color-background);
+  }
+  .submit-btn-active:hover {
+    filter: brightness(1.1);
+  }
+
+  .error-banner {
+    background: var(--error-1);
+    border: 1px solid var(--error-6);
+    border-radius: var(--radius-4);
+    color: var(--error-11);
+  }
+
+  /* iOS Continuous Corners */
+  .card, .popover-content, .chip, .message-bubble {
+    corner-shape: var(--corner-shape);
+  }
+`;

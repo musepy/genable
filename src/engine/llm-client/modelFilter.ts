@@ -19,7 +19,7 @@ export interface RawGeminiModel {
 /**
  * Cleaned model data for UI consumption
  */
-export interface GeminiModel {
+export interface LLMModel {
   name: string;
   displayName: string;
 }
@@ -77,7 +77,7 @@ export function isAllowedModel(modelName: string, displayName?: string): boolean
  * @param apiKey - Gemini API key
  * @returns Filtered list of supported models
  */
-export async function fetchGeminiModels(apiKey: string): Promise<GeminiModel[]> {
+export async function fetchGeminiModels(apiKey: string): Promise<LLMModel[]> {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
   const data = await response.json();
   
@@ -89,15 +89,47 @@ export async function fetchGeminiModels(apiKey: string): Promise<GeminiModel[]> 
       name: m.name.replace('models/', ''),
       displayName: m.displayName || m.name
     }))
-    .filter((m: GeminiModel) => isAllowedModel(m.name, m.displayName));
+    .filter((m: LLMModel) => isAllowedModel(m.name, m.displayName));
 }
 
-import { isGemini3Family } from './modelEngine';
+/**
+ * Fetch available OpenRouter models from API
+ */
+export async function fetchOpenRouterModels(apiKey: string): Promise<LLMModel[]> {
+  const response = await fetch('https://openrouter.ai/api/v1/models', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    }
+  });
+  const data = await response.json();
+  
+  if (!data.data) return [];
+  
+  // For OpenRouter, we might want to filter for specific high-quality models 
+  // or just return all of them. For now, let's return all but prioritize 
+  // ones used in our constants.
+  return data.data.map((m: any) => ({
+    name: m.id,
+    displayName: m.name || m.id
+  }));
+}
 
 /**
- * Detect if model is Gemini 3.0 (for Thinking Mode support)
+ * Unified model fetcher
+ */
+export async function fetchModels(provider: 'gemini' | 'openrouter', apiKey: string): Promise<LLMModel[]> {
+  if (provider === 'openrouter') {
+    return fetchOpenRouterModels(apiKey);
+  }
+  return fetchGeminiModels(apiKey);
+}
+
+import { supportsThinkingMode } from './modelEngine';
+
+/**
+ * Detect if model supports Thinking Mode (Gemini 3.0+)
  */
 export function isGemini3Model(modelName: string): boolean {
-  return isGemini3Family(modelName);
+  return supportsThinkingMode(modelName);
 }
 

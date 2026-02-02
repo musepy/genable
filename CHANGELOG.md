@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-02-02
+
+### Added
+- **Agentic Orchestration**: Implemented `AgentOrchestrator` for autonomous multi-phase generation (Planning → Execution → Verification).
+- **Thinking Transparency**: New `IterationCard` and `ToolCallItem` UI components for real-time visualization of LLM reasoning and tool execution.
+- **Remote Debugging Stack**: WebSocket-based `log-server.js` and `remoteLogger.ts` for real-time sandbox diagnostics.
+- **Semantic Error Recovery**: Advanced self-correction loop using structured error mapping and autonomous retries.
+- **Atomic Tool Flow**: Granular Figma SceneGraph operations (node creation, layout, styling) as LLM-callable tools.
+
+### Changed
+- **Unified State Management**: Overhauled `useChat` to handle thinking iterations and tool execution states.
+- **Pipeline Refactor**: Deprecated old generators in favor of the new tool-driven `CanvasOrchestrator`.
+
+### Removed
+- **Legacy Layout Engine**: Deleted `src/engine/layout-engine/` and associated outdated tests.
+- **Distributed Generators**: Removed legacy `distributedGenerator.ts` and `progressiveContext.ts`.
+
 ## [1.1.0] - 2026-01-26
 
 ### Added

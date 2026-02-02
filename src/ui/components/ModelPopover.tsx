@@ -30,6 +30,7 @@ interface ModelPopoverProps {
   onSelectModel: (modelName: string) => void;
   onApiKeyChange: (key: string) => void;
   onOpenSettings?: () => void;
+  providerName?: 'gemini' | 'openrouter'; // [NEW]
   
   // P4: Layout variants
   placement?: 'bottom' | 'top';  // Popover 弹出方向
@@ -48,6 +49,7 @@ export function ModelPopover({
   onOpenSettings,
   placement = 'bottom',
   variant = 'chip',
+  providerName = 'gemini', // [NEW]
 }: ModelPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -79,7 +81,7 @@ export function ModelPopover({
   };
 
   // Use dynamic models from props
-  const sortedModels = sortModels(availableModels.length > 0 ? availableModels : SUPPORTED_MODELS, currentModel);
+  const sortedModels = sortModels(availableModels.length > 0 ? availableModels : (SUPPORTED_MODELS[providerName] || SUPPORTED_MODELS.gemini), currentModel);
   const hasApiKey = !!apiKey;
 
   const handleSelect = (modelName: string) => {
@@ -212,7 +214,7 @@ export function ModelPopover({
                     <span style={{ 
                       fontSize: tokens.fontSize[1],     // Same as trigger (12px)
                       color: tokens.colors.textPrimary, // Unified color
-                      fontWeight: tokens.fontWeight.normal,
+                      fontWeight: tokens.fontWeight.regular,
                     }}>
                       {model.displayName || model.name}
                     </span>
@@ -260,7 +262,7 @@ export function ModelPopover({
                     value={localApiKey}
                     onInput={(e) => setLocalApiKey((e.target as HTMLInputElement).value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-                    placeholder="Gemini API Key"
+                    placeholder={providerName === 'openrouter' ? "OpenRouter API Key" : "Gemini API Key"}
                     style={{
                       flex: 1,
                       padding: tokens.space[1],

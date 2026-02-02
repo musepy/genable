@@ -35,6 +35,16 @@ export const ERROR_CATEGORIES = [
     id: 'network',
     pattern: /network|fetch|timeout/i,
     handler: 'retry' as ErrorActionType,
+  },
+  {
+    id: 'malformedFunctionCall',
+    pattern: /malformed.?function.?call/i,
+    handler: 'retry' as ErrorActionType,
+  },
+  {
+    id: 'emptyResponse',
+    pattern: /empty.?response/i,
+    handler: 'retry' as ErrorActionType,
   }
 ] as const;
 

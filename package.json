@@ -4,7 +4,7 @@
   "dependencies": {
     "@create-figma-plugin/ui": "^4.0.3",
     "@create-figma-plugin/utilities": "^4.0.3",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.38.0",
     "fuse.js": "^7.1.0",
     "handlebars": "^4.7.8",
     "lucide-preact": "^0.562.0",
@@ -33,7 +33,6 @@
     "dotenv": "^17.2.3",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
-    "glpk.js": "^5.0.0",
     "jsdom": "^27.4.0",
     "stylelint": "^16.26.1",
     "stylelint-config-standard": "^39.0.1",
@@ -56,7 +55,11 @@
   },
   "figma-plugin": {
     "editorType": [
-      "figma"
+      "figma",
+      "dev"
+    ],
+    "capabilities": [
+      "inspect"
     ],
     "id": "1583731690321161934",
     "name": "Genable (Dogfood)",
@@ -69,7 +72,8 @@
     "networkAccess": {
       "allowedDomains": [
         "https://generativelanguage.googleapis.com",
-        "https://api.iconify.design"
+        "https://api.iconify.design",
+        "https://openrouter.ai"
       ]
     }
   }

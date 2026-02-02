@@ -1,4 +1,4 @@
-import { h, Fragment as PreactFragment } from 'preact'
+import { h, Fragment as PreactFragment, Fragment } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import { Sparkles, ChevronDown, AlertCircle } from 'lucide-preact' // Added AlertCircle
 import { tokens } from '../../ui/design-system/tokens'
@@ -10,7 +10,8 @@ import { PromptChips } from '../../ui/components/PromptChips'
 import { PromptInput } from '../../ui/components/PromptInput'
 import { ThinkingCard } from '../../ui/components/ThinkingCard'
 import { MessageRenderer } from '../../ui/components/MessageRenderer'
-import { ThinkingStream } from '../../ui/components/ThinkingStream'
+import { ToolExecutionPanel } from '../../ui/components/ToolExecutionPanel'
+import { IterationCard } from '../../ui/components/IterationCard'
 import { RawOutputPanel } from '../../ui/components/RawOutputPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { Button } from '../../ui/components/Button'
@@ -73,6 +74,129 @@ function getErrorConfig(errorMsg: string): ErrorConfig {
   return categorizeError(errorMsg) as ErrorConfig;
 }
 
+function ErrorBanner({ error, errorActions }: { 
+  error: string | null; 
+  errorActions: Record<ErrorActionType, () => void> 
+}) {
+  if (!error) return null;
+  const config = getErrorConfig(error);
+  const content = t.errors[config.i18nKey];
+  if (!content) return null;
+
+  return (
+    <div className="message-enter" style={{
+      background: tokens.colors.errorMuted,
+      border: `1px solid ${tokens.colors.errorBorder}`,
+      borderRadius: 'var(--radius-3)',
+      padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+      margin: `0 ${tokens.space[4]}px`,
+      marginBottom: tokens.space[2],
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: tokens.space[3],
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1, minWidth: 0 }}>
+        <AlertCircle size={14} color={tokens.colors.error} style={{ flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], overflow: 'hidden' }}>
+          <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: tokens.colors.error, whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {content.title}
+          </span>
+          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {content.message}
+          </span>
+        </div>
+      </div>
+      <button
+        onClick={errorActions[config.handler]}
+        style={{ background: 'none', border: 'none', padding: 0, color: tokens.colors.error, fontSize: tokens.fontSize[1], fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+      >
+        {content.action}
+      </button>
+    </div>
+  );
+}
+
+function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, iterations, loading, anchorRef }: {
+  history: any[];
+  expandedRawIds: Set<number>;
+  toggleRaw: (id: number) => void;
+  currentToolCalls: any[];
+  iterations: any[];
+  loading: boolean;
+  anchorRef: any;
+}) {
+  const isEmpty = history.length === 0 && !loading;
+
+  if (isEmpty) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', flex: 1, gap: tokens.space[2], color: tokens.colors.textSecondary, textAlign: 'center', paddingTop: tokens.space[5] }}>
+        <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.accent }} />
+        <span style={{ fontSize: tokens.fontSize[2] }}>{t.emptyStateHint}</span>
+        {/* Chips are handled in the parent for now to access setPrompt */}
+      </div>
+    );
+  }
+
+  return (
+    <Fragment>
+      {history.map((msg, i) => {
+        const isUserMessage = msg.role === 'user';
+        const prevRole = i > 0 ? history[i - 1].role : null;
+        const isCrossRole = prevRole !== null && prevRole !== msg.role;
+        const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[5] : tokens.space[1]);
+
+        if (!isUserMessage && msg.thinking) {
+          const isRawExpanded = expandedRawIds.has(i);
+          return (
+            <div key={i} style={{ marginTop, maxWidth: '100%' }}>
+              <ThinkingCard summary={msg.text} thinking={msg.thinking} />
+              {msg.rawOutput && (
+                <Fragment>
+                  <button onClick={() => toggleRaw(i)} className="ghost-btn" style={{ marginTop: tokens.space[1], padding: `${tokens.space[1]}px ${tokens.space[2]}px`, background: 'transparent', border: 'none', color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1], cursor: 'pointer' }}>
+                    {isRawExpanded ? t.hideRaw : t.showRaw}
+                  </button>
+                  <RawOutputPanel content={msg.rawOutput} isExpanded={isRawExpanded} onToggle={() => toggleRaw(i)} />
+                </Fragment>
+              )}
+            </div>
+          );
+        }
+
+        const bubbleStyle = isUserMessage ? messageBubbleUserStyle : messageBubbleModelStyle;
+
+        return (
+          <div key={i} className="message-enter" style={{ ...bubbleStyle as any, marginTop }}>
+            {isUserMessage ? (
+              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: '1.4' }}>{msg.text}</span>
+            ) : (
+              <Fragment>
+                <MessageRenderer content={msg.text} level="L3" />
+                {msg.iterations && msg.iterations.length > 0 && (
+                  <div style={{ marginTop: tokens.space[2], borderTop: `1px solid ${tokens.colors.grayBorder}`, paddingTop: tokens.space[2] }}>
+                    {msg.iterations.map((it: any, idx: number) => <IterationCard key={idx} iteration={it} />)}
+                  </div>
+                )}
+                {msg.toolCalls && <ToolExecutionPanel toolCalls={msg.toolCalls} />}
+              </Fragment>
+            )}
+          </div>
+        );
+      })}
+
+      {loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[2] }}>
+          {iterations.map((it, idx) => (
+            <IterationCard key={idx} iteration={it} isStreaming={idx === iterations.length - 1} />
+          ))}
+          <ToolExecutionPanel toolCalls={currentToolCalls} />
+        </div>
+      )}
+      <div ref={anchorRef} />
+    </Fragment>
+  );
+}
+
 export function ChatFeature(props: UseChatProps) {
   const {
     prompt,
@@ -92,6 +216,10 @@ export function ChatFeature(props: UseChatProps) {
     setApiKey,
     suggestedModels,
     onOpenSettings,
+    providerName, // [NEW]
+    tokenUsage, // [NEW]
+    currentToolCalls, // [NEW]
+    iterations // [NEW]
   } = useChat(props)
 
   const { copy } = useClipboard()
@@ -173,24 +301,24 @@ export function ChatFeature(props: UseChatProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Messages Area */}
-      <div style={messagesContainerStyle}>
-        
-        {/* Empty State */}
-        {isEmpty && (
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            justifyContent: 'flex-start', 
-            flex: 1,
-            gap: tokens.space[2],
-            color: tokens.colors.textSecondary,
-            textAlign: 'center',
-            paddingTop: tokens.space[5],
-          }}>
-            <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.accent }} />
-            <span style={{ fontSize: tokens.fontSize[2] }}>{t.emptyStateHint}</span>
-            
+      <div style={messagesContainerStyle} ref={containerRef}>
+        <MessageList 
+          history={history}
+          expandedRawIds={expandedRawIds}
+          toggleRaw={(id) => setExpandedRawIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          })}
+          currentToolCalls={currentToolCalls}
+          iterations={iterations}
+          loading={loading}
+          anchorRef={anchorRef}
+        />
+
+        {isEmpty && chipsState.visible && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: tokens.space[2] }}>
             <PromptChips
               suggestions={t.promptSuggestions}
               onSelect={selectSavedPrompt}
@@ -199,90 +327,6 @@ export function ChatFeature(props: UseChatProps) {
             />
           </div>
         )}
-
-        {/* Message Loop */}
-        {!isEmpty && history.map((msg, i) => {
-          const isUserMessage = msg.role === 'user';
-          
-          const prevRole = i > 0 ? history[i - 1].role : null;
-          const isCrossRole = prevRole !== null && prevRole !== msg.role;
-          const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[5] : tokens.space[1]);
-          
-          if (!isUserMessage && msg.thinking) {
-            const isRawExpanded = expandedRawIds.has(i);
-            const toggleRaw = () => {
-              setExpandedRawIds(prev => {
-                const next = new Set(prev);
-                if (next.has(i)) next.delete(i);
-                else next.add(i);
-                return next;
-              });
-            };
-            
-            return (
-              <div key={i} style={{ marginTop, maxWidth: '100%' }}>
-                <ThinkingCard 
-                  summary={msg.text} 
-                  thinking={msg.thinking} 
-                />
-                
-                {msg.rawOutput && (
-                  <PreactFragment>
-                    <button
-                      onClick={toggleRaw}
-                      className="ghost-btn"
-                      style={{
-                        marginTop: tokens.space[1],
-                        padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-                        background: 'transparent',
-                        border: 'none',
-                        color: tokens.colors.textSecondary,
-                        fontSize: tokens.fontSize[1],
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {isRawExpanded ? t.hideRaw : t.showRaw}
-                    </button>
-                    <RawOutputPanel 
-                      content={msg.rawOutput}
-                      isExpanded={isRawExpanded}
-                      onToggle={toggleRaw}
-                    />
-                  </PreactFragment>
-                )}
-              </div>
-            );
-          }
-          
-          const bubbleStyle = isUserMessage 
-            ? messageBubbleUserStyle 
-            : messageBubbleModelStyle;
-          
-          return (
-            <div 
-              key={i} 
-              className="message-enter"
-              style={{ ...bubbleStyle as any, marginTop }}
-            >
-              {isUserMessage ? (
-                <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: '1.4' }}>{msg.text}</span>
-              ) : (
-                <MessageRenderer content={msg.text} level="L3" />
-              )}
-            </div>
-          );
-        })}
-
-        {/* Thinking Stream */}
-        {loading && (
-          <ThinkingStream
-            status={loadingStatus}
-            isStreaming={isThinkingStreaming}
-            onSkip={() => {}}
-          />
-        )}
-        
-        <div ref={(el) => { anchorRef.current = el }} />
         
         {/* New Messages Indicator */}
         {showNewMessagesIndicator && (
@@ -304,7 +348,7 @@ export function ChatFeature(props: UseChatProps) {
               gap: tokens.space[1],
               border: 'none',
               cursor: 'pointer',
-              boxShadow: tokens.colors.shadow, // Replaced rgba(0,0,0,0.15)
+              boxShadow: tokens.colors.shadow,
               zIndex: 10,
             }}
           >
@@ -314,67 +358,17 @@ export function ChatFeature(props: UseChatProps) {
         )}
       </div>
 
-      {/* Input Area - Parent controls spacing (隔离式原则) */}
+      {/* Input Area */}
       <div style={{ padding: `0 ${tokens.space[2]}px ${tokens.space[2]}px ${tokens.space[2]}px` }}>
-        {/* Inline Error Banner - Refined UI */}
-        {error && errorConfig && errorContent && (
-           <div className="message-enter" style={{
-             background: tokens.colors.errorMuted,
-             border: `1px solid ${tokens.colors.errorBorder}`,
-             borderRadius: 'var(--radius-3)',
-             padding: `${tokens.space[2]}px ${tokens.space[3]}px`, // Reduced padding
-             margin: `0 ${tokens.space[4]}px`,
-             marginBottom: tokens.space[2], // Detached from input, proper spacing
-             display: 'flex',
-             alignItems: 'center', // Strict vertical centering
-             justifyContent: 'space-between',
-             gap: tokens.space[3],
-           }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1, minWidth: 0 }}>
-               <AlertCircle size={14} color={tokens.colors.error} style={{ flexShrink: 0 }} />
-               <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], overflow: 'hidden' }}>
-                 <span style={{ 
-                   fontSize: tokens.fontSize[1], 
-                   fontWeight: 500, // Reduced from 600
-                   color: tokens.colors.error,
-                   whiteSpace: 'nowrap',
-                   flexShrink: 0
-                 }}>
-                   {errorContent.title}
-                 </span>
-                 <span style={{ 
-                   fontSize: tokens.fontSize[1], // Same size as title
-                   color: tokens.colors.textSecondary,
-                   overflow: 'hidden', 
-                   textOverflow: 'ellipsis', 
-                   whiteSpace: 'nowrap'
-                 }}>
-                   {errorContent.message}
-                 </span>
-               </div>
-             </div>
-             
-             {/* Text-only button (Apple style inline action) */}
-             <button
-               onClick={errorActions[errorConfig.handler]}
-               style={{ 
-                 background: 'none',
-                 border: 'none',
-                 padding: 0,
-                 color: tokens.colors.error, // Use error color or primary? Error color usually for destructive, maybe Standard Blue? 
-                 // HIG: "Use a color that harmonizes...". Usually actions in red alerts are red or black. 
-                 // Let's use standard text color or system blue.
-                 // Actually, for an error banner, typically the action is semantic.
-                 fontSize: tokens.fontSize[1],
-                 fontWeight: 600,
-                 cursor: 'pointer',
-                 flexShrink: 0,
-               }}
-             >
-               {errorContent.action}
-             </button>
-           </div>
+        {tokenUsage && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.space[2], padding: `0 ${tokens.space[2]}px`, gap: tokens.space[3], fontSize: tokens.fontSize.xs, color: tokens.colors.textSecondary }}>
+            <span>Input: {tokenUsage.promptTokens}</span>
+            <span>Output: {tokenUsage.completionTokens}</span>
+            <span>Total: {tokenUsage.totalTokens}</span>
+          </div>
         )}
+
+        <ErrorBanner error={error} errorActions={errorActions} />
         
         <PromptInput
           value={prompt}
@@ -395,6 +389,7 @@ export function ChatFeature(props: UseChatProps) {
                 onOpenSettings={onOpenSettings}
                 placement="top"
                 variant="ghost"
+                providerName={providerName} // [NEW]
               />
               <button
                 className="ghost-btn"

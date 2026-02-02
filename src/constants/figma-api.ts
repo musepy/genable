@@ -91,33 +91,34 @@ export interface PropDefinition {
 
 export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.name]: { figmaKey: 'name', type: 'string' },
-  [PROPS.visible]: { figmaKey: 'visible', type: 'scalar' },
-  [PROPS.opacity]: { figmaKey: 'opacity', type: 'scalar' },
+  [PROPS.visible]: { figmaKey: 'visible', type: 'scalar', defaultValue: true },
+  [PROPS.opacity]: { figmaKey: 'opacity', type: 'scalar', defaultValue: 1 },
   
   // Layout
   [PROPS.layoutMode]: { 
     figmaKey: 'layoutMode', 
     type: 'enum', 
-    enumMap: { 'VERTICAL': 'VERTICAL', 'HORIZONTAL': 'HORIZONTAL', 'NONE': 'NONE' } 
+    enumMap: { 'VERTICAL': 'VERTICAL', 'HORIZONTAL': 'HORIZONTAL', 'NONE': 'NONE' },
+    defaultValue: 'NONE'
   },
-  [PROPS.layoutSizingHorizontal]: { figmaKey: 'layoutSizingHorizontal', type: 'enum' },
-  [PROPS.layoutSizingVertical]: { figmaKey: 'layoutSizingVertical', type: 'enum' },
-  [PROPS.primaryAxisAlignItems]: { figmaKey: 'primaryAxisAlignItems', type: 'enum' },
-  [PROPS.counterAxisAlignItems]: { figmaKey: 'counterAxisAlignItems', type: 'enum' },
+  [PROPS.layoutSizingHorizontal]: { figmaKey: 'layoutSizingHorizontal', type: 'enum', defaultValue: 'FIXED' },
+  [PROPS.layoutSizingVertical]: { figmaKey: 'layoutSizingVertical', type: 'enum', defaultValue: 'FIXED' },
+  [PROPS.primaryAxisAlignItems]: { figmaKey: 'primaryAxisAlignItems', type: 'enum', defaultValue: 'MIN' },
+  [PROPS.counterAxisAlignItems]: { figmaKey: 'counterAxisAlignItems', type: 'enum', defaultValue: 'MIN' },
   [PROPS.gap]: { figmaKey: 'itemSpacing', type: 'scalar', defaultValue: 0 }, // Note: itemSpacing in Figma API
-  [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar' },
-  [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar' },
-  [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar' },
-  [PROPS.paddingLeft]: { figmaKey: 'paddingLeft', type: 'scalar' },
+  [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar', defaultValue: 0 },
+  [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0 },
+  [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar', defaultValue: 0 },
+  [PROPS.paddingLeft]: { figmaKey: 'paddingLeft', type: 'scalar', defaultValue: 0 },
   [PROPS.width]: { figmaKey: 'width', type: 'scalar' },
   [PROPS.height]: { figmaKey: 'height', type: 'scalar' },
 
   // Styling
-  [PROPS.fills]: { figmaKey: 'fills', type: 'color' },
-  [PROPS.strokes]: { figmaKey: 'strokes', type: 'color' },
-  [PROPS.strokeWeight]: { figmaKey: 'strokeWeight', type: 'scalar' },
-  [PROPS.cornerRadius]: { figmaKey: 'cornerRadius', type: 'scalar' },
-  [PROPS.effects]: { figmaKey: 'effects', type: 'array' },
+  [PROPS.fills]: { figmaKey: 'fills', type: 'color', defaultValue: [] },
+  [PROPS.strokes]: { figmaKey: 'strokes', type: 'color', defaultValue: [] },
+  [PROPS.strokeWeight]: { figmaKey: 'strokeWeight', type: 'scalar', defaultValue: 0 },
+  [PROPS.cornerRadius]: { figmaKey: 'cornerRadius', type: 'scalar', defaultValue: 0 },
+  [PROPS.effects]: { figmaKey: 'effects', type: 'array', defaultValue: [] },
 
   // Text
   [PROPS.characters]: { figmaKey: 'characters', type: 'string' },

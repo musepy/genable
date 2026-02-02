@@ -26,6 +26,29 @@ export interface CorrectionLog {
     reason: string;
 }
 
+export interface ToolCallRecord {
+    id: string;
+    name: string;
+    parameters: any;
+    status: 'pending' | 'running' | 'success' | 'error';
+    startTime: number;
+    endTime?: number;
+    result?: any;
+    error?: string;
+}
+
+export interface IterationRecord {
+    iteration: number;
+    thinking: string;
+    startTime: number;
+    endTime?: number;
+    toolCallIds?: string[];
+    /** Linked task ID from planState */
+    taskId?: string;
+    /** Current task title for UI display */
+    taskTitle?: string;
+}
+
 export interface ChatMessage {
     role: 'user' | 'model';
     text: string;
@@ -33,6 +56,10 @@ export interface ChatMessage {
     rawOutput?: string;
     /** Post-processing corrections applied to LLM output (P2 feature) */
     corrections?: CorrectionLog[];
+    /** Tool execution records for this response (Phase 1) */
+    toolCalls?: ToolCallRecord[];
+    /** Reasoning iterations for this response (Phase 2) */
+    iterations?: IterationRecord[];
 }
 
 export interface ChatFeedback extends Omit<ChatMessage, 'role'> {

@@ -4,8 +4,10 @@ import { NodeLayer } from './schema/layerSchema'
 export type { NodeLayer };
 
 export interface Settings {
-  apiKey: string;
+  apiKey: string; // Active/Default key for backward compatibility
+  apiKeys?: Record<string, string>; // [NEW] Map of provider -> key
   modelName: string;
+  providerName?: 'gemini' | 'openrouter';
   availableModels?: { name: string; displayName: string }[];
   /** Timestamp when models were last fetched (for SWR cache) */
   cacheTimestamp?: number;
@@ -252,6 +254,28 @@ export interface ExportTokensHandler extends EventHandler {
 export interface SendExportedTokensHandler extends EventHandler {
   name: 'SEND_EXPORTED_TOKENS';
   handler: (data: { tokens: any }) => void;
+}
+
+// ==========================================
+// Level 1.2: Agentic IPC Bridge
+// ==========================================
+
+export interface ToolCallHandler extends EventHandler {
+  name: 'TOOL_CALL';
+  handler: (data: {
+    toolName: string,
+    parameters: any,
+    context?: import('./engine/agent/tools/types').ToolContext,
+    requestId: string
+  }) => void;
+}
+
+export interface ToolResultHandler extends EventHandler {
+  name: 'TOOL_RESULT';
+  handler: (data: {
+    requestId: string,
+    response: import('./engine/agent/tools/types').ToolResponse
+  }) => void;
 }
 
 // ==========================================

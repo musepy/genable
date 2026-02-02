@@ -13,17 +13,17 @@ import type {
   SelectionStyles,
   LoadSettingsHandler,
   SaveSettingsHandler,
-  SettingsLoadedHandler,
   SendLogHandler,
-  Settings,
   GetLibraryResourcesHandler,
   SendLibraryResourcesHandler,
   GetLocalComponentsHandler,
-  SendLocalComponentsHandler
+  SendLocalComponentsHandler,
+  ToolCallHandler,
+  ToolResultHandler
 } from './types'
+import { renderNodeDSL } from './engine/figma-adapter/renderers/index'
 import { figmaVariableCache } from './engine/figma-adapter/caches/figmaVariableCache'
 import { getActiveEngineConfig } from './engine/engineConfig'
-import { renderOrchestrator } from './engine/pipeline/RenderOrchestrator'
 import { initializeRenderers } from './engine/figma-adapter/renderers'
 import { NodeSerializer } from './engine/figma-adapter/nodeSerializer';
 import { TreeReconstructor } from './engine/figma-adapter/treeReconstructor';
@@ -31,17 +31,20 @@ import { DEFAULT_MODEL } from './ui/constants/models'
 import { PaintResolver } from './engine/pipeline/PaintResolver';
 import { RenderLifecycleManager } from './engine/pipeline/RenderLifecycleManager';
 import { StreamBufferManager } from './engine/pipeline/StreamBufferManager';
-import { generateLayout } from './engine/llm-client/generator';
-import { GenerationPhase } from './engine/llm-client/types';
 import { throttle } from './utils/throttle';
 import { TokenParser, TokenMode } from './engine/sync/tokenParser';
-import { FigmaSync } from './engine/sync/figmaSync';
 import { DesignSystemManager } from './engine/sync/DesignSystemManager';
 import { CanvasOrchestrator } from './engine/pipeline/CanvasOrchestrator';
 import { ImportTokensHandler, ExportTokensHandler, SendExportedTokensHandler, CombineVariantsHandler, GetSnapshotHistoryHandler, SendSnapshotHistoryHandler, GetProjectTemplatesHandler, SendProjectTemplatesHandler, ImportProjectTemplateHandler, SendCapturedUIHandler, CaptureUIHandler } from './types';
 import { PROJECT_TEMPLATES } from './knowledge/ui-templates/registry';
 
-const streamRoots = new Map<string, SceneNode>();
+// ==========================================
+// NEW: Refactored IPC Handlers and Services
+// ==========================================
+import { handleToolCall } from './ipc/handlers/toolCallHandler';
+import { handleLoadSettings, handleSaveSettings } from './ipc/handlers/settingsHandler';
+import { handleUnifiedRender, clearStream } from './ipc/helpers/renderHelper';
+
 const throttledRenderers = new Map<string, (...args: any[]) => void>();
 
 export default function () {
@@ -53,148 +56,13 @@ export default function () {
   );
 
   on<ClearStreamHandler>('CLEAR_STREAM', function (data: { streamSessionId: string }) {
-    const existing = streamRoots.get(data.streamSessionId);
-    if (existing) {
-      RenderLifecycleManager.safeRemove(existing);
-      streamRoots.delete(data.streamSessionId);
-    }
-    StreamBufferManager.clear(data.streamSessionId);
+    clearStream(data.streamSessionId);
   });
 
-  /**
-   * Unified Generation Entry Point
-   * Now driven by internal state.
-   */
-  async function generate(options: {
-    apiKey: string,
-    modelName: string,
-    systemPrompt: string,
-    userPrompt: string,
-    designSystemId: string,
-    sessionId: string,
-    streaming?: boolean
-  }) {
-      try {
-          const result = await generateLayout({
-              ...options,
-              onStateChange: (state: any) => {
-                  // 1. Sync State Manager
-                  StreamBufferManager.updateState(state.sessionId, state);
-                  
-                  // 2. Handle Progress Logging (UI Feedback)
-                  if (state.progress) {
-                      emit<SendLogHandler>('SEND_LOG', { 
-                          message: state.progress, 
-                          type: state.phase === GenerationPhase.ERROR ? 'warn' : 'info' 
-                      });
-                  }
-
-                  // 3. Handle Streaming Render (Throttled Declarative Trigger)
-                  const node = (state as any).node;
-                  if (node) {
-                      const root = StreamBufferManager.addNode(state.sessionId, node);
-                      if (root) {
-                          // Get or create throttled renderer for this session
-                          // 150ms is a good balance between responsiveness and flicker reduction
-                          let throttled = throttledRenderers.get(state.sessionId);
-                          if (!throttled) {
-                              throttled = throttle((data: any) => {
-                                  handleUnifiedRender(data, true);
-                              }, 150);
-                              throttledRenderers.set(state.sessionId, throttled);
-                          }
-
-                          throttled({ 
-                              ...root, 
-                              designSystemId: options.designSystemId,
-                              streamSessionId: state.sessionId 
-                          });
-                      }
-                  }
-              }
-          });
-
-          // Final Render for non-streaming or completion
-          // Ensure we clear the throttled renderer for this session
-          throttledRenderers.delete(options.sessionId);
-
-          handleUnifiedRender({
-              ...result.data,
-              designSystemId: options.designSystemId,
-              streamSessionId: options.sessionId
-          }, false);
-
-      } catch (error: any) {
-          emit<SendLogHandler>('SEND_LOG', { message: `Error: ${error.message}`, type: 'warn' });
-      }
-  }
-
-  /**
-   * Internal Rendering Core
-   */
-  async function handleUnifiedRender(data: any, isStream: boolean): Promise<SceneNode | null> {
-      const { 
-        designSystemId, 
-        renderContext, 
-        streamSessionId,
-        meta,
-        __modifyMode,
-        __modifyTargetId,
-        ...layerData   
-      } = data;
-      
-      const currentStreamId = streamSessionId || meta?.replaceStreamSessionId;
-      const existingStreamRoot = currentStreamId ? streamRoots.get(currentStreamId) : null;
-      
-      const placement = RenderLifecycleManager.resolvePlacement(
-          (__modifyMode && __modifyTargetId) ? figma.getNodeById(__modifyTargetId) as SceneNode : null,
-          existingStreamRoot as SceneNode
-      );
-
-      const activeConfig = getActiveEngineConfig(designSystemId);
-      const traceId = streamSessionId || meta?.traceId || 'unified';
-
-      const rootNode = await renderOrchestrator.process({
-          layerData: layerData as NodeLayer,
-          designSystemId,
-          designSystemConfig: activeConfig,
-          renderContext: renderContext,
-          meta: { 
-              traceId, 
-              isStream, 
-              position: placement.position,
-              positionStrategy: placement.strategy as any,
-              viewportCenter: figma.viewport.center,
-              parent: placement.parent,
-              insertIndex: placement.index
-          }
-      });
-
-      if (rootNode) {
-          if (existingStreamRoot && rootNode !== existingStreamRoot) {
-            RenderLifecycleManager.safeRemove(existingStreamRoot);
-          }
-          
-          if (isStream && streamSessionId) {
-            streamRoots.set(streamSessionId, rootNode);
-          } else if (!isStream) {
-            if (meta?.replaceStreamSessionId) {
-              streamRoots.delete(meta.replaceStreamSessionId);
-              StreamBufferManager.clear(meta.replaceStreamSessionId);
-            }
-            figma.viewport.scrollAndZoomIntoView([rootNode]);
-
-            // [New] Use CanvasOrchestrator to organize the canvas
-            const intent = meta?.intent || (rootNode.name.toLowerCase().includes('page') ? 'PAGE' : 'COMPONENT');
-            await CanvasOrchestrator.placeInSection(rootNode, intent as any);
-
-            emit<SendLogHandler>('SEND_LOG', { message: `Generation Complete!`, type: 'success' });
-          }
-      }
-      return rootNode;
-  }
-
-  // Simplified entry points mapping directly from UI events
+  // ==========================================
+  // Level 1: Core Rendering Pipeline
+  // ==========================================
+  
   on<StreamLayersHandler>('STREAM_LAYERS', (data: any) => {
       const { streamSessionId, designSystemId, renderContext, ...node } = data;
       
@@ -225,14 +93,19 @@ export default function () {
   });
   
   on<CreateLayersHandler>('CREATE_LAYERS', (data) => {
-      // Same here - handle it if it's already pre-parsed data, 
-      // but usually the generation starts from LLM.
       handleUnifiedRender(data, false);
   });
 
-  // [TODO]: Add on('START_GENERATION') for the new coordinated flow
+  // ==========================================
+  // Level 1.2: Agentic Tool IPC Bridge
+  // ==========================================
+  on<ToolCallHandler>('TOOL_CALL', async (data) => {
+    await handleToolCall(data as any);
+  });
 
-
+  // ==========================================
+  // Level 2: Variable & Style Sync
+  // ==========================================
   on<GetVariablesHandler>('GET_VARIABLES', async function () {
     try {
       if (figma.variables) {
@@ -280,16 +153,12 @@ export default function () {
     emit<SendSelectionStylesHandler>('SEND_SELECTION_STYLES', styles);
   })
 
-  on<LoadSettingsHandler>('LOAD_SETTINGS', async function () {
-    const apiKey = await figma.clientStorage.getAsync('GEMINI_API_KEY') || '';
-    const modelName = await figma.clientStorage.getAsync('GEMINI_MODEL_NAME') || DEFAULT_MODEL;
-    emit<SettingsLoadedHandler>('SETTINGS_LOADED', { apiKey, modelName });
-  })
+  // ==========================================
+  // Level 3: Settings Management
+  // ==========================================
+  on<LoadSettingsHandler>('LOAD_SETTINGS', handleLoadSettings);
 
-  on<SaveSettingsHandler>('SAVE_SETTINGS', async function (settings: Settings) {
-    await figma.clientStorage.setAsync('GEMINI_API_KEY', settings.apiKey);
-    await figma.clientStorage.setAsync('GEMINI_MODEL_NAME', settings.modelName);
-  })
+  on<SaveSettingsHandler>('SAVE_SETTINGS', handleSaveSettings);
 
   on<CloseHandler>('CLOSE', function () {
     figma.closePlugin()
@@ -311,7 +180,9 @@ export default function () {
     emit<SendLocalComponentsHandler>('SEND_LOCAL_COMPONENTS', { components: componentsData });
   })
 
+  // ==========================================
   // Dogfooding: Figma to Code Serialization
+  // ==========================================
   on<import('./types').SerializeSelectionHandler>('SERIALIZE_SELECTION', function () {
     try {
       const selection = figma.currentPage.selection;
@@ -458,14 +329,21 @@ export default function () {
       const template = PROJECT_TEMPLATES.find(t => t.id === data.templateId);
       const sessionBase = `captured-${data.templateId}-${Date.now()}`;
 
-      for (const layer of data.layers) {
-        const node = await handleUnifiedRender({
-          ...layer,
-          designSystemId: 'vanilla',
-          streamSessionId: sessionBase,
-          meta: { traceId: sessionBase }
-        }, false);
+      // Parallel processing for better performance
+      const nodes = await Promise.all(
+        data.layers.map(async (layer) => {
+          const node = await handleUnifiedRender({
+            ...layer,
+            designSystemId: 'vanilla',
+            streamSessionId: `${sessionBase}-${layer.id || Math.random().toString(36).substr(2, 9)}`,
+            meta: { traceId: sessionBase }
+          }, false);
+          return node;
+        })
+      );
 
+      // Set plugin data after all nodes are created
+      for (const node of nodes) {
         if (node && template) {
           node.setPluginData('dogfood_component_id', template.id);
           node.setPluginData('dogfood_source_path', template.path);
@@ -526,28 +404,55 @@ export default function () {
     }
   });
 
+  on<SendLogHandler>('SEND_LOG', (data) => {
+    // [FIX] Forward log messages from UI back to UI via the Main thread.
+    // This allows components in the UI thread to listen to logs emitted by other 
+    // UI-side services (like AgentOrchestrator).
+    emit<SendLogHandler>('SEND_LOG', data);
+  });
+
   // Dev Mode Codegen Support
   if (figma.editorType === 'dev') {
     figma.codegen.on('generate', (event) => {
       try {
-        console.log('[Genable] Dev Mode: Generating DSL for selection...');
+        console.log('[Genable] Dev Mode: Generating code for selection...');
         const serialized = NodeSerializer.serialize(event.node);
         const dsl = JSON.stringify(serialized, null, 2);
         
+        // React transformation logic (Experimental Stub)
+        const componentName = event.node.name.replace(/[^a-zA-Z0-9]/g, '') || 'Component';
+        let reactCode = `/**\n * Generated React Component: ${event.node.name}\n * \n * NOTE: This is an experimental placeholder. \n * The full semantic mapping from Genable DSL to React components is in development.\n */\n`;
+        reactCode += `import React from 'react';\n\n`;
+        reactCode += `export const ${componentName}: React.FC = () => {\n`;
+        reactCode += `  return (\n`;
+        reactCode += `    <div className="genable-node" data-figma-id="${event.node.id}">\n`;
+        reactCode += `      {/* \n`;
+        reactCode += `        LLM-driven semantic generation is coming soon.\n`;
+        reactCode += `        Use the "Genable DSL" tab for the full node structure.\n`;
+        reactCode += `      */}\n`;
+        reactCode += `      <span>${event.node.name}</span>\n`;
+        reactCode += `    </div>\n`;
+        reactCode += `  );\n};`;
+
         return [
           {
+            title: 'Genable DSL',
             language: 'JSON',
-            label: 'Genable DSL',
             code: dsl,
+          },
+          {
+            title: 'React (Preview)',
+            language: 'TYPESCRIPT',
+            code: reactCode,
           }
         ];
       } catch (e: any) {
         console.error('Codegen Error', e);
         return [
           {
+            title: 'Error',
             language: 'PLAINTEXT',
-            label: 'Error',
-            code: `Failed to generate DSL: ${e.message}`,
+            code: `Failed to generate code: ${e.message}`,
           }
         ];
       }
@@ -555,7 +460,12 @@ export default function () {
   }
 
   showUI({
-    height: 500,
+    height: figma.editorType === 'dev' ? 400 : 500,
     width: 340
   })
+  
+  // Pass editor mode to UI
+  setTimeout(() => {
+    emit('SET_EDITOR_MODE', { editorType: figma.editorType });
+  }, 200);
 }

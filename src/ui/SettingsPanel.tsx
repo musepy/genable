@@ -23,6 +23,8 @@ export interface SettingsPanelProps {
   setApiKey: (key: string) => void;
   modelName: string;
   setModelName: (name: string) => void;
+  providerName: 'gemini' | 'openrouter'; // [NEW]
+  setProviderName: (name: 'gemini' | 'openrouter') => void; // [NEW]
   suggestedModels: { name: string; displayName: string }[];
   fetchStatus: 'idle' | 'fetching' | 'success' | 'fail';
   settingsError: string | null;
@@ -37,6 +39,8 @@ export function SettingsPanel({
   setApiKey,
   modelName,
   setModelName,
+  providerName,
+  setProviderName,
   suggestedModels,
   fetchStatus,
   settingsError,
@@ -50,7 +54,10 @@ export function SettingsPanel({
   
   useEffect(() => {
     if (debouncedApiKey && debouncedApiKey.length >= 20 && fetchStatus !== 'fetching') {
-      onFetchModels();
+      // usage of void-returning async function
+      Promise.resolve(onFetchModels()).catch(e => {
+        console.warn('Silent fetch error caught in SettingsPanel:', e);
+      });
     }
   }, [debouncedApiKey]);
 
@@ -118,13 +125,74 @@ export function SettingsPanel({
             type="password"
             value={apiKey}
             onInput={(e: Event) => setApiKey((e.currentTarget as HTMLInputElement).value)}
-            placeholder="Enter Gemini API Key"
+            placeholder={`Enter ${providerName === 'gemini' ? 'Gemini' : 'OpenRouter'} API Key`}
             fullWidth
             style={{
               borderColor: fetchStatus === 'fail' ? tokens.colors.error : undefined
             }}
             rightElement={getStatusIndicator()}
           />
+        </div>
+
+        {/* Provider Selection */}
+        <div>
+          <label style={{ 
+            fontSize: tokens.fontSize[1], 
+            fontWeight: tokens.fontWeight.medium, 
+            color: tokens.colors.textPrimary,
+            display: 'block',
+            marginBottom: tokens.space[2],
+          }}>
+            Provider
+          </label>
+          <div style={{ 
+            display: 'flex', 
+            background: tokens.colors.surface, 
+            padding: 2, 
+            borderRadius: 'var(--radius-3)',
+            border: `1px solid ${tokens.colors.grayBorder}`,
+          }}>
+      <button 
+              onClick={() => {
+                console.log('[Settings] Switching to Gemini (Current:', providerName, ')');
+                setProviderName('gemini');
+              }}
+              style={{
+                flex: 1,
+                padding: `${tokens.space[1]}px 0`,
+                fontSize: tokens.fontSize[1],
+                border: 'none',
+                background: providerName === 'gemini' ? tokens.colors.background : 'transparent',
+                color: providerName === 'gemini' ? tokens.colors.textPrimary : tokens.colors.textSecondary,
+                borderRadius: 'var(--radius-2)',
+                cursor: 'pointer',
+                fontWeight: providerName === 'gemini' ? tokens.fontWeight.semibold : tokens.fontWeight.regular,
+                boxShadow: providerName === 'gemini' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              Gemini
+            </button>
+            <button 
+              onClick={() => {
+                console.log('[Settings] Switching to OpenRouter (Current:', providerName, ')');
+                setProviderName('openrouter');
+              }}
+              style={{
+                flex: 1,
+                padding: `${tokens.space[1]}px 0`,
+                fontSize: tokens.fontSize[1],
+                border: 'none',
+                background: providerName === 'openrouter' ? tokens.colors.background : 'transparent',
+                color: providerName === 'openrouter' ? tokens.colors.textPrimary : tokens.colors.textSecondary,
+                borderRadius: 'var(--radius-2)',
+                cursor: 'pointer',
+                fontWeight: providerName === 'openrouter' ? tokens.fontWeight.semibold : tokens.fontWeight.regular,
+                boxShadow: providerName === 'openrouter' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              OpenRouter
+            </button>
+          </div>
         </div>
 
         {/* Model Section */}

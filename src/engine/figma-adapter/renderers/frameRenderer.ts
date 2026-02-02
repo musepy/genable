@@ -170,7 +170,7 @@ export class FrameRenderer extends BaseRenderer {
      */
     private applyLayoutSizing(f: FrameNode, dsl: NodeLayer, context: RenderContext): void {
         const props = dsl.props;
-        const isRoot = context.depth === 0;
+        const isRoot = context.depth === 0 && (context.parent?.type === 'PAGE' || context.parent?.type === 'SECTION');
         const hasAutoLayout = props.layoutMode && props.layoutMode !== 'NONE';
         const parentHasAutoLayout = context.parentLayoutMode && context.parentLayoutMode !== 'NONE';
         
@@ -185,16 +185,25 @@ export class FrameRenderer extends BaseRenderer {
             vSizing = 'FIXED';
         }
         
-        // CRITICAL: FILL can only be set on children of auto-layout frames
-        // If parent doesn't have auto-layout, fallback FILL → FIXED for root or HUG for others
+        // CRITICAL VALIDATION: HUG requires Auto Layout on the node itself
+        if (!hasAutoLayout) {
+            if (hSizing === 'HUG') hSizing = 'FIXED';
+            if (vSizing === 'HUG') vSizing = 'FIXED';
+        }
+
+        // CRITICAL VALIDATION: FILL requires Auto Layout on the parent
         if (!parentHasAutoLayout) {
             if (hSizing === 'FILL') hSizing = isRoot ? 'FIXED' : 'HUG';
             if (vSizing === 'FILL') vSizing = isRoot ? 'FIXED' : 'HUG';
         }
         
-        // [PURE TRUST] Removed HUG/FILL paradox demotion. 
-        // We trust the structure. If it causes a 1px collapse in Figma, it is valid feedback for the LLM.
-        
+        // Double check after demotions: if we ended up with HUG but still have no auto-layout
+        // (e.g. from FILL demotion), force FIXED
+        if (!hasAutoLayout) {
+            if (hSizing === 'HUG') hSizing = 'FIXED';
+            if (vSizing === 'HUG') vSizing = 'FIXED';
+        }
+
         // If explicit dimensions provided without sizing mode, assume FIXED
         if (props.width && !props.layoutSizingHorizontal) {
             hSizing = 'FIXED';
@@ -204,19 +213,16 @@ export class FrameRenderer extends BaseRenderer {
         }
         
         // ========== 2. Set Sizing Mode FIRST (before resize) ==========
-        // [PURE TRUST] Removed Auto Layout enforcement.
-        // If LLM requests HUG without Layout, we let Figma handle it (or error out).
-        // This respects the "No Interference" policy.
-        /*
-        if ((hSizing === 'HUG' || vSizing === 'HUG') && (!f.layoutMode || f.layoutMode === 'NONE')) {
-            console.warn(`[FrameRenderer] HUG requires auto-layout. Adding layoutMode=HORIZONTAL for "${props.name}"`);
-            f.layoutMode = 'HORIZONTAL';
+        // Figma API will throw if we set HUG/FILL on invalid nodes
+        try {
+            f.layoutSizingHorizontal = hSizing;
+            f.layoutSizingVertical = vSizing;
+        } catch (e) {
+            console.warn(`[FrameRenderer] Failed to set layoutSizing for "${props.name}":`, e);
+            // Fallback to FIXED on error to prevent total render failure
+            f.layoutSizingHorizontal = 'FIXED';
+            f.layoutSizingVertical = 'FIXED';
         }
-        */
-        
-        // Figma root frames on page support HUG if layoutMode is set
-        f.layoutSizingHorizontal = hSizing;
-        f.layoutSizingVertical = vSizing;
         
         // ========== 3. Calculate Dimensions (only for FIXED mode) ==========
         let w: number;

@@ -5,7 +5,7 @@ import {
   SaveSettingsHandler,
   SettingsLoadedHandler,
 } from '../types'
-import { fetchGeminiModels } from '../engine/llm-client'
+import { fetchModels } from '../engine/llm-client'
 import { DEFAULT_MODEL, SUPPORTED_MODELS, MODEL_CACHE_TTL_MS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
 
@@ -21,7 +21,9 @@ export function useModelSettings() {
   const { toast } = useToast()
   
   const [apiKey, setApiKey] = useState<string>('')
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({ gemini: '', openrouter: '' })
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL)
+  const [providerName, setProviderName] = useState<'gemini' | 'openrouter'>('gemini')
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
   const [cacheTimestamp, setCacheTimestamp] = useState<number>(0)
   
@@ -48,8 +50,8 @@ export function useModelSettings() {
    * Priority: cached/fetched models → static manifest
    */
   const getModels = useCallback((): { name: string, displayName: string }[] => {
-    return suggestedModels.length > 0 ? suggestedModels : SUPPORTED_MODELS
-  }, [suggestedModels])
+    return suggestedModels.length > 0 ? suggestedModels : (SUPPORTED_MODELS[providerName] || SUPPORTED_MODELS.gemini)
+  }, [suggestedModels, providerName])
 
   /**
    * Background refresh - non-blocking, updates cache silently
@@ -59,7 +61,7 @@ export function useModelSettings() {
     
     isRefreshingRef.current = true
     try {
-      const ms = await fetchGeminiModels(key)
+      const ms = await fetchModels(providerName, key)
       if (ms.length > 0) {
         setSuggestedModels(ms)
         setCacheTimestamp(Date.now())
@@ -71,17 +73,42 @@ export function useModelSettings() {
     } finally {
       isRefreshingRef.current = false
     }
-  }, [])
+  }, [providerName])
 
+  /**
+   * Listen for settings updates
+   * Re-binds when dependencies change (like refreshModelsInBackground)
+   */
   useEffect(() => {
-    const stopSettings = on<SettingsLoadedHandler>('SETTINGS_LOADED', (s) => {
-      if (s.apiKey) {
-        setApiKey(s.apiKey)
-        setHasConfig(true)
+    return on<SettingsLoadedHandler>('SETTINGS_LOADED', (s) => {
+      // 1. Update Keys
+      if (s.apiKeys) {
+        setApiKeys(s.apiKeys)
+        // Only set apiKey if we don't have one or if we're initializing
+        // This prevents overwriting user input during a refresh
+        if (!isInitialized) {
+          const initialKey = s.providerName === 'openrouter' ? s.apiKeys.openrouter : s.apiKeys.gemini;
+          setApiKey(initialKey || s.apiKey || '')
+          setHasConfig(!!(initialKey || s.apiKey))
+        }
+      } else if (s.apiKey) {
+        // Legacy single key support
+        if (!isInitialized) {
+          setApiKey(s.apiKey)
+          setHasConfig(true)
+        }
+        setApiKeys(prev => ({ ...prev, [s.providerName || 'gemini']: s.apiKey }))
       } else {
         setShowSettings(true)
       }
-      if (s.modelName) setModelName(s.modelName)
+
+      // 2. Update Model/Provider if not user-initiated
+      // Only sync these on initial load to avoid overwriting user selection
+      if (!isInitialized) {
+        if (s.modelName) setModelName(s.modelName)
+        if (s.providerName) setProviderName(s.providerName)
+      }
+
       if (s.availableModels && s.availableModels.length > 0) {
         setSuggestedModels(s.availableModels)
       }
@@ -97,18 +124,46 @@ export function useModelSettings() {
       
       setIsInitialized(true)
     })
-    
+  }, [isCacheStale, refreshModelsInBackground, isInitialized])
+
+  /**
+   * Initial Load Trigger
+   * Only runs once on mount
+   */
+  useEffect(() => {
     emit<LoadSettingsHandler>('LOAD_SETTINGS')
+  }, [])
+
+  /**
+   * Sync active apiKey when providerName changes
+   */
+  useEffect(() => {
+    const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini;
+    setApiKey(activeKey || '');
     
-    return () => {
-      stopSettings()
-    }
-  }, [isCacheStale, refreshModelsInBackground])
+    // [FIX] Reset state when switching providers to prevent stale models (Coupling Fix)
+    setSuggestedModels([]); 
+    setFetchStatus('idle');
+    setSettingsError(null);
+  }, [providerName]); // Removed apiKeys from deps to avoid resetting on key type interaction, only on provider switch
+
+  /**
+   * Update specific provider key
+   */
+  const updateApiKey = (key: string) => {
+    setApiKey(key);
+    setApiKeys(prev => ({
+      ...prev,
+      [providerName]: key
+    }));
+  };
 
   const handleSaveSettings = () => {
     emit<SaveSettingsHandler>('SAVE_SETTINGS', { 
       apiKey, 
+      apiKeys,
       modelName, 
+      providerName,
       availableModels: suggestedModels,
       cacheTimestamp 
     })
@@ -122,10 +177,12 @@ export function useModelSettings() {
    * Shows loading state (unlike background refresh)
    */
   const handleFetchModels = async (keyOverride?: string) => {
-    const keyToUse = keyOverride || apiKey
+    // [FIX] Resolve key from map if not overridden, ensuring match with providerName
+    // This prevents race condition where providerName updates but apiKey state is stale
+    const keyToUse = keyOverride || apiKeys[providerName] || apiKey;
     setFetchStatus('fetching')
     try {
-      const ms = await fetchGeminiModels(keyToUse)
+      const ms = await fetchModels(providerName, keyToUse)
       setSuggestedModels(ms)
       setCacheTimestamp(Date.now())
       setFetchStatus('success')
@@ -143,9 +200,16 @@ export function useModelSettings() {
 
   return {
     apiKey,
-    setApiKey,
+    setApiKey: updateApiKey,
+    apiKeys,
+    setApiKeys,
     modelName,
     setModelName,
+    providerName,
+    setProviderName: (name: 'gemini' | 'openrouter') => {
+      console.log('[useModelSettings] setProviderName called with:', name);
+      setProviderName(name);
+    },
     suggestedModels,
     setSuggestedModels,
     hasConfig,

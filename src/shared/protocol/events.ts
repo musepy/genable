@@ -17,7 +17,11 @@ export const PLUGIN_EVENTS = {
   
   // Feedback & Operations
   UNDO: 'UNDO',
-  RETRY: 'RETRY'
+  RETRY: 'RETRY',
+
+  // Agentic Tools (IPC Bridge)
+  TOOL_CALL: 'TOOL_CALL',
+  TOOL_RESULT: 'TOOL_RESULT'
 } as const;
 
 export type PluginEvent = keyof typeof PLUGIN_EVENTS;

@@ -19,8 +19,7 @@ import { DeveloperPanel } from './ui/components/DeveloperPanel'
 import { Header } from './ui/components/Header'
 import { Iso } from './ui/components/layout/Iso'
 import { Stack } from './ui/components/layout/Stack'
-import { tokens } from './ui/design-system/tokens'
-import { cssTokens } from './ui/design-system/tokens/css'
+import { tokens, cssTokens, globalStyles } from './ui/design-system/tokens'
 import { thinkingStreamCss } from './ui/components/ThinkingStream'
 import { ToastProvider } from './ui/components/ui'
 import uiRegistry from './generated/ui-registry.json'
@@ -62,6 +61,7 @@ function PluginContent() {
   const settings = useModelSettings()
   const { 
     apiKey, setApiKey, modelName, setModelName, 
+    providerName, setProviderName,
     suggestedModels, fetchStatus, settingsError,
     hasConfig, setHasConfig, isInitialized, showSettings, setShowSettings,
     handleSaveSettings, handleFetchModels
@@ -76,7 +76,7 @@ function PluginContent() {
   // Inject CSS
   useEffect(() => {
     const styleEl = document.createElement('style')
-    styleEl.textContent = cssTokens + thinkingStreamCss
+    styleEl.textContent = cssTokens + globalStyles + thinkingStreamCss
     document.head.appendChild(styleEl)
     return () => { document.head.removeChild(styleEl) }
   }, [])
@@ -143,6 +143,8 @@ function PluginContent() {
           setApiKey={setApiKey}
           modelName={modelName}
           setModelName={setModelName}
+          providerName={providerName} // [NEW]
+          setProviderName={setProviderName} // [NEW]
           suggestedModels={suggestedModels}
           fetchStatus={fetchStatus}
           settingsError={settingsError}
@@ -208,9 +210,16 @@ function PluginContent() {
 
   // L3: Dogfood Tools State
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
+  const [editorMode, setEditorMode] = useState<'figma' | 'dev'>('figma');
   
   useEffect(() => {
     (window as any).toggleDeveloperPanel = () => setShowDeveloperTools(prev => !prev);
+    
+    const unbind = on('SET_EDITOR_MODE', (data: { editorType: 'figma' | 'dev' }) => {
+      console.log('[UI] Editor Mode:', data.editorType);
+      setEditorMode(data.editorType);
+    });
+    return unbind;
   }, []);
 
   // 4. Router / Switcher
@@ -243,6 +252,8 @@ function PluginContent() {
             setApiKey={setApiKey}
             modelName={modelName}
             setModelName={setModelName}
+            providerName={providerName} // [NEW]
+            setProviderName={setProviderName} // [NEW]
             suggestedModels={suggestedModels}
             fetchStatus={fetchStatus}
             settingsError={settingsError}
@@ -281,6 +292,7 @@ function PluginContent() {
             key={chatKey} // Remount on New Chat click
             apiKey={apiKey}
             modelName={modelName}
+            providerName={providerName} // [NEW]
             pluginData={pluginData}
             setModelName={setModelName}
             setApiKey={setApiKey}

@@ -6,6 +6,8 @@
  * to bypass module hoisting issues. This utility provides extended diagnostics.
  */
 
+import { RemoteLogger } from './remoteLogger';
+
 export interface CompatibilityAudit {
     ok: boolean;
     missingFeatures: string[];
@@ -45,6 +47,9 @@ export function auditEnvironment(): CompatibilityAudit {
  * Initialize diagnostics and log report.
  */
 export function initializeDiagnostics(): void {
+    // Initialize Remote Logging for Dev
+    RemoteLogger.init();
+
     const audit = auditEnvironment();
     const g = getGlobal();
 

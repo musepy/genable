@@ -8,14 +8,10 @@
           "name": "div",
           "width": 0,
           "height": 0,
-          "layoutMode": "HORIZONTAL",
-          "gap": 0,
-          "primaryAxisAlignItems": "MIN",
-          "counterAxisAlignItems": "CENTER",
-          "paddingTop": 16,
-          "paddingRight": 16,
-          "paddingBottom": 16,
-          "paddingLeft": 16
+          "paddingTop": null,
+          "paddingRight": null,
+          "paddingBottom": null,
+          "paddingLeft": null
         },
         "children": [
           {
@@ -24,10 +20,10 @@
               "name": "button",
               "width": 0,
               "height": 0,
-              "paddingTop": 4,
-              "paddingRight": 8,
-              "paddingBottom": 4,
-              "paddingLeft": 8
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
             },
             "children": [
               {
@@ -54,44 +50,6 @@
               "name": "div",
               "width": 0,
               "height": 0,
-              "layoutMode": "HORIZONTAL",
-              "gap": 0,
-              "primaryAxisAlignItems": "MIN",
-              "counterAxisAlignItems": "CENTER",
-              "paddingTop": null,
-              "paddingRight": null,
-              "paddingBottom": null,
-              "paddingLeft": 8
-            },
-            "children": [
-              {
-                "type": "RECTANGLE",
-                "props": {
-                  "name": "div",
-                  "width": 0,
-                  "height": 0,
-                  "paddingTop": 2,
-                  "paddingRight": 6,
-                  "paddingBottom": 2,
-                  "paddingLeft": 6,
-                  "characters": "🧪 Dogfood",
-                  "fontSize": 10,
-                  "fontWeight": "700",
-                  "fontFamily": ""
-                }
-              }
-            ]
-          },
-          {
-            "type": "FRAME",
-            "props": {
-              "name": "button",
-              "width": 0,
-              "height": 0,
-              "layoutMode": "HORIZONTAL",
-              "gap": 0,
-              "primaryAxisAlignItems": "CENTER",
-              "counterAxisAlignItems": "CENTER",
               "paddingTop": null,
               "paddingRight": null,
               "paddingBottom": null,
@@ -104,39 +62,28 @@
               "name": "button",
               "width": 0,
               "height": 0,
-              "layoutMode": "HORIZONTAL",
-              "gap": 0,
-              "primaryAxisAlignItems": "MIN",
-              "counterAxisAlignItems": "CENTER",
-              "paddingTop": 2,
-              "paddingRight": 2,
-              "paddingBottom": 2,
-              "paddingLeft": 2
-            },
-            "children": [
-              {
-                "type": "RECTANGLE",
-                "props": {
-                  "name": "div",
-                  "width": 0,
-                  "height": 0,
-                  "layoutMode": "HORIZONTAL",
-                  "gap": 0,
-                  "primaryAxisAlignItems": "CENTER",
-                  "counterAxisAlignItems": "CENTER",
-                  "paddingTop": null,
-                  "paddingRight": null,
-                  "paddingBottom": null,
-                  "paddingLeft": null,
-                  "cornerRadius": 50
-                }
-              }
-            ]
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            }
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "button",
+              "width": 0,
+              "height": 0,
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            }
           }
         ]
       }
     ],
-    "timestamp": "2026-01-27T10:25:41.560Z"
+    "timestamp": "2026-02-02T00:36:09.662Z"
   },
   "onboarding": {
     "name": "Onboarding View",
@@ -352,7 +299,7 @@
         ]
       }
     ],
-    "timestamp": "2026-01-27T10:25:41.591Z"
+    "timestamp": "2026-02-02T00:36:09.706Z"
   },
   "button": {
     "name": "Standard Button",
@@ -374,7 +321,7 @@
         }
       }
     ],
-    "timestamp": "2026-01-27T10:25:41.597Z"
+    "timestamp": "2026-02-02T00:36:09.713Z"
   },
   "prompt-input": {
     "name": "Prompt Input",
@@ -452,7 +399,7 @@
         ]
       }
     ],
-    "timestamp": "2026-01-27T10:25:41.608Z"
+    "timestamp": "2026-02-02T00:36:09.725Z"
   },
   "settings-panel": {
     "name": "Settings Panel",
@@ -573,6 +520,86 @@
                           "paddingRight": 16,
                           "paddingBottom": 0,
                           "paddingLeft": 16
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "label",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null,
+                      "characters": "Provider",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
+                      "layoutMode": "HORIZONTAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "MIN",
+                      "paddingTop": 2,
+                      "paddingRight": 2,
+                      "paddingBottom": 2,
+                      "paddingLeft": 2
+                    },
+                    "children": [
+                      {
+                        "type": "TEXT",
+                        "props": {
+                          "name": "button",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": 4,
+                          "paddingRight": 0,
+                          "paddingBottom": 4,
+                          "paddingLeft": 0,
+                          "characters": "Gemini",
+                          "fontSize": 12,
+                          "fontWeight": "400",
+                          "fontFamily": ""
+                        }
+                      },
+                      {
+                        "type": "TEXT",
+                        "props": {
+                          "name": "button",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": 4,
+                          "paddingRight": 0,
+                          "paddingBottom": 4,
+                          "paddingLeft": 0,
+                          "characters": "OpenRouter",
+                          "fontSize": 12,
+                          "fontWeight": "400",
+                          "fontFamily": ""
                         }
                       }
                     ]
@@ -874,7 +901,7 @@
         ]
       }
     ],
-    "timestamp": "2026-01-27T10:25:41.640Z"
+    "timestamp": "2026-02-02T00:36:09.775Z"
   },
   "chat-message": {
     "name": "Chat Message",
@@ -910,6 +937,6 @@
         ]
       }
     ],
-    "timestamp": "2026-01-27T10:25:41.644Z"
+    "timestamp": "2026-02-02T00:36:09.778Z"
   }
 }

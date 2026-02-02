@@ -1,5 +1,16 @@
 import { LibraryResource } from '../types';
-import { RecognizedIntent } from '../knowledge/intentRecognizer';
+
+
+export interface SelectionContext {
+    hasSelection: boolean;
+    nodes?: Array<{
+        id: string;
+        type: string;
+        name: string;
+        [key: string]: any;
+    }>;
+    serializedDSL?: string;
+}
 
 /**
  * Phase 4.6: Explicit Dependencies Interface
@@ -14,19 +25,30 @@ export interface PromptDependencies {
         goldenTemplates: Array<{ name: string; description: string; dsl: unknown }>;
     };
 
-    // [2] Intent Recognition (from intentRecognizer.ts)
-    intent: RecognizedIntent;
+    // [2] User Intent (Optional)
+    intent?: {
+        requiresLayoutKnowledge?: boolean;
+        [key: string]: any;
+    };
 
     // [3] Design System Context (Classic Manifest)
     designSystemContext: {
         skillName: string;           // Manifest Name
     };
 
-    // [4] Global Context (Optional)
+    // [4] Figma Selection Context
+    selectionContext?: SelectionContext;
+
+    // [5] Global Context (Optional)
     globalContext?: {
         isModifyMode?: boolean;
         originalTextContent?: string;
     };
+}
+
+export interface Intent {
+    requiresLayoutKnowledge?: boolean;
+    [key: string]: any;
 }
 
 /**

@@ -4,8 +4,24 @@
  */
 
 import { NodeLayer } from '../../schema/layerSchema';
-import { LintWarning } from '../layout-engine/types';
 import { ThinkingLevel } from './config';
+export type { ThinkingLevel };
+
+export interface LintWarning {
+  message?: string;
+  severity: 'error' | 'warning';
+  nodeId?: string;
+  nodePath?: string;
+  nodeName?: string;
+  ruleId?: string;
+  rule?: string;
+  semanticContext?: string;
+  humanMessage?: string;
+  machineReadable?: {
+    expected?: string;
+    [key: string]: any;
+  };
+}
 
 /**
  * Extended types for experimental Gemini features (Thinking)

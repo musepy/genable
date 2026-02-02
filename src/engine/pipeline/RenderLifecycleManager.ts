@@ -37,20 +37,26 @@ export class RenderLifecycleManager {
      */
     public static resolvePlacement(
         targetNode: SceneNode | null, 
-        existingStreamRoot: SceneNode | null
+        existingStreamRoot: SceneNode | null,
+        explicitParent: (BaseNode & ChildrenMixin) | null = null
     ) {
         const isTargetAlive = this.isNodeAlive(targetNode);
         const isStreamAlive = this.isNodeAlive(existingStreamRoot);
 
-        const targetParent = isTargetAlive ? targetNode!.parent : figma.currentPage;
-        const targetIndex = (isTargetAlive && targetParent && 'children' in targetParent)
+        let targetParent = explicitParent;
+        
+        if (!targetParent) {
+            targetParent = isTargetAlive ? targetNode!.parent : figma.currentPage;
+        }
+
+        const targetIndex = (isTargetAlive && targetParent && 'children' in targetParent && targetParent === targetNode!.parent)
             ? (targetParent as any).children.indexOf(targetNode)
             : undefined;
 
         let position: { x: number, y: number } | undefined;
 
-        // Priority 1: Keep stream position if it exists
-        if (isStreamAlive && 'x' in existingStreamRoot!) {
+        // Priority 1: Keep stream position if it exists (only if parent matches or no explicit parent)
+        if (isStreamAlive && 'x' in existingStreamRoot! && (!explicitParent || explicitParent === existingStreamRoot!.parent)) {
             position = { x: (existingStreamRoot as any).x, y: (existingStreamRoot as any).y };
         } 
         // Priority 2: Use target node position
@@ -62,7 +68,7 @@ export class RenderLifecycleManager {
             parent: targetParent as any,
             index: targetIndex,
             position,
-            strategy: isTargetAlive ? 'PARENT_CENTER' : 'VIEWPORT'
+            strategy: (isTargetAlive || explicitParent) ? 'PARENT_CENTER' : 'VIEWPORT'
         };
     }
 }

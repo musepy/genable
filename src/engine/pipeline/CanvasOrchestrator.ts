@@ -15,18 +15,29 @@ export class CanvasOrchestrator {
   /**
    * Get or create a section by name.
    */
-  static async getOrCreateSection(name: string): Promise<SectionNode> {
-    let section = figma.currentPage.findOne(n => n.type === 'SECTION' && n.name === name) as SectionNode;
+  static async getOrCreateSection(name: string): Promise<SectionNode | null> {
+    const section = figma.currentPage.findOne(n => n.type === 'SECTION' && n.name === name) as SectionNode;
     
     if (!section) {
-      section = figma.createSection();
-      section.name = name;
-      figma.currentPage.appendChild(section);
-      
-      // Basic auto-layout-like positioning for sections
-      const sections = figma.currentPage.findAll(n => n.type === 'SECTION');
-      const offset = (sections.length - 1) * 1200;
-      section.x = offset;
+      try {
+        const newSection = figma.createSection();
+        newSection.name = name;
+        figma.currentPage.appendChild(newSection);
+        
+        // Basic auto-layout-like positioning for sections
+        const sections = figma.currentPage.findAll(n => n.type === 'SECTION');
+        const offset = (sections.length - 1) * 1200;
+        newSection.x = offset;
+        return newSection;
+      } catch (e) {
+        console.error(`[CanvasOrchestrator] Failed to create section "${name}":`, e);
+        return null;
+      }
+    }
+    
+    if (section.locked) {
+      console.warn(`[CanvasOrchestrator] Section "${name}" is locked. Cannot use for organization.`);
+      return null;
     }
     
     return section;
@@ -39,10 +50,18 @@ export class CanvasOrchestrator {
     const sectionName = this.SECTION_NAMES[intent] || this.SECTION_NAMES.COMPONENTS;
     const section = await this.getOrCreateSection(sectionName);
     
-    section.appendChild(node);
-    
-    // Auto-arrange within section
-    this.arrangeChildren(section);
+    if (!section) {
+      // If section is locked or creation failed, just stay on page.
+      return;
+    }
+
+    try {
+      section.appendChild(node);
+      // Auto-arrange within section
+      this.arrangeChildren(section);
+    } catch (e) {
+      console.error(`[CanvasOrchestrator] Failed to append node to section "${sectionName}":`, e);
+    }
   }
 
   /**
@@ -163,8 +182,16 @@ export class CanvasOrchestrator {
         container.appendChild(grid);
     }
 
-    section.appendChild(container);
-    this.arrangeChildren(section);
+    if (section) {
+      section.appendChild(container);
+      this.arrangeChildren(section);
+    } else {
+      // Fallback: If section is locked/failed, just add to current page
+      figma.currentPage.appendChild(container);
+      // Optional: reposition container to viewport center? 
+      // container.x = figma.viewport.center.x;
+      // container.y = figma.viewport.center.y;
+    }
   }
 
   /**

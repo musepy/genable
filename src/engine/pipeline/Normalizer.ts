@@ -34,18 +34,22 @@ export class Normalizer {
         const layer = { ...node };
         if (!layer.props) layer.props = {};
 
-        // 1. Normalize Type
+        // 1. Normalize Type (Keep basic type normalization or make it strict?)
+        // Let's keep basic safety for now but remove deep coercion if possible.
         this.normalizeType(layer);
 
-        // 2. Context-Indepenent "Hallucination" Fixing (Lifting props)
-        this.liftProps(layer);
+        // 2. Lift Props: REMOVED for strict mode
+        // this.liftProps(layer);
 
         // 3. Property Transformation (Aliases & Coercion)
-        this.normalizePropertyAliases(layer.props);
+        // Kept minimal for basic type safety (e.g. number parsing) but removed fuzzy aliases
         this.coercePropertyValues(layer.props);
-        this.normalizeEnums(layer.props);
+        
+        // 4. Enums: REMOVED fuzzy matching.
+        // We can add strict validation here if we want to delete invalid enums.
+        this.validateEnums(layer.props);
 
-        // 4. Recursive for children
+        // 5. Recursive for children
         if (Array.isArray(layer.children)) {
             if (layer.children.length === 0) {
                 delete (layer as any).children;
@@ -53,6 +57,10 @@ export class Normalizer {
                 layer.children = layer.children.map((child: any) => this.processNode(child));
             }
         }
+
+        // 6. Strict Sanitation: Remove legacy keys that are no longer lifted
+        if ('style' in layer) delete (layer as any).style;
+        if ('layout' in layer) delete (layer as any).layout;
 
         return layer;
     }
@@ -74,82 +82,13 @@ export class Normalizer {
             layer.type = NODE_TYPES.FRAME;
             return;
         }
-
-        const type = layer.type.toUpperCase();
-        const TYPE_MAP: Record<string, string> = {
-            'COMPONENT': NODE_TYPES.FRAME,
-            'COMPONENT_SET': NODE_TYPES.FRAME,
-            'INSTANCE': NODE_TYPES.FRAME,
-            'BOOLEAN_OPERATION': NODE_TYPES.FRAME,
-            'POLYGON': NODE_TYPES.RECTANGLE,
-            'STAR': NODE_TYPES.RECTANGLE,
-            'ICON': 'ICON'
-        };
-
-        if (TYPE_MAP[type]) {
-            if (type !== TYPE_MAP[type]) this.logFix(layer, `Type coerced: ${type} -> ${TYPE_MAP[type]}`);
-            layer.type = TYPE_MAP[type];
-        } else if (!Object.values(NODE_TYPES).includes(type as any)) {
-            this.logFix(layer, `Unknown type "${type}" coerced to FRAME`);
-            layer.type = NODE_TYPES.FRAME;
-        } else {
-            layer.type = type;
-        }
+        // Basic uppercase normalization is fine
+        layer.type = layer.type.toUpperCase();
     }
 
-    private static liftProps(layer: any): void {
-        const KEYS_TO_LIFT = [
-            PROPS.semantic, PROPS.layoutMode, 'layout', 'style', 
-            PROPS.layoutSizingHorizontal, PROPS.layoutSizingVertical, 
-            PROPS.gap, PROPS.padding, PROPS.width, PROPS.height, 
-            PROPS.fills, PROPS.cornerRadius, 'role', PROPS.name
-        ];
+    // REMOVED: liftProps
 
-        KEYS_TO_LIFT.forEach(key => {
-            if (layer[key] !== undefined && layer.props[key] === undefined) {
-                layer.props[key] = layer[key];
-            }
-        });
-
-        const flatten = (source: any) => {
-            if (typeof source === 'object' && source !== null) {
-                Object.assign(layer.props, source);
-                return true;
-            }
-            return false;
-        };
-
-        if (flatten(layer.layout)) delete layer.layout;
-        if (flatten(layer.style)) delete layer.style;
-        if (flatten(layer.props.style)) delete layer.props.style;
-        if (typeof layer.props.layout === 'object') flatten(layer.props.layout); 
-    }
-
-    private static normalizePropertyAliases(props: any): void {
-        const aliases: Record<string, string> = RUNTIME_CONFIG.propertyAliases || {};
-        
-        for (const [alias, target] of Object.entries(aliases)) {
-            if (props[alias] !== undefined && props[target] === undefined) {
-                let value = props[alias];
-                if ((target === 'fills' || target === 'strokes') && !Array.isArray(value)) {
-                    value = [value];
-                }
-                props[target] = value;
-                delete props[alias];
-            }
-        }
-
-        // Nested mapping for effects
-        if (Array.isArray(props.effects)) {
-            props.effects.forEach((eff: any) => {
-                for (const [alias, target] of Object.entries(aliases)) {
-                    if (eff[alias] !== undefined && eff[target] === undefined) {
-                        eff[target] = eff[alias];
-                    }
-                }
-            });
-        }
-    }
+    // REMOVED: normalizePropertyAliases
 
     private static coercePropertyValues(props: any): void {
         const numericFields = [
@@ -165,12 +104,7 @@ export class Normalizer {
             }
         });
 
-        // Specific legacy bridge: characters vs content
-        if (props.content && !props.characters) {
-            props.characters = props.content;
-        }
-
-        // Color Arrays
+        // Color Arrays - valid schema requirement
         [PROPS.fills, PROPS.strokes].forEach(field => {
             if (Array.isArray(props[field])) {
                 props[field] = props[field].map((val: any) => {
@@ -182,41 +116,21 @@ export class Normalizer {
         });
     }
 
-    private static normalizeEnums(props: any): void {
-        const ENUM_MAPS: Record<string, Record<string, string>> = {
-            [PROPS.layoutMode]: {
-                'VERTICAL': LAYOUT_MODES.VERTICAL, 'VERT': LAYOUT_MODES.VERTICAL, 'COL': LAYOUT_MODES.VERTICAL, 'COLUMN': LAYOUT_MODES.VERTICAL,
-                'HORIZONTAL': LAYOUT_MODES.HORIZONTAL, 'HORZ': LAYOUT_MODES.HORIZONTAL, 'ROW': LAYOUT_MODES.HORIZONTAL,
-                'NONE': LAYOUT_MODES.NONE
-            },
-            [PROPS.layoutSizingHorizontal]: {
-                'FIXED': SIZING_MODES.FIXED, 'FILL': SIZING_MODES.FILL, 'HUG': SIZING_MODES.HUG,
-                'AUTO': SIZING_MODES.HUG, 'STRETCH': SIZING_MODES.FILL
-            },
-            [PROPS.layoutSizingVertical]: {
-                'FIXED': SIZING_MODES.FIXED, 'FILL': SIZING_MODES.FILL, 'HUG': SIZING_MODES.HUG,
-                'AUTO': SIZING_MODES.HUG, 'STRETCH': SIZING_MODES.FILL
-            }
+    private static validateEnums(props: any): void {
+         const ENUM_VALIDATORS: Record<string, string[]> = {
+            [PROPS.layoutMode]: [LAYOUT_MODES.VERTICAL, LAYOUT_MODES.HORIZONTAL, LAYOUT_MODES.NONE],
+            [PROPS.layoutSizingHorizontal]: [SIZING_MODES.FIXED, SIZING_MODES.FILL, SIZING_MODES.HUG],
+            [PROPS.layoutSizingVertical]: [SIZING_MODES.FIXED, SIZING_MODES.FILL, SIZING_MODES.HUG]
         };
 
-        for (const [prop, map] of Object.entries(ENUM_MAPS)) {
-            if (props[prop]) {
-                const val = String(props[prop]).toUpperCase().trim();
-                if (map[val]) {
-                    props[prop] = map[val];
-                } else {
-                    // [Fix] Specific fallback for layoutMode
-                    if (prop === PROPS.layoutMode) {
-                        props[prop] = LAYOUT_MODES.NONE;
-                    } else {
-                        // [Fix] Remove invalid enum values to prevent Zod failures
-                        delete props[prop];
-                    }
-                }
+        for (const [prop, validValues] of Object.entries(ENUM_VALIDATORS)) {
+            if (props[prop] && !validValues.includes(props[prop])) {
+                 // Invalid enum value? Delete it (Strict)
+                 delete props[prop];
             }
         }
-
-        // Semantic casing
+        
+        // Name check?
         if (props[PROPS.semantic]) {
             props[PROPS.semantic] = String(props[PROPS.semantic]).toUpperCase().trim().replace(/ /g, '_');
         }

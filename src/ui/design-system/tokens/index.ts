@@ -10,6 +10,7 @@ import { radii, size } from './layout';
 
 // Re-export individual token modules
 export * from './css';
+export * from './globalStyles';
 export * from './colors';
 export * from './spacing';
 export * from './typography';

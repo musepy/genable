@@ -39,20 +39,30 @@ export function isNodeManaged(node: SceneNode): boolean {
     return managed;
 }
 
-export function findNodeById(id: string): SceneNode | null {
+export async function findNodeByIdAsync(id: string): Promise<SceneNode | null> {
+    // 1. Check persistent registry (high performance, same-session)
     const node = nodeRegistry.get(id);
-    if (!node) return null;
-    
-    try {
-        // Double-check existence: 'removed' property is the official flag,
-        // but accessing 'type' is a foolproof way to check if the proxy is valid.
-        if (node.removed) throw new Error('removed');
-        const _ = node.type; 
-        return node;
-    } catch (e) {
-        nodeRegistry.delete(id);
-        return null;
+    if (node) {
+        try {
+            if (node.removed) throw new Error('removed');
+            const _ = node.type; 
+            return node;
+        } catch (e) {
+            nodeRegistry.delete(id);
+        }
     }
+    
+    // 2. Fallback to Figma Global ID (for atomic tool calls or cross-session persistence)
+    try {
+        const figmaNode = await figma.getNodeByIdAsync(id);
+        if (figmaNode && figmaNode.type !== 'DOCUMENT' && figmaNode.type !== 'PAGE') {
+            return figmaNode as SceneNode;
+        }
+    } catch (e) {
+        // Node not found or invalid type
+    }
+    
+    return null;
 }
 
 export interface RenderOptions {
@@ -101,7 +111,7 @@ export class RenderOrchestrator {
         const normalizedDSL = Normalizer.normalize(layerData);
 
         // [V7] PRE-FLIGHT CHECK: Is this node already part of an active stream?
-        const isAlreadyManaged = layerData.id ? (!!findNodeById(layerData.id)) : false;
+        const isAlreadyManaged = layerData.id ? (!!await findNodeByIdAsync(layerData.id)) : false;
 
         // 3. Render directly or reconcile
         const context: RenderContext = {

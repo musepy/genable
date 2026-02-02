@@ -169,13 +169,6 @@ export class TextRenderer extends BaseRenderer {
     // PRIVATE HELPERS
     // ==========================================
 
-    /**
-     * @deprecated Use FontBus.getOrLoad
-     */
-    private async loadFont(family: string, style: string): Promise<void> {
-        await fontBus.getOrLoad(family, style);
-    }
-
     private applyLineHeight(t: TextNode, props: NodeLayerProps): void {
         if (!props.lineHeight) return;
 

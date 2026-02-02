@@ -9,9 +9,22 @@ import { getActivePerformance } from './performance';
 const activePerformance = getActivePerformance();
 
 /**
+ * Log levels for structured logging
+ */
+export enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+  NONE = 4
+}
+
+/**
  * Core Gemini API configuration
  */
 export const GEMINI_CONFIG = {
+  /** [Logging] Current log level */
+  LOG_LEVEL: LogLevel.INFO,
   /** Maximum output tokens for generation (Sourced from Performance Engine) */
   MAX_OUTPUT_TOKENS: activePerformance.maxOutputTokens,
   
@@ -52,3 +65,13 @@ export const MODEL_PATTERNS = {
 export type ThinkingLevel = 'minimal' | 'low' | 'high';
 
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = activePerformance.thinkingLevel;
+
+/**
+ * OpenRouter API configuration
+ */
+export const OPENROUTER_CONFIG = {
+  BASE_URL: 'https://openrouter.ai/api/v1',
+  DEFAULT_MODEL: 'anthropic/claude-3.5-sonnet',
+  SITE_URL: 'https://github.com/muse40007-stack/genable-figma-plugin',
+  SITE_NAME: 'Genable Figma Plugin',
+} as const;

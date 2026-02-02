@@ -356,6 +356,21 @@ class KnowledgeHubService {
   // ==========================================
 
   /**
+   * Search for aesthetic inspiration and visual directions.
+   * Aggregates reasoning patterns and style definitions.
+   * @param query - Contextual keywords (e.g., 'minimalist', 'luxury')
+   */
+  searchAesthetics(query: string, limit = 3) {
+    const reasoning = this.searchReasoning(query, limit);
+    const styles = this.searchStyles(query, limit);
+
+    return {
+      patterns: reasoning.map(r => r.item),
+      visualStyles: styles.map(s => s.item)
+    };
+  }
+
+  /**
    * Search all knowledge domains and return aggregated results
    */
   searchAll(query: string) {

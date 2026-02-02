@@ -51,7 +51,9 @@ export const PERFORMANCE_PROFILES: Record<string, LLMPerformanceProfile> = {
   'balanced': {
     id: 'balanced',
     name: 'Balanced (Standard)',
-    maxOutputTokens: 32768,
+    // FIX: Increased from 32768 to 65536 to prevent MALFORMED_FUNCTION_CALL
+    // when generating complex layouts with many nodes
+    maxOutputTokens: 65536,
     thinkingLevel: 'low',
     safetyBufferMs: 25000
   },

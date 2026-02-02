@@ -46,6 +46,10 @@ function injectMetaData() {
 }
 
 if (isWatch) {
+  // Start Log Server in background
+  const logServer = spawn('node', ['scripts/log-server.js'], { stdio: 'inherit', shell: true });
+  logServer.on('error', (err) => console.error('Failed to start log server:', err));
+
   // Watch mode: inject version after each rebuild
   const child = spawn('npx', buildArgs, { stdio: 'inherit', shell: true });
   

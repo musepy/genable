@@ -16,6 +16,34 @@ CRITICAL ICON RULES:
 3. If you are not sure, omit the ICON node rather than guessing.`;
 
 /**
+ * Design Agent Persona Template
+ * Defines the aesthetic-driven identity and guidelines for the Agentic Loop.
+ */
+export const DESIGN_AGENT_PERSONA_TEMPLATE = `
+You are the **Design Agent**, a premium AI designer capable of creating world-class, distinctive frontend interfaces. 
+You don't just "arrange nodes"; you create experiences with intent.
+
+#### CORE AESTHETIC GUIDELINES
+- **Typography**: Pair distinctive display fonts (e.g., Space Grotesk, Playfair Display) with refined, highly readable body fonts (e.g., Inter, Source Sans). Use weight and tracking to create hierarchy.
+- **Motion & Micro-interactions**: Use 'scroll-triggering', 'hover surprises', and staggered reveals (animation-delay) to create delight.
+- **Spatial Composition**: Unexpected layouts. **Asymmetry**. Overlap. Diagonal flow. Grid-breaking elements. Use negative space aggressively to focus attention.
+- **Color & Depth**: Use dominant color blocks with sharp accents. Utilize translucent layers, grain textures, and dramatic shadows to create atmosphere and premium depth.
+
+Maintain a bold aesthetic direction: choose an extreme (minimalist luxury, brutalist raw, retro-futuristic, etc.) and execute it with mathematical precision.
+`;
+
+/**
+ * Structured Section Headers (Kilo Code Style)
+ */
+export const PROMPT_HEADERS = {
+    IDENTITY: '==== SYSTEM IDENTITY ====',
+    TOOLS: '==== AVAILABLE TOOLS ====',
+    CONSTRAINTS: '==== OUTPUT CONSTRAINTS ====',
+    CONTEXT: '==== DESIGN CONTEXT ====',
+    SELECTION: '==== CURRENT SELECTION ===='
+};
+
+/**
  * Base formatting rules for the LLM to ensure valid JSON FlatNode structure.
  */
 export const JSON_FORMAT_RULES = `

@@ -177,7 +177,39 @@ export class PropertyTransformer {
 
         if (meta.type === 'array') {
             // Complex arrays like effects require deep comparison
-            return JSON.stringify(currentState) === JSON.stringify(dslValue);
+            return this.deepEqual(currentState, dslValue);
+        }
+
+        return false;
+    }
+
+    /**
+     * Internal: Robust deep equality check for complex nested objects and arrays.
+     * Handles key ordering differences in objects.
+     */
+    private static deepEqual(a: any, b: any): boolean {
+        if (a === b) return true;
+
+        if (a && b && typeof a === 'object' && typeof b === 'object') {
+            if (Array.isArray(a)) {
+                if (!Array.isArray(b) || a.length !== b.length) return false;
+                for (let i = 0; i < a.length; i++) {
+                    if (!this.deepEqual(a[i], b[i])) return false;
+                }
+                return true;
+            }
+
+            if (Array.isArray(b)) return false;
+
+            const keysA = Object.keys(a);
+            const keysB = Object.keys(b);
+            if (keysA.length !== keysB.length) return false;
+
+            for (const key of keysA) {
+                if (!keysB.includes(key)) return false;
+                if (!this.deepEqual(a[key], b[key])) return false;
+            }
+            return true;
         }
 
         return false;

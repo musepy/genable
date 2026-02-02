@@ -25,13 +25,6 @@ const createMockDeps = (overrides?: Partial<PromptDependencies>): PromptDependen
         prioritizedComponents: [],
         goldenTemplates: []
     },
-    intent: {
-        type: 'UNKNOWN',
-        confidence: 0,
-        target: undefined,
-        modifiers: {},
-        matchedKeywords: []
-    },
     designSystemContext: {
         skillName: 'MOCK_SYSTEM'
     },
@@ -56,22 +49,8 @@ const createMockDeps = (overrides?: Partial<PromptDependencies>): PromptDependen
         expect(prompt).toContain('MODE: MODIFY EXISTING DESIGN');
     });
 
-    it('should inject Structural Anatomy for recognized components', () => {
-        const deps = createMockDeps({
-            intent: {
-                 type: 'GENERATE_COMPONENT',
-                 target: 'Button',
-                 confidence: 0.9,
-                 modifiers: {},
-                 matchedKeywords: ['button']
-            }
-        });
-        
-        const prompt = composeSystemPrompt(deps);
-        
-        // structural-anatomy section is now used instead of deprecated knowledge-base
-        expect(prompt).toContain('STRUCTURAL ANATOMY BLUEPRINT');
-    });
+    // REMOVED: Structural Anatomy test (Section logic removed)
+
 
     it('should include Icon Semantic Naming section', () => {
         const deps = createMockDeps();

@@ -8,10 +8,11 @@
 
 ## 🌟 Key Features (v1.0.0)
 
--   **Intelligent Intent Recognition:** Uses dynamic pattern matching to understand user intent (e.g., "Create a dashboard" vs. "Add a button") rather than heuristic guessing.
--   **Pure Trust Engine:** Respects LLM design intent by preserving stylistic choices (strokes, fills) on generic frames, avoiding aggressive over-sanitization.
--   **Unified Property Mapping:** Standardized DSL layer ensures consistent property translation between the Gemini LLM and Figma's SceneGraph.
--   **Knowledge-Driven Generation:** RAG-enhanced generation using a curated component knowledge base (`src/knowledge`).
+-   **Agentic Orchestration:** Moves beyond single-shot generation to a multi-phase agent loop (Planning → Execution → Verification).
+-   **Transparent Reasoning:** Real-time visualization of the agent's "thinking" process through iteration cards.
+-   **Pure Trust Engine:** Respects LLM design intent by preserving stylistic choices (strokes, fills) on generic frames.
+-   **Remote Logging System:** Custom WebSocket-based logging server for real-time debugging within Figma’s restricted sandbox.
+-   **Semantic Error Recovery:** Autonomous self-correction through a structured feedback loop and semantic error mapping.
 -   **Native Figma Quality:** Outputs production-ready Auto Layout frames, responsive text, and vector networks.
 
 ---
@@ -21,26 +22,31 @@
 This plugin adopts Figma's **dual-thread architecture** to ensure performance and security:
 
 ```mermaid
-graph LR
-    subgraph "UI Thread (React/Preact)"
-        A[ui.tsx] --> B[Context Builder]
-        B --> C[Gemini API Client]
-        C --> D[Schema Validator]
+graph TD
+    subgraph "UI Thread (React)"
+        A[User Prompt] --> B[Agent Orchestrator]
+        B --> C{Agent Mode}
+        C -->|Planning| D[Task Breakdown]
+        C -->|Execution| E[Tool Dispatcher]
+        C -->|Verification| F[Result Audit]
+        D & E & F --> G[Gemini LLM]
+        G -->|Thinking/Iterations| H[UI Display]
     end
     
     subgraph "Sandbox Thread (Figma)"
-        E[main.ts] --> F[Layer Renderer]
-        F --> G[Figma Scene Graph]
+        I[Main Controller] --> J[Node Renderer]
+        J --> K[Figma SceneGraph]
     end
     
-    D -->|postMessage| E
-    E -->|postMessage| A
+    E -->|IPC| I
+    I -->|Error/Result| E
 ```
 
-| Thread | Responsibility | Access |
-|--------|----------------|--------|
-| **UI Thread** | Prompt processing, LLM communication, State management | Network, LocalStorage |
-| **Sandbox Thread** | Node creation, Layout engine, Property application | Figma Document API |
+| Component | Responsibility |
+|-----------|----------------|
+| **Agent Orchestrator** | Manages the lifecycle of a task (Plan/Run/Verify) |
+| **Tool Dispatcher** | Translates LLM function calls to Figma SceneGraph actions |
+| **Remote Logger** | Forwards sandbox logs to local terminal for real-time debugging |
 
 ---
 
@@ -65,20 +71,20 @@ graph LR
 ```bash
 git clone <repo-url>
 npm install
-npm run build
+npm run dev
 ```
+
+### Remote Logging (Development)
+Since Figma's console is restricted, use the built-in remote logger:
+1. Start the log server: `node scripts/log-server.js`
+2. Run the plugin in Figma.
+3. View logs in your terminal.
 
 ### Folder Structure
-- `src/main.ts`: Sandbox thread entry point.
-- `src/ui.tsx`: UI thread entry point.
-- `src/engine/`: Core logic for layout, rendering, and LLM client.
-- `src/knowledge/`: Component patterns and anatomy registry.
-
-### Releasing
-Run the standard build command to generate the `dist/` artifacts:
-```bash
-npm run build
-```
+- `src/engine/agent/`: Agent logic and mode definitions.
+- `src/engine/services/AgentOrchestrator.ts`: Task lifecycle management.
+- `src/ui/components/IterationCard.tsx`: Thinking process visualization.
+- `src/engine/figma-adapter/`: Translates abstracted nodes to Figma nodes.
 
 ---
 

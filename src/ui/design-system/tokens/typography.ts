@@ -52,10 +52,11 @@ export const lineHeight = {
 } as const;
 
 export const fontWeight = {
-  normal: 400,    // Body text
-  medium: 500,    // Emphasis (static)
-  semibold: 600,  // Titles
-  bold: 700,      // Strong emphasis
+  light: 300,
+  regular: 400,
+  medium: 500,
+  semibold: 600,
+  bold: 700,
 } as const;
 
 export const font = {

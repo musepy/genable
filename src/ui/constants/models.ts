@@ -8,12 +8,13 @@
  */
 
 import { sortModelsGeneric, SortableModel } from '../../engine/llm-client/modelEngine';
+import { MODEL_DISPLAY_LABELS, MODEL_FAMILIES } from '../../constants';
 
 // [SSOT] Stable default for UI and fresh installations
-export const DEFAULT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_MODEL = MODEL_FAMILIES.GEMINI_2_5_FLASH;
 
 /** [SSOT] Hard fallback for emergency recovery in main thread storage */
-export const FALLBACK_MODEL = 'gemini-2.5-flash';
+export const FALLBACK_MODEL = MODEL_FAMILIES.GEMINI_2_5_FLASH;
 
 /** Cache expiry duration (24 hours in milliseconds) */
 export const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -32,12 +33,21 @@ export interface ModelConfig {
  * Static model manifest - bundled at build time
  * Provides instant availability without API call.
  */
-export const SUPPORTED_MODELS: ModelConfig[] = [
-  { name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', tier: 'fast' },
-  { name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', tier: 'balanced' },
-  { name: 'gemini-2.5-flash-preview-05-20', displayName: 'Gemini 2.5 Flash Preview', tier: 'preview' },
-  { name: 'gemini-2.5-pro-preview-05-06', displayName: 'Gemini 2.5 Pro Preview', tier: 'preview' },
-];
+export const SUPPORTED_MODELS: Record<string, ModelConfig[]> = {
+  gemini: [
+    { name: MODEL_FAMILIES.GEMINI_2_5_FLASH, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_FLASH], tier: 'fast' },
+    { name: MODEL_FAMILIES.GEMINI_2_5_PRO, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_PRO], tier: 'balanced' },
+    { name: MODEL_FAMILIES.GEMINI_2_5_FLASH_PREVIEW_05_20, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_FLASH_PREVIEW_05_20], tier: 'preview' },
+    { name: MODEL_FAMILIES.GEMINI_2_5_PRO_PREVIEW_05_06, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_PRO_PREVIEW_05_06], tier: 'preview' },
+  ],
+  openrouter: [
+    { name: MODEL_FAMILIES.CLAUDE_3_5_SONNET, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.CLAUDE_3_5_SONNET], tier: 'balanced' },
+    { name: MODEL_FAMILIES.GPT_4O, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GPT_4O], tier: 'balanced' },
+    { name: MODEL_FAMILIES.DEEPSEEK_R1_FREE, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.DEEPSEEK_R1_FREE], tier: 'balanced' },
+    { name: MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE], tier: 'fast' },
+    { name: MODEL_FAMILIES.DEEPSEEK_CHIMERA_FREE, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.DEEPSEEK_CHIMERA_FREE], tier: 'balanced' },
+  ]
+};
 
 /**
  * Sort models for UI display using the shared engine logic.
@@ -48,4 +58,3 @@ export function sortModels(
 ): SortableModel[] {
   return sortModelsGeneric(models);
 }
-

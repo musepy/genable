@@ -11,7 +11,7 @@
  *    2. 更新 /src/skills/llm-client/context/.folder.md 中的文件描述
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import * as v from 'valibot';
 import { NodeSchema, NodeLayer } from '../src/schema/layerSchema';
 
@@ -174,17 +174,18 @@ export async function runPromptTest(
   onRender?: (layer: NodeLayer, iteration: number) => void
 ): Promise<TestResult[]> {
   const results: TestResult[] = [];
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: modelName });
+  const ai = new GoogleGenAI({ apiKey });
 
   for (let i = 0; i < iterations; i++) {
     const startTime = Date.now();
 
     try {
       const prompt = generatePromptVariant(variant);
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      let text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt
+      });
+      let text = (response.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
 
       const generationTime = Date.now() - startTime;
 

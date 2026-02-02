@@ -3,9 +3,36 @@
  * @description Global CSS custom properties (variables) definition - Radix Standards
  */
 
-export const cssTokens = `
+const lightModeTokens = `
   :root {
     /* --- Radix Scales (Generated) --- */
+    /* Gray (Neutral) - Light Mode */
+    --gray-1: #fcfcfc;
+    --gray-2: #f9f9f9;
+    --gray-3: #f0f0f0;
+    --gray-4: #e8e8e8;
+    --gray-5: #e0e0e0;
+    --gray-6: #d9d9d9;
+    --gray-7: #cecece;
+    --gray-8: #bbbbbb;
+    --gray-9: #8d8d8d;
+    --gray-10: #838383;
+    --gray-11: #646464;
+    --gray-12: #171717;
+
+    --gray-a1: rgba(0, 0, 0, 0.012);
+    --gray-a2: rgba(0, 0, 0, 0.024);
+    --gray-a3: rgba(0, 0, 0, 0.059);
+    --gray-a4: rgba(0, 0, 0, 0.09);
+    --gray-a5: rgba(0, 0, 0, 0.118);
+    --gray-a6: rgba(0, 0, 0, 0.149);
+    --gray-a7: rgba(0, 0, 0, 0.192);
+    --gray-a8: rgba(0, 0, 0, 0.267);
+    --gray-a9: rgba(0, 0, 0, 0.447);
+    --gray-a10: rgba(0, 0, 0, 0.486);
+    --gray-a11: rgba(0, 0, 0, 0.608);
+    --gray-a12: rgba(0, 0, 0, 0.875);
+
     /* Amber */
     --amber-1: #FEFDFB;
     --amber-2: #FEFBE9;
@@ -161,6 +188,89 @@ export const cssTokens = `
     --custom-a10: rgba(0, 0, 0, 0.82);
     --custom-a11: rgba(0, 0, 0, 0.608);
     --custom-a12: rgba(0, 0, 0, 0.875);
+
+    /* --- Component Specific (Semantic) --- */
+    --header-height: 52px;
+    --header-bg: var(--colors-surface);
+    --header-border: var(--colors-gray-border);
+    
+    /* Success / Green */
+    --success-1: var(--green-1);
+    --success-2: var(--green-2);
+    --success-3: var(--green-3);
+    --success-4: var(--green-4);
+    --success-5: var(--green-5);
+    --success-6: var(--green-6);
+    --success-7: var(--green-7);
+    --success-8: var(--green-8);
+    --success-9: var(--green-9);
+    --success-10: var(--green-10);
+    --success-11: var(--green-11);
+    --success-12: var(--green-12);
+    --success-a1: var(--green-a1);
+    --success-a2: var(--green-a2);
+    --success-a3: var(--green-a3);
+    --success-a4: var(--green-a4);
+    --success-a5: var(--green-a5);
+    --success-a6: var(--green-a6);
+    --success-a7: var(--green-a7);
+    --success-a8: var(--green-a8);
+    --success-a9: var(--green-a9);
+    --success-a10: var(--green-a10);
+    --success-a11: var(--green-a11);
+    --success-a12: var(--green-a12);
+
+    /* Error / Crimson (using Crimson as base for Error as per Radix recommendation) */
+    --error-1: var(--crimson-1);
+    --error-2: var(--crimson-2);
+    --error-3: var(--crimson-3);
+    --error-4: var(--crimson-4);
+    --error-5: var(--crimson-5);
+    --error-6: var(--crimson-6);
+    --error-7: var(--crimson-7);
+    --error-8: var(--crimson-8);
+    --error-9: var(--crimson-9);
+    --error-10: var(--crimson-10);
+    --error-11: var(--crimson-11);
+    --error-12: var(--crimson-12);
+    --error-a1: var(--crimson-a1);
+    --error-a2: var(--crimson-a2);
+    --error-a3: var(--crimson-a3);
+    --error-a4: var(--crimson-a4);
+    --error-a5: var(--crimson-a5);
+    --error-a6: var(--crimson-a6);
+    --error-a7: var(--crimson-a7);
+    --error-a8: var(--crimson-a8);
+    --error-a9: var(--crimson-a9);
+    --error-a10: var(--crimson-a10);
+    --error-a11: var(--crimson-a11);
+    --error-a12: var(--crimson-a12);
+
+    /* Warning / Amber */
+    --warning-1: var(--amber-1);
+    --warning-2: var(--amber-2);
+    --warning-3: var(--amber-3);
+    --warning-4: var(--amber-4);
+    --warning-5: var(--amber-5);
+    --warning-6: var(--amber-6);
+    --warning-7: var(--amber-7);
+    --warning-8: var(--amber-8);
+    --warning-9: var(--amber-9);
+    --warning-10: var(--amber-10);
+    --warning-11: var(--amber-11);
+    --warning-12: var(--amber-12);
+    --warning-a1: var(--amber-a1);
+    --warning-a2: var(--amber-a2);
+    --warning-a3: var(--amber-a3);
+    --warning-a4: var(--amber-a4);
+    --warning-a5: var(--amber-a5);
+    --warning-a6: var(--amber-a6);
+    --warning-a7: var(--amber-a7);
+    --warning-a8: var(--amber-a8);
+    --warning-a9: var(--amber-a9);
+    --warning-a10: var(--amber-a10);
+    --warning-a11: var(--amber-a11);
+    --warning-a12: var(--amber-a12);
 
     /* Cyan */
     --cyan-1: #FAFDFE;
@@ -732,8 +842,7 @@ export const cssTokens = `
     --teal-a9: rgba(0, 158, 140, 0.929);
     --teal-a10: rgba(0, 150, 132, 0.949);
     --teal-a11: #008573;
-    --teal-a12: rgba(0, 51, 45, 0.949);
-
+    --teal-a12: rgba(0, 31, 28, 0.925);
     /* Tomato */
     --tomato-1: #FFFCFC;
     --tomato-2: #FFF8F7;
@@ -813,154 +922,20 @@ export const cssTokens = `
     --yellow-a12: rgba(46, 32, 0, 0.878);
 
 
-    /* --- Theme A Tokens (Recursive Export) --- */
-    --colors-accent-accent-1: var(--indigo-1);
-    --colors-accent-accent-2: var(--indigo-2);
-    --colors-accent-accent-3: var(--indigo-3);
-    --colors-accent-accent-4: var(--indigo-4);
-    --colors-accent-accent-5: var(--indigo-5);
-    --colors-accent-accent-6: var(--indigo-6);
-    --colors-accent-accent-7: var(--indigo-7);
-    --colors-accent-accent-8: var(--indigo-8);
-    --colors-accent-accent-9: var(--indigo-9);
-    --colors-accent-accent-10: var(--indigo-10);
-    --colors-accent-accent-11: var(--indigo-11);
-    --colors-accent-accent-12: var(--indigo-12);
-    --colors-accent-accent-alpha-1: var(--indigo-a1);
-    --colors-accent-accent-alpha-2: var(--indigo-a2);
-    --colors-accent-accent-alpha-3: var(--indigo-a3);
-    --colors-accent-accent-alpha-4: var(--indigo-a4);
-    --colors-accent-accent-alpha-5: var(--indigo-a5);
-    --colors-accent-accent-alpha-6: var(--indigo-a6);
-    --colors-accent-accent-alpha-7: var(--indigo-a7);
-    --colors-accent-accent-alpha-8: var(--indigo-a8);
-    --colors-accent-accent-alpha-9: var(--indigo-a9);
-    --colors-accent-accent-alpha-10: var(--indigo-a10);
-    --colors-accent-accent-alpha-11: var(--indigo-a11);
-    --colors-accent-accent-alpha-12: var(--indigo-a12);
-    --colors-default-black: rgba(28, 32, 36, 1);
-    --colors-default-white: rgba(255, 255, 255, 1);
-    --colors-neutral-neutral-1: var(--slate-1);
-    --colors-neutral-neutral-2: var(--slate-2);
-    --colors-neutral-neutral-3: var(--slate-3);
-    --colors-neutral-neutral-4: var(--slate-4);
-    --colors-neutral-neutral-5: var(--slate-5);
-    --colors-neutral-neutral-6: var(--slate-6);
-    --colors-neutral-neutral-7: var(--slate-7);
-    --colors-neutral-neutral-8: var(--slate-8);
-    --colors-neutral-neutral-9: var(--slate-9);
-    --colors-neutral-neutral-10: var(--slate-10);
-    --colors-neutral-neutral-11: var(--slate-11);
-    --colors-neutral-neutral-12: var(--slate-12);
-    --colors-neutral-neutral-alpha-1: var(--slate-a1);
-    --colors-neutral-neutral-alpha-2: var(--slate-a2);
-    --colors-neutral-neutral-alpha-3: var(--slate-a3);
-    --colors-neutral-neutral-alpha-4: var(--slate-a4);
-    --colors-neutral-neutral-alpha-5: var(--slate-a5);
-    --colors-neutral-neutral-alpha-6: var(--slate-a6);
-    --colors-neutral-neutral-alpha-7: var(--slate-a7);
-    --colors-neutral-neutral-alpha-8: var(--slate-a8);
-    --colors-neutral-neutral-alpha-9: var(--slate-a9);
-    --colors-neutral-neutral-alpha-10: var(--slate-a10);
-    --colors-neutral-neutral-alpha-11: var(--slate-a11);
-    --colors-neutral-neutral-alpha-12: var(--slate-a12);
-    --colors-semantic-error-1: var(--red-1);
-    --colors-semantic-error-2: var(--red-2);
-    --colors-semantic-error-3: var(--red-3);
-    --colors-semantic-error-4: var(--red-4);
-    --colors-semantic-error-5: var(--red-5);
-    --colors-semantic-error-6: var(--red-6);
-    --colors-semantic-error-7: var(--red-7);
-    --colors-semantic-error-8: var(--red-8);
-    --colors-semantic-error-9: var(--red-9);
-    --colors-semantic-error-10: var(--red-10);
-    --colors-semantic-error-11: var(--red-11);
-    --colors-semantic-error-12: var(--red-12);
-    --colors-semantic-error-alpha-1: var(--red-a1);
-    --colors-semantic-error-alpha-2: var(--red-a2);
-    --colors-semantic-error-alpha-3: var(--red-a3);
-    --colors-semantic-error-alpha-4: var(--red-a4);
-    --colors-semantic-error-alpha-5: var(--red-a5);
-    --colors-semantic-error-alpha-6: var(--red-a6);
-    --colors-semantic-error-alpha-7: var(--red-a7);
-    --colors-semantic-error-alpha-8: var(--red-a8);
-    --colors-semantic-error-alpha-9: var(--red-a9);
-    --colors-semantic-error-alpha-10: var(--red-a10);
-    --colors-semantic-error-alpha-11: var(--red-a11);
-    --colors-semantic-error-alpha-12: var(--red-a12);
-    --colors-semantic-info-1: var(--sky-1);
-    --colors-semantic-info-2: var(--sky-2);
-    --colors-semantic-info-3: var(--sky-3);
-    --colors-semantic-info-4: var(--sky-4);
-    --colors-semantic-info-5: var(--sky-5);
-    --colors-semantic-info-6: var(--sky-6);
-    --colors-semantic-info-7: var(--sky-7);
-    --colors-semantic-info-8: var(--sky-8);
-    --colors-semantic-info-9: var(--sky-9);
-    --colors-semantic-info-10: var(--sky-10);
-    --colors-semantic-info-11: var(--sky-11);
-    --colors-semantic-info-12: var(--sky-12);
-    --colors-semantic-info-alpha-1: var(--sky-a1);
-    --colors-semantic-info-alpha-2: var(--sky-a2);
-    --colors-semantic-info-alpha-3: var(--sky-a3);
-    --colors-semantic-info-alpha-4: var(--sky-a4);
-    --colors-semantic-info-alpha-5: var(--sky-a5);
-    --colors-semantic-info-alpha-6: var(--sky-a6);
-    --colors-semantic-info-alpha-7: var(--sky-a7);
-    --colors-semantic-info-alpha-8: var(--sky-a8);
-    --colors-semantic-info-alpha-9: var(--sky-a9);
-    --colors-semantic-info-alpha-10: var(--sky-a10);
-    --colors-semantic-info-alpha-11: var(--sky-a11);
-    --colors-semantic-info-alpha-12: var(--sky-a12);
-    --colors-semantic-success-1: var(--green-1);
-    --colors-semantic-success-2: var(--green-2);
-    --colors-semantic-success-3: var(--green-3);
-    --colors-semantic-success-4: var(--green-4);
-    --colors-semantic-success-5: var(--green-5);
-    --colors-semantic-success-6: var(--green-6);
-    --colors-semantic-success-7: var(--green-7);
-    --colors-semantic-success-8: var(--green-8);
-    --colors-semantic-success-9: var(--green-9);
-    --colors-semantic-success-10: var(--green-10);
-    --colors-semantic-success-11: var(--green-11);
-    --colors-semantic-success-12: var(--green-12);
-    --colors-semantic-success-alpha-1: var(--green-a1);
-    --colors-semantic-success-alpha-2: var(--green-a2);
-    --colors-semantic-success-alpha-3: var(--green-a3);
-    --colors-semantic-success-alpha-4: var(--green-a4);
-    --colors-semantic-success-alpha-5: var(--green-a5);
-    --colors-semantic-success-alpha-6: var(--green-a6);
-    --colors-semantic-success-alpha-7: var(--green-a7);
-    --colors-semantic-success-alpha-8: var(--green-a8);
-    --colors-semantic-success-alpha-9: var(--green-a9);
-    --colors-semantic-success-alpha-10: var(--green-a10);
-    --colors-semantic-success-alpha-11: var(--green-a11);
-    --colors-semantic-success-alpha-12: var(--green-a12);
-    --colors-semantic-warning-1: var(--amber-1);
-    --colors-semantic-warning-2: var(--amber-2);
-    --colors-semantic-warning-3: var(--amber-3);
-    --colors-semantic-warning-4: var(--amber-4);
-    --colors-semantic-warning-5: var(--amber-5);
-    --colors-semantic-warning-6: var(--amber-6);
-    --colors-semantic-warning-7: var(--amber-7);
-    --colors-semantic-warning-8: var(--amber-8);
-    --colors-semantic-warning-9: var(--amber-9);
-    --colors-semantic-warning-10: var(--amber-10);
-    --colors-semantic-warning-11: var(--amber-11);
-    --colors-semantic-warning-12: var(--amber-12);
-    --colors-semantic-warning-alpha-1: var(--amber-a1);
-    --colors-semantic-warning-alpha-2: var(--amber-a2);
-    --colors-semantic-warning-alpha-3: var(--amber-a3);
-    --colors-semantic-warning-alpha-4: var(--amber-a4);
-    --colors-semantic-warning-alpha-5: var(--amber-a5);
-    --colors-semantic-warning-alpha-6: var(--amber-a6);
-    --colors-semantic-warning-alpha-7: var(--amber-a7);
-    --colors-semantic-warning-alpha-8: var(--amber-a8);
-    --colors-semantic-warning-alpha-9: var(--amber-a9);
-    --colors-semantic-warning-alpha-10: var(--amber-a10);
-    --colors-semantic-warning-alpha-11: var(--amber-a11);
-    --colors-semantic-warning-alpha-12: var(--amber-a12);
-    --panel-default: {Panel.translucent};
+    /* --- Component Constants --- */
+    --header-height: 52px;
+    --toggle-width: 44px;
+    --toggle-height: 24px;
+    --toggle-thumb-size: 20px;
+    --header-icon-size: 28px;
+    
+    /* Semantic Colors (Direct) */
+    --header-bg: var(--tokens-colors-surface);
+    --header-border: var(--gray-a4);
+    
+    --panel-default: rgba(255, 255, 255, 0.8);
+...
+    --colors-neutral-neutral-alpha-3: var(--slate-a3); /* Keep only specific ones if strictly used by legacy code, otherwise remove */
     --panel-solid: rgba(255, 255, 255, 1);
     --panel-translucent: rgba(255, 255, 255, 0.8);
     --radius-1: 3px;
@@ -985,30 +960,30 @@ export const cssTokens = `
     --space-7: 40px;
     --space-8: 48px;
     --space-9: 64px;
-    --tokens-colors-accent-contrast: {Tokens.Colors.white-contrast};
-    --tokens-colors-accent-surface: {Colors.Accent.Accent Alpha.2};
-    --tokens-colors-black-contrast: {Colors.Default.black};
+    --tokens-colors-accent-contrast: #ffffff;
+    --tokens-colors-accent-surface: var(--blue-a2);
+    --tokens-colors-black-contrast: #000000;
     --tokens-colors-overlay: rgba(0, 8, 48, 0.275);
     --tokens-colors-page-background: rgba(255, 255, 255, 1);
     --tokens-colors-surface: rgba(255, 255, 255, 0.9);
     --tokens-colors-text: rgba(28, 32, 36, 1);
-    --tokens-colors-white-contrast: {Colors.Default.white};
-    --tokens-space-button-height-1: {Spacing.5};
-    --tokens-space-button-height-2: {Spacing.6};
-    --tokens-space-button-height-3: {Spacing.7};
-    --tokens-space-button-height-4: {Spacing.8};
-    --tokens-space-menu-item-height-1: {Spacing.5};
-    --tokens-space-menu-item-height-2: {Spacing.6};
+    --tokens-colors-white-contrast: #ffffff;
+    --tokens-space-button-height-1: var(--space-5);
+    --tokens-space-button-height-2: var(--space-6);
+    --tokens-space-button-height-3: var(--space-7);
+    --tokens-space-button-height-4: var(--space-8);
+    --tokens-space-menu-item-height-1: var(--space-5);
+    --tokens-space-menu-item-height-2: var(--space-6);
     --tokens-space-table-cell-min-height-1: 36px;
     --tokens-space-table-cell-min-height-2: 44px;
-    --tokens-space-table-cell-min-height-3: {Spacing.8};
-    --tokens-space-table-cell-padding-1: {Spacing.2};
-    --tokens-space-table-cell-padding-2: {Spacing.3};
-    --tokens-space-table-cell-padding-3: {Spacing.4};
-    --typography-font-family-code: Menlo;
-    --typography-font-family-emphasis: Times New Roman;
-    --typography-font-family-quote: Times New Roman;
-    --typography-font-family-text: SF Pro;
+    --tokens-space-table-cell-min-height-3: var(--space-8);
+    --tokens-space-table-cell-padding-1: var(--space-2);
+    --tokens-space-table-cell-padding-2: var(--space-3);
+    --tokens-space-table-cell-padding-3: var(--space-4);
+    --typography-font-family-code: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+    --typography-font-family-emphasis: 'Georgia', 'Times New Roman', serif;
+    --typography-font-family-quote: 'Georgia', 'Garamond', serif;
+    --typography-font-family-text: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     --typography-font-size-1: 12px;
     --typography-font-size-2: 14px;
     --typography-font-size-3: 16px;
@@ -1052,89 +1027,74 @@ export const cssTokens = `
     --corner-shape: squircle;
     --transition-crisp: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
+`; // End lightModeTokens
 
+const darkModeTokens = `
+    /* Gray (Neutral) - Dark Mode Overrides */
+    --gray-1: #111111; --gray-2: #191919; --gray-3: #222222; --gray-4: #2a2a2a;
+    --gray-5: #313131; --gray-6: #3a3a3a; --gray-7: #484848; --gray-8: #606060;
+    --gray-9: #6e6e6e; --gray-10: #7b7b7b; --gray-11: #b4b4b4; --gray-12: #eeeeee;
+
+    /* Gray Alpha - Dark Mode */
+    --gray-a1: rgba(255, 255, 255, 0.010); --gray-a2: rgba(255, 255, 255, 0.024); --gray-a3: rgba(255, 255, 255, 0.057);
+    --gray-a4: rgba(255, 255, 255, 0.074); --gray-a5: rgba(255, 255, 255, 0.103); --gray-a6: rgba(255, 255, 255, 0.133);
+    --gray-a7: rgba(255, 255, 255, 0.176); --gray-a8: rgba(255, 255, 255, 0.255); --gray-a9: rgba(255, 255, 255, 0.420);
+    --gray-a10: rgba(255, 255, 255, 0.475); --gray-a11: rgba(255, 255, 255, 0.565); --gray-a12: rgba(255, 255, 255, 0.910);
+
+    /* Semantic Colors - Dark Mode Mapping (Simplified for reliability) */
+    /* Success (Green Dark) */
+    --green-1: #0e1f17; --green-2: #12281d; --green-3: #163625; --green-4: #19442c;
+    --green-5: #1d5234; --green-6: #23633e; --green-7: #2a7949; --green-8: #329257;
+    --green-9: #30a46c; --green-10: #36b576; --green-11: #4cc38a; --green-12: #e5fbe9;
+    
+    /* Error (Red/Crimson Dark) - using Crimson Dark values */
+    --crimson-1: #1f1315; --crimson-2: #29141a; --crimson-3: #3c1925; --crimson-4: #4d1c2d;
+    --crimson-5: #5d2236; --crimson-6: #702a41; --crimson-7: #8a3551; --crimson-8: #b44065;
+    --crimson-9: #e93d82; --crimson-10: #ee5b94; --crimson-11: #f47ea9; --crimson-12: #fee7ef;
+
+    /* Warning (Amber Dark) */
+    --amber-1: #16120c; --amber-2: #1d1810; --amber-3: #2d2416; --amber-4: #3c2f1a;
+    --amber-5: #4b3b1f; --amber-6: #5b4823; --amber-7: #6e5829; --amber-8: #876d31;
+    --amber-9: #ffc53d; --amber-10: #ffd60a; --amber-11: #ffca16; --amber-12: #ffe7b3;
+
+    /* Blue (Accent Dark) */
+    --blue-1: #0f1720; --blue-2: #101b26; --blue-3: #11253a; --blue-4: #13304e;
+    --blue-5: #153b61; --blue-6: #184a7d; --blue-7: #1c5d9e; --blue-8: #2176c7;
+    --blue-9: #0090ff; --blue-10: #52a9ff; --blue-11: #8bc8ff; --blue-12: #eaf6ff;
+
+    /* Semantic Re-map for Dark Mode */
+    --color-background: var(--gray-1);
+    --color-surface: var(--gray-2);
+    --color-panel: var(--gray-2);
+    --color-overlay: rgba(0, 0, 0, 0.7);
+    --color-shadow: rgba(0, 0, 0, 0.5);
+    
+    --accent-surface: rgba(0, 144, 255, 0.15);
+    
+    /* Ensure variables used in Components utilize these overrides */
+    --tokens-colors-page-background: var(--gray-1);
+    --tokens-colors-surface: var(--gray-2);
+    --tokens-colors-text: var(--gray-12);
+    --tokens-colors-accent-contrast: #ffffff;
+    --tokens-colors-black-contrast: #ffffff; /* In dark mode, contrasting against black/dark bg usually implies white text */
+    --tokens-colors-white-contrast: #000000;
+    
+    --panel-default: rgba(30, 30, 30, 0.8);
+    --panel-solid: var(--gray-2);
+    --panel-translucent: rgba(25, 25, 25, 0.8);
+`;
+
+export const cssTokens = lightModeTokens + `
   /* --- Dark Mode Configuration --- */
   @media (prefers-color-scheme: dark) {
     :root {
-      --gray-1: #111111; --gray-2: #191919; --gray-3: #222222; --gray-4: #2a2a2a;
-      --gray-5: #313131; --gray-6: #3a3a3a; --gray-7: #484848; --gray-8: #606060;
-      --gray-9: #6e6e6e; --gray-10: #7b7b7b; --gray-11: #b4b4b4; --gray-12: #eeeeee;
-
-      --gray-a1: rgba(255, 255, 255, 0.010); --gray-a2: rgba(255, 255, 255, 0.024); --gray-a3: rgba(255, 255, 255, 0.057);
-      --gray-a4: rgba(255, 255, 255, 0.074); --gray-a5: rgba(255, 255, 255, 0.103); --gray-a6: rgba(255, 255, 255, 0.133);
-      --gray-a7: rgba(255, 255, 255, 0.176); --gray-a8: rgba(255, 255, 255, 0.255); --gray-a9: rgba(255, 255, 255, 0.420);
-      --gray-a10: rgba(255, 255, 255, 0.475); --gray-a11: rgba(255, 255, 255, 0.565); --gray-a12: rgba(255, 255, 255, 0.910);
-
-      /* Dark mode overrides for other scales if needed - currently sticking to defaults or Theme A mappings? */
-      /* Theme A doesn't seem to have explicit Dark Mode in the JSON file we saw. Use standard Radix mapping logic if needed. */
-      
-      --color-background: var(--gray-1);
-      --color-surface: var(--gray-2);
-      --color-panel: var(--gray-2);
-      --color-overlay: rgba(0, 0, 0, 0.7);
-      --color-shadow: rgba(0, 0, 0, 0.3);
-      
-      --accent-surface: rgba(0, 145, 255, 0.15);
+      ${darkModeTokens}
     }
   }
 
-  /* Attribute-based themes */
+  /* Attribute-based themes (Fallback/Force) */
   [data-theme="dark"] {
-      --color-background: var(--gray-1);
-      --color-surface: var(--gray-2);
-      --color-panel: var(--gray-2);
-      --gray-1: #111111; --gray-12: #eeeeee;
-  }
-
-  /* --- Global Styles --- */
-  * { box-sizing: border-box; }
-  body { 
-    margin: 0; 
-    font-family: var(--font-sans, Inter, system-ui, sans-serif); 
-    background-color: var(--color-background);
-    color: var(--gray-12);
-  }
-
-  /* --- Component Standard Classes --- */
-  .card {
-    background: var(--color-surface);
-    border-radius: var(--radius-5);
-    box-shadow: var(--color-shadow);
-  }
-
-  .chip {
-    background: var(--gray-3);
-    color: var(--gray-11);
-    border: 1px solid var(--gray-6);
-    transition: all 150ms ease;
-  }
-  .chip:hover {
-    background: var(--gray-4);
-    border-color: var(--gray-8);
-  }
-  .chip.active {
-    background: var(--accent-9);
-    color: white;
-    border-color: var(--accent-9);
-  }
-
-  .submit-btn-active {
-    background: var(--gray-12);
-    color: var(--color-background);
-  }
-  .submit-btn-active:hover {
-    filter: brightness(1.1);
-  }
-
-  .error-banner {
-    background: var(--error-1);
-    border: 1px solid var(--error-6);
-    border-radius: var(--radius-4);
-    color: var(--error-11);
-  }
-
-  /* iOS Continuous Corners */
-  .card, .popover-content, .chip, .message-bubble {
-    corner-shape: var(--corner-shape);
+    color-scheme: dark;
+    ${darkModeTokens}
   }
 `;

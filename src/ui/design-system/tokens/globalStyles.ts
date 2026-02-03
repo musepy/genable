@@ -21,7 +21,7 @@ export const globalStyles = `
     align-items: center;
     height: var(--header-height);
     background: var(--header-bg);
-    border-bottom: 1px solid var(--header-border);
+    /* border-bottom removed per design update */
     padding: 0 var(--space-3); /* 对齐设计稿的紧凑感 */
     box-sizing: border-box;
   }
@@ -34,7 +34,7 @@ export const globalStyles = `
     background: transparent; /* 默认 Ghost 风格 */
     color: var(--text-primary);
     border: 1px solid var(--header-border);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-5);
     font-size: var(--font-size-1);
     font-weight: var(--font-weight-medium);
     cursor: pointer;

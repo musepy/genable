@@ -15,10 +15,10 @@ const translations = {
     themeLabel: (theme: string) => `Theme: ${theme}`,
     
     // Actions
-    newDesign: 'New design',
+    newDesign: 'New Design',
     
     // Placeholder
-    placeholder: 'Type to generate design... ⌘↵',
+    placeholder: 'Describe your task, mention @context, or use /commands...',
     
     // Empty state
     emptyStateHint: 'Pick a suggestion below or describe your design',
@@ -89,7 +89,7 @@ const translations = {
     newDesign: '新设计',
     
     // Placeholder
-    placeholder: '输入描述生成设计... ⌘↵',
+    placeholder: '描述你的任务，使用 @上下文 或 /命令...',
     
     // Empty state
     emptyStateHint: '选择下方建议或描述你的设计',

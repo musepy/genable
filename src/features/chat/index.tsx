@@ -39,19 +39,25 @@ const messagesContainerStyle = {
 };
 
 const messageBubbleUserStyle = {
-  background: tokens.colors.surface,
+  background: tokens.colors.alpha[2],
   color: tokens.colors.textPrimary,
-  borderRadius: 'var(--radius-5)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-  alignSelf: 'flex-end' as const,
-  maxWidth: '80%',
+  borderRadius: 'var(--radius-6)',
+  padding: `${tokens.space[3]}px ${tokens.space[5]}px`,
+  alignSelf: 'flex-start' as const,
+  maxWidth: '100%',
 };
 
 const messageBubbleModelStyle = {
-  background: tokens.colors.surface,
-  border: `1px solid ${tokens.colors.grayBorder}`,
-  borderRadius: 'var(--radius-5)',
-  padding: tokens.space[4],
+  borderRadius: 'var(--radius-6)',
+  padding: `${tokens.space[4]}px ${tokens.space[5]}px`,
+  alignSelf: 'flex-start' as const,
+  maxWidth: '100%',
+};
+
+const messageBubbleResultStyle = {
+  background: tokens.colors.accentAlpha[2],
+  borderRadius: 'var(--radius-6)',
+  padding: `${tokens.space[4]}px ${tokens.space[5]}px`,
   alignSelf: 'flex-start' as const,
   maxWidth: '100%',
 };
@@ -163,21 +169,24 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
           );
         }
 
-        const bubbleStyle = isUserMessage ? messageBubbleUserStyle : messageBubbleModelStyle;
+        const hasToolCalls = !isUserMessage && msg.toolCalls && msg.toolCalls.length > 0;
+        const bubbleStyle = isUserMessage
+          ? messageBubbleUserStyle
+          : (hasToolCalls ? messageBubbleResultStyle : messageBubbleModelStyle);
 
         return (
           <div key={i} className="message-enter" style={{ ...bubbleStyle as any, marginTop }}>
             {isUserMessage ? (
-              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: '1.4' }}>{msg.text}</span>
+              <span style={{ fontSize: tokens.fontSize[2], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-3)' }}>{msg.text}</span>
             ) : (
               <Fragment>
+                {hasToolCalls && <ToolExecutionPanel toolCalls={msg.toolCalls} />}
                 <MessageRenderer content={msg.text} level="L3" />
                 {msg.iterations && msg.iterations.length > 0 && (
                   <div style={{ marginTop: tokens.space[2], borderTop: `1px solid ${tokens.colors.grayBorder}`, paddingTop: tokens.space[2] }}>
                     {msg.iterations.map((it: any, idx: number) => <IterationCard key={idx} iteration={it} />)}
                   </div>
                 )}
-                {msg.toolCalls && <ToolExecutionPanel toolCalls={msg.toolCalls} />}
               </Fragment>
             )}
           </div>
@@ -358,8 +367,16 @@ export function ChatFeature(props: UseChatProps) {
         )}
       </div>
 
-      {/* Input Area */}
-      <div style={{ padding: `0 ${tokens.space[2]}px ${tokens.space[2]}px ${tokens.space[2]}px` }}>
+      {/* Input Area — floating with backdrop blur */}
+      <div style={{
+        position: 'sticky' as const,
+        bottom: 0,
+        padding: `${tokens.space[6]}px ${tokens.space[2]}px ${tokens.space[4]}px`,
+        background: 'linear-gradient(to top, var(--color-background) 0%, rgba(255,255,255,0.8) 50%, transparent 100%)',
+        backdropFilter: 'blur(5px)',
+        WebkitBackdropFilter: 'blur(5px)',
+        zIndex: 10,
+      }}>
         {tokenUsage && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.space[2], padding: `0 ${tokens.space[2]}px`, gap: tokens.space[3], fontSize: tokens.fontSize.xs, color: tokens.colors.textSecondary }}>
             <span>Input: {tokenUsage.promptTokens}</span>

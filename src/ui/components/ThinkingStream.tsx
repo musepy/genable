@@ -70,8 +70,8 @@ export function ThinkingStream({
   
   return (
     <div style={containerStyle}>
-      <span style={statusStyle}>
-        {status || 'Generating...'}
+      <span className={!status ? 'thinking-shimmer' : undefined} style={status ? statusStyle : undefined}>
+        {status || 'Thinking...'}
       </span>
       {onSkip && (
         <button 
@@ -87,7 +87,22 @@ export function ThinkingStream({
   );
 }
 
-// No extra CSS needed for minimal design
-export const thinkingStreamCss = '';
+export const thinkingStreamCss = `
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .thinking-shimmer {
+    background: linear-gradient(90deg, var(--gray-9), var(--gray-6), var(--gray-9));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 2s ease-in-out infinite;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'Inter', var(--font-sans, system-ui, sans-serif);
+  }
+`;
 
 export default ThinkingStream;

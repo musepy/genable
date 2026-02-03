@@ -7,7 +7,7 @@
  */
 
 import { h } from 'preact';
-import { Plus, Settings, Sun, Moon, Braces } from 'lucide-preact';
+import { Plus, AlignJustify, Sun, Moon } from 'lucide-preact';
 import { emit } from '@create-figma-plugin/utilities';
 import { ImportJsonHandler } from '../../types';
 import { tokens, componentStyles } from '../design-system/tokens';
@@ -80,7 +80,7 @@ export function Header({
         title="Settings"
         aria-label="Settings"
       >
-        <Settings size={16} strokeWidth={2} />
+        <AlignJustify size={16} strokeWidth={2} />
       </button>
     </div>
   );

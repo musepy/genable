@@ -1,21 +1,22 @@
 /**
  * @file PromptInput.tsx
- * @description P4 重构：输入区域组件
- * 
- * 布局：
+ * @description Input area component — matches Figma design (node 57:571)
+ *
+ * Layout:
  * ┌──────────────────────────────────────────┐
- * │ Type to generate...                      │  ← Textarea（上）
- * │ [Model ↑]                           [✓]  │  ← Footer Row（下）
+ * │ [ContextTag] [ContextTag]                │  ← Context Tags (optional)
+ * │ Describe your task...                    │  ← Textarea
+ * │ [+]  [Model ↑]                      [▶] │  ← Footer Row
  * └──────────────────────────────────────────┘
- * 
- * 语义化架构：
- * - leftElement slot 用于放置 ModelPopover
- * - 使用 componentStyles.inputArea / submitButton
- * - IME 输入法兼容（中日韩语言）
+ *
+ * - contextTags slot for ContextTag components
+ * - leftElement slot for ModelPopover
+ * - IME input compatible (CJK languages)
  */
 
 import { h, ComponentChildren } from 'preact';
 import { useRef, useLayoutEffect } from 'preact/hooks';
+import { Plus } from 'lucide-preact';
 import { tokens, componentStyles } from '../design-system/tokens';
 import { t } from '../i18n';
 
@@ -27,9 +28,13 @@ export interface PromptInputProps {
   disabled?: boolean;
   canSubmit?: boolean;
   loading?: boolean;
-  
-  // P4: Slot for ModelPopover
+
+  /** Slot for context tag pills above textarea */
+  contextTags?: ComponentChildren;
+  /** Slot for ModelPopover / extra controls */
   leftElement?: ComponentChildren;
+  /** Callback for the plus (+) button */
+  onPlusClick?: () => void;
 }
 
 export function PromptInput({
@@ -40,26 +45,28 @@ export function PromptInput({
   disabled = false,
   canSubmit = false,
   loading = false,
+  contextTags,
   leftElement,
+  onPlusClick,
 }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   const autoResize = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   };
-  
+
   const handleInput = (e: Event) => {
     if (disabled) return;
     const textarea = e.currentTarget as HTMLTextAreaElement;
     onChange(textarea.value);
     autoResize(textarea);
   };
-  
+
   const handleKeyDown = (e: KeyboardEvent) => {
     // IME composition check: ignore Enter during IME input (CJK languages)
     if (e.isComposing || e.keyCode === 229) return;
-    
+
     // Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux) to submit
     const isSubmitShortcut = e.key === 'Enter' && (e.metaKey || e.ctrlKey);
     if (isSubmitShortcut && canSubmit) {
@@ -69,11 +76,9 @@ export function PromptInput({
   };
 
   // Auto-resize when value updates (e.g. from prompt chips or reset)
-  // Also scroll to bottom so user sees cursor/latest content
   useLayoutEffect(() => {
     if (textareaRef.current) {
       autoResize(textareaRef.current);
-      // Scroll to bottom to show latest content
       textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
     }
   }, [value]);
@@ -81,24 +86,35 @@ export function PromptInput({
   return (
     <div style={{
       ...componentStyles.inputArea.container,
-      borderRadius: tokens.radii['2xl'], // 24px - Use token instead of hardcode
-      background: tokens.colors.surface, // Migrated from colors.card
-      border: `1px solid ${tokens.colors.grayBorder}`,
-      boxShadow: tokens.colors.shadow, // Replaced rgba(0,0,0,0.08)
-      // Note: Removed overflow: hidden to allow Popovers to float above
-      // Note: margin removed - parent container controls spacing (隔离式原则)
+      borderRadius: 14,
+      background: 'rgba(255, 255, 255, 0.95)',
+      border: '0.5px solid rgba(228, 228, 231, 0.8)',
+      boxShadow: '0px 0px 0px 0px rgba(24,24,27,0.05), 0px 8px 32px 0px rgba(0,0,0,0.1)',
     }}>
-      {/* Textarea - 上方 */}
+      {/* Context Tags row */}
+      {contextTags && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap' as const,
+          gap: tokens.space[3],
+          padding: `${tokens.space[3]}px ${tokens.space[3]}px 0`,
+        }}>
+          {contextTags}
+        </div>
+      )}
+
+      {/* Textarea */}
       <textarea
         ref={textareaRef}
         className="focusable"
         style={{
           ...componentStyles.inputArea.textarea,
-          background: 'transparent', // Transparent to let card bg show
-          paddingBottom: tokens.space[1], // 4px
-          paddingTop: tokens.space[3],    // 12px
-          paddingLeft: tokens.space[4],   // 16px
-          paddingRight: tokens.space[4],  // 16px
+          background: 'transparent',
+          paddingBottom: tokens.space[2],
+          paddingTop: tokens.space[2],
+          paddingLeft: tokens.space[4],
+          paddingRight: tokens.space[4],
+          fontSize: 14,
         } as h.JSX.CSSProperties}
         value={value}
         onInput={handleInput}
@@ -107,46 +123,69 @@ export function PromptInput({
         aria-disabled={disabled}
         readOnly={disabled}
       />
-      
-      {/* Footer Row - 下方: [Model ↑] ... [✓] */}
+
+      {/* Footer Row: [+] [Model ↑] ... [▶] */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: `${tokens.space[2]}px ${tokens.space[4]}px ${tokens.space[4]}px ${tokens.space[4]}px`, // Use tokens
+        padding: `${tokens.space[3]}px`,
       }}>
-        {/* Left: Model Selector slot */}
-        <div>
-          {leftElement}
-        </div>
-        
-        {/* Right: Submit button */}
+        {/* Left: Plus button */}
         <button
-          className={canSubmit ? 'submit-btn-active' : 'submit-btn-disabled'}
+          onClick={onPlusClick}
           style={{
-            ...componentStyles.submitButton.base,
-            ...(canSubmit ? componentStyles.submitButton.active : componentStyles.submitButton.disabled),
-            position: 'relative', // 覆盖 absolute
-            right: 'auto',
-            bottom: 'auto',
-            borderRadius: 'var(--radius-full)', // was 999
-          } as h.JSX.CSSProperties}
-          onClick={() => canSubmit && onSubmit()}
-          aria-disabled={!canSubmit}
-          aria-busy={loading}
+            width: 32,
+            height: 32,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 10,
+            cursor: 'pointer',
+            color: tokens.colors.textSecondary,
+            transition: 'var(--transition-crisp)',
+            flexShrink: 0,
+          }}
+          aria-label="Add context"
         >
-          {/* Replaced Checkmark with Send Arrow (Icon Refresh Phase 3 - early partial apply) */}
-          <svg 
-            width="16" 
-            height="16" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface} // Migrated from colors.card 
-            strokeWidth="2.5"
-          >
-             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <Plus size={20} strokeWidth={1.5} />
         </button>
+
+        {/* Right: Model Selector + Submit */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[3] }}>
+          {leftElement}
+
+          {/* Submit button — rounded square per Figma */}
+          <button
+            className={canSubmit ? 'submit-btn-active' : 'submit-btn-disabled'}
+            style={{
+              ...componentStyles.submitButton.base,
+              ...(canSubmit ? componentStyles.submitButton.active : componentStyles.submitButton.disabled),
+              position: 'relative',
+              right: 'auto',
+              bottom: 'auto',
+              borderRadius: 'var(--radius-5)',
+              width: 40,
+              height: 40,
+            } as h.JSX.CSSProperties}
+            onClick={() => canSubmit && onSubmit()}
+            aria-disabled={!canSubmit}
+            aria-busy={loading}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface}
+              strokeWidth="2.5"
+            >
+               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

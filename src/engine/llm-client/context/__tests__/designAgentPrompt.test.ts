@@ -34,8 +34,8 @@ describe('Design Agent Prompt Optimization (TDD)', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider as any);
         
         // Assert new headers
-        expect(prompt).toContain('## CRITICAL: PLAN BEFORE ACTING');
-        expect(prompt).toContain('## DECISION FLOW');
+        expect(prompt).toContain('## MODE: PLANNING');
+        expect(prompt).toContain('CORE POLICIES');
         expect(prompt).toContain('## AVAILABLE TOOLS');
         expect(prompt).toContain('## EXAMPLES');
     });

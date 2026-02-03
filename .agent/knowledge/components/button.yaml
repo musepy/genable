@@ -1,0 +1,22 @@
+name: Button
+category: Inputs
+description: Interactive element for actions
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - icon?
+    - label
+    - icon?
+defaultProps:
+  layoutSizingHorizontal: HUG
+  layoutSizingVertical: HUG
+  primaryAxisAlignItems: CENTER
+  counterAxisAlignItems: CENTER
+  gap: 8
+  semantic: BUTTON
+variants:
+  default:
+    padding: [8, 16]
+  icon:
+    padding: 0

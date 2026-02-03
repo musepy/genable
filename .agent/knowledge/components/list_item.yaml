@@ -1,0 +1,14 @@
+name: List Item
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - item-icon
+    - item-content
+    - item-action
+defaultProps:
+  padding: [12, 16]
+  gap: 12
+  counterAxisAlignItems: CENTER
+  layoutSizingHorizontal: FILL
+  semantic: LIST_ITEM

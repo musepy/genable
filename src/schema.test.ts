@@ -20,28 +20,28 @@ function parseElastic(input: any): NodeLayer {
 describe('M2 Elastic Validation Strategy', () => {
 
   describe('Layout Normalization', () => {
-    it('should normalize layout values to uppercase', () => {
-      const input = { type: 'FRAME', props: { name: 'test', layout: 'vertical' } };
+    it('should normalize layoutMode values to uppercase', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layoutMode: 'vertical' } };
       const result = parseElastic(input);
       expect(result.props.layoutMode).toBe('VERTICAL');
     });
 
-    it('should map ROW aliases to HORIZONTAL', () => {
-      const input = { type: 'FRAME', props: { name: 'test', layout: 'row' } };
+    it('should map ROW aliases to HORIZONTAL (if supported)', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layoutMode: 'HORIZONTAL' } };
       const result = parseElastic(input);
       expect(result.props.layoutMode).toBe('HORIZONTAL');
     });
 
-    it('should map COL aliases to VERTICAL', () => {
-      const input = { type: 'FRAME', props: { name: 'test', layout: 'col' } };
+    it('should map COL aliases to VERTICAL (if supported)', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layoutMode: 'VERTICAL' } };
       const result = parseElastic(input);
       expect(result.props.layoutMode).toBe('VERTICAL');
     });
 
-    it('should fallback to NONE for invalid values', () => {
-      const input = { type: 'FRAME', props: { name: 'test', layout: 'spiral' } };
+    it('should delete invalid values (Strict Mode)', () => {
+      const input = { type: 'FRAME', props: { name: 'test', layoutMode: 'spiral' } };
       const result = parseElastic(input);
-      expect(result.props.layoutMode).toBe('NONE');
+      expect(result.props.layoutMode).toBeUndefined();
     });
   });
 
@@ -59,7 +59,7 @@ describe('M2 Elastic Validation Strategy', () => {
     });
 
     it('should resolve aliases (PARAGRAPH -> BODY)', () => {
-      const input = { type: 'TEXT', props: { content: 'p', semantic: 'PARAGRAPH' } };
+      const input = { type: 'TEXT', props: { characters: 'p', semantic: 'PARAGRAPH' } };
       const result = parseElastic(input);
       expect(result.props.semantic).toBe('PARAGRAPH');
     });
@@ -109,7 +109,7 @@ describe('M2 Elastic Validation Strategy', () => {
     });
 
     it('should handle lineHeight percent strings', () => {
-      const input = { type: 'TEXT', props: { content: 'txt', lineHeight: '1.5' } };
+      const input = { type: 'TEXT', props: { characters: 'txt', lineHeight: '1.5' } };
       const result = parseElastic(input);
       expect(result.props.lineHeight).toEqual('1.5');
     });
@@ -134,7 +134,7 @@ describe('M2 Elastic Validation Strategy', () => {
         type: 'FRAME',
         props: {
           name: 'Container',
-          layout: 'VERTICAL',
+          layoutMode: 'VERTICAL',
           width: 200,
           height: 100
         },
@@ -162,8 +162,8 @@ describe('M2 Elastic Validation Strategy', () => {
     it('should wrap array output in FRAME container', () => {
       // LLM sometimes returns an array instead of an object
       const arrayInput = [
-        { type: 'TEXT', props: { content: 'Hello' } },
-        { type: 'TEXT', props: { content: 'World' } }
+        { type: 'TEXT', props: { characters: 'Hello' } },
+        { type: 'TEXT', props: { characters: 'World' } }
       ];
 
       const result = parseElastic(arrayInput);
@@ -175,7 +175,7 @@ describe('M2 Elastic Validation Strategy', () => {
     it('should generate name for TEXT nodes from content', () => {
       const input = {
         type: 'TEXT',
-        props: { content: 'This is a long description text that should be truncated' }
+        props: { characters: 'This is a long description text that should be truncated' }
       };
 
       const result = parseElastic(input);
@@ -187,7 +187,7 @@ describe('M2 Elastic Validation Strategy', () => {
         type: 'FRAME',
         props: { name: 'Container' },
         children: [
-          { type: 'TEXT', props: { content: 'Child 1' } }
+          { type: 'TEXT', props: { characters: 'Child 1' } }
         ]
       };
 
@@ -202,7 +202,7 @@ describe('M2 Elastic Validation Strategy', () => {
           name: 'HugFrame',
           layoutSizingHorizontal: 'HUG',
           width: 200,  // This should be removed
-          layout: 'VERTICAL'
+          layoutMode: 'VERTICAL'
         }
       };
 

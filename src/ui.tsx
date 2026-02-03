@@ -1,3 +1,4 @@
+import './utils/compatibility'
 import { render, VerticalSpace } from '@create-figma-plugin/ui'
 import { h } from 'preact'
 import { useEffect, useState } from 'preact/hooks'

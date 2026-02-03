@@ -1,0 +1,53 @@
+# 设计方案：Shadow Figma (画布检查点系统)
+
+本方案旨在为 Figma AI Agent 引入一套类似 Kilo Code "Shadow Git" 的机制。通过对画布状态进行“快照”管理，实现非破坏性的设计探索。
+
+## 1. 核心概念对比
+
+| Kilo Code (Shadow Git) | Shadow Figma (本项目) |
+| :--- | :--- |
+| **Shadow Repo**: 影子仓库副本 | **State Mirror**: 内存中的 DSL 镜像 |
+| **Checkpoint**: Git Commit | **Snapshot**: 序列化后的 JSON 快照 |
+| **Diff**: 文件级别比对 | **Structural Diff**: 树结构属性比对 |
+| **Rollback**: `git checkout` | **Reconstruction**: 根据快照重建节点属性 |
+
+## 2. 架构设计
+
+### 2.1 状态管理器 (SnapshotManager)
+建立一个 `src/engine/agent/snapshotManager.ts`，负责：
+- **Capture**: 调用 [NodeSerializer](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/figma-adapter/nodeSerializer.ts#19-114) 抓取当前选中节点及其子级的完整 DSL。
+- **Store**: 维护一个 `history: Snapshot[]` 栈。
+- **Revert**: 当 Agent 调用 `rollback` 或发生致命错误时，取出栈顶快照。
+
+### 2.2 恢复引擎 (StateApplier)
+目前我们有 [NodeSerializer](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/figma-adapter/nodeSerializer.ts#19-114) (Figma -> DSL)，还需要一个强大的 `StateApplier` (DSL -> Figma)：
+- 它会通过 ID 匹配现有节点。
+- 如果节点存在：更新其属性（Layout, Styles, Props）。
+- 如果节点不存在：重新创建（针对 Undo 被删除的情况）。
+
+### 2.3 事务包裹器 (AtomicWrapper)
+在 `AgentRuntime.ts` 中，每轮迭代开始前自动调用 `snapshotManager.capture()`。
+
+## 3. 实现步骤 [Proposed]
+
+### Phase 1: Snapshot 基础设施
+- [NEW] `src/engine/agent/snapshotManager.ts`: 实现基础的压栈/出栈逻辑。
+- [MODIFY] `AgentRuntime.ts`: 在迭代循环中接入快照抓取。
+
+### Phase 2: Rollback 工具化
+- [NEW] `rollbackTransaction` 工具：允许 Agent 显式撤回。
+- [MODIFY] [ipcBridge.ts](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/ipcBridge.ts): 支持批量应用 DSL 快照的回传指令。
+
+### Phase 3: 透明 Diff UI
+- [NEW] 在插件 UI 中展示“变更预览”，告知用户 Agent 打算撤销或修改哪些具体的属性。
+
+## 4. 验证计划
+
+### 自动化测试
+- 编写 `snapshotManager.test.ts`，模拟连串修改后回滚，校验 DSL 是否恢复原始状态。
+- 使用 `vitest` 运行测试：`npm run test src/engine/agent/__tests__/snapshotManager.test.ts`
+
+### 手动验证
+1. 启动插件，让 Agent 创建一个按钮。
+2. 指令： "把按钮变红，然后反悔（回滚）"。
+3. 观察行为：按钮是否先变红，然后瞬时恢复原色。

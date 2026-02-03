@@ -1,0 +1,12 @@
+name: Pricing Table
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - pricing-card-basic
+    - pricing-card-pro
+    - pricing-card-enterprise
+defaultProps:
+  padding: [60, 40]
+  gap: 24
+  primaryAxisAlignItems: CENTER

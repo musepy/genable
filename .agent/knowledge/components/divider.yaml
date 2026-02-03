@@ -1,0 +1,10 @@
+name: Divider
+structure:
+  type: FRAME
+  layoutMode: NONE
+  children: []
+defaultProps:
+  height: 1
+  layoutSizingHorizontal: FILL
+  layoutSizingVertical: FIXED
+  semantic: DIVIDER

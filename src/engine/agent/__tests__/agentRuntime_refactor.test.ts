@@ -24,7 +24,8 @@ describe('AgentRuntime Refactor Verification', () => {
           functionResponse: { name: tr.name, response: tr.response },
           thought_signature: tr.thought_signature
         }))
-      }))
+      })),
+      getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Rules')
     } as any;
   });
 
@@ -119,21 +120,11 @@ describe('AgentRuntime Refactor Verification', () => {
     const runtime = new AgentRuntime({ provider: mockProvider, tools: [] });
     
     const englishText = 'Hello world'; // 11 chars -> 3 tokens (round up 11/4)
-    const chineseText = '你好世界'; // 4 chars -> 4 * 0.6 = 2.4 -> 3 tokens
-    const mixedText = 'Hello你好'; // 5 eng + 2 chi -> 5/4 + 2*0.6 = 1.25 + 1.2 = 2.45 -> 3 tokens (Wait, calculation is internal)
-    
-    // Internal estimation: 
-    // English: Math.ceil(11/4) = 3
-    // Chinese: Math.ceil(4 * 0.6) = 3
-    // Mixed: Math.ceil(5/4) + Math.ceil(2 * 0.6) = 2 + 2 = 4 (actually it sums the results)
-    
-    // Let's check actual implementation in agentRuntime:
-    // chineseTokens = Math.ceil(chineseChars * 0.6)
-    // otherTokens = Math.ceil(otherChars / 4)
-    // return chineseTokens + otherTokens
+    const chineseText = '你好世界'; // 4 chars -> 4 * 2.0 = 8 tokens
+    const mixedText = 'Hello你好'; // 5 eng + 2 chi -> ceil(5/4) + 2*2.0 = 2 + 4 = 6 tokens
     
     expect((runtime as any).estimateTokens(englishText)).toBe(3);
-    expect((runtime as any).estimateTokens(chineseText)).toBe(3);
-    expect((runtime as any).estimateTokens(mixedText)).toBe(4); 
+    expect((runtime as any).estimateTokens(chineseText)).toBe(8);
+    expect((runtime as any).estimateTokens(mixedText)).toBe(6); 
   });
 });

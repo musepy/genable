@@ -1,0 +1,128 @@
+{
+  "HeaderSync": {
+    "description": "验证 Figma 设计变体到 React Props 的映射及语义化样式",
+    "cases": [
+      {
+        "id": "header_theme_mapping",
+        "input": {
+          "figma_variants": {
+            "day": "true"
+          }
+        },
+        "expected": {
+          "props": {
+            "theme": "light"
+          },
+          "resolved_css_variables": {
+            "--header-bg": "var(--colors-surface)"
+          }
+        }
+      },
+      {
+        "id": "button_state_hover",
+        "input": {
+          "figma_variants": {
+            "type": "primary",
+            "state": "hover"
+          }
+        },
+        "expected": {
+          "class": "header-btn-primary--hover",
+          "styles": {
+            "background": "var(--gray-a3)"
+          }
+        }
+      },
+      {
+        "id": "button_state_pressed",
+        "input": {
+          "figma_variants": {
+            "type": "ghost",
+            "state": "pressed"
+          }
+        },
+        "expected": {
+          "class": "header-btn-ghost--pressed",
+          "styles": {
+            "background": "var(--gray-a4)"
+          }
+        }
+      }
+    ]
+  },
+  "GeminiToolCalling": {
+    "description": "验证 GeminiProvider 在传入 tools 时正确配置 toolConfig 以强制工具调用",
+    "cases": [
+      {
+        "id": "tool_config_any_mode",
+        "description": "当传入 tools 时，config 必须包含 toolConfig.functionCallingConfig.mode = 'ANY'",
+        "input": {
+          "messages": [{ "role": "user", "content": "Create a button" }],
+          "tools": [
+            {
+              "name": "createFrame",
+              "description": "Create a frame in Figma",
+              "parameters": {
+                "type": "object",
+                "properties": { "name": { "type": "string" } },
+                "required": ["name"]
+              }
+            }
+          ]
+        },
+        "expected": {
+          "config": {
+            "tools": [
+              {
+                "functionDeclarations": [
+                  {
+                    "name": "createFrame",
+                    "description": "Create a frame in Figma"
+                  }
+                ]
+              }
+            ],
+            "toolConfig": {
+              "functionCallingConfig": {
+                "mode": "ANY"
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "no_tools_no_toolconfig",
+        "description": "当不传入 tools 时，config 不应包含 toolConfig",
+        "input": {
+          "messages": [{ "role": "user", "content": "Hello" }]
+        },
+        "expected": {
+          "config": {
+            "tools": null,
+            "toolConfig": null
+          }
+        }
+      }
+    ]
+  },
+  "AtomicToolFlow": {
+    "description": "Validation of atomic tool usage and error recovery",
+    "cases": [
+      {
+        "id": "create_and_layout_recovery",
+        "description": "Simulate a scenario where Hug setup fails due to parent layout, and Agent fixes it.",
+        "steps": [
+          { "tool": "createNode", "args": { "type": "FRAME", "name": "Parent" }, "output_ref": "Parent" },
+          { "tool": "createNode", "args": { "type": "FRAME", "name": "Child", "parentId": "${Parent.id}" }, "output_ref": "Child" },
+          { 
+            "tool": "setNodeLayout", 
+            "args": { "nodeId": "${Child.id}", "sizing": { "horizontal": "HUG" } }, 
+            "expectError": "Parent node is FIXED. To use 'HUG', parent must be AUTO_LAYOUT." 
+          },
+          { "tool": "setNodeLayout", "args": { "nodeId": "${Parent.id}", "layoutMode": "HORIZONTAL" } },
+          { "tool": "setNodeLayout", "args": { "nodeId": "${Child.id}", "sizing": { "horizontal": "HUG" } } }
+        ]
+      }
+    ]
+  }
+}

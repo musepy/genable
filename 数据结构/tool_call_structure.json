@@ -1,0 +1,55 @@
+{
+  "description": "LLM Tool Call and Execution Data Structures",
+  "tool_definition": {
+    "name": "string (unique tool name)",
+    "description": "string (instruction for LLM)",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "fieldName": {
+          "type": "string | number | boolean | array | object",
+          "description": "string",
+          "enum": "any[] (optional)",
+          "items": "ToolParameter (for arrays)",
+          "properties": "Record<string, ToolParameter> (for objects)"
+        }
+      },
+      "required": "string[] (list of required field names)"
+    },
+    "executionStrategy": "parallel | sequential",
+    "category": "read | plan | create | modify | validate | knowledge",
+    "dependencies": "string[] (optional, hints for LLM)"
+  },
+  "tool_request": {
+    "toolName": "string",
+    "parameters": "object (matching ToolDefinition schema)",
+    "requestId": "string (unique request ID)",
+    "context": {
+      "designSystemId": "string (optional)",
+      "sessionId": "string (optional)",
+      "userId": "string (optional)"
+    }
+  },
+  "tool_response": {
+    "success": "boolean",
+    "data": "any (optional, successful result data)",
+    "error": {
+      "code": "string (error identifier)",
+      "message": "string (human-readable error message)",
+      "details": "any (optional, technical error details)",
+      "semanticFeedback": "string (optional, feedback to help LLM correct itself)"
+    }
+  },
+  "internal_representations": {
+    "LLMToolCall": {
+      "name": "string",
+      "args": "object",
+      "thought_signature": "string (Gemini 3 specific)"
+    },
+    "LLMToolResult": {
+      "name": "string",
+      "response": "ToolResponse",
+      "thought_signature": "string (Gemini 3 specific)"
+    }
+  }
+}

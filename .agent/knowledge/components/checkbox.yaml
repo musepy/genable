@@ -1,0 +1,11 @@
+name: Checkbox
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - checkbox-box
+    - checkbox-label
+defaultProps:
+  gap: 8
+  counterAxisAlignItems: CENTER
+  semantic: CHECKBOX

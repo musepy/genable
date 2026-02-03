@@ -123,10 +123,27 @@ export class Normalizer {
             [PROPS.layoutSizingVertical]: [SIZING_MODES.FIXED, SIZING_MODES.FILL, SIZING_MODES.HUG]
         };
 
+        const ENUM_ALIASES: Record<string, Record<string, string>> = {
+            [PROPS.layoutSizingHorizontal]: { 'AUTO': SIZING_MODES.HUG, 'STRETCH': SIZING_MODES.FILL },
+            [PROPS.layoutSizingVertical]: { 'AUTO': SIZING_MODES.HUG, 'STRETCH': SIZING_MODES.FILL }
+        };
+
         for (const [prop, validValues] of Object.entries(ENUM_VALIDATORS)) {
-            if (props[prop] && !validValues.includes(props[prop])) {
-                 // Invalid enum value? Delete it (Strict)
-                 delete props[prop];
+            const rawValue = props[prop];
+            if (rawValue) {
+                let currentVal = String(rawValue).toUpperCase();
+                
+                // Handle Alises
+                if (ENUM_ALIASES[prop] && ENUM_ALIASES[prop][currentVal]) {
+                    currentVal = ENUM_ALIASES[prop][currentVal];
+                }
+
+                if (validValues.includes(currentVal)) {
+                    props[prop] = currentVal;
+                } else if (!validValues.includes(rawValue)) {
+                     // Invalid enum value? Delete it (Strict)
+                     delete props[prop];
+                }
             }
         }
         

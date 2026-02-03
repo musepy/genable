@@ -1,0 +1,10 @@
+name: Pie Chart
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - chart-canvas-round
+    - chart-legend-vertical
+defaultProps:
+  padding: 24
+  gap: 20

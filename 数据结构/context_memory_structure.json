@@ -1,0 +1,54 @@
+{
+  "description": "Agent Context and Memory Data Structures",
+  "memory_state": {
+    "plan_state": {
+      "planId": "string (e.g., 'plan_1769862995626')",
+      "activeStepId": "string | null",
+      "steps": [
+        {
+          "stepId": "string",
+          "title": "string",
+          "description": "string (optional)",
+          "status": "pending | in_progress | completed | failed",
+          "todos": [
+            {
+              "id": "string",
+              "label": "string",
+              "status": "pending | completed | failed"
+            }
+          ],
+          "startedAt": "timestamp (ms)",
+          "completedAt": "timestamp (ms)"
+        }
+      ]
+    },
+    "runtime_context": {
+      "approximateTokens": "number",
+      "thinkingOnlyIterations": "number",
+      "lastProgressSummary": "string",
+      "toolCallSignatureHistory": [
+        "string (e.g., 'createNode(87:901)|setNodeLayout(87:901)')"
+      ]
+    }
+  },
+  "message_history": {
+    "role": "system | user | model | tool",
+    "id": "string (e.g., 'usr_...', 'mdl_...', 'tol_...')",
+    "hidden": "boolean (context management / truncation)",
+    "summaryOf": "string[] (IDs of summarized messages)",
+    "content": "string | Part[]",
+    "Part": {
+      "text": "string",
+      "thought": "boolean (thinking process)",
+      "thought_signature": "string (Gemini 3 specific)",
+      "functionCall": {
+        "name": "string",
+        "args": "object"
+      },
+      "functionResponse": {
+        "name": "string",
+        "response": "object"
+      }
+    }
+  }
+}

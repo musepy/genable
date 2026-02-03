@@ -1,0 +1,11 @@
+name: Tabs
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - tab-list
+    - tab-content
+defaultProps:
+  gap: 0
+  layoutSizingHorizontal: FILL
+  semantic: TABS

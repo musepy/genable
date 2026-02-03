@@ -1,0 +1,13 @@
+import { MODEL_FAMILIES } from './providers';
+
+export const MODEL_DISPLAY_LABELS = {
+  [MODEL_FAMILIES.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash',
+  [MODEL_FAMILIES.GEMINI_2_5_PRO]: 'Gemini 2.5 Pro',
+  [MODEL_FAMILIES.GEMINI_2_5_FLASH_PREVIEW_05_20]: 'Gemini 2.5 Flash Preview',
+  [MODEL_FAMILIES.GEMINI_2_5_PRO_PREVIEW_05_06]: 'Gemini 2.5 Pro Preview',
+  [MODEL_FAMILIES.CLAUDE_3_5_SONNET]: 'Claude 3.5 Sonnet',
+  [MODEL_FAMILIES.GPT_4O]: 'GPT-4o',
+  [MODEL_FAMILIES.DEEPSEEK_R1_FREE]: 'DeepSeek R1 (Free)',
+  [MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE]: 'Gemini 2.0 Flash (Free)',
+  [MODEL_FAMILIES.DEEPSEEK_CHIMERA_FREE]: 'DeepSeek Chimera (Free)'
+} as const;

@@ -1,0 +1,13 @@
+name: Switch
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - switch-thumb
+defaultProps:
+  width: 36
+  height: 20
+  padding: 2
+  layoutSizingHorizontal: FIXED
+  layoutSizingVertical: FIXED
+  semantic: SWITCH

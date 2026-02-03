@@ -78,5 +78,25 @@ export const workflowTools: ToolDefinition[] = [
     },
     executionStrategy: 'parallel',
     category: 'plan'
+  },
+  {
+    name: 'complete_task',
+    description: `[REQUIRED] Signal task completion. You MUST call this tool to end execution. Do NOT just stop responding - explicitly call this tool with a summary.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'string',
+          description: 'Summary of what was accomplished'
+        },
+        verification: {
+          type: 'string',
+          description: 'Optional: how user can verify the result'
+        }
+      },
+      required: ['summary']
+    },
+    executionStrategy: 'sequential',
+    category: 'control'
   }
 ];

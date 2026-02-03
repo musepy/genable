@@ -1,0 +1,13 @@
+name: Modal
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - modal-header
+    - modal-content
+    - modal-footer
+defaultProps:
+  padding: 24
+  gap: 16
+  width: 480
+  semantic: MODAL

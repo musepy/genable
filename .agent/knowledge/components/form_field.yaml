@@ -1,0 +1,11 @@
+name: Form Field
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - field-label
+    - field-input
+    - field-helper
+defaultProps:
+  gap: 4
+  layoutSizingHorizontal: FILL

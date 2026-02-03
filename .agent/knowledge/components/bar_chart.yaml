@@ -1,0 +1,11 @@
+name: Bar Chart
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - chart-header
+    - chart-canvas
+    - chart-legend
+defaultProps:
+  padding: 16
+  gap: 12

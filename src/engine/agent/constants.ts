@@ -13,8 +13,8 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Rough token estimation factor (1 token ≈ 4 characters) */
   ESTIMATION_CHARACTERS_PER_TOKEN: 4,
 
-  /** Adjust factor for Chinese characters (approx 0.6 token per char) */
-  ESTIMATION_CHINESE_CHAR_MULTIPLIER: 0.6,
+  /** Adjust factor for Chinese characters (actual observed ratio ~2.0 for modern LLMs) */
+  ESTIMATION_CHINESE_CHAR_MULTIPLIER: 2.0,
   
   /** Factor of max context tokens to trigger compression (e.g., 0.7 = 70%) */
   CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.7,
@@ -29,7 +29,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   REDUNDANT_ERROR_DROP_THRESHOLD: 10,
 
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
-  LOOP_DETECTION_THRESHOLD: 5,
+  LOOP_DETECTION_THRESHOLD: 3,  // Lowered from 5 -> fail faster
 
   /** Default timeout for a single tool execution in milliseconds */
   DEFAULT_TOOL_TIMEOUT_MS: 30000,

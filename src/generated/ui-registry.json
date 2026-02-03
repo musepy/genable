@@ -36,7 +36,7 @@
                   "paddingRight": null,
                   "paddingBottom": null,
                   "paddingLeft": null,
-                  "characters": "New design",
+                  "characters": "New Design",
                   "fontSize": null,
                   "fontWeight": "",
                   "fontFamily": ""
@@ -83,7 +83,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-02T00:36:09.662Z"
+    "timestamp": "2026-02-03T14:51:50.413Z"
   },
   "onboarding": {
     "name": "Onboarding View",
@@ -299,7 +299,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-02T00:36:09.706Z"
+    "timestamp": "2026-02-03T14:51:50.454Z"
   },
   "button": {
     "name": "Standard Button",
@@ -315,19 +315,19 @@
           "paddingBottom": 0,
           "paddingLeft": 16,
           "characters": "Action Button",
-          "fontSize": null,
+          "fontSize": 13,
           "fontWeight": "500",
           "fontFamily": "Inter"
         }
       }
     ],
-    "timestamp": "2026-02-02T00:36:09.713Z"
+    "timestamp": "2026-02-03T14:51:50.461Z"
   },
   "prompt-input": {
     "name": "Prompt Input",
     "layers": [
       {
-        "type": "RECTANGLE",
+        "type": "FRAME",
         "props": {
           "name": "div",
           "width": 0,
@@ -335,7 +335,11 @@
           "paddingTop": null,
           "paddingRight": null,
           "paddingBottom": null,
-          "paddingLeft": null
+          "paddingLeft": null,
+          "fills": [
+            "rgba(255, 255, 255, 0.95)"
+          ],
+          "cornerRadius": 14
         },
         "children": [
           {
@@ -344,9 +348,9 @@
               "name": "textarea",
               "width": 0,
               "height": 0,
-              "paddingTop": 12,
+              "paddingTop": 8,
               "paddingRight": 16,
-              "paddingBottom": 4,
+              "paddingBottom": 8,
               "paddingLeft": 16
             }
           },
@@ -360,26 +364,14 @@
               "gap": 0,
               "primaryAxisAlignItems": "SPACE_BETWEEN",
               "counterAxisAlignItems": "CENTER",
-              "paddingTop": 8,
-              "paddingRight": 16,
-              "paddingBottom": 16,
-              "paddingLeft": 16
+              "paddingTop": 12,
+              "paddingRight": 12,
+              "paddingBottom": 12,
+              "paddingLeft": 12
             },
             "children": [
               {
-                "type": "RECTANGLE",
-                "props": {
-                  "name": "div",
-                  "width": 0,
-                  "height": 0,
-                  "paddingTop": null,
-                  "paddingRight": null,
-                  "paddingBottom": null,
-                  "paddingLeft": null
-                }
-              },
-              {
-                "type": "RECTANGLE",
+                "type": "FRAME",
                 "props": {
                   "name": "button",
                   "width": 0,
@@ -391,15 +383,50 @@
                   "paddingTop": null,
                   "paddingRight": null,
                   "paddingBottom": null,
-                  "paddingLeft": null
+                  "paddingLeft": null,
+                  "cornerRadius": 10
                 }
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "MIN",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "button",
+                      "width": 0,
+                      "height": 0,
+                      "layoutMode": "HORIZONTAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "CENTER",
+                      "counterAxisAlignItems": "CENTER",
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    }
+                  }
+                ]
               }
             ]
           }
         ]
       }
     ],
-    "timestamp": "2026-02-02T00:36:09.725Z"
+    "timestamp": "2026-02-03T14:51:50.484Z"
   },
   "settings-panel": {
     "name": "Settings Panel",
@@ -901,7 +928,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-02T00:36:09.775Z"
+    "timestamp": "2026-02-03T14:51:50.529Z"
   },
   "chat-message": {
     "name": "Chat Message",
@@ -937,6 +964,6 @@
         ]
       }
     ],
-    "timestamp": "2026-02-02T00:36:09.778Z"
+    "timestamp": "2026-02-03T14:51:50.532Z"
   }
 }

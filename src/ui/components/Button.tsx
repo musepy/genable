@@ -80,7 +80,7 @@ export function Button({
     md: {
       height: 40,
       padding: `0 ${tokens.space[4]}px`,
-      fontSize: 'var(--font-size-2)',
+      fontSize: '13px', // Figma design spec
     },
     lg: {
       height: tokens.size.button.xl,
@@ -105,8 +105,12 @@ export function Button({
   // but existing codebase uses inline styles heavily. 
   // We will trust the existing global css or simple active states.
   
+  // CSS class for pressed state support
+  const variantClass = `btn-${variant}`;
+
   return (
     <button
+      className={variantClass}
       style={{
         ...baseStyle,
         ...variantStyles[variant],

@@ -45,7 +45,7 @@ describe('PromptComposer - Agent Mode', () => {
     it('should include agent core prompt', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
         expect(prompt).toContain('You are a Figma design agent');
-        expect(prompt).toContain('DECISION FLOW');
+        expect(prompt).toContain('CORE POLICIES');
         expect(prompt).toContain('NAMING CONVENTION');
     });
 
@@ -64,8 +64,8 @@ describe('PromptComposer - Agent Mode', () => {
 
     it('should include tool examples', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
-        expect(prompt).toContain('## COMPLETE EXAMPLE: Creating a Card Component');
-        expect(prompt).toContain('Feature Card');
+        expect(prompt).toContain('## EXAMPLES');
+        expect(prompt).toContain('Card Container');
     });
 
     it('should inject knowledge if intent requires it', () => {

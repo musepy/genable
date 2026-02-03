@@ -1,0 +1,11 @@
+name: Radio
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - radio-circle
+    - radio-label
+defaultProps:
+  gap: 8
+  counterAxisAlignItems: CENTER
+  semantic: RADIO

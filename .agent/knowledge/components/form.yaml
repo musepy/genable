@@ -1,0 +1,11 @@
+name: Form
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - form-fields
+    - form-actions
+defaultProps:
+  gap: 16
+  layoutSizingHorizontal: FILL
+  semantic: FORM

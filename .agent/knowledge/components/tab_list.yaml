@@ -1,0 +1,9 @@
+name: Tab List
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children: []
+defaultProps:
+  gap: 0
+  layoutSizingHorizontal: FILL
+  strokeWeight: 1

@@ -1,0 +1,11 @@
+name: Table
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - table-header
+    - table-body
+defaultProps:
+  gap: 0
+  layoutSizingHorizontal: FILL
+  semantic: TABLE

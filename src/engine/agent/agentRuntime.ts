@@ -4,7 +4,7 @@
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
-import { ToolDefinition } from './tools/types';
+import { ToolDefinition, getToolsForMode } from './tools';
 import { IpcBridge } from './ipcBridge';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { RetryPolicy, AgentErrorCategory } from './retryPolicy';
@@ -415,6 +415,20 @@ export class AgentRuntime {
     return summaryResponse.text || 'Context condensed.';
   }
 
+  /**
+   * Main agent loop
+   * 
+   * STRUCTURE:
+   * 1. Setup Phase: Initialize messages, reset state
+   * 2. Iteration Loop:
+   *    - Mode Selection (PLANNING/EXECUTION/VERIFICATION)
+   *    - System Prompt Reconstruction
+   *    - LLM Generate
+   *    - Tool Execution
+   *    - Loop Detection
+   *    - Context Management
+   * 3. Termination: complete_task or max iterations
+   */
   async run(userPrompt: string): Promise<string> {
     this.messages.push({ 
       id: this.generateId('usr'),
@@ -439,6 +453,9 @@ export class AgentRuntime {
     this.thinkingOnlyIterations = 0;
     this.retryPolicy.resetAll();
 
+    // ============================================
+    // ITERATION LOOP
+    // ============================================
     while (iteration < this.maxIterations) {
       iteration++;
       console.log(`[AgentRuntime] Iteration ${iteration}/${this.maxIterations}`);
@@ -458,6 +475,9 @@ export class AgentRuntime {
         }
       };
 
+      // ----------------------------------------
+      // PHASE 1: MODE DETERMINATION
+      // ----------------------------------------
       // 0. Determine Mode based on plan state
       let mode: AgentMode = 'PLANNING';
       const activeStep = planState.getActiveStep();
@@ -470,6 +490,10 @@ export class AgentRuntime {
           mode = 'VERIFICATION';
         }
       }
+      
+      // ----------------------------------------
+      // PHASE 2: SYSTEM PROMPT CONSTRUCTION
+      // ----------------------------------------
       // 1. Core System Prompt Reconstruction (Hot-Swapping)
       const systemPrompt = composeAgentSystemPrompt(
         { 
@@ -498,6 +522,9 @@ export class AgentRuntime {
         });
       }
 
+      // ----------------------------------------
+      // PHASE 3: PREPARE LLM CALL
+      // ----------------------------------------
       // 2. Capture visible messages
       const visibleMessages = this.messages.filter(m => !m.hidden);
       
@@ -508,6 +535,9 @@ export class AgentRuntime {
 
       let response: LLMResponse;
 
+      // ----------------------------------------
+      // PHASE 4: LLM GENERATION
+      // ----------------------------------------
       // Create AbortController for stream timeout
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -515,10 +545,22 @@ export class AgentRuntime {
         abortController.abort();
       }, AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS);
 
+      // ----------------------------------------
+      // PLAN/ACT TOOL FILTERING
+      // ----------------------------------------
+      // Filter tools based on current mode to prevent mode mixing
+      const filteredTools = getToolsForMode(mode, this.options.tools);
+      console.log(`[AgentRuntime] Mode: ${mode}, Tools available: ${filteredTools.length}/${this.options.tools.length}`);
+      
+      // In PLANNING mode, allow longer text (plans need more space)
+      const ramblingThreshold = mode === 'PLANNING' 
+        ? AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * 4  // 4x for planning
+        : AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * 2;
+
       try {
         response = await this.options.provider.generate({
           messages: visibleMessages,
-          tools: this.options.tools,
+          tools: filteredTools,  // Use filtered tools based on mode
           abortSignal: abortController.signal,
           streamTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
           onProgress: (chunk) => {
@@ -526,8 +568,8 @@ export class AgentRuntime {
             
             // Active Rambling Detection: Abort if text exceeds threshold during streaming
             const accumulatedChars = (response?.text || '').length + chunk.length;
-            if (accumulatedChars > AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * 2) {
-                console.warn(`[AgentRuntime] Active rambling detected (${accumulatedChars} chars) - aborting stream`);
+            if (accumulatedChars > ramblingThreshold) {
+                console.warn(`[AgentRuntime] Active rambling detected (${accumulatedChars} chars, mode: ${mode}) - aborting stream`);
                 abortController.abort();
             }
 
@@ -615,6 +657,9 @@ export class AgentRuntime {
       this.messages.push(modelMessage);
       this.approximateTokens += this.estimateTokens(modelMessage.content);
 
+      // ----------------------------------------
+      // PHASE 5: TOOL EXECUTION
+      // ----------------------------------------
       if (response.toolCalls && response.toolCalls.length > 0) {
         // Handle Workflow Tools Internally
         const workflowResults: import('../llm-client/providers/types').LLMToolResult[] = [];
@@ -649,6 +694,9 @@ export class AgentRuntime {
               planState.completeTask(undefined, tc.args.summary);
             }
             workflowResults.push({ name: tc.name, response: { success: true }, thought_signature: tc.thought_signature });
+          } else if (tc.name === 'complete_task') {
+            // Agent signals completion - return summary and exit
+            return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
           } else {
             figmaToolCalls.push(tc);
           }
@@ -668,7 +716,9 @@ export class AgentRuntime {
            continue;
         }
 
-        // Semantic Loop Detection: Check for repeating patterns using signatures
+        // ----------------------------------------
+        // PHASE 6: LOOP DETECTION
+        // ----------------------------------------  
         // A signature looks at tool name + target nodeId (if applicable)
         const semanticSignature = figmaToolCalls.map(tc => {
           const targetNodeId = tc.args?.nodeId || tc.args?.parentId;
@@ -678,20 +728,6 @@ export class AgentRuntime {
         this.toolCallSignatureHistory.push(semanticSignature);
         if (this.toolCallSignatureHistory.length > 10) this.toolCallSignatureHistory.shift();
 
-        const identicalSignatureCount = this.toolCallSignatureHistory.filter(sig => sig === semanticSignature).length;
-        if (identicalSignatureCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD) {
-           // If we hit threshold, check if it's really the same tool+args for strict check
-           const exactSignature = figmaToolCalls.map(tc => `${tc.name}:${JSON.stringify(tc.args)}`).join('|');
-           const exactCount = this.toolCallSignatureHistory.filter(sig => {
-             // This is a bit simplified, but captures the intent of strict vs semantic
-             return sig === semanticSignature; 
-           }).length;
-
-           if (exactCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD) {
-             throw new Error(`Agent stuck in loop: repeatedly performing the same actions on the same nodes. Last action: ${semanticSignature}`);
-           }
-        }
-
         // Semantic Planning Loop Detection: Check for repeated planDesign calls without progress
         const planCallCount = figmaToolCalls.filter(tc => tc.name === 'planDesign').length;
         if (planCallCount > 0) {
@@ -699,6 +735,15 @@ export class AgentRuntime {
           if (recentPlanCalls.length >= 3) {
             throw new Error(`Agent stuck in planning loop: planDesign called 3+ times consecutively. Try giving more specific instructions.`);
           }
+        }
+
+        // Semantic Loop Detection: Check for repeating patterns using signatures
+        const identicalSignatureCount = this.toolCallSignatureHistory.filter(sig => sig === semanticSignature).length;
+        if (identicalSignatureCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD) {
+          throw new Error(
+            `[LOOP DETECTED] Same action repeated ${identicalSignatureCount} times: ${semanticSignature}. ` +
+            `Consider: (1) Check if previous tool succeeded (2) Try different approach (3) Call complete_task if done.`
+          );
         }
 
         // Group tool calls by strategy for figmaToolCalls
@@ -795,7 +840,12 @@ export class AgentRuntime {
         // Continue the loop
         continue;
       } else {
-        // Final response: already in history, just return text
+        // No tool calls - pure text response (final summary or completion)
+        // Short text: accept as final response
+        // Long text: warn but still accept (don't crash)
+        if (response.text && response.text.length > 500) {
+          console.warn('[AgentRuntime] Long response without tool calls. Consider using complete_task.');
+        }
         return response.text;
       }
     }

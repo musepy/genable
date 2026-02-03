@@ -10,7 +10,12 @@
  */
 
 import MiniSearch from 'minisearch';
-import { ANATOMY_REGISTRY } from '../../../knowledge/anatomyRegistry';
+// [FIX] Handle environments without 'path' (Figma Sandbox)
+let path: any;
+try {
+  path = require('path');
+} catch (e) {}
+import { loadAnatomyFromDirectory, getAnatomyDir } from '../../agent/skills/knowledgeLoader';
 import { ComponentSchema } from '../../../knowledge/types';
 
 // Import generated knowledge bases
@@ -212,8 +217,13 @@ class KnowledgeHubService {
     this.stacks = stacksData as unknown as StackRule[];
     this.figmaLayout = figmaLayoutData as unknown as FigmaLayoutRule[];
 
-    // Convert ANATOMY_REGISTRY to searchable format
-    this.anatomy = Object.entries(ANATOMY_REGISTRY).map(([key, value]) => ({
+    // Load anatomy from .agent/knowledge/components/ (Cline-style)
+    const root = path ? path.resolve(__dirname, '../../../../..') : '';
+    const anatomyDir = getAnatomyDir(root);
+    const anatomyRegistry = loadAnatomyFromDirectory(anatomyDir);
+
+    // Convert to searchable format
+    this.anatomy = Object.entries(anatomyRegistry).map(([key, value]) => ({
       id: key,
       name: value.name || key,
       category: value.category,
@@ -348,7 +358,10 @@ class KnowledgeHubService {
    * @param key - Exact registry key (e.g., 'button', 'badge')
    */
   getAnatomyByKey(key: string): Partial<ComponentSchema> | undefined {
-    return ANATOMY_REGISTRY[key.toLowerCase()];
+    const root = path ? path.resolve(__dirname, '../../../../..') : '';
+    const anatomyDir = getAnatomyDir(root);
+    const anatomyRegistry = loadAnatomyFromDirectory(anatomyDir);
+    return anatomyRegistry[key.toLowerCase()];
   }
 
   // ==========================================
@@ -429,5 +442,4 @@ export const knowledgeHub = new KnowledgeHubService();
 
 // Re-export for backward compatibility
 export { knowledgeHub as reasoningEngine };
-export { ANATOMY_REGISTRY };
 // AnatomyBlueprint is already exported as interface above

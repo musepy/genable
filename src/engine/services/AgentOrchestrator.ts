@@ -14,6 +14,13 @@ import { ThinkingLevel } from '../llm-client/types';
 import { SelectionStyles } from '../../types';
 import { emit } from '@create-figma-plugin/utilities';
 
+// Skill-based prompt system
+import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
+import { composeSkillBasedPrompt, buildSkillContextDeps } from '../agent/skills/skillPromptComposer';
+
+// Feature flag for skill system
+const USE_SKILL_SYSTEM = true;
+
 export interface AgentPluginData {
   selectionStyles?: SelectionStyles | null;
   analyzedPattern?: any | null;
@@ -46,7 +53,15 @@ import { configManager } from '../../config/configManager';
 import { IpcBridge } from '../agent/ipcBridge';
 
 export class AgentOrchestrator {
-  constructor(private options: OrchestratorOptions) {}
+  private static skillsInitialized = false;
+
+  constructor(private options: OrchestratorOptions) {
+    // Initialize skills on first orchestrator creation
+    if (USE_SKILL_SYSTEM && !AgentOrchestrator.skillsInitialized) {
+      initializeSkills();
+      AgentOrchestrator.skillsInitialized = true;
+    }
+  }
 
   async generate(prompt: string, pluginData: AgentPluginData, history: ChatMessage[]) {
     // [DI] Instantiate IpcBridge for this session
@@ -106,26 +121,39 @@ export class AgentOrchestrator {
     }
 
     // Calculate total layout generation budget
-    const totalBudget = calculateBudget({ 
+    const totalBudget = calculateBudget({
       totalTokens: 4000 // In the future, this can be derived from provider window
     });
 
     // Compose System Prompt
-    const systemPrompt = composeAgentSystemPrompt(
-      { 
-        ragResults: { prioritizedComponents: [], goldenTemplates: [] },
-        intent: {}, 
-        designSystemContext: { skillName: designSystemConfig.manifest.name }
-      },
-      tools,
-      provider,
-      { totalBudget }
-    );
+    let systemPrompt: string;
+    let activeTools: ToolDefinition[];
+
+    if (USE_SKILL_SYSTEM) {
+      // Use skill-based prompt composition
+      const skillDeps = buildSkillContextDeps('', { designSystemId });
+      systemPrompt = composeSkillBasedPrompt(skillDeps, provider, { budget: { total: totalBudget } });
+      activeTools = getActiveAgentTools();
+      emit('SEND_LOG', { message: `Skills active: ${skillRegistry.getEnabled().map(s => s.id).join(', ')}`, type: 'info' });
+    } else {
+      // Legacy prompt composition
+      systemPrompt = composeAgentSystemPrompt(
+        {
+          ragResults: { prioritizedComponents: [], goldenTemplates: [] },
+          intent: {},
+          designSystemContext: { skillName: designSystemConfig.manifest.name }
+        },
+        tools,
+        provider,
+        { totalBudget }
+      );
+      activeTools = tools;
+    }
 
     // Return configured runtime
     return new AgentRuntime({
       provider,
-      tools,
+      tools: activeTools,
       systemPrompt,
       ipcBridge, // [DI] Inject Bridge
       toolExecutors: pluginData.toolExecutors, 

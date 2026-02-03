@@ -69,6 +69,9 @@ if (isWatch) {
   try {
     console.log(`📸 Running UI Capture Engine...`);
     execSync(`npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/capture-ui.ts`, { stdio: 'inherit' });
+
+    console.log(`🔨 Generating Agent Registries...`);
+    execSync(`node scripts/generate-skills-registry.js`, { stdio: 'inherit' });
     
     console.log(`🔨 Running Figma Plugin Build...`);
     execSync(`npx ${buildArgs.join(' ')}`, { stdio: 'inherit' });

@@ -1,0 +1,27 @@
+name: Badge
+category: Data Display
+description: A small tag for status, labels, or counts
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - badge-label
+defaultProps:
+  layoutSizingHorizontal: HUG
+  layoutSizingVertical: HUG
+  primaryAxisAlignItems: CENTER
+  counterAxisAlignItems: CENTER
+  padding: [2, 10]
+  gap: 4
+  fontSize: 12
+  fontWeight: SemiBold
+  semantic: BADGE
+variants:
+  default:
+    stroke: null
+  secondary:
+    stroke: null
+  outline:
+    strokeWeight: 1
+  destructive:
+    stroke: null

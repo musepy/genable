@@ -31,7 +31,7 @@ export interface ToolDefinition {
    * - 'modify': Modify existing nodes
    * - 'validate': Validate designs
    */
-  category?: 'read' | 'plan' | 'create' | 'modify' | 'validate' | 'knowledge';
+  category?: 'read' | 'plan' | 'create' | 'modify' | 'validate' | 'knowledge' | 'control';
   /**
    * Tool names this tool commonly follows (dependency hints for LLM).
    * Example: setNodeLayout typically follows createNode.

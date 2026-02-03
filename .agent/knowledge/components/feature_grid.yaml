@@ -1,0 +1,10 @@
+name: Feature Grid
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children:
+    - section-header
+    - features-container
+defaultProps:
+  padding: [60, 40]
+  gap: 32

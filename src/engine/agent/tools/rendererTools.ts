@@ -49,41 +49,8 @@ EXAMPLE: For "Create a login form with title and button":
             stepNumber: { type: 'number', description: 'Step order (1, 2, 3...)' },
             action: { type: 'string', description: 'Tool to call (createNode, setNodeLayout, etc.)' },
             parameters: { type: 'object', description: 'Parameters for the tool call' },
-            dependencies: { 
-              type: 'array', 
-              description: 'Step numbers that must complete before this step',
-              items: { type: 'number', description: 'Step number dependency' }
-            },
-            reasoning: { type: 'string', description: 'Why this step is needed and what it accomplishes' }
+            reasoning: { type: 'string', description: 'Why this step is needed' }
           }
-        }
-      },
-      contentPlan: {
-        type: 'object',
-        description: 'Plan for text content in each TEXT node',
-        properties: {
-          textNodes: {
-            type: 'array',
-            description: 'List of text nodes with planned content',
-            items: {
-              type: 'object',
-              description: 'Text node content plan',
-              properties: {
-                name: { type: 'string', description: 'Node name' },
-                characters: { type: 'string', description: 'Actual text content to display' },
-                purpose: { type: 'string', description: 'What this text communicates' }
-              }
-            }
-          }
-        }
-      },
-      layoutStrategy: {
-        type: 'object',
-        description: 'Layout and sizing strategy',
-        properties: {
-          rootLayout: { type: 'string', description: 'Layout mode for root container (VERTICAL/HORIZONTAL/NONE)' },
-          sizingRules: { type: 'string', description: 'Sizing strategy (FIXED/HUG/FILL) for key nodes' },
-          autoLayoutChain: { type: 'string', description: 'Description of Auto Layout parent-child relationships' }
         }
       }
     },
@@ -103,8 +70,14 @@ export const createNodeDefinition: ToolDefinition = {
   dependencies: [],
   description: `
 [ATOMIC] Create FRAME, TEXT, RECTANGLE, ELLIPSE, or LINE.
-PRIMARY way to create layers. Defaults to 100x100.
-Returns: {nodeId: "124:567"} - Use this exact ID for subsequent operations.
+
+⚠️ SEQUENTIAL CONSTRAINT (Figma Hard Rule):
+When creating parent-child hierarchy:
+1. MUST wait for parent's createNode to return nodeId BEFORE creating child
+2. NEVER call createNode for child in parallel with parent
+3. parentId MUST be the exact nodeId from a COMPLETED previous createNode
+
+Returns: {nodeId: "124:567"} - Use this ID as parentId for child nodes.
 `,
   parameters: {
     type: 'object',
@@ -119,9 +92,12 @@ Returns: {nodeId: "124:567"} - Use this exact ID for subsequent operations.
         description: 'Descriptive name for the layer (e.g., "Main Card", "Login Button"). AVOID generic names like "unnamed" or "layer".',
         minimum: 1
       },
-      parentId: { 
-        type: 'string', 
-        description: 'ID of the parent node (from createNode response). If omitted, adds to current page.' 
+      parentId: {
+        type: 'string',
+        description: `[BLOCKING DEPENDENCY] Parent node ID from a COMPLETED createNode call.
+⚠️ MUST wait for parent createNode to return before using this.
+If omitted, node is added to current page (root level).
+NEVER use a predicted, placeholder, or guessed ID.`
       },
       characters: { 
         type: 'string', 

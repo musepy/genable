@@ -3,12 +3,13 @@ import { PROMPT_SECTION_REGISTRY } from './sectionRegistry';
 import { configManager } from '../../../config/configManager';
 import { ToolDefinition } from '../../agent/tools/types';
 import { NodeSerializer } from '../../figma-adapter/nodeSerializer';
-import { 
-    AGENT_IDENTITY, 
-    AGENT_THINKING_PROTOCOL, 
-    DYNAMIC_GUIDANCE, 
-    AGENT_NAMING_CONVENTION, 
-    AGENT_CONTENT_REQUIREMENT 
+import {
+    AGENT_IDENTITY,
+    AGENT_THINKING_PROTOCOL,
+    DYNAMIC_GUIDANCE,
+    AGENT_NAMING_CONVENTION,
+    AGENT_CONTENT_REQUIREMENT,
+    AGENT_PARENT_CHILD_RULE
 } from '../../agent/agentPrompts';
 
 // ==========================================
@@ -63,21 +64,22 @@ interface TokenRatios {
 const DEFAULT_TOKEN_RATIOS: TokenRatios = {
     core: 0.2,      // 20% for identity & instructions
     tools: 0.15,    // 15% for tool definitions
-    examples: 0.3,  // 30% for examples
-    context: 0.2,   // 20% for RAG knowledge
-    selection: 0.15 // 15% for current selection
+    examples: 0.2,  // 20% for examples (reduced from 30%)
+    context: 0.25,  // 25% for RAG knowledge
+    selection: 0.2  // 20% for current selection
 };
 
 /**
- * Default token budget configuration.
- * Total: 4800 tokens
+ * Default token budget configuration (reference only).
+ * Actual budgets are computed dynamically via calculateLiquidBudget() using DEFAULT_TOKEN_RATIOS.
+ * Total: 8000 tokens (matching calculateBudget fallback)
  */
 const DEFAULT_TOKEN_BUDGET: TokenBudget = {
-    core: 1000,      // 身份 + 工具格式（不可压缩）
-    tools: 800,      // 工具定义
-    examples: 1500,  // 完整示例（高优先级）
-    context: 1000,   // RAG 知识（可压缩）
-    selection: 500,  // 当前选择（可截断）
+    core: 1600,      // 20% - identity + tool format (non-compressible)
+    tools: 1200,     // 15% - tool definitions
+    examples: 1600,  // 20% - examples
+    context: 2000,   // 25% - RAG knowledge (compressible)
+    selection: 1600, // 20% - current selection (truncatable)
 };
 
 const SECTION_PRIORITY: (keyof TokenBudget)[] = ['core', 'tools', 'examples', 'context', 'selection'];
@@ -159,7 +161,7 @@ export function calculateBudget(options: {
 }): number {
     if (options.totalTokens) return options.totalTokens;
     if (options.contextWindow) return Math.floor(options.contextWindow * (options.reserveFactor || 0.6));
-    return 4000; // Default fallback
+    return 8000; // Default fallback (increased from 4000)
 }
 
 /**
@@ -167,7 +169,16 @@ export function calculateBudget(options: {
  * Uses a simple heuristic: ~4 characters per token for English text.
  */
 function estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
+    // Improved estimation: count Chinese characters separately with multiplier
+    // Matching agentRuntime.ts implementation for consistency
+    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const otherChars = text.length - chineseChars;
+    
+    // Using multipliers from project constants where possible
+    const chineseTokens = Math.ceil(chineseChars * 2.0); // Simplified for local helper
+    const otherTokens = Math.ceil(otherChars / 4);
+    
+    return chineseTokens + otherTokens;
 }
 
 /**
@@ -179,16 +190,29 @@ function truncateToBudget(text: string, maxTokens: number): string {
         return text;
     }
 
-    const maxChars = maxTokens * 4;
-    let truncated = text.slice(0, maxChars);
+    // Binary search for the optimal truncation point that fits within budget.
+    // This handles mixed Chinese/English content correctly.
+    let lo = 0;
+    let hi = text.length;
+    while (lo < hi) {
+        const mid = Math.floor((lo + hi + 1) / 2);
+        if (estimateTokens(text.slice(0, mid)) <= maxTokens) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
 
-    // Try to find a good breaking point
-    const lastNewline = truncated.lastIndexOf('\n');
-    const lastSentence = truncated.lastIndexOf('. ');
+    let truncated = text.slice(0, lo);
 
-    if (lastNewline > maxChars * 0.8) {
+    // Try to find a good breaking point near the end
+    const minBoundary = Math.floor(lo * 0.8);
+    const lastNewline = truncated.lastIndexOf('\n', lo);
+    const lastSentence = truncated.lastIndexOf('. ', lo);
+
+    if (lastNewline > minBoundary) {
         truncated = truncated.slice(0, lastNewline);
-    } else if (lastSentence > maxChars * 0.8) {
+    } else if (lastSentence > minBoundary) {
         truncated = truncated.slice(0, lastSentence + 1);
     }
 
@@ -240,47 +264,6 @@ function compressSelectionContext(serializedNodes: any[], maxTokens: number): st
     return truncateToBudget(serialized, maxTokens);
 }
 
-// Agent Core Prompt (Lean & Focused)
-const AGENT_CORE_PROMPT = `
-You are a Figma design agent. You accomplish tasks by calling tools.
-
-## THINKING PROTOCOL
-You have available a native Reasoning/Thinking model.
-Briefly plan your approach before executing.
-
-- **Be Concise**: Keep your internal monologue short and focused. Avoid verbose narration.
-- **Action Over Perfection**: It is better to create a structure and refine it later than to over-analyze.
-- **Iterative Refinement**: You can call tools multiple times. Start with the core structure.
-
-## DECISION FLOW
-1. **PLAN**: Briefly outline the hierarchy and layout.
-2. **EXECUTE**: Call tools immediately once the next step is clear.
-3. **VERIFY**: Check results and refine in subsequent turns.
-4. **COMPLETE**: Report success or adjust plan if needed.
-
-## NAMING CONVENTION
-- ALWAYS use descriptive, semantic names for layers (e.g., "Primary Button", "Card Title").
-- NEVER name a node "unnamed", "layer", or "frame" unless it's a transient state.
-- Names should reflect the role or content of the node.
-
-## CONTENT REQUIREMENT
-- EVERY TEXT node MUST have meaningful content in the 'characters' field
-- NEVER create a TEXT node with empty or default content
-- Content should match the node's purpose (e.g., a "Submit Button" should have characters "Submit")
-
-## ERROR RECOVERY
-When a tool returns an error:
-- \`PARENT_NOT_FOUND\`: Create the parent node first, then retry.
-- \`NODE_NOT_FOUND\`: Use only nodeIds returned by createNode. Use \`getSelection\` to find valid IDs.
-- \`INVALID_SIZING\`: HUG requires Auto Layout. Add \`layoutMode: "VERTICAL"\` or \`"HORIZONTAL"\` in the same call.
-
-## MISSING INFORMATION
-If user request is ambiguous:
-- **Missing size**: Use reasonable defaults (e.g., Button: 120x40, Card: 320x200)
-- **Missing color**: Use neutral palette (#FFFFFF, #1F1F1F, #666666)
-- **Missing text**: Generate contextual placeholder (e.g., "Submit", "Card Title")
-`;
-
 // Extended Tool Examples
 const TOOL_EXAMPLES = `
 ## EXAMPLES
@@ -329,6 +312,27 @@ setNodeLayout({nodeId: "100:1", sizing: {horizontal: "HUG"}})
 **Recovery:**
 setNodeLayout({nodeId: "100:1", layoutMode: "VERTICAL", sizing: {horizontal: "HUG"}})
 → Success: {success: true}
+
+---
+
+### Example 4: Multi-Level Hierarchy (CRITICAL - Sequential Only) ⚠️
+User: "Create a card with header containing title and icon"
+
+**Step 1 - Create root (no parentId):**
+createNode({type: "FRAME", name: "Card"})
+→ Returns: {nodeId: "100:1"}
+// ⚠️ WAIT for this response before Step 2!
+
+**Step 2 - Create child using Step 1's nodeId:**
+createNode({type: "FRAME", name: "Header", parentId: "100:1"})
+→ Returns: {nodeId: "100:2"}
+// ⚠️ WAIT for this response before Step 3!
+
+**Step 3 - Create grandchild using Step 2's nodeId:**
+createNode({type: "TEXT", name: "Title", parentId: "100:2", characters: "Card Title"})
+→ Returns: {nodeId: "100:3"}
+
+⚠️ NEVER call these in parallel! Each createNode MUST complete before using its nodeId.
 `;
 
 // ==========================================
@@ -341,6 +345,7 @@ setNodeLayout({nodeId: "100:1", layoutMode: "VERTICAL", sizing: {horizontal: "HU
 function buildAgentIdentity(): string {
     return [
         AGENT_IDENTITY.trim(),
+        AGENT_PARENT_CHILD_RULE.trim(),  // High priority: Figma hard constraint
         AGENT_THINKING_PROTOCOL.trim(),
         AGENT_NAMING_CONVENTION.trim(),
         AGENT_CONTENT_REQUIREMENT.trim()
@@ -483,19 +488,6 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
 ];
 
 /**
- * @deprecated Use AGENT_SECTION_REGISTRY instead. Kept for backward compatibility.
- */
-function injectKnowledgeIfNeeded(intent?: { requiresLayoutKnowledge?: boolean }): string {
-    // Only inject knowledge if explicitly required intent is present
-    if (intent?.requiresLayoutKnowledge) {
-        // Placeholder for actual layout rules.
-        // In a real scenario, this might come from a localized knowledge base or updated based on RAG.
-        return `\n## LAYOUT RULES\n- Use Auto Layout for responsive containers.\n- Set 'hug' for content-dependent sizing.`;
-    }
-    return '';
-}
-
-/**
  * Standard system prompt composer for the linear pipeline.
  */
 export function composeSystemPrompt(
@@ -562,7 +554,7 @@ export function composeSystemPrompt(
     options: { totalBudget?: number; ratios?: TokenRatios; mode?: AgentMode } = {},
     flags: AgentFeatureFlags = {}
 ): string {
-    const totalBudget = options.totalBudget || 4000;
+    const totalBudget = options.totalBudget || 8000;
     const ratios = options.ratios || DEFAULT_TOKEN_RATIOS;
     const mode = options.mode || 'PLANNING';
     
@@ -709,6 +701,7 @@ ${phases.plan.map(formatTool).join('\n')}`);
     
     if (phases.create.length > 0 || phases.modify.length > 0) {
         sections.push(`### 🛠 Phase 3: Execution (Sequential, respect dependencies)
+⚠️ Parent-child createNode calls MUST be sequential. Wait for parent nodeId before creating children.
 ${[...phases.create, ...phases.modify].map(formatTool).join('\n')}`);
     }
     

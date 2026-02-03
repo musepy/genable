@@ -1,0 +1,9 @@
+name: List
+structure:
+  type: FRAME
+  layoutMode: VERTICAL
+  children: []
+defaultProps:
+  gap: 0
+  layoutSizingHorizontal: FILL
+  semantic: LIST

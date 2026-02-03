@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "export_time": "2026-02-02T16:33:04+08:00",
+    "project_version": "1.0.0",
+    "environment": "mac",
+    "description": "Full generation log capture"
+  },
+  "logs": [
+    {
+      "type": "info",
+      "message": "[Trace: agent-update-1770021117195] PHASE: [RENDER] - Details: {\"depth\":0}",
+      "timestamp": "2026-02-02T08:31:57.394Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Agent] Tool Call: updateNodeProperties {\"parameters\":{\"nodeId\":\"157:980\",\"properties\":{\"textAlignHorizontal\":\"CENTER\",\"fontSize\":16}},\"requestId\":\"req_1770021117392_vxzc9ygn1\"}",
+      "timestamp": "2026-02-02T08:31:57.592Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Trace: agent-update-1770021117409] PHASE: [PROMPT] - Resuming generation trace: agent-update-1770021117409",
+      "timestamp": "2026-02-02T08:31:57.593Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FigmaVariableCache] Warming up cache...",
+      "timestamp": "2026-02-02T08:31:57.595Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FigmaVariableCache] Cache warmed in 149ms. Vars: 1185, Styles: 0",
+      "timestamp": "2026-02-02T08:31:57.595Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FontBus] Starting static set warmup...",
+      "timestamp": "2026-02-02T08:31:57.596Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Trace: agent-update-1770021117409] PHASE: [RENDER] - Rendering node: Subtitle (TEXT)",
+      "timestamp": "2026-02-02T08:31:57.597Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FontBus] Warmup complete.",
+      "timestamp": "2026-02-02T08:31:57.598Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Trace: agent-update-1770021117409] PHASE: [RENDER] - Details: {\"depth\":0}",
+      "timestamp": "2026-02-02T08:31:57.599Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Agent] Tool Call: setNodeStyles {\"parameters\":{\"nodeId\":\"157:979\",\"fills\":[\"#111827\"]},\"requestId\":\"req_1770021117597_5xi02qgko\"}",
+      "timestamp": "2026-02-02T08:31:57.648Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Agent] Tool Call: setNodeStyles {\"parameters\":{\"fills\":[\"#6B7280\"],\"nodeId\":\"157:980\"},\"requestId\":\"req_1770021117648_vu2kog7o8\"}",
+      "timestamp": "2026-02-02T08:31:57.696Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Agent] Tool Call: createNode {\"parameters\":{\"name\":\"Form Fields\",\"parentId\":\"157:977\",\"stepId\":\"step_1770021095317_5\",\"type\":\"FRAME\"},\"requestId\":\"req_1770021120922_5w984eduf\"}",
+      "timestamp": "2026-02-02T08:32:01.126Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Trace: agent-1770021120933] PHASE: [PROMPT] - Resuming generation trace: agent-1770021120933",
+      "timestamp": "2026-02-02T08:32:01.127Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FigmaVariableCache] Warming up cache...",
+      "timestamp": "2026-02-02T08:32:01.128Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FontBus] Starting static set warmup...",
+      "timestamp": "2026-02-02T08:32:01.128Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FontBus] Warmup complete.",
+      "timestamp": "2026-02-02T08:32:01.128Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[FigmaVariableCache] Cache warmed in 128ms. Vars: 1185, Styles: 0",
+      "timestamp": "2026-02-02T08:32:01.129Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Trace: agent-1770021120933] PHASE: [RENDER] - Rendering node: Form Fields (FRAME)",
+      "timestamp": "2026-02-02T08:32:01.130Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[Trace: agent-1770021120933] PHASE: [RENDER] - Details: {\"depth\":0}",
+      "timestamp": "2026-02-02T08:32:01.131Z",
+      "env": "figma-plugin"
+    },
+    {
+      "type": "info",
+      "message": "[PlanState] Task completed: step_1770021095317_5",
+      "timestamp": "2026-02-02T08:32:01.133Z",
+      "env": "figma-plugin"
+    }
+  ]
+}

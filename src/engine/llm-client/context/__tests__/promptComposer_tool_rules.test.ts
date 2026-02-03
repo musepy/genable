@@ -27,12 +27,12 @@ describe('Prompt Composer - Tool Use Iron Rules', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider as any);
 
         // 1. Core Tool Calling Format
-        expect(prompt).toContain('CRITICAL: PLAN BEFORE ACTING');
+        expect(prompt).toContain('## MODE: PLANNING');
         expect(prompt).toContain('planDesign');
         
-        // 2. Decision Flow
-        expect(prompt).toContain('DECISION FLOW');
-        expect(prompt).toContain('Check results and handle errors');
+        // 2. Core Policies
+        expect(prompt).toContain('CORE POLICIES');
+        expect(prompt).toContain('Reliability First');
 
         // 3. Negative Constraints (Implicit in guidelines - Removed explicit text to be lean)
         // Verified by presence of Examples which show correct behavior

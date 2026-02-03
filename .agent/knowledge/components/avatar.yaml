@@ -1,0 +1,12 @@
+name: Avatar
+structure:
+  type: FRAME
+  layoutMode: NONE
+  children:
+    - avatar-image
+defaultProps:
+  width: 40
+  height: 40
+  layoutSizingHorizontal: FIXED
+  layoutSizingVertical: FIXED
+  semantic: AVATAR

@@ -1,0 +1,14 @@
+name: Toast
+structure:
+  type: FRAME
+  layoutMode: HORIZONTAL
+  children:
+    - toast-icon
+    - toast-content
+    - toast-close
+defaultProps:
+  padding: 16
+  gap: 12
+  strokeWeight: 1
+  counterAxisAlignItems: CENTER
+  semantic: TOAST

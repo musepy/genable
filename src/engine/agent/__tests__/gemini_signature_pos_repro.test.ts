@@ -26,7 +26,8 @@ describe('Gemini Signature Position Repro', () => {
           functionResponse: { name: tr.name, response: tr.response },
           thought_signature: tr.thought_signature
         }))
-      }))
+      })),
+      getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Rules')
     } as any;
   });
 

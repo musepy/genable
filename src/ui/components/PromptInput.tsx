@@ -16,7 +16,8 @@
 
 import { h, ComponentChildren } from 'preact';
 import { useRef, useLayoutEffect } from 'preact/hooks';
-import { Plus } from 'lucide-preact';
+import { Plus, ArrowUp } from 'lucide-preact';
+import { ActionPopover } from './ActionPopover';
 import { tokens, componentStyles } from '../design-system/tokens';
 import { t } from '../i18n';
 
@@ -84,13 +85,7 @@ export function PromptInput({
   }, [value]);
 
   return (
-    <div style={{
-      ...componentStyles.inputArea.container,
-      borderRadius: 14,
-      background: 'rgba(255, 255, 255, 0.95)',
-      border: '0.5px solid rgba(228, 228, 231, 0.8)',
-      boxShadow: '0px 0px 0px 0px rgba(24,24,27,0.05), 0px 8px 32px 0px rgba(0,0,0,0.1)',
-    }}>
+    <div style={componentStyles.inputArea.container}>
       {/* Context Tags row */}
       {contextTags && (
         <div style={{
@@ -107,15 +102,7 @@ export function PromptInput({
       <textarea
         ref={textareaRef}
         className="focusable"
-        style={{
-          ...componentStyles.inputArea.textarea,
-          background: 'transparent',
-          paddingBottom: tokens.space[2],
-          paddingTop: tokens.space[2],
-          paddingLeft: tokens.space[4],
-          paddingRight: tokens.space[4],
-          fontSize: 14,
-        } as h.JSX.CSSProperties}
+        style={componentStyles.inputArea.textarea as h.JSX.CSSProperties}
         value={value}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
@@ -131,31 +118,24 @@ export function PromptInput({
         justifyContent: 'space-between',
         padding: `${tokens.space[3]}px`,
       }}>
-        {/* Left: Plus button */}
-        <button
-          onClick={onPlusClick}
-          style={{
-            width: 32,
-            height: 32,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 10,
-            cursor: 'pointer',
-            color: tokens.colors.textSecondary,
-            transition: 'var(--transition-crisp)',
-            flexShrink: 0,
-          }}
-          aria-label="Add context"
-        >
-          <Plus size={20} strokeWidth={1.5} />
-        </button>
+        {/* Left: Action Popover (+) */}
+        <ActionPopover 
+          onSerializeSelection={onPlusClick || (() => {})} 
+          disabled={disabled}
+        />
 
         {/* Right: Model Selector + Submit */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[3] }}>
-          {leftElement}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: tokens.space[3], 
+          minWidth: 0, 
+          flex: 1, 
+          justifyContent: 'flex-end' 
+        }}>
+          <div style={{ minWidth: 0, flexShrink: 1 }}>
+            {leftElement}
+          </div>
 
           {/* Submit button — rounded square per Figma */}
           <button
@@ -167,8 +147,7 @@ export function PromptInput({
               right: 'auto',
               bottom: 'auto',
               borderRadius: 'var(--radius-5)',
-              width: 40,
-              height: 40,
+              flexShrink: 0,
             } as h.JSX.CSSProperties}
             onClick={() => canSubmit && onSubmit()}
             aria-disabled={!canSubmit}
@@ -180,9 +159,9 @@ export function PromptInput({
               viewBox="0 0 24 24"
               fill="none"
               stroke={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface}
-              strokeWidth="2.5"
+              strokeWidth="3"
             >
-               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/>
+               <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         </div>

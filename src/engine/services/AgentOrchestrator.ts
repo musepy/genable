@@ -53,17 +53,24 @@ import { configManager } from '../../config/configManager';
 import { IpcBridge } from '../agent/ipcBridge';
 
 export class AgentOrchestrator {
-  private static skillsInitialized = false;
+  private static initializationPromise: Promise<void> | null = null;
 
-  constructor(private options: OrchestratorOptions) {
-    // Initialize skills on first orchestrator creation
-    if (USE_SKILL_SYSTEM && !AgentOrchestrator.skillsInitialized) {
-      initializeSkills();
-      AgentOrchestrator.skillsInitialized = true;
+  constructor(private options: OrchestratorOptions) {}
+
+  private static async ensureSkillsInitialized(): Promise<void> {
+    if (!USE_SKILL_SYSTEM) return;
+    
+    if (!AgentOrchestrator.initializationPromise) {
+      AgentOrchestrator.initializationPromise = initializeSkills();
     }
+    
+    return AgentOrchestrator.initializationPromise;
   }
 
   async generate(prompt: string, pluginData: AgentPluginData, history: ChatMessage[]) {
+    // 0. Ensure skills are fully loaded before starting
+    await AgentOrchestrator.ensureSkillsInitialized();
+
     // [DI] Instantiate IpcBridge for this session
     const ipcBridge = new IpcBridge({
         logger: console,
@@ -122,7 +129,7 @@ export class AgentOrchestrator {
 
     // Calculate total layout generation budget
     const totalBudget = calculateBudget({
-      totalTokens: 4000 // In the future, this can be derived from provider window
+      totalTokens: 8000 // Matches composeAgentSystemPrompt default; 4000 was too small for 12+ tool definitions
     });
 
     // Compose System Prompt

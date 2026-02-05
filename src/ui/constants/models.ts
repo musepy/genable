@@ -35,17 +35,18 @@ export interface ModelConfig {
  */
 export const SUPPORTED_MODELS: Record<string, ModelConfig[]> = {
   gemini: [
-    { name: MODEL_FAMILIES.GEMINI_2_5_FLASH, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_FLASH], tier: 'fast' },
-    { name: MODEL_FAMILIES.GEMINI_2_5_PRO, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_PRO], tier: 'balanced' },
-    { name: MODEL_FAMILIES.GEMINI_2_5_FLASH_PREVIEW_05_20, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_FLASH_PREVIEW_05_20], tier: 'preview' },
-    { name: MODEL_FAMILIES.GEMINI_2_5_PRO_PREVIEW_05_06, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_5_PRO_PREVIEW_05_06], tier: 'preview' },
+    { name: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', tier: 'fast' },
+    { name: MODEL_FAMILIES.GEMINI_2_5_FLASH, displayName: 'Gemini 2.5 Flash', tier: 'fast' },
+    { name: MODEL_FAMILIES.GEMINI_2_5_PRO, displayName: 'Gemini 2.5 Pro', tier: 'balanced' },
+    // Use 1.5 as common fallback
+    { name: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash', tier: 'fast' },
+    { name: 'gemini-1.5-pro', displayName: 'Gemini 1.5 Pro', tier: 'balanced' },
   ],
   openrouter: [
     { name: MODEL_FAMILIES.CLAUDE_3_5_SONNET, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.CLAUDE_3_5_SONNET], tier: 'balanced' },
     { name: MODEL_FAMILIES.GPT_4O, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GPT_4O], tier: 'balanced' },
-    { name: MODEL_FAMILIES.DEEPSEEK_R1_FREE, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.DEEPSEEK_R1_FREE], tier: 'balanced' },
-    { name: MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE], tier: 'fast' },
-    { name: MODEL_FAMILIES.DEEPSEEK_CHIMERA_FREE, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.DEEPSEEK_CHIMERA_FREE], tier: 'balanced' },
+    { name: MODEL_FAMILIES.DEEPSEEK_R1_FREE, displayName: 'DeepSeek R1', tier: 'balanced' },
+    { name: MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE, displayName: 'Gemini 2.0 Flash', tier: 'fast' },
   ]
 };
 

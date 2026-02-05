@@ -107,7 +107,7 @@ export const getComponentAnatomyDefinition: ToolDefinition = {
   name: 'getComponentAnatomy',
   category: 'knowledge',
   dependencies: [],
-  description: 'Retrieve the structural blueprint (node hierarchy and properties) for a specific UI component.',
+  description: 'Retrieve a REFERENCE structural blueprint for a specific UI component. Use ONLY when user explicitly requests project/system patterns. For custom or relative adjustments, rely on your own design reasoning.',
   parameters: {
     type: 'object',
     properties: {

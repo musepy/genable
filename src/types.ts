@@ -241,6 +241,11 @@ export interface SendSerializedSelectionHandler extends EventHandler {
   handler: (data: { jsonString: string }) => void;
 }
 
+export interface SelectNodeHandler extends EventHandler {
+  name: 'SELECT_NODE';
+  handler: (data: { nodeId: string; smooth?: boolean; durationMs?: number }) => void;
+}
+
 export interface ImportTokensHandler extends EventHandler {
   name: 'IMPORT_TOKENS';
   handler: (data: { cssString: string, jsonString?: string }) => void;
@@ -254,6 +259,15 @@ export interface ExportTokensHandler extends EventHandler {
 export interface SendExportedTokensHandler extends EventHandler {
   name: 'SEND_EXPORTED_TOKENS';
   handler: (data: { tokens: any }) => void;
+}
+
+export interface SelectNodeHandler extends EventHandler {
+  name: 'SELECT_NODE';
+  handler: (data: {
+    nodeId: string;
+    smooth?: boolean;   // default true
+    durationMs?: number; // optional
+  }) => void;
 }
 
 // ==========================================

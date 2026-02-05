@@ -9,7 +9,8 @@ import {
     DYNAMIC_GUIDANCE,
     AGENT_NAMING_CONVENTION,
     AGENT_CONTENT_REQUIREMENT,
-    AGENT_PARENT_CHILD_RULE
+    AGENT_PARENT_CHILD_RULE,
+    AGENT_DESIGN_FREEDOM
 } from '../../agent/agentPrompts';
 
 // ==========================================
@@ -345,7 +346,8 @@ createNode({type: "TEXT", name: "Title", parentId: "100:2", characters: "Card Ti
 function buildAgentIdentity(): string {
     return [
         AGENT_IDENTITY.trim(),
-        AGENT_PARENT_CHILD_RULE.trim(),  // High priority: Figma hard constraint
+        AGENT_PARENT_CHILD_RULE.trim(),
+        AGENT_DESIGN_FREEDOM.trim(),
         AGENT_THINKING_PROTOCOL.trim(),
         AGENT_NAMING_CONVENTION.trim(),
         AGENT_CONTENT_REQUIREMENT.trim()

@@ -14,6 +14,7 @@ import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { handleUnifiedRender } from '../helpers/renderHelper';
 import { planState } from '../../engine/agent/planState';
 import { projectUITools } from '../../engine/agent/tools/projectUITools';
+import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
 
 export interface ToolCallData {
   toolName: string;
@@ -275,7 +276,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
       case 'getVariables': {
         try {
-          const { figmaVariableCache } = await import('../../engine/figma-adapter/caches/figmaVariableCache');
           await figmaVariableCache.warmup();
           const names = Array.from((figmaVariableCache as any).variableMap.keys());
           response = { success: true, data: { variables: names } };
@@ -287,7 +287,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
       case 'getStyles': {
         try {
-          const { figmaVariableCache } = await import('../../engine/figma-adapter/caches/figmaVariableCache');
           await figmaVariableCache.warmup();
           const names = Array.from((figmaVariableCache as any).styleMap.keys());
           response = { success: true, data: { styles: names } };
@@ -313,7 +312,56 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       }
 
       // ==========================================
-      // 8.5. Design Super Tools
+      // 8.5. Unified Inspection (replaces getSelection/getDeepHierarchy/getNodeDSL)
+      // ==========================================
+      case 'inspectDesign': {
+        const { mode: inspectMode, nodeId: inspectNodeId, depth: inspectDepth } = parameters;
+
+        switch (inspectMode) {
+          case 'selection': {
+            const selection = nodeLayoutService.getSelection();
+            response = { success: true, data: selection };
+            break;
+          }
+          case 'hierarchy': {
+            if (!inspectNodeId) {
+              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for hierarchy mode.' } };
+              break;
+            }
+            const hNode = await figma.getNodeByIdAsync(inspectNodeId) as SceneNode;
+            if (!hNode) {
+              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${inspectNodeId} not found.` } };
+              break;
+            }
+            const hSerialized = NodeSerializer.serializeWithCompression(hNode, {
+              maxDepth: Math.min(inspectDepth || 5, 10),
+              pruneDefaults: false
+            });
+            response = { success: true, data: hSerialized };
+            break;
+          }
+          case 'node': {
+            if (!inspectNodeId) {
+              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for node mode.' } };
+              break;
+            }
+            const nNode = await figma.getNodeByIdAsync(inspectNodeId) as SceneNode;
+            if (!nNode) {
+              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${inspectNodeId} not found.` } };
+              break;
+            }
+            const nSerialized = NodeSerializer.serialize(nNode);
+            response = { success: true, data: nSerialized };
+            break;
+          }
+          default:
+            response = { success: false, error: { code: 'INVALID_MODE', message: `inspectDesign mode '${inspectMode}' is not valid. Use 'selection', 'hierarchy', or 'node'.` } };
+        }
+        break;
+      }
+
+      // ==========================================
+      // 8.6. Design Super Tools
       // ==========================================
       case 'applyDesignPatch': {
         const { patches } = parameters;

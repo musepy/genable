@@ -13,10 +13,4 @@ defaultProps:
   layoutSizingVertical: HUG
   primaryAxisAlignItems: CENTER
   counterAxisAlignItems: CENTER
-  gap: 8
   semantic: BUTTON
-variants:
-  default:
-    padding: [8, 16]
-  icon:
-    padding: 0

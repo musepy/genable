@@ -7,6 +7,4 @@ structure:
     - card-content
     - card-footer
 defaultProps:
-  padding: 16
-  gap: 16
   semantic: CARD

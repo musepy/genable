@@ -61,11 +61,15 @@ export function PromptChips({
         display: 'flex',
         overflowX: 'auto',
         gap: tokens.space[2],
-        paddingBottom: tokens.space[2],
+        paddingBottom: 0, // Removed vertical padding
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
-        marginTop: tokens.space[4], // P0: Increased from space[2] for visual separation
-        maxWidth: '100%',
+        marginTop: 0, // Removed top margin
+        marginLeft: -tokens.space[3],  // Full-bleed trick (12px)
+        marginRight: -tokens.space[3], // Full-bleed trick (12px)
+        paddingLeft: tokens.space[3],  // Align back to content
+        paddingRight: tokens.space[3], // Scroll targets the edge
+        maxWidth: 'calc(100% + 24px)', // Match -12-12
         boxSizing: 'border-box',
       }}
     >
@@ -83,7 +87,7 @@ export function PromptChips({
               background: 'transparent', // P0: De-noise - was tokens.colors.card
               border: `0.5px solid ${tokens.colors.grayBorder}`,
               boxShadow: tokens.colors.shadow,
-              borderRadius: 'var(--radius-2)',
+              borderRadius: 'var(--radius-5)', // Unified to 12px
               padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
               cursor: enabled ? 'pointer' : 'default',
               color: enabled ? tokens.colors.textPrimary : tokens.colors.disabledText, // P3: Alpha token
@@ -98,7 +102,8 @@ export function PromptChips({
             {IconComponent && <IconComponent size={12} strokeWidth={1.5} />}
             <span style={{ 
               fontSize: 'var(--font-size-1)', 
-              fontWeight: tokens.fontWeight.medium, 
+              fontWeight: tokens.fontWeight.regular, 
+              lineHeight: 'var(--typography-line-height-1)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',

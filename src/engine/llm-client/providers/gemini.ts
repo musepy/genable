@@ -47,7 +47,7 @@ export class GeminiProvider implements LLMProvider {
     });
 
     const config: any = {
-      temperature: temperature ?? 0.7,
+      temperature: temperature ?? 0.4,
       maxOutputTokens: effectiveMaxTokens,
     };
 

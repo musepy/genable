@@ -922,20 +922,41 @@ const lightModeTokens = `
     --yellow-a12: rgba(46, 32, 0, 0.878);
 
 
+    /* --- Semantic Color Aliases (Light Mode) --- */
+    --color-background: #fcfcfc;
+    --color-surface: #ffffff;
+    --color-panel: #ffffff;
+    --color-overlay: rgba(0, 8, 48, 0.275);
+    --color-shadow: rgba(0, 0, 0, 0.08);
+    --text-primary: var(--gray-12);
+    --text-secondary: var(--gray-11);
+
+    /* Accent Scale (Blue) - Light Mode */
+    --accent-1: var(--blue-1); --accent-2: var(--blue-2); --accent-3: var(--blue-3);
+    --accent-4: var(--blue-4); --accent-5: var(--blue-5); --accent-6: var(--blue-6);
+    --accent-7: var(--blue-7); --accent-8: var(--blue-8); --accent-9: var(--blue-9);
+    --accent-10: var(--blue-10); --accent-11: var(--blue-11); --accent-12: var(--blue-12);
+    --accent-a1: var(--blue-a1); --accent-a2: var(--blue-a2); --accent-a3: var(--blue-a3);
+    --accent-a4: var(--blue-a4); --accent-a5: var(--blue-a5); --accent-a6: var(--blue-a6);
+    --accent-a7: var(--blue-a7); --accent-a8: var(--blue-a8); --accent-a9: var(--blue-a9);
+    --accent-a10: var(--blue-a10); --accent-a11: var(--blue-a11); --accent-a12: var(--blue-a12);
+    --accent-surface: var(--blue-a2);
+    --accent-contrast: #ffffff;
+
     /* --- Component Constants --- */
     --header-height: 52px;
     --toggle-width: 44px;
     --toggle-height: 24px;
     --toggle-thumb-size: 20px;
-    --header-icon-size: 28px;
-    
+    --header-icon-size: 32px;
+    --border-subtle: 0.5px;
+
     /* Semantic Colors (Direct) */
-    --header-bg: var(--tokens-colors-surface);
+    --header-bg: var(--color-surface);
     --header-border: var(--gray-a4);
-    
+
     --panel-default: rgba(255, 255, 255, 0.8);
-...
-    --colors-neutral-neutral-alpha-3: var(--slate-a3); /* Keep only specific ones if strictly used by legacy code, otherwise remove */
+    --colors-neutral-neutral-alpha-3: var(--slate-a3);
     --panel-solid: rgba(255, 255, 255, 1);
     --panel-translucent: rgba(255, 255, 255, 0.8);
     --radius-1: 3px;
@@ -980,10 +1001,10 @@ const lightModeTokens = `
     --tokens-space-table-cell-padding-1: var(--space-2);
     --tokens-space-table-cell-padding-2: var(--space-3);
     --tokens-space-table-cell-padding-3: var(--space-4);
-    --typography-font-family-code: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+    --typography-font-family-code: 'Inter Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
     --typography-font-family-emphasis: 'Georgia', 'Times New Roman', serif;
     --typography-font-family-quote: 'Georgia', 'Garamond', serif;
-    --typography-font-family-text: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    --typography-font-family-text: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     --typography-font-size-1: 12px;
     --typography-font-size-2: 14px;
     --typography-font-size-3: 16px;
@@ -1068,26 +1089,43 @@ const darkModeTokens = `
     --color-panel: var(--gray-2);
     --color-overlay: rgba(0, 0, 0, 0.7);
     --color-shadow: rgba(0, 0, 0, 0.5);
-    
+    --text-primary: var(--gray-12);
+    --text-secondary: var(--gray-11);
+
+    /* Accent Scale (Blue) - Dark Mode */
+    --accent-1: var(--blue-1); --accent-2: var(--blue-2); --accent-3: var(--blue-3);
+    --accent-4: var(--blue-4); --accent-5: var(--blue-5); --accent-6: var(--blue-6);
+    --accent-7: var(--blue-7); --accent-8: var(--blue-8); --accent-9: var(--blue-9);
+    --accent-10: var(--blue-10); --accent-11: var(--blue-11); --accent-12: var(--blue-12);
+    --accent-a1: var(--blue-a1); --accent-a2: var(--blue-a2); --accent-a3: var(--blue-a3);
+    --accent-a4: var(--blue-a4); --accent-a5: var(--blue-a5); --accent-a6: var(--blue-a6);
+    --accent-a7: var(--blue-a7); --accent-a8: var(--blue-a8); --accent-a9: var(--blue-a9);
+    --accent-a10: var(--blue-a10); --accent-a11: var(--blue-a11); --accent-a12: var(--blue-a12);
     --accent-surface: rgba(0, 144, 255, 0.15);
-    
+    --accent-contrast: #ffffff;
+
     /* Ensure variables used in Components utilize these overrides */
     --tokens-colors-page-background: var(--gray-1);
     --tokens-colors-surface: var(--gray-2);
     --tokens-colors-text: var(--gray-12);
     --tokens-colors-accent-contrast: #ffffff;
-    --tokens-colors-black-contrast: #ffffff; /* In dark mode, contrasting against black/dark bg usually implies white text */
+    --tokens-colors-black-contrast: #ffffff;
     --tokens-colors-white-contrast: #000000;
-    
+
     --panel-default: rgba(30, 30, 30, 0.8);
     --panel-solid: var(--gray-2);
     --panel-translucent: rgba(25, 25, 25, 0.8);
 `;
 
 export const cssTokens = lightModeTokens + `
-  /* --- Dark Mode Configuration --- */
+  /* Force light mode when explicitly set */
+  [data-theme="light"] {
+    color-scheme: light;
+  }
+
+  /* Dark Mode Configuration - Only applies when NOT explicitly light */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       ${darkModeTokens}
     }
   }

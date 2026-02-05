@@ -1,21 +1,21 @@
 import { colors } from './colors';
 import { space } from './spacing';
 import { fontSize, fontWeight, lineHeight, font } from './typography';
-import { radii } from './layout';
+import { radii, size } from './layout';
 
 // Local tokens alias for easier migration
-const tokens = { colors, space, fontSize, fontWeight, lineHeight, radii, font };
+const tokens = { colors, space, fontSize, fontWeight, lineHeight, radii, font, size };
 
 export const componentStyles = {
   // Chip base - used for prompt chips, model chip, tags
   chipBase: {
     display: 'inline-flex' as const,
     alignItems: 'center' as const,
-    gap: 4,  // tokens.space.xs
-    padding: '4px 16px',  // xs md
-    borderRadius: '9999px',  // tokens.radii.full
-    fontSize: 12,  // tokens.fontSize.sm
-    fontWeight: tokens.fontWeight.medium,  // tokens.fontWeight.medium
+    gap: tokens.space[1],
+    padding: `${tokens.space[1]}px ${tokens.space[4]}px`,
+    borderRadius: tokens.radii.full,
+    fontSize: tokens.fontSize[1],
+    fontWeight: tokens.fontWeight.regular,  // Unified to Regular in Phase 3
     cursor: 'pointer',
     transition: 'var(--transition-crisp, all 150ms ease)',
     whiteSpace: 'nowrap' as const,
@@ -23,16 +23,16 @@ export const componentStyles = {
   // Card base - used for message bubbles, prompt cards
   cardBase: {
     background: 'var(--color-surface)',
-    borderRadius: '12px',  // tokens.radii.lg
-    padding: 16,  // tokens.space.md
+    borderRadius: tokens.radii.lg,
+    padding: tokens.space[4],
     boxShadow: 'var(--color-shadow)',
   },
   // Bubble base - for chat messages
   bubbleBase: {
-    borderRadius: '12px',  // tokens.radii.lg
-    padding: 16,  // tokens.space.md
+    borderRadius: tokens.radii.lg,
+    padding: tokens.space[4],
     maxWidth: '85%',
-    fontSize: 12,
+    fontSize: tokens.fontSize[1],
     lineHeight: tokens.lineHeight[2],
   },
   // Icon button base - for action icons (legacy 32x32)
@@ -40,9 +40,9 @@ export const componentStyles = {
     display: 'inline-flex' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    width: 32,
-    height: 32,
-    borderRadius: '8px',  // tokens.radii.md
+    width: tokens.size.button.md,
+    height: tokens.size.button.md,
+    borderRadius: tokens.radii.md,
     border: 'none',
     cursor: 'pointer',
     transition: 'var(--transition-crisp, opacity 150ms ease)',
@@ -62,10 +62,10 @@ export const componentStyles = {
       display: 'inline-flex' as const,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
-      width: 28,
-      height: 28,
+      width: tokens.size.button.xs,
+      height: tokens.size.button.xs,
       border: 'none',
-      borderRadius: 'var(--radius-md)',
+      borderRadius: tokens.radii.md,
       background: 'transparent',
       cursor: 'pointer',
       transition: 'var(--transition-crisp, opacity 150ms ease)',
@@ -79,10 +79,10 @@ export const componentStyles = {
   submitButton: {
     base: {
       position: 'absolute' as const,
-      right: 6,
-      bottom: 6,
-      width: 28,
-      height: 28,
+      right: tokens.space[1],
+      bottom: tokens.space[1],
+      width: tokens.size.button.md,
+      height: tokens.size.button.md,
       borderRadius: '50%',
       display: 'flex' as const,
       alignItems: 'center' as const,
@@ -90,8 +90,8 @@ export const componentStyles = {
       transition: 'var(--transition-crisp, all 150ms ease)',
     },
     active: {
-      background: 'var(--gray-12)',
-      border: '1.5px solid var(--gray-12)',
+      background: 'var(--accent-9)',
+      border: '1.5px solid var(--accent-9)',
       cursor: 'pointer',
     },
     // 禁用态：容器用 border 色，图标用 card 色，形成“镂空”效果
@@ -110,27 +110,30 @@ export const componentStyles = {
   inputArea: {
     container: {
       position: 'relative' as const,
-      background: 'var(--color-surface)',
-      border: '1px solid var(--gray-6)',
-      borderRadius: 'var(--radius-lg)',
+      background: tokens.colors.surface,
+      border: `var(--border-subtle) solid ${tokens.colors.alpha[4]}`,
+      borderRadius: 'var(--radius-5)',
+      boxShadow: '0px 0px 0px 0px var(--color-shadow), 0px 8px 32px 0px var(--color-shadow)',
       // 注意：不设置 overflow:hidden，允许内部 Popover 溢出
     },
     textarea: {
       width: '100%',
-      minHeight: 56,
-      maxHeight: 120,
-      padding: '10px 12px',
-      paddingRight: 40,  // 为提交按钮留空间
-      paddingBottom: 36, // 确保滚动到底时内容不被按钮遮挡
-      fontSize: 12,
+      minHeight: tokens.space[6] + tokens.space[5], // 32 + 24 = 56
+      maxHeight: tokens.space[9] + tokens.space[6] + tokens.space[5], // 64 + 32 + 24 = 120
+      paddingTop: tokens.space[2],
+      paddingBottom: tokens.space[2],
+      paddingLeft: tokens.space[4],
+      paddingRight: tokens.space[4],
+      fontSize: tokens.fontSize[1],
       background: 'transparent',
       color: 'var(--gray-12)',
       border: 'none',
       outline: 'none',
       resize: 'none' as const,
-      fontFamily: 'var(--font-sans, Inter, -apple-system, sans-serif)',
+      fontFamily: tokens.font.sans,
       lineHeight: tokens.lineHeight[2],
       boxSizing: 'border-box' as const,
+      transition: 'height 200ms cubic-bezier(0, 0, 0.2, 1)', // Smooth expansion/contraction
     },
   },
   
@@ -143,17 +146,34 @@ export const componentStyles = {
     ghost: {
       display: 'inline-flex' as const,
       alignItems: 'center' as const,
-      gap: 4,
-      padding: '4px 8px',
+      gap: tokens.space[1],
+      padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
       background: 'transparent',
       border: 'none',
       color: 'var(--gray-11)',
-      fontSize: 11,
-      fontWeight: tokens.fontWeight.medium,
+      fontSize: fontSize[1],
+      fontWeight: tokens.fontWeight.regular,
       cursor: 'pointer',
       transition: 'var(--transition-crisp)',
       whiteSpace: 'nowrap' as const,
-      borderRadius: 'var(--radius-md)',
+      borderRadius: 'var(--radius-5)', // Standardized to 12px
+    },
+    chip: {
+      display: 'inline-flex' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      gap: tokens.space[1],
+      padding: `0 ${tokens.space[2]}px`,
+      height: tokens.size.button.md,
+      background: 'transparent',
+      color: tokens.colors.textPrimary,
+      border: '1px solid transparent',
+      borderRadius: 'var(--radius-5)', // Standardized to 12px
+      fontSize: tokens.fontSize[1],
+      fontWeight: tokens.fontWeight.regular,
+      lineHeight: tokens.lineHeight[1],
+      cursor: 'pointer',
+      transition: 'var(--transition-crisp)',
     },
     // Hover 状态：添加背景色
     ghostHover: {
@@ -164,7 +184,7 @@ export const componentStyles = {
     popoverTop: {
       bottom: '100%',
       top: 'auto',
-      marginBottom: 4,
+      marginBottom: tokens.space[1],
     },
   },
 } as const;

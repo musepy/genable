@@ -14,6 +14,7 @@ export const radii = {
 
 export const size = {
   button: {
+    xs: 28,    // Compact icon button (legacy)
     sm: 32,
     md: 32,    // Radix space[6] - compact for Figma plugin
     lg: 44,    // HIG standard touch target
@@ -30,6 +31,13 @@ export const size = {
     md: 20,
     lg: 24,
   },
+} as const;
+
+export const zIndex = {
+  base: 0,
+  popover: 100,
+  toast: 1000,
+  modal: 1100,
 } as const;
 
 // Layout tokens for semantic fill/hug/fixed sizing

@@ -31,7 +31,7 @@ export function Input({
     background: 'transparent', // Transparent to avoid dark mode issues
     color: tokens.colors.textPrimary,
     border: `1px solid ${tokens.colors.grayBorder}`,
-    borderRadius: 'var(--radius-2)',
+    borderRadius: 'var(--radius-5)', // Unified to 12px
     outline: 'none',
     transition: 'border-color var(--duration-normal) var(--ease-default)',
     ...(style as any),

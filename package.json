@@ -51,6 +51,8 @@
     "watch": "node build.js --watch",
     "build:raw": "build-figma-plugin --typecheck --minify",
     "preview": "vite --config vite.preview.config.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint:style": "stylelint \"src/**/*.{css,scss,sass,less}\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

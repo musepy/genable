@@ -5,6 +5,4 @@ structure:
   children:
     - section-header
     - features-container
-defaultProps:
-  padding: [60, 40]
-  gap: 32
+defaultProps: {}

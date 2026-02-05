@@ -26,7 +26,7 @@ export const getProjectUIContextDefinition: ToolDefinition = {
   name: 'getProjectUIContext',
   category: 'knowledge',
   dependencies: [],
-  description: 'Retrieve information about project UI components to ensure generated designs match the existing codebase style. Use this before creating UI elements to understand the project\'s design patterns.',
+  description: 'Retrieve a REFERENCE technical specification for project UI components. Use ONLY when user explicitly requests project-specific implementations. For free design or generic systems (iOS, shadcn), rely on your own knowledge.',
   parameters: {
     type: 'object',
     properties: {
@@ -59,6 +59,8 @@ interface GetProjectUIContextParams {
   includeTokens?: boolean;
 }
 
+import { knowledgeHub } from '../../llm-client/knowledge/knowledgeHub';
+
 export const getProjectUIContext: ToolExecutor<GetProjectUIContextParams> = async (params) => {
   try {
     const { component, category, query, includeTokens } = params;
@@ -68,7 +70,9 @@ export const getProjectUIContext: ToolExecutor<GetProjectUIContextParams> = asyn
     if (component) {
       const comp = getComponent(component);
       if (comp) {
-        result.component = formatComponentForLLM(comp);
+        // Enrich with design anatomy from KnowledgeHub
+        const enriched = knowledgeHub.getEnrichedComponent(comp);
+        result.component = formatComponentForLLM(enriched as any);
       } else {
         // Suggest similar components
         const similar = searchComponents(component);

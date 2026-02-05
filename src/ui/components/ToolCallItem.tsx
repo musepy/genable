@@ -73,7 +73,7 @@ export function ToolCallItem({ record }: ToolCallItemProps) {
             display: 'flex', 
             alignItems: 'center', 
             gap: 4, 
-            fontSize: tokens.fontSize.xs, 
+            fontSize: tokens.fontSize[1], 
             color: tokens.colors.textSecondary 
           }}>
             <Clock size={10} />
@@ -89,7 +89,7 @@ export function ToolCallItem({ record }: ToolCallItemProps) {
           padding: tokens.space[2],
           background: tokens.colors.grayMuted,
           borderRadius: 'var(--radius-2)',
-          fontSize: tokens.fontSize.xs,
+          fontSize: tokens.fontSize[1],
           fontFamily: 'var(--font-mono)',
           overflow: 'hidden'
         }}>

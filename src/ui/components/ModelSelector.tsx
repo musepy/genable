@@ -10,6 +10,7 @@
  */
 
 import { h } from 'preact';
+import { Check } from 'lucide-preact';
 import { useState } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { sortModels } from '../constants/models';
@@ -36,27 +37,42 @@ export function ModelSelector({
   
   if (isLoading) {
     return (
-      <div style={{ 
-        padding: tokens.space[4], // Migrated from space.md 
-        textAlign: 'center', 
-        color: tokens.colors.textSecondary,
-      }}>
-        <div className="loading-dots" style={{ justifyContent: 'center', display: 'flex' }}>
-          <span></span><span></span><span></span>
-        </div>
+      <div 
+        role="status" 
+        aria-label="Loading models"
+        style={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          gap: 4,
+        }}
+      >
+        {/* Skeleton 占位器 - 3 个模型的骨架 */}
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="skeleton-item"
+            style={{
+              height: 32,
+              borderRadius: 'var(--radius-4)',
+              background: 'var(--gray-a2)',
+              animation: 'skeleton-pulse 1.5s ease-in-out infinite',
+              animationDelay: `${i * 0.1}s`,
+            }}
+          />
+        ))}
       </div>
     );
   }
 
   if (models.length === 0) {
     return (
-      <div style={{ 
-        padding: tokens.space[4], // Migrated from space.md 
-        border: `1px dashed ${tokens.colors.grayBorder}`, 
-        borderRadius: 'var(--radius-2)', 
+    <div style={{ 
+        padding: 12, 
+        border: 'var(--border-main)', 
+        borderRadius: 'var(--radius-5)', 
         textAlign: 'center',
-        color: tokens.colors.textSecondary,
-        fontSize: tokens.fontSize[1],
+        color: 'var(--gray-9)',
+        fontSize: 12,
       }}>
         Enter API Key to load models
       </div>
@@ -73,28 +89,18 @@ export function ModelSelector({
       style={{ 
         display: 'flex', 
         flexDirection: 'column',
-        // No gap - avoid unnecessary visual separators
+        gap: 4, // Reduced from 12px for a more compact list
       }}
     >
       {sortedModels.map((model, index) => {
-        const normalize = (name: string) => name.toLowerCase().replace(/models\//, '').replace(/[^a-z0-p]/g, '').replace(/30/g, '3').replace(/25/g, '2');
+        const normalize = (name: string) => name.toLowerCase().replace(/models\//, '').replace(/[^a-z0-9]/g, '');
         const isSelected = normalize(selectedModel) === normalize(model.name);
-        
-        // No fallback - only highlight the actually selected model
-        const shouldHighlight = isSelected;
-        
-        const isHovered = hoveredModel === index;
-        
-        // Background logic: selected (step 4) > hover (step 3) for proper visual weight
-        const background = shouldHighlight 
-          ? tokens.colors.surfaceHover  // gray-4: selected needs more weight
-          : isHovered 
-            ? tokens.colors.surface      // gray-3: hover is lighter
-            : 'transparent';
+        const shouldHighlight = isSelected || (index === 0 && !sortedModels.some(m => normalize(selectedModel) === normalize(m.name)));
         
         return (
           <div
-            key={`${model.name}-${index}`}
+            key={model.name}
+            className={`model-item ${shouldHighlight ? 'is-selected' : ''}`}
             role="option"
             aria-selected={shouldHighlight}
             tabIndex={0}
@@ -105,28 +111,39 @@ export function ModelSelector({
                 onSelect(model.name);
               }
             }}
-            onMouseEnter={() => setHoveredModel(index)}
-            onMouseLeave={() => setHoveredModel(null)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--gray-a2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: `${tokens.space[2]}px ${tokens.space[2]}px`, // Radix space[2] (8px)
-              minHeight: tokens.space[6], // Radix space[6] (32px)
-              borderRadius: 'var(--radius-2)',
+              padding: `var(--space-1) var(--space-3) var(--space-1) var(--space-2)`, // Reduced vertical padding to 4px
+              minHeight: 32,
+              borderRadius: 'var(--radius-4)', // Slightly smaller radius for more compact look
               cursor: 'pointer',
-              background,
+              background: 'transparent',
               transition: 'var(--transition-crisp)',
+              gap: tokens.space[2],
             }}
           >
             <span style={{ 
-              fontSize: tokens.fontSize[1], // Same as trigger (12px)
-              color: tokens.colors.textPrimary,  // Unified color, no change on selection
-              fontWeight: tokens.fontWeight.regular,  // No font-weight change
+              fontSize: 12, // Standardized to 12px to match Popover
+              color: 'var(--gray-11)',
+              fontWeight: 400, // No bolding even when highlighted
+              lineHeight: '16px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
             }}>
               {model.displayName || model.name}
             </span>
-            {/* Check icon removed - background color is sufficient indicator */}
+            {shouldHighlight && (
+              <Check size={14} strokeWidth={2.5} style={{ marginLeft: 'auto', color: 'var(--gray-11)' }} />
+            )}
           </div>
         );
       })}

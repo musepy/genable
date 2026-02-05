@@ -176,6 +176,12 @@ export interface AnatomyBlueprint {
   variants?: Record<string, any>;
 }
 
+export interface EnrichedComponent extends UIComponentMeta {
+  designAnatomy?: AnatomyBlueprint;
+}
+
+import { UIComponentMeta } from '../../../knowledge/projectUIRegistry';
+
 // ==========================================
 // KnowledgeHub Service
 // ==========================================
@@ -357,11 +363,19 @@ class KnowledgeHubService {
    * Get anatomy blueprint by exact key (for backward compatibility)
    * @param key - Exact registry key (e.g., 'button', 'badge')
    */
-  getAnatomyByKey(key: string): Partial<ComponentSchema> | undefined {
-    const root = path ? path.resolve(__dirname, '../../../../..') : '';
-    const anatomyDir = getAnatomyDir(root);
-    const anatomyRegistry = loadAnatomyFromDirectory(anatomyDir);
-    return anatomyRegistry[key.toLowerCase()];
+  getAnatomyByKey(key: string): AnatomyBlueprint | undefined {
+    return this.anatomy.find(a => a.id.toLowerCase() === key.toLowerCase());
+  }
+
+  /**
+   * Associates a technical component with its design anatomy blueprint.
+   */
+  getEnrichedComponent(comp: UIComponentMeta): EnrichedComponent {
+    const anatomy = this.getAnatomyByKey(comp.name);
+    return {
+      ...comp,
+      designAnatomy: anatomy
+    };
   }
 
   // ==========================================

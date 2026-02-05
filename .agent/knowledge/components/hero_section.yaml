@@ -6,7 +6,5 @@ structure:
     - hero-content
     - hero-visual
 defaultProps:
-  padding: [80, 40]
   primaryAxisAlignItems: CENTER
   counterAxisAlignItems: CENTER
-  gap: 40

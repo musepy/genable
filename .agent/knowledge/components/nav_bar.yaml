@@ -7,8 +7,6 @@ structure:
     - nav-links
     - nav-actions
 defaultProps:
-  padding: [12, 24]
-  gap: 16
   primaryAxisAlignItems: SPACE_BETWEEN
   counterAxisAlignItems: CENTER
   layoutSizingHorizontal: FILL

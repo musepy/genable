@@ -50,7 +50,7 @@ export class NodeSerializer {
         Object.values(PROPS).forEach(dslKey => {
             const value = PropertyTransformer.serialize(nodeData, dslKey);
             
-            if (value !== undefined && value !== null) {
+            if (value !== undefined) {
                 // Skip default values if pruning is enabled
                 if (pruneDefaults) {
                     const meta = PROP_METADATA[dslKey];

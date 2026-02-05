@@ -2466,7 +2466,7 @@
     "description": "Code split with next/dynamic",
     "do": "dynamic() for heavy components",
     "dont": "Import everything statically",
-    "codeGood": "const Chart = dynamic(() => import('./Chart'))",
+    "codeGood": "const Chart = dynamic(() => import ('./Chart'))",
     "codeBad": "import Chart from './Chart'",
     "severity": "Medium",
     "docsUrl": "https://nextjs.org/docs/app/building-your-application/optimizing/lazy-loading"
@@ -5119,7 +5119,7 @@
     "description": "Use React.lazy for code splitting",
     "do": "lazy() for routes and heavy components",
     "dont": "Import everything upfront",
-    "codeGood": "const Page = lazy(() => import('./Page'))",
+    "codeGood": "const Page = lazy(() => import ('./Page'))",
     "codeBad": "import Page from './Page'",
     "severity": "Medium",
     "docsUrl": "https://react.dev/reference/react/lazy"
@@ -6056,7 +6056,7 @@
     "description": "Dynamic import for heavy dialog content",
     "do": "React.lazy for dialog content",
     "dont": "Import all dialogs upfront",
-    "codeGood": "const HeavyContent = lazy(() => import('./Heavy'))",
+    "codeGood": "const HeavyContent = lazy(() => import ('./Heavy'))",
     "codeBad": "import HeavyContent from './Heavy'",
     "severity": "Medium"
   },
@@ -7795,9 +7795,9 @@
     "category": "Routing",
     "guideline": "Lazy load route components",
     "description": "Code splitting for routes",
-    "do": "() => import() for components",
+    "do": "() => import () for components",
     "dont": "Static imports for all routes",
-    "codeGood": "component: () => import('./Page.vue')",
+    "codeGood": "component: () => import ('./Page.vue')",
     "codeBad": "component: Page",
     "severity": "Medium",
     "docsUrl": "https://router.vuejs.org/guide/advanced/lazy-loading.html"
@@ -7860,7 +7860,7 @@
     "description": "Lazy load heavy components",
     "do": "defineAsyncComponent for modals dialogs",
     "dont": "Import all components eagerly",
-    "codeGood": "defineAsyncComponent(() => import())",
+    "codeGood": "defineAsyncComponent(() => import ())",
     "codeBad": "import HeavyComponent from",
     "severity": "Medium",
     "docsUrl": "https://vuejs.org/guide/components/async.html"

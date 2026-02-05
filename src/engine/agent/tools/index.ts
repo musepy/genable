@@ -79,7 +79,8 @@ const EXECUTION_TOOLS = [
   'deleteNode',
   'applyDesignPatch',
   'update_todo_list',
-  'summarize_progress'
+  'summarize_progress',
+  'complete_task'
 ];
 
 const VERIFICATION_TOOLS = [

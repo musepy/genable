@@ -15,16 +15,6 @@ export const fontSize = {
   4: 18,
   5: 20,
   6: 24,
-  
-  // Deprecated - will be removed
-  /** @deprecated Use fontSize[1] instead */
-  xs: 10,     // ❌ Non-standard, violates Radix spec
-  /** @deprecated Use fontSize[1] instead */
-  sm: 12,     // → fontSize[1]
-  /** @deprecated Use fontSize[2] instead */
-  base: 14,   // → fontSize[2]
-  /** @deprecated Use fontSize[3] instead */
-  lg: 16,     // → fontSize[3]
 } as const;
 
 /**
@@ -61,5 +51,5 @@ export const fontWeight = {
 
 export const font = {
   sans: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, monospace',
+  mono: '"Inter Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, monospace',
 } as const;

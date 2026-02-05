@@ -9,8 +9,6 @@
       ]
     },
     "defaultProps": {
-      "width": 40,
-      "height": 40,
       "layoutSizingHorizontal": "FIXED",
       "layoutSizingVertical": "FIXED",
       "semantic": "AVATAR"
@@ -32,28 +30,7 @@
       "layoutSizingVertical": "HUG",
       "primaryAxisAlignItems": "CENTER",
       "counterAxisAlignItems": "CENTER",
-      "padding": [
-        2,
-        10
-      ],
-      "gap": 4,
-      "fontSize": 12,
-      "fontWeight": "SemiBold",
       "semantic": "BADGE"
-    },
-    "variants": {
-      "default": {
-        "stroke": null
-      },
-      "secondary": {
-        "stroke": null
-      },
-      "outline": {
-        "strokeWeight": 1
-      },
-      "destructive": {
-        "stroke": null
-      }
     }
   },
   "bar chart": {
@@ -67,10 +44,7 @@
         "chart-legend"
       ]
     },
-    "defaultProps": {
-      "padding": 16,
-      "gap": 12
-    }
+    "defaultProps": {}
   },
   "button": {
     "name": "Button",
@@ -90,19 +64,7 @@
       "layoutSizingVertical": "HUG",
       "primaryAxisAlignItems": "CENTER",
       "counterAxisAlignItems": "CENTER",
-      "gap": 8,
       "semantic": "BUTTON"
-    },
-    "variants": {
-      "default": {
-        "padding": [
-          8,
-          16
-        ]
-      },
-      "icon": {
-        "padding": 0
-      }
     }
   },
   "card": {
@@ -117,8 +79,6 @@
       ]
     },
     "defaultProps": {
-      "padding": 16,
-      "gap": 16,
       "semantic": "CARD"
     }
   },
@@ -133,7 +93,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 8,
       "counterAxisAlignItems": "CENTER",
       "semantic": "CHECKBOX"
     }
@@ -151,9 +110,6 @@
       ]
     },
     "defaultProps": {
-      "padding": 24,
-      "gap": 16,
-      "width": 320,
       "primaryAxisAlignItems": "CENTER",
       "semantic": "DIALOG"
     }
@@ -166,7 +122,6 @@
       "children": []
     },
     "defaultProps": {
-      "height": 1,
       "layoutSizingHorizontal": "FILL",
       "layoutSizingVertical": "FIXED",
       "semantic": "DIVIDER"
@@ -182,10 +137,6 @@
       ]
     },
     "defaultProps": {
-      "padding": 4,
-      "gap": 2,
-      "strokeWeight": 1,
-      "width": 200,
       "semantic": "DROPDOWN"
     }
   },
@@ -199,13 +150,7 @@
         "features-container"
       ]
     },
-    "defaultProps": {
-      "padding": [
-        60,
-        40
-      ],
-      "gap": 32
-    }
+    "defaultProps": {}
   },
   "form": {
     "name": "Form",
@@ -218,7 +163,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 16,
       "layoutSizingHorizontal": "FILL",
       "semantic": "FORM"
     }
@@ -235,7 +179,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 4,
       "layoutSizingHorizontal": "FILL"
     }
   },
@@ -250,13 +193,8 @@
       ]
     },
     "defaultProps": {
-      "padding": [
-        80,
-        40
-      ],
       "primaryAxisAlignItems": "CENTER",
-      "counterAxisAlignItems": "CENTER",
-      "gap": 40
+      "counterAxisAlignItems": "CENTER"
     }
   },
   "input": {
@@ -270,7 +208,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 4,
       "layoutSizingHorizontal": "FILL",
       "semantic": "TEXT_FIELD"
     }
@@ -286,10 +223,7 @@
         "chart-legend"
       ]
     },
-    "defaultProps": {
-      "padding": 16,
-      "gap": 12
-    }
+    "defaultProps": {}
   },
   "list": {
     "name": "List",
@@ -299,7 +233,6 @@
       "children": []
     },
     "defaultProps": {
-      "gap": 0,
       "layoutSizingHorizontal": "FILL",
       "semantic": "LIST"
     }
@@ -316,11 +249,6 @@
       ]
     },
     "defaultProps": {
-      "padding": [
-        12,
-        16
-      ],
-      "gap": 12,
       "counterAxisAlignItems": "CENTER",
       "layoutSizingHorizontal": "FILL",
       "semantic": "LIST_ITEM"
@@ -338,9 +266,6 @@
       ]
     },
     "defaultProps": {
-      "padding": 24,
-      "gap": 16,
-      "width": 480,
       "semantic": "MODAL"
     }
   },
@@ -356,11 +281,6 @@
       ]
     },
     "defaultProps": {
-      "padding": [
-        12,
-        24
-      ],
-      "gap": 16,
       "primaryAxisAlignItems": "SPACE_BETWEEN",
       "counterAxisAlignItems": "CENTER",
       "layoutSizingHorizontal": "FILL",
@@ -377,10 +297,7 @@
         "chart-legend-vertical"
       ]
     },
-    "defaultProps": {
-      "padding": 24,
-      "gap": 20
-    }
+    "defaultProps": {}
   },
   "pricing table": {
     "name": "Pricing Table",
@@ -394,11 +311,6 @@
       ]
     },
     "defaultProps": {
-      "padding": [
-        60,
-        40
-      ],
-      "gap": 24,
       "primaryAxisAlignItems": "CENTER"
     }
   },
@@ -413,7 +325,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 8,
       "counterAxisAlignItems": "CENTER",
       "semantic": "RADIO"
     }
@@ -430,9 +341,6 @@
       ]
     },
     "defaultProps": {
-      "padding": 16,
-      "gap": 8,
-      "width": 256,
       "layoutSizingVertical": "FILL",
       "semantic": "SIDEBAR"
     }
@@ -447,9 +355,6 @@
       ]
     },
     "defaultProps": {
-      "width": 36,
-      "height": 20,
-      "padding": 2,
       "layoutSizingHorizontal": "FIXED",
       "layoutSizingVertical": "FIXED",
       "semantic": "SWITCH"
@@ -463,9 +368,7 @@
       "children": []
     },
     "defaultProps": {
-      "gap": 0,
-      "layoutSizingHorizontal": "FILL",
-      "strokeWeight": 1
+      "layoutSizingHorizontal": "FILL"
     }
   },
   "table": {
@@ -479,7 +382,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 0,
       "layoutSizingHorizontal": "FILL",
       "semantic": "TABLE"
     }
@@ -495,7 +397,6 @@
       ]
     },
     "defaultProps": {
-      "gap": 0,
       "layoutSizingHorizontal": "FILL",
       "semantic": "TABS"
     }
@@ -512,9 +413,6 @@
       ]
     },
     "defaultProps": {
-      "padding": 16,
-      "gap": 12,
-      "strokeWeight": 1,
       "counterAxisAlignItems": "CENTER",
       "semantic": "TOAST"
     }

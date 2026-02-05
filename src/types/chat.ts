@@ -60,9 +60,12 @@ export interface ChatMessage {
     toolCalls?: ToolCallRecord[];
     /** Reasoning iterations for this response (Phase 2) */
     iterations?: IterationRecord[];
+    /** Whether the message is currently being streamed/generated */
+    streaming?: boolean;
+    /** Stable identifier for DOM reconciliation */
+    id: string;
 }
 
 export interface ChatFeedback extends Omit<ChatMessage, 'role'> {
     role: 'model';
 }
-

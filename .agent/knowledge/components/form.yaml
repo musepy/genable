@@ -6,6 +6,5 @@ structure:
     - form-fields
     - form-actions
 defaultProps:
-  gap: 16
   layoutSizingHorizontal: FILL
   semantic: FORM

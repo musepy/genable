@@ -1,0 +1,26 @@
+name: ModelSelector
+path: src/ui/components/ModelSelector.tsx
+description: Dropdown selector for AI model selection
+category: input
+props:
+  - name: value
+    type: string
+    description: Selected model ID
+    required: true
+  - name: onChange
+    type: function
+    description: Selection change handler
+    required: true
+  - name: variant
+    type: string
+    description: Display style
+    options: [ghost, chip]
+    default: ghost
+figmaMapping:
+  nodeType: FRAME
+  layoutMode: HORIZONTAL
+  defaultProps:
+    height: 28
+    paddingHorizontal: 8
+    gap: 4
+    borderRadius: 6

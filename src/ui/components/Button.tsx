@@ -80,7 +80,7 @@ export function Button({
     md: {
       height: 40,
       padding: `0 ${tokens.space[4]}px`,
-      fontSize: '13px', // Figma design spec
+      fontSize: tokens.fontSize[1], // Unified from 13px
     },
     lg: {
       height: tokens.size.button.xl,

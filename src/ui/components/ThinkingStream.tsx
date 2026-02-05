@@ -9,7 +9,7 @@
  * Design: No fill, no border, full width, minimal
  */
 
-import { h } from 'preact';
+import { h, JSX } from 'preact';
 import { tokens } from '../design-system/tokens';
 
 // ============================================
@@ -29,7 +29,7 @@ interface ThinkingStreamProps {
 // Minimal Styles (no fill, no border)
 // ============================================
 
-const containerStyle: React.CSSProperties = {
+const containerStyle: JSX.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: tokens.space[2],
@@ -38,13 +38,13 @@ const containerStyle: React.CSSProperties = {
   animation: 'fadeIn 0.3s ease-out',
 };
 
-const statusStyle: React.CSSProperties = {
+const statusStyle: JSX.CSSProperties = {
   fontSize: tokens.fontSize[1], // was 11
   color: tokens.colors.textSecondary,
   flex: 1,
 };
 
-const skipButtonStyle: React.CSSProperties = {
+const skipButtonStyle: JSX.CSSProperties = {
   background: 'transparent',
   border: 'none',
   color: tokens.colors.textSecondary,
@@ -52,7 +52,7 @@ const skipButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
   padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
   transition: 'opacity 0.2s ease',
-  opacity: 'var(--alpha-11)',
+  opacity: 0.6,
 };
 
 // ============================================
@@ -77,7 +77,7 @@ export function ThinkingStream({
         <button 
           style={skipButtonStyle}
           onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = 'var(--alpha-11)')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
           className="ghost-btn"
         >
           Skip

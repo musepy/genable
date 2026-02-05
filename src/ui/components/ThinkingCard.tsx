@@ -8,7 +8,7 @@
  * - Renamed "Thinking" → "Thoughts"
  */
 
-import { h } from 'preact';
+import { h, JSX } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { Flex } from './layout';
@@ -50,7 +50,7 @@ const ChevronUp = () => (
 // Styles
 // ============================================
 
-const cardStyle: React.CSSProperties = {
+const cardStyle: JSX.CSSProperties = {
   background: 'transparent',
   zIndex: 1,
   borderRadius: 'var(--radius-3)',
@@ -58,7 +58,7 @@ const cardStyle: React.CSSProperties = {
   contain: 'layout style',
 };
 
-const headerStyle: React.CSSProperties = {
+const headerStyle: JSX.CSSProperties = {
   cursor: 'pointer',
   color: tokens.colors.textSecondary, // Already reduced via gray-11
   fontSize: 'var(--font-size-1)',
@@ -66,31 +66,31 @@ const headerStyle: React.CSSProperties = {
   // P3: Removed opacity - textSecondary provides sufficient contrast reduction
 };
 
-const summaryStyle: React.CSSProperties = {
+const summaryStyle: JSX.CSSProperties = {
   fontSize: 'var(--font-size-1)',
   color: tokens.colors.textPrimary,
   lineHeight: tokens.lineHeight[3],
 };
 
 // P2: CSS Grid based animation - smoother than max-height
-const gridContainerStyle: React.CSSProperties = {
+const gridContainerStyle: JSX.CSSProperties = {
   display: 'grid',
   gridTemplateRows: '0fr',
-  transition: 'grid-template-rows 250ms var(--ease-spring)',
+  transition: 'grid-template-rows 250ms var(--ease-in-out)',
 };
 
-const gridContainerExpandedStyle: React.CSSProperties = {
+const gridContainerExpandedStyle: JSX.CSSProperties = {
   display: 'grid',
   gridTemplateRows: '1fr',
-  transition: 'grid-template-rows 250ms var(--ease-spring)',
+  transition: 'grid-template-rows 250ms var(--ease-in-out)',
 };
 
-const gridContentStyle: React.CSSProperties = {
+const gridContentStyle: JSX.CSSProperties = {
   overflow: 'hidden',
   minHeight: 0, // Critical for 0fr to work
 };
 
-const innerContentStyle: React.CSSProperties = {
+const innerContentStyle: JSX.CSSProperties = {
   padding: `${tokens.space[2]}px ${tokens.space[1]}px`,
   borderTop: `1px solid ${tokens.colors.grayBorder}`,
   fontSize: 'var(--font-size-1)',
@@ -98,13 +98,13 @@ const innerContentStyle: React.CSSProperties = {
   lineHeight: tokens.lineHeight[3],
 };
 
-const tagRowStyle: React.CSSProperties = {
+const tagRowStyle: JSX.CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: tokens.space[1],
 };
 
-const tagStyle: React.CSSProperties = {
+const tagStyle: JSX.CSSProperties = {
   padding: `2px ${tokens.space[2]}px`,
   background: tokens.colors.surface, // Migrated from colors.card
   borderRadius: 'var(--radius-full)',
@@ -118,6 +118,20 @@ const tagStyle: React.CSSProperties = {
 
 export function ThinkingCard({ summary, thinking }: ThinkingCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Guard: thinking may be a string (from streaming updates) instead of ThinkingData object
+  if (typeof thinking === 'string' || !thinking) {
+    return (
+      <div style={cardStyle}>
+        <div style={summaryStyle}>{summary || ''}</div>
+        {typeof thinking === 'string' && thinking && (
+          <div style={{ ...innerContentStyle, borderTop: 'none', color: tokens.colors.textSecondary }}>
+            {thinking}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Filter high-value tags
   const tags = [

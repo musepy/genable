@@ -1,5 +1,5 @@
 import { h, ComponentChildren, createContext } from 'preact';
-import { useContext, useState, useEffect, useCallback } from 'preact/hooks';
+import { useContext, useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import { tokens } from '../../design-system/tokens';
 
 // ============================================
@@ -67,11 +67,7 @@ export function ToastProvider({ children, maxToasts = 3 }: ToastProviderProps) {
       return next;
     });
 
-    // Auto-dismiss
-    if (duration > 0) {
-      setTimeout(() => dismiss(id), duration);
-    }
-  }, [dismiss, maxToasts]);
+  }, [maxToasts]);
 
   return (
     <ToastContext.Provider value={{ toast, toasts, dismiss }}>
@@ -103,12 +99,14 @@ function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   return (
     <div style={{
       position: 'fixed',
-      bottom: 'var(--space-4)',
-      right: 'var(--space-4)',
+      bottom: 'var(--space-5)',
+      left: '50%',
+      transform: 'translateX(-50%)',
       display: 'flex',
       flexDirection: 'column',
       gap: 'var(--space-2)',
-      zIndex: 99999, // Very high to ensure visibility
+      alignItems: 'center',
+      zIndex: tokens.zIndex.toast,
       pointerEvents: 'none',
     }}>
       {toasts.map((t) => (
@@ -129,10 +127,45 @@ interface ToastProps {
 
 function Toast({ data, onDismiss }: ToastProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const isLeavingRef = useRef(false);
+  const exitTimerRef = useRef<number | null>(null);
+  const autoDismissTimerRef = useRef<number | null>(null);
+  const EXIT_MS = 180;
 
   // Animate in
   useEffect(() => {
-    requestAnimationFrame(() => setIsVisible(true));
+    const raf = requestAnimationFrame(() => setIsVisible(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const dismissWithAnimation = useCallback(() => {
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+    setIsVisible(false);
+    exitTimerRef.current = window.setTimeout(() => {
+      onDismiss();
+    }, EXIT_MS);
+  }, [onDismiss]);
+
+  useEffect(() => {
+    if (!data.duration || data.duration <= 0) return;
+    autoDismissTimerRef.current = window.setTimeout(() => {
+      dismissWithAnimation();
+    }, data.duration);
+
+    return () => {
+      if (autoDismissTimerRef.current) {
+        window.clearTimeout(autoDismissTimerRef.current);
+      }
+    };
+  }, [data.duration, dismissWithAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current) {
+        window.clearTimeout(exitTimerRef.current);
+      }
+    };
   }, []);
 
   const variantStyles: Record<ToastVariant, h.JSX.CSSProperties> = {
@@ -173,26 +206,25 @@ function Toast({ data, onDismiss }: ToastProps) {
         display: 'flex',
         alignItems: 'center',
         gap: tokens.space[2],
-        padding: `${tokens.space[2]}px ${tokens.space[4]}px`,
-        borderRadius: 'var(--radius-2)',
+        padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+        borderRadius: 'var(--radius-5)',
         border: '1px solid',
         boxShadow: '0 4px 12px var(--gray-a4)',
         fontSize: 'var(--font-size-1)',
         fontFamily: tokens.font.sans,
-        minWidth: 200,
-        maxWidth: 320,
+        maxWidth: 260,
         pointerEvents: 'auto',
         // Animation
         opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'opacity 200ms ease-out, transform 200ms ease-out',
+        transform: isVisible ? 'translateY(0)' : 'translateY(6px)',
+        transition: 'opacity 180ms ease-out, transform 180ms ease-out',
         ...variantStyles[data.variant],
       }}
     >
       <span style={{ fontSize: 'var(--font-size-2)' }}>{icons[data.variant]}</span>
       <span style={{ flex: 1 }}>{data.message}</span>
       <button
-        onClick={onDismiss}
+        onClick={dismissWithAnimation}
         style={{
           background: 'transparent',
           border: 'none',

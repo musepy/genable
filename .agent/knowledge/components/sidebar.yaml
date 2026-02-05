@@ -7,8 +7,5 @@ structure:
     - sidebar-nav
     - sidebar-footer
 defaultProps:
-  padding: 16
-  gap: 8
-  width: 256
   layoutSizingVertical: FILL
   semantic: SIDEBAR

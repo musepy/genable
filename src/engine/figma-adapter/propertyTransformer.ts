@@ -27,6 +27,15 @@ export class PropertyTransformer {
         let figmaValue: any = undefined;
         if (meta.type !== 'virtual') {
             figmaValue = nodeData[meta.figmaKey];
+            // console.log(`[Debug] ${dslKey} (figmaKey: ${meta.figmaKey}) =`, figmaValue);
+        }
+
+        // [Figma Sandbox Fix] Safety: Handle figma.mixed (a Symbol)
+        // Symbols cannot be passed through postMessage (emit), causing "Cannot unwrap symbol"
+        const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
+        if (typeof figmaMixed !== 'undefined' && figmaValue === figmaMixed) {
+            // console.log(`[Debug] ${dslKey} is figma.mixed -> returning null`);
+            return null;
         }
 
         // 2. Transformation Logic based on type
@@ -118,9 +127,9 @@ export class PropertyTransformer {
     private static extractVirtualProperty(nodeData: FigmaNodeData, dslKey: string): any {
         switch (dslKey) {
             case PROPS.fontFamily:
-                return nodeData.fontName ? (nodeData.fontName as FontName).family : undefined;
+                return nodeData.fontName ? (nodeData.fontName as FontName).family : null;
             case PROPS.fontWeight:
-                return nodeData.fontName ? (nodeData.fontName as FontName).style : undefined;
+                return nodeData.fontName ? (nodeData.fontName as FontName).style : null;
             case PROPS.semantic:
                 // [PURE TRUST] Removed naming-based inference. Trusted to LLM/props only.
                 return undefined;

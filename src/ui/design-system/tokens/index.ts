@@ -6,7 +6,7 @@
 import { colors } from './colors';
 import { space } from './spacing';
 import { fontSize, fontWeight, lineHeight, font } from './typography';
-import { radii, size } from './layout';
+import { radii, size, zIndex } from './layout';
 
 // Re-export individual token modules
 export * from './css';
@@ -28,6 +28,7 @@ export const tokens = {
   size,
   radii,
   font,
+  zIndex,
 } as const;
 
 export type Tokens = typeof tokens;
@@ -35,4 +36,3 @@ export type MotionTokens = typeof import('./motion').motionTokens;
 export type InteractionTokens = typeof import('./motion').interactionTokens;
 export type LayoutTokens = typeof import('./layout').layoutTokens;
 export type ComponentStyles = typeof import('./components').componentStyles;
-

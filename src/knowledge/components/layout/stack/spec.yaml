@@ -1,0 +1,15 @@
+name: Stack
+path: src/ui/components/layout/Stack.tsx
+description: Vertical flex layout primitive
+category: layout
+props:
+  - name: gap
+    type: number | string
+    description: Gap between children
+  - name: align
+    type: string
+    description: Cross-axis alignment
+    options: [start, center, end, stretch]
+figmaMapping:
+  nodeType: FRAME
+  layoutMode: VERTICAL

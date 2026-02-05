@@ -6,6 +6,7 @@
 import { BaseRenderer, NodeLayer, RenderContext, NodeLayerProps } from './baseRenderer';
 import { PropertyTransformer } from '../propertyTransformer';
 import { PROPS } from '../../../constants/figma-api';
+import { applySurgicalBinding } from './surgicalBinding';
 
 /**
  * VectorRenderer - Renders VECTOR, RECTANGLE nodes, and SVG content
@@ -126,7 +127,7 @@ export class VectorRenderer extends BaseRenderer {
 
         // V5.4: Use shared Surgical Binding logic
         // This ensures consistency with IconRenderer and prevents future divergence.
-        const { applySurgicalBinding } = await import('./surgicalBinding');
+        // Note: Using static import to avoid Figma sandbox "import expression rejected" error.
         applySurgicalBinding(frame, paint);
     }
 

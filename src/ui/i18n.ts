@@ -59,6 +59,16 @@ const translations = {
         message: 'Please check your internet connection.',
         action: 'Retry',
       },
+      malformedFunctionCall: {
+        title: 'Malformed Response',
+        message: 'The AI returned an invalid response format.',
+        action: 'Retry',
+      },
+      emptyResponse: {
+        title: 'Empty Response',
+        message: 'The AI returned no content.',
+        action: 'Retry',
+      },
       unknown: {
         title: 'Unknown Error',
         message: 'An unexpected error occurred.',
@@ -128,6 +138,16 @@ const translations = {
       network: {
         title: '网络连接失败',
         message: '请检查您的网络连接。',
+        action: '重试',
+      },
+      malformedFunctionCall: {
+        title: '响应格式错误',
+        message: 'AI 返回了无效的响应格式。',
+        action: '重试',
+      },
+      emptyResponse: {
+        title: '响应内容为空',
+        message: 'AI 未返回任何内容。',
         action: '重试',
       },
       unknown: {

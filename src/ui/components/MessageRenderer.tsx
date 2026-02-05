@@ -9,7 +9,7 @@
  * Supports: headers, lists, code blocks, bold/italic, tables, links
  */
 
-import { h } from 'preact';
+import { h, JSX } from 'preact';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { emit } from '@create-figma-plugin/utilities';
@@ -34,7 +34,7 @@ interface MessageRendererProps {
 // Styles for Markdown elements
 // ============================================
 
-const codeBlockStyle: React.CSSProperties = {
+const codeBlockStyle: JSX.CSSProperties = {
   display: 'block',
   background: tokens.colors.surface,
   borderRadius: 'var(--radius-2)',
@@ -47,7 +47,7 @@ const codeBlockStyle: React.CSSProperties = {
   wordBreak: 'break-word',
 };
 
-const inlineCodeStyle: React.CSSProperties = {
+const inlineCodeStyle: JSX.CSSProperties = {
   background: tokens.colors.surface,
   borderRadius: 'var(--radius-1)',
   padding: `2px ${tokens.space[1]}px`,
@@ -55,42 +55,42 @@ const inlineCodeStyle: React.CSSProperties = {
   fontSize: 'var(--font-size-1)',
 };
 
-const listStyle: React.CSSProperties = {
+const listStyle: JSX.CSSProperties = {
   paddingLeft: tokens.space[5],
   marginTop: tokens.space[1],
   marginBottom: tokens.space[1],
 };
 
-const listItemStyle: React.CSSProperties = {
+const listItemStyle: JSX.CSSProperties = {
   marginBottom: tokens.space[1],
   lineHeight: tokens.lineHeight[3],
 };
 
-const headingStyle: React.CSSProperties = {
+const headingStyle: JSX.CSSProperties = {
   fontWeight: tokens.fontWeight.semibold,
   marginTop: tokens.space[4],
   marginBottom: tokens.space[2],
 };
 
-const paragraphStyle: React.CSSProperties = {
+const paragraphStyle: JSX.CSSProperties = {
   marginTop: tokens.space[1],
   marginBottom: tokens.space[1],
   lineHeight: tokens.lineHeight[3],
 };
 
-const linkStyle: React.CSSProperties = {
+const linkStyle: JSX.CSSProperties = {
   color: tokens.colors.accent,
   textDecoration: 'underline',
 };
 
-const tableStyle: React.CSSProperties = {
+const tableStyle: JSX.CSSProperties = {
   borderCollapse: 'collapse',
   width: '100%',
   margin: `${tokens.space[2]}px 0`,
   fontSize: 'var(--font-size-1)',
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle: JSX.CSSProperties = {
   border: `1px solid ${tokens.colors.grayBorder}`,
   padding: tokens.space[2],
   background: tokens.colors.surface,
@@ -98,7 +98,7 @@ const thStyle: React.CSSProperties = {
   fontWeight: tokens.fontWeight.semibold,
 };
 
-const tdStyle: React.CSSProperties = {
+const tdStyle: JSX.CSSProperties = {
   border: `1px solid ${tokens.colors.grayBorder}`,
   padding: tokens.space[2],
 };
@@ -152,14 +152,18 @@ function renderL3(content: string) {
           }
 
           const codeContent = String(children).replace(/\n$/, '');
-          const isJson = codeContent.trim().startsWith('[') || codeContent.trim().startsWith('{');
+          const trimmed = codeContent.trim();
+          const isJson = trimmed.startsWith('[') || trimmed.startsWith('{');
+          const isSingleLine = !codeContent.includes('\n');
+          const isShort = trimmed.length > 0 && trimmed.length <= 24;
+          const compactBlock = isSingleLine && isShort;
           
           const handleImport = () => {
              emit<ImportJsonHandler>('IMPORT_JSON', { jsonString: codeContent });
           };
 
           return (
-            <div style={{ position: 'relative', margin: `${tokens.space[2]}px 0` }}>
+            <div style={{ position: 'relative', margin: `${compactBlock ? tokens.space[1] : tokens.space[2]}px 0` }}>
               {isJson && (
                 <div style={{ 
                   position: 'absolute', 
@@ -174,7 +178,7 @@ function renderL3(content: string) {
                     style={{ 
                       height: 24, 
                       padding: '0 8px', 
-                      fontSize: '10px',
+                      fontSize: '12px',
                       background: tokens.colors.surface,
                       borderColor: tokens.colors.grayBorder
                     }}
@@ -188,7 +192,12 @@ function renderL3(content: string) {
                   </Button>
                 </div>
               )}
-              <pre style={{ ...codeBlockStyle, margin: 0 }}>
+              <pre style={{ 
+                ...codeBlockStyle, 
+                margin: 0,
+                display: compactBlock ? 'inline-block' : 'block',
+                padding: compactBlock ? tokens.space[2] : tokens.space[4],
+              }}>
                 <code className={className} {...props}>
                   {children}
                 </code>
@@ -260,18 +269,22 @@ function renderL3(content: string) {
 // ============================================
 
 export function MessageRenderer({ content, level = 'L3' }: MessageRendererProps) {
-  if (!content) {
-    return null;
+  // Ensure content is always a string to prevent Preact diff errors
+  const safeContent = typeof content === 'string' ? content : String(content ?? '');
+
+  if (!safeContent) {
+    // Return consistent element type to avoid vnode switching (insertBefore errors)
+    return <div />;
   }
-  
+
   switch (level) {
     case 'L1':
-      return renderL1(content);
+      return renderL1(safeContent);
     case 'L2':
       // L2 falls through to L3 for now (code highlighting requires same deps)
     case 'L3':
     default:
-      return renderL3(content);
+      return renderL3(safeContent);
   }
 }
 

@@ -37,8 +37,8 @@ function triggerHandler(eventName: string, data: any) {
           availableModels: [
             { name: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
             { name: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
-            { name: 'gemini-2.5-flash-preview-05-20', displayName: 'Gemini 2.5 Flash Preview' },
-            { name: 'gemini-2.5-pro-preview-05-06', displayName: 'Gemini 2.5 Pro Preview' },
+            { name: 'gemini-2.5-flash-preview-05-20', displayName: '2.5 Flash' },
+            { name: 'gemini-2.5-pro-preview-05-06', displayName: '2.5 Pro' },
           ]
         })
       }, 100)

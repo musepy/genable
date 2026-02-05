@@ -6,6 +6,5 @@ structure:
     - table-header
     - table-body
 defaultProps:
-  gap: 0
   layoutSizingHorizontal: FILL
   semantic: TABLE

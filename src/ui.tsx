@@ -46,12 +46,9 @@ const mainContentStyle: h.JSX.CSSProperties = {
   flexDirection: 'column',
   overflowY: 'auto',
   overflowX: 'hidden',
-  padding: `0 ${tokens.space[4]}px`,
   scrollBehavior: 'smooth',
-  paddingBottom: tokens.space[6],
   position: 'relative',
   isolation: 'isolate',
-  // Note: Removed mask-image as it was clipping content at top/bottom edges
 }
 
 function PluginContent() {
@@ -71,8 +68,9 @@ function PluginContent() {
   // Key for remounting ChatFeature (replaces window.location.reload)
   const [chatKey, setChatKey] = useState(0)
 
-  // 3. Theme State
+  // 3. Theme & UI Animation State
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system')
+  const [isSettingsClosing, setIsSettingsClosing] = useState(false)
 
   // Inject CSS
   useEffect(() => {
@@ -244,29 +242,8 @@ function PluginContent() {
       );
     }
     
-    // A. Settings View
-    if (showSettings) {
-      return (
-        <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <SettingsPanel
-            apiKey={apiKey}
-            setApiKey={setApiKey}
-            modelName={modelName}
-            setModelName={setModelName}
-            providerName={providerName} // [NEW]
-            setProviderName={setProviderName} // [NEW]
-            suggestedModels={suggestedModels}
-            fetchStatus={fetchStatus}
-            settingsError={settingsError}
-            onFetchModels={() => handleFetchModels()}
-            onSave={handleSaveSettings}
-            onClose={() => setShowSettings(false)}
-            localComponents={pluginData.localComponents}
-          />
-        </Iso>
-      )
-    }
-
+    // A. Settings View moved to main render for overlay/animation
+    
     // B. Onboarding View
     if (!hasConfig) {
       return (
@@ -316,10 +293,51 @@ function PluginContent() {
         }}
         newChatVisible={hasConfig && !showSettings}
         newChatEnabled={true}
-        onSettingsClick={() => setShowSettings(true)}
+        onSettingsClick={() => {
+          if (showSettings) {
+             handleSaveSettings();
+             setIsSettingsClosing(true);
+             setTimeout(() => {
+               setShowSettings(false);
+               setIsSettingsClosing(false);
+             }, 200); // Unified 200ms for crisp feedback
+          } else {
+             setShowSettings(true);
+          }
+        }}
+        isSettingsOpen={showSettings} // Keep X icon during closing
       />
       
       {renderContent()}
+
+      {/* Settings Panel Overlay - Slide-in animation source */}
+      {showSettings && (
+        <div className={`settings-container ${isSettingsClosing ? 'is-closing' : ''}`}>
+          <SettingsPanel
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            modelName={modelName}
+            setModelName={setModelName}
+            providerName={providerName}
+            setProviderName={setProviderName}
+            suggestedModels={suggestedModels}
+            fetchStatus={fetchStatus}
+            settingsError={settingsError}
+            onFetchModels={() => handleFetchModels()}
+            onSave={handleSaveSettings}
+            onClose={() => {
+              handleSaveSettings();
+              setIsSettingsClosing(true);
+              setTimeout(() => {
+                setShowSettings(false);
+                setIsSettingsClosing(false);
+              }, 200);
+            }}
+            localComponents={pluginData.localComponents}
+          />
+        </div>
+      )}
+
       {renderCaptureSandbox()}
     </div>
   )

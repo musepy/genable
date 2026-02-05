@@ -6,6 +6,5 @@ structure:
     - tab-list
     - tab-content
 defaultProps:
-  gap: 0
   layoutSizingHorizontal: FILL
   semantic: TABS

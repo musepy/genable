@@ -666,7 +666,7 @@
     "description": "Large bundles slow initial load",
     "do": "Split code by route/feature",
     "dont": "Single large bundle",
-    "codeGood": "dynamic import()",
+    "codeGood": "dynamic import ()",
     "codeBad": "All code in main bundle",
     "severity": "Medium",
     "source": "ux-guidelines.csv"
@@ -1972,7 +1972,7 @@
     "description": "Use next/dynamic to lazy-load large components not needed on initial render",
     "do": "Use dynamic() for heavy components",
     "dont": "Import heavy components at top level",
-    "codeGood": "const Monaco = dynamic(() => import('./monaco'), { ssr: false })",
+    "codeGood": "const Monaco = dynamic(() => import ('./monaco'), { ssr: false })",
     "codeBad": "import { MonacoEditor } from './monaco-editor'",
     "severity": "Critical",
     "source": "react-performance.csv"
@@ -1988,7 +1988,7 @@
     "description": "Load analytics and logging after hydration since they don't block interaction",
     "do": "Load non-critical scripts after hydration",
     "dont": "Include analytics in main bundle",
-    "codeGood": "const Analytics = dynamic(() => import('@vercel/analytics'), { ssr: false })",
+    "codeGood": "const Analytics = dynamic(() => import ('@vercel/analytics'), { ssr: false })",
     "codeBad": "import { Analytics } from '@vercel/analytics/react'",
     "severity": "Medium",
     "source": "react-performance.csv"
@@ -2004,7 +2004,7 @@
     "description": "Load large data or modules only when a feature is activated",
     "do": "Dynamic import when feature enabled",
     "dont": "Import large modules unconditionally",
-    "codeGood": "useEffect(() => { if (enabled) import('./heavy.js') }, [enabled])",
+    "codeGood": "useEffect(() => { if (enabled) import ('./heavy.js') }, [enabled])",
     "codeBad": "import { heavyData } from './heavy.js'",
     "severity": "High",
     "source": "react-performance.csv"
@@ -2020,8 +2020,8 @@
     "description": "Preload heavy bundles on hover/focus before they're needed",
     "do": "Preload on user intent signals",
     "dont": "Load only on click",
-    "codeGood": "onMouseEnter={() => import('./editor')}",
-    "codeBad": "onClick={() => import('./editor')}",
+    "codeGood": "onMouseEnter={() => import ('./editor')}",
+    "codeBad": "onClick={() => import ('./editor')}",
     "severity": "Medium",
     "source": "react-performance.csv"
   },

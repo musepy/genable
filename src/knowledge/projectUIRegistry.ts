@@ -48,187 +48,401 @@ export interface FigmaMapping {
  */
 export const PROJECT_UI_REGISTRY: Record<string, UIComponentMeta> = {
   'Button': {
-    name: 'Button',
-    path: 'src/ui/components/Button.tsx',
-    description: 'Interactive button component with multiple variants and states',
-    category: 'input',
-    props: [
-      { name: 'variant', type: 'string', description: 'Visual style of the button', options: ['primary', 'secondary', 'ghost', 'destructive', 'outline'], default: 'primary' },
-      { name: 'size', type: 'string', description: 'Size of the button', options: ['sm', 'md', 'lg', 'icon'], default: 'md' },
-      { name: 'isLoading', type: 'boolean', description: 'Shows loading spinner', default: false },
-      { name: 'fullWidth', type: 'boolean', description: 'Button fills container width', default: false },
-      { name: 'leftIcon', type: 'ReactNode', description: 'Icon displayed before text' },
-      { name: 'disabled', type: 'boolean', description: 'Disables interaction', default: false },
+    "name": "Button",
+    "path": "src/ui/components/Button.tsx",
+    "description": "Interactive button component with multiple variants and states",
+    "category": "input",
+    "props": [
+      {
+        "name": "variant",
+        "type": "string",
+        "description": "Visual style of the button",
+        "options": [
+          "primary",
+          "secondary",
+          "ghost",
+          "outline",
+          "destructive"
+        ],
+        "default": "primary"
+      },
+      {
+        "name": "size",
+        "type": "string",
+        "description": "Vertical size of the button",
+        "options": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "default": "md"
+      },
+      {
+        "name": "children",
+        "type": "ReactNode",
+        "description": "Button text or content",
+        "required": true
+      },
+      {
+        "name": "leftIcon",
+        "type": "ReactNode",
+        "description": "Icon displayed before text"
+      },
+      {
+        "name": "disabled",
+        "type": "boolean",
+        "description": "Disables interaction",
+        "default": false
+      }
     ],
-    variants: {
-      primary: { description: 'Main action button with accent background', props: { background: 'var(--accent-9)', color: 'white' } },
-      secondary: { description: 'Secondary action with muted background', props: { background: 'var(--gray-3)', border: '1px solid var(--gray-6)' } },
-      outline: { description: 'Transparent with border', props: { background: 'transparent', border: '1px solid var(--gray-6)' } },
-      ghost: { description: 'Transparent without border', props: { background: 'transparent', border: 'none' } },
-      destructive: { description: 'Destructive/danger action', props: { background: 'var(--error-9)', color: 'white' } },
-    },
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'HORIZONTAL',
-      defaultProps: {
-        height: 40,
-        paddingHorizontal: 16,
-        gap: 4,
-        borderRadius: 6,
-        primaryAxisAlignItems: 'CENTER',
-        counterAxisAlignItems: 'CENTER',
+    "variants": {
+      "primary": {
+        "description": "Main action button with accent background",
+        "props": {
+          "background": "var(--accent-9)",
+          "color": "white"
+        }
+      },
+      "secondary": {
+        "description": "Subtle secondary action",
+        "props": {
+          "background": "var(--gray-3)",
+          "color": "var(--gray-12)"
+        }
       }
     },
-    codeSnippet: `<Button variant="primary" size="md" leftIcon={<Plus />}>New Design</Button>`
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "HORIZONTAL",
+      "defaultProps": {
+        "gap": 4,
+        "borderRadius": 6,
+        "primaryAxisAlignItems": "CENTER",
+        "counterAxisAlignItems": "CENTER"
+      }
+    },
+    "codeSnippet": "<Button variant=\"primary\" size=\"md\" leftIcon={<Plus />}>New Design</Button>\n"
   },
 
-  'Header': {
-    name: 'Header',
-    path: 'src/ui/components/Header.tsx',
-    description: 'Plugin top bar with New Chat button, theme toggle, and settings',
-    category: 'navigation',
-    props: [
-      { name: 'theme', type: 'string', description: 'Current theme mode', options: ['light', 'dark', 'system'], required: true },
-      { name: 'onToggleTheme', type: 'function', description: 'Theme toggle callback', required: true },
-      { name: 'onNewChat', type: 'function', description: 'New chat callback', required: true },
-      { name: 'newChatVisible', type: 'boolean', description: 'Show new chat button', default: true },
-      { name: 'newChatEnabled', type: 'boolean', description: 'Enable new chat button', default: true },
-      { name: 'onSettingsClick', type: 'function', description: 'Settings button callback', required: true },
+  'Card': {
+    "name": "Card",
+    "path": "src/ui/components/ui/Card.tsx",
+    "description": "Container component with header, content, and footer sections",
+    "category": "display",
+    "props": [
+      {
+        "name": "children",
+        "type": "ReactNode",
+        "description": "Card content",
+        "required": true
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'HORIZONTAL',
-      defaultProps: {
-        height: 52,
-        paddingHorizontal: 12,
-        primaryAxisAlignItems: 'SPACE_BETWEEN',
-        counterAxisAlignItems: 'CENTER',
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "VERTICAL",
+      "defaultProps": {
+        "padding": 16,
+        "gap": 16,
+        "borderRadius": "var(--radius-5)",
+        "fills": [
+          {
+            "type": "SOLID",
+            "color": "var(--color-surface)"
+          }
+        ]
       }
     }
   },
 
-  'Card': {
-    name: 'Card',
-    path: 'src/ui/components/ui/Card.tsx',
-    description: 'Container component with header, content, and footer sections',
-    category: 'display',
-    props: [
-      { name: 'children', type: 'ReactNode', description: 'Card content', required: true },
+  'Header': {
+    "name": "Header",
+    "path": "src/ui/components/Header.tsx",
+    "description": "Plugin top bar with New Chat button, theme toggle, and settings",
+    "category": "navigation",
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "description": "Header title"
+      },
+      {
+        "name": "showActions",
+        "type": "boolean",
+        "description": "Whether to show right-side actions",
+        "default": true
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'VERTICAL',
-      defaultProps: {
-        padding: 16,
-        gap: 16,
-        borderRadius: 'var(--radius-5)',
-        fills: [{ type: 'SOLID', color: 'var(--color-surface)' }],
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "HORIZONTAL",
+      "defaultProps": {
+        "height": 52,
+        "paddingHorizontal": 12,
+        "primaryAxisAlignItems": "SPACE_BETWEEN",
+        "counterAxisAlignItems": "CENTER"
       }
     }
   },
 
   'Input': {
-    name: 'Input',
-    path: 'src/ui/components/Input.tsx',
-    description: 'Text input field component',
-    category: 'input',
-    props: [
-      { name: 'value', type: 'string', description: 'Input value' },
-      { name: 'onChange', type: 'function', description: 'Change handler' },
-      { name: 'placeholder', type: 'string', description: 'Placeholder text' },
-      { name: 'disabled', type: 'boolean', description: 'Disable input', default: false },
+    "name": "Input",
+    "path": "src/ui/components/Input.tsx",
+    "description": "Text input field component",
+    "category": "input",
+    "props": [
+      {
+        "name": "value",
+        "type": "string",
+        "description": "Input value"
+      },
+      {
+        "name": "onChange",
+        "type": "function",
+        "description": "Change handler"
+      },
+      {
+        "name": "placeholder",
+        "type": "string",
+        "description": "Placeholder text"
+      },
+      {
+        "name": "disabled",
+        "type": "boolean",
+        "description": "Disable input",
+        "default": false
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'HORIZONTAL',
-      defaultProps: {
-        height: 40,
-        paddingHorizontal: 12,
-        borderRadius: 6,
-        border: '1px solid var(--gray-6)',
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "HORIZONTAL",
+      "defaultProps": {
+        "height": 40,
+        "paddingHorizontal": 12,
+        "borderRadius": 6,
+        "border": "1px solid var(--gray-6)"
       }
     }
   },
 
   'Flex': {
-    name: 'Flex',
-    path: 'src/ui/components/layout/Flex.tsx',
-    description: 'Horizontal flex layout primitive',
-    category: 'layout',
-    props: [
-      { name: 'gap', type: 'number | string', description: 'Gap between children' },
-      { name: 'align', type: 'string', description: 'Cross-axis alignment', options: ['start', 'center', 'end', 'stretch'] },
-      { name: 'justify', type: 'string', description: 'Main-axis alignment', options: ['start', 'center', 'end', 'between', 'around'] },
-      { name: 'wrap', type: 'boolean', description: 'Allow wrapping', default: false },
+    "name": "Flex",
+    "path": "src/ui/components/layout/Flex.tsx",
+    "description": "Horizontal flex layout primitive",
+    "category": "layout",
+    "props": [
+      {
+        "name": "gap",
+        "type": "number | string",
+        "description": "Gap between children"
+      },
+      {
+        "name": "align",
+        "type": "string",
+        "description": "Cross-axis alignment",
+        "options": [
+          "start",
+          "center",
+          "end",
+          "stretch"
+        ]
+      },
+      {
+        "name": "justify",
+        "type": "string",
+        "description": "Main-axis alignment",
+        "options": [
+          "start",
+          "center",
+          "end",
+          "between",
+          "around"
+        ]
+      },
+      {
+        "name": "wrap",
+        "type": "boolean",
+        "description": "Allow wrapping",
+        "default": false
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'HORIZONTAL',
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "HORIZONTAL"
     }
   },
 
   'Stack': {
-    name: 'Stack',
-    path: 'src/ui/components/layout/Stack.tsx',
-    description: 'Vertical flex layout primitive',
-    category: 'layout',
-    props: [
-      { name: 'gap', type: 'number | string', description: 'Gap between children' },
-      { name: 'align', type: 'string', description: 'Cross-axis alignment', options: ['start', 'center', 'end', 'stretch'] },
+    "name": "Stack",
+    "path": "src/ui/components/layout/Stack.tsx",
+    "description": "Vertical flex layout primitive",
+    "category": "layout",
+    "props": [
+      {
+        "name": "gap",
+        "type": "number | string",
+        "description": "Gap between children"
+      },
+      {
+        "name": "align",
+        "type": "string",
+        "description": "Cross-axis alignment",
+        "options": [
+          "start",
+          "center",
+          "end",
+          "stretch"
+        ]
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'VERTICAL',
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "VERTICAL"
     }
   },
 
   'ModelSelector': {
-    name: 'ModelSelector',
-    path: 'src/ui/components/ModelSelector.tsx',
-    description: 'Dropdown selector for AI model selection',
-    category: 'input',
-    props: [
-      { name: 'value', type: 'string', description: 'Selected model ID', required: true },
-      { name: 'onChange', type: 'function', description: 'Selection change handler', required: true },
-      { name: 'variant', type: 'string', description: 'Display style', options: ['ghost', 'chip'], default: 'ghost' },
+    "name": "ModelSelector",
+    "path": "src/ui/components/ModelSelector.tsx",
+    "description": "Dropdown selector for AI model selection",
+    "category": "input",
+    "props": [
+      {
+        "name": "value",
+        "type": "string",
+        "description": "Selected model ID",
+        "required": true
+      },
+      {
+        "name": "onChange",
+        "type": "function",
+        "description": "Selection change handler",
+        "required": true
+      },
+      {
+        "name": "variant",
+        "type": "string",
+        "description": "Display style",
+        "options": [
+          "ghost",
+          "chip"
+        ],
+        "default": "ghost"
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'HORIZONTAL',
-      defaultProps: {
-        height: 28,
-        paddingHorizontal: 8,
-        gap: 4,
-        borderRadius: 6,
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "HORIZONTAL",
+      "defaultProps": {
+        "height": 28,
+        "paddingHorizontal": 8,
+        "gap": 4,
+        "borderRadius": 6
       }
     }
   },
 
   'Toast': {
-    name: 'Toast',
-    path: 'src/ui/components/ui/Toast.tsx',
-    description: 'Notification toast component',
-    category: 'feedback',
-    props: [
-      { name: 'message', type: 'string', description: 'Toast message', required: true },
-      { name: 'type', type: 'string', description: 'Toast type', options: ['info', 'success', 'warning', 'error'], default: 'info' },
-      { name: 'duration', type: 'number', description: 'Auto-dismiss duration in ms', default: 3000 },
+    "name": "Toast",
+    "path": "src/ui/components/ui/Toast.tsx",
+    "description": "Notification toast component",
+    "category": "feedback",
+    "props": [
+      {
+        "name": "message",
+        "type": "string",
+        "description": "Toast message",
+        "required": true
+      },
+      {
+        "name": "type",
+        "type": "string",
+        "description": "Toast type",
+        "options": [
+          "info",
+          "success",
+          "warning",
+          "error"
+        ],
+        "default": "info"
+      },
+      {
+        "name": "duration",
+        "type": "number",
+        "description": "Auto-dismiss duration in ms",
+        "default": 3000
+      }
     ],
-    figmaMapping: {
-      nodeType: 'FRAME',
-      layoutMode: 'HORIZONTAL',
-      defaultProps: {
-        padding: 12,
-        gap: 8,
-        borderRadius: 8,
+    "figmaMapping": {
+      "nodeType": "FRAME",
+      "layoutMode": "HORIZONTAL",
+      "defaultProps": {
+        "padding": 12,
+        "gap": 8,
+        "borderRadius": 8
       }
     }
   },
 };
 
 /**
- * Design Tokens Summary for LLM context
+ * Synced Semantic Rules
  */
+export const SEMANTIC_RULES = {
+  "rules": [
+    {
+      "token": "BUTTON",
+      "keywords": [
+        "button",
+        "btn",
+        "action"
+      ],
+      "weight": 10
+    },
+    {
+      "token": "ICON_BUTTON",
+      "keywords": [
+        "iconbutton",
+        "icon-button",
+        "btn-icon"
+      ],
+      "weight": 12
+    },
+    {
+      "token": "AVATAR",
+      "keywords": [
+        "avatar",
+        "profile",
+        "user-pic"
+      ],
+      "weight": 15
+    },
+    {
+      "token": "CARD",
+      "keywords": [
+        "card",
+        "panel",
+        "surface"
+      ],
+      "weight": 8
+    },
+    {
+      "token": "BADGE",
+      "keywords": [
+        "badge",
+        "tag",
+        "chip",
+        "label"
+      ],
+      "weight": 10
+    }
+  ],
+  "settings": {
+    "match_score": 10,
+    "exact_match_bonus": 20,
+    "min_threshold": 10
+  }
+};
+
 export const PROJECT_DESIGN_TOKENS = {
   colors: {
     background: 'var(--color-background)',

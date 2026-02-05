@@ -48,11 +48,11 @@ interface TokenBudget {
 }
 
 const DEFAULT_BUDGET: TokenBudget = {
-  total: 4000,
-  identity: 500,
-  skills: 1500,
-  tools: 1500,
-  context: 500,
+  total: 8000,
+  identity: 800,
+  skills: 3000,
+  tools: 3000,
+  context: 1200,
 };
 
 /**

@@ -22,6 +22,7 @@ import { findBestComponentMatch } from '../../../knowledge/semanticMap';
 import { LibraryResource } from '../../../types';
 import { isEnabled } from '../../../constants/featureFlags';
 import { flowObserver, FlowPhase } from '../observers/flowObserver';
+import { ShapeRenderer } from './shapeRenderer';
 
 // ==========================================
 // MODULE STATE (for dependency injection)
@@ -91,11 +92,9 @@ export function initializeRenderers(
     registerRenderer('INSTANCE', new InstanceRenderer(createPaintFn!));
     registerRenderer('ICON', new IconRenderer(createPaintFn!));
 
-    import('./shapeRenderer').then(({ ShapeRenderer }) => {
-        const shape = new ShapeRenderer(createPaintFn!);
-        registerRenderer('ELLIPSE', shape);
-        registerRenderer('LINE', shape);
-    });
+    const shape = new ShapeRenderer(createPaintFn!);
+    registerRenderer('ELLIPSE', shape);
+    registerRenderer('LINE', shape);
 }
 
 /**

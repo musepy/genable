@@ -51,10 +51,12 @@ export const GEMINI_CONFIG = {
  * Model version detection patterns
  */
 export const MODEL_PATTERNS = {
-  VERSION: /(?:2[.-]5|3[.-]?\d*|exp-3)/i,
-  VARIANT: /(?:pro|flash)/i,
+  /** Allow 1.5, 2.0, 2.5, 3.0+ and experimental versions */
+  VERSION: /(?:1[.-]5|2[.-]0|2[.-]5|3[.-]?\d*|exp-3)/i,
+  /** Allow Pro, Flash and Flash-Lite variants */
+  VARIANT: /(?:pro|flash|lite)/i,
   EXCLUDED_KEYWORDS: [
-    'lite', 'tts', 'embedding', 'nano',
+    'tts', 'embedding', 'nano',
     'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug'
   ],
 } as const;

@@ -7,7 +7,4 @@ structure:
     - modal-content
     - modal-footer
 defaultProps:
-  padding: 24
-  gap: 16
-  width: 480
   semantic: MODAL

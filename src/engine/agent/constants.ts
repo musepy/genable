@@ -17,13 +17,13 @@ export const AGENT_RUNTIME_CONSTANTS = {
   ESTIMATION_CHINESE_CHAR_MULTIPLIER: 2.0,
   
   /** Factor of max context tokens to trigger compression (e.g., 0.7 = 70%) */
-  CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.7,
+  CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.8,
   
   /** Factor of max context tokens to trigger proactive compression (e.g., 0.75 = 75%) */
-  CONTEXT_PROACTIVE_COMPRESSION_FACTOR: 0.75,
+  CONTEXT_PROACTIVE_COMPRESSION_FACTOR: 0.85,
   
   /** Minimum number of messages to keep during context continuity */
-  MIN_MESSAGES_TO_KEEP: 6,
+  MIN_MESSAGES_TO_KEEP: 10,
   
   /** Minimum number of messages before redundant error cleanup is allowed */
   REDUNDANT_ERROR_DROP_THRESHOLD: 10,
@@ -40,8 +40,8 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Max consecutive iterations with no tool calls before error */
   MAX_THINKING_ONLY_ITERATIONS: 4,
   
-  /** Minimum text length to consider as "rambling" (chars) */
-  RAMBLING_TEXT_THRESHOLD: 1000,
+  /** Minimum text length to consider as "rambling" (chars). Gemini streams text before tool calls, so this must be high enough to not abort before tool calls arrive. */
+  RAMBLING_TEXT_THRESHOLD: 1500,
 } as const;
 
 export const IPC_CONSTANTS = {

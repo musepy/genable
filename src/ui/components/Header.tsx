@@ -7,7 +7,7 @@
  */
 
 import { h } from 'preact';
-import { Plus, AlignJustify, Sun, Moon } from 'lucide-preact';
+import { Plus, AlignJustify, Sun, Moon, X } from 'lucide-preact';
 import { emit } from '@create-figma-plugin/utilities';
 import { ImportJsonHandler } from '../../types';
 import { tokens, componentStyles } from '../design-system/tokens';
@@ -23,6 +23,7 @@ export interface HeaderProps {
   newChatEnabled: boolean;
   // Settings
   onSettingsClick: () => void;
+  isSettingsOpen?: boolean;
 }
 
 export function Header({
@@ -32,6 +33,7 @@ export function Header({
   newChatVisible,
   newChatEnabled,
   onSettingsClick,
+  isSettingsOpen = false,
 }: HeaderProps) {
   
   // Derive CSS class for new chat button
@@ -44,43 +46,70 @@ export function Header({
 
   return (
     <div className="header-container">
-      {/* New Design button - 进化为 Ghost/Subtle 风格 */}
-      <button 
-        className={"header-chip " + (newChatEnabled ? "" : "disabled")}
-        style={{ display: newChatVisible ? 'inline-flex' : 'none' }}
-        onClick={onNewChat}
-        aria-label={t.newDesign}
-        aria-disabled={!newChatEnabled}
-      >
-        <Plus size={14} strokeWidth={2.5} />
-        <span>{t.newDesign}</span>
-      </button>
+      {/* Settings Title (Left Aligned) - Moved to start */}
+      {isSettingsOpen && (
+        <div style={{ 
+          fontSize: 13, // Standardized 13px
+          fontWeight: 400, // No bolding
+          color: 'var(--gray-11)', // Softened color
+          paddingLeft: 'var(--space-3)' // 12px header + 12px local = 24px total
+        }}>
+          Settings
+        </div>
+      )}
+
+      {/* New Design button - Hidden in settings */}
+      {!isSettingsOpen && (
+        <button 
+          className={"header-chip " + (newChatEnabled ? "" : "disabled")}
+          style={{ display: newChatVisible ? 'inline-flex' : 'none' }}
+          onClick={onNewChat}
+          aria-label={t.newDesign}
+          aria-disabled={!newChatEnabled}
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          <span>{t.newDesign}</span>
+        </button>
+      )}
       
       {/* Spacer */}
       <div className="header-spacer" />
 
-      {/* Theme Toggle - 恢复为设计稿的单图标按钮 */}
-      <button 
-        className="header-icon-btn"
-        onClick={onToggleTheme}
-        title={t.themeLabel(theme)}
-        aria-label={t.themeLabel(theme)}
-      >
-        {theme === 'dark' ? (
-          <Moon size={16} strokeWidth={2} />
-        ) : (
-          <Sun size={16} strokeWidth={2} />
-        )}
-      </button>
+      {/* Theme Toggle - Hidden in settings */}
+      {!isSettingsOpen && (
+        <button 
+          className="header-icon-btn"
+          onClick={onToggleTheme}
+          title={t.themeLabel(theme)}
+          aria-label={t.themeLabel(theme)}
+        >
+          {theme === 'dark' ? (
+            <Moon size={16} strokeWidth={2} />
+          ) : (
+            <Sun size={16} strokeWidth={2} />
+          )}
+        </button>
+      )}
 
       {/* Settings Button */}
       <button
-        className="header-icon-btn"
+        className={`header-icon-btn ${isSettingsOpen ? 'is-active' : ''}`}
         onClick={onSettingsClick}
-        title="Settings"
-        aria-label="Settings"
+        title={isSettingsOpen ? "Close Settings" : "Settings"}
+        aria-label={isSettingsOpen ? "Close Settings" : "Settings"}
+        style={{ transition: 'transform 0.3s ease' }}
       >
-        <AlignJustify size={16} strokeWidth={2} />
+        <div style={{ 
+          display: 'flex', 
+          transition: 'transform 0.3s ease',
+          transform: isSettingsOpen ? 'rotate(90deg)' : 'rotate(0deg)' 
+        }}>
+          {isSettingsOpen ? (
+            <X size={16} strokeWidth={2} />
+          ) : (
+            <AlignJustify size={16} strokeWidth={2} />
+          )}
+        </div>
       </button>
     </div>
   );

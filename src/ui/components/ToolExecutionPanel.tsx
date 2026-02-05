@@ -1,13 +1,14 @@
 import { h } from 'preact';
 import { useState } from 'preact/hooks';
-import { ChevronDown } from 'lucide-preact';
+import { ChevronDown, Terminal } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
 import { ToolCallRecord } from '../../types/chat';
-import { ToolCallItem } from './ToolCallItem';
 
 interface ToolExecutionPanelProps {
-  toolCalls: ToolCallRecord[];
-  isGlobal?: boolean;
+  toolCalls?: ToolCallRecord[];
+  thinkingStatus?: string;  // "Thinking..." / "Loading..."
+  thinkingDetail?: string;  // 长文本
+  onSelectNode?: (nodeId: string) => void;
 }
 
 /** Minimal tool icon matching Figma ToolGroup design */
@@ -16,45 +17,73 @@ function ToolIcon() {
     <div style={{
       width: 20,
       height: 20,
-      background: tokens.colors.alpha[2],
-      borderRadius: 'var(--radius-2)',
+      background: tokens.colors.surface,
+      border: `1px solid ${tokens.colors.alpha[3]}`,
+      borderRadius: 'var(--radius-4)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       flexShrink: 0,
     }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.textSecondary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
-        <rect x="8" y="8" width="8" height="8" rx="1" />
-      </svg>
+      <Terminal size={12} color={tokens.colors.textSecondary} strokeWidth={2.5} />
     </div>
   );
 }
 
-export function ToolExecutionPanel({ toolCalls, isGlobal = false }: ToolExecutionPanelProps) {
+function extractResultNodes(toolCalls: ToolCallRecord[] = []) {
+  const map = new Map<string, { nodeId: string; label: string }>();
+
+  for (const tc of toolCalls) {
+    const data = (tc.result as any)?.data || {};
+    const nodeId =
+      data.nodeId ||
+      (tc.result as any)?.nodeId ||
+      tc.parameters?.nodeId;
+
+    if (!nodeId || map.has(nodeId)) continue;
+
+    const label =
+      data.name ||
+      tc.parameters?.name ||
+      nodeId;
+
+    map.set(nodeId, { nodeId, label });
+  }
+
+  return Array.from(map.values());
+}
+
+export function ToolExecutionPanel({ 
+  toolCalls = [], 
+  thinkingStatus, 
+  thinkingDetail, 
+  onSelectNode 
+}: ToolExecutionPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (toolCalls.length === 0) return null;
-
-  const runningCount = toolCalls.filter(t => t.status === 'running').length;
   const totalCount = toolCalls.length;
+  const toolSummary = totalCount > 0 ? `Use ${totalCount} tool${totalCount > 1 ? 's' : ''}` : '';
+  const headerText = thinkingStatus 
+    ? (toolSummary ? `${thinkingStatus} · ${toolSummary}` : thinkingStatus) 
+    : toolSummary;
 
-  const summary = runningCount > 0
-    ? `Executing ${runningCount} Actions...`
-    : `Executed ${totalCount} Actions`;
+  const resultNodes = extractResultNodes(toolCalls);
+  const canExpand = !!thinkingDetail || resultNodes.length > 0;
+
+  if (!headerText && !canExpand) return null;
 
   return (
     <div style={{ width: '100%' }}>
       {/* ToolGroup header row */}
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => canExpand && setIsExpanded(!isExpanded)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: tokens.space[3],
           padding: `${tokens.space[1]}px 0`,
           borderBottom: `0.5px solid ${tokens.colors.alpha[3]}`,
-          cursor: 'pointer',
+          cursor: canExpand ? 'pointer' : 'default',
         }}
       >
         <ToolIcon />
@@ -69,28 +98,75 @@ export function ToolExecutionPanel({ toolCalls, isGlobal = false }: ToolExecutio
             fontWeight: 500,
             color: tokens.colors.textPrimary,
           }}>
-            {summary}
+            {headerText}
           </span>
-          <ChevronDown
-            size={14}
-            style={{
-              color: tokens.colors.textSecondary,
-              transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 150ms ease',
-            }}
-          />
+          {canExpand && (
+            <ChevronDown
+              size={14}
+              style={{
+                color: tokens.colors.textSecondary,
+                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 150ms ease',
+              }}
+            />
+          )}
         </div>
       </div>
 
-      {/* Expanded tool call details */}
-      {isExpanded && (
-        <div style={{
-          maxHeight: 200,
-          overflowY: 'auto' as const,
-        }}>
-          {toolCalls.map(record => (
-            <ToolCallItem key={record.id} record={record} />
-          ))}
+      {/* Expanded content */}
+      {isExpanded && canExpand && (
+        <div style={{ padding: `${tokens.space[2]}px 0` }}>
+          {thinkingStatus && (
+            <div style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
+              {thinkingStatus}
+            </div>
+          )}
+
+          {thinkingDetail && (
+            <div style={{ 
+              marginTop: tokens.space[1], 
+              fontSize: tokens.fontSize[1], 
+              color: tokens.colors.textPrimary,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {thinkingDetail}
+            </div>
+          )}
+
+          {resultNodes.length > 0 && (
+            <div style={{ 
+              marginTop: tokens.space[2], 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: tokens.space[1],
+            }}>
+              {resultNodes.map(node => (
+                <button
+                  key={node.nodeId}
+                  className="chip"
+                  style={{ 
+                    padding: `2px ${tokens.space[2]}px`, 
+                    color: tokens.colors.accent, 
+                    background: tokens.colors.accentAlpha[2], 
+                    border: 'none',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: tokens.fontSize[1],
+                    cursor: 'pointer',
+                    transition: 'var(--transition-crisp)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = tokens.colors.accentAlpha[3];
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = tokens.colors.accentAlpha[2];
+                  }}
+                  onClick={() => onSelectNode?.(node.nodeId)}
+                >
+                  {node.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

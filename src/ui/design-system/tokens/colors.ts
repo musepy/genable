@@ -23,7 +23,7 @@ export const colors = {
 
   // === Accent Scale (Interactive) ===
   accent: 'var(--accent-9)',
-  accentContrast: '#ffffff',
+  accentContrast: 'var(--accent-contrast)',
   accentMuted: 'var(--accent-3)',
   accentBorder: 'var(--accent-6)',
   accentBorderHover: 'var(--accent-7)',
@@ -31,7 +31,7 @@ export const colors = {
   
   // === Gray Scale (Neutral) ===
   gray: 'var(--gray-9)',
-  grayContrast: '#ffffff',
+  grayContrast: 'var(--color-background)',
   grayMuted: 'var(--gray-3)',
   grayBorder: 'var(--gray-6)',
   grayBorderHover: 'var(--gray-7)',

@@ -8,8 +8,5 @@ structure:
     - dialog-message
     - dialog-actions
 defaultProps:
-  padding: 24
-  gap: 16
-  width: 320
   primaryAxisAlignItems: CENTER
   semantic: DIALOG

@@ -37,21 +37,49 @@ const panelStyle: h.JSX.CSSProperties = {
 
 const buttonStyle: h.JSX.CSSProperties = {
   padding: `${tokens.space[2]}px ${tokens.space[4]}px`,
-  background: tokens.colors.accent,
-  color: tokens.colors.accentContrast,
-  border: 'none',
+  background: tokens.colors.surface,
+  color: tokens.colors.textPrimary,
+  border: `1px solid ${tokens.colors.grayBorder}`,
   borderRadius: 'var(--radius-3)',
   cursor: 'pointer',
   fontSize: tokens.fontSize[1],
   fontWeight: 500,
   textAlign: 'center',
+  transition: 'var(--transition-crisp)',
 };
 
 const ghostButtonStyle: h.JSX.CSSProperties = {
   ...buttonStyle,
   background: 'transparent',
-  border: `1px solid ${tokens.colors.accent}`,
-  color: tokens.colors.accent,
+  border: `1px solid ${tokens.colors.grayBorder}`,
+  color: tokens.colors.textSecondary,
+};
+
+const jsonTextareaHeight = tokens.space[9] + tokens.space[5] + tokens.space[3]; // 64 + 24 + 12 = 100
+
+const jsonSectionStyle: h.JSX.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: tokens.space[2],
+};
+
+const jsonTextareaStyle: h.JSX.CSSProperties = {
+  width: '100%',
+  height: jsonTextareaHeight,
+  fontSize: tokens.fontSize[1],
+  fontFamily: tokens.font.mono,
+  padding: tokens.space[2],
+  background: tokens.colors.background,
+  color: tokens.colors.textPrimary,
+  border: `1px solid ${tokens.colors.grayBorder}`,
+  borderRadius: tokens.radii.sm,
+  resize: 'vertical',
+};
+
+const jsonConfirmButtonStyle: h.JSX.CSSProperties = {
+  ...buttonStyle,
+  fontSize: tokens.fontSize[1],
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
 };
 
 export function DeveloperPanel() {
@@ -135,8 +163,8 @@ export function DeveloperPanel() {
 
   return (
     <div style={panelStyle}>
-      <div style={{ fontWeight: 600, fontSize: tokens.fontSize[2], marginBottom: -tokens.space[2] }}>
-        🛠 开发者同步工具
+      <div style={{ fontWeight: 600, fontSize: tokens.fontSize[2], marginBottom: -tokens.space[2], color: tokens.colors.textPrimary }}>
+        开发者同步工具
       </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[2] }}>
@@ -150,36 +178,25 @@ export function DeveloperPanel() {
         </div>
         
         {/* JSON Import Section */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={jsonSectionStyle}>
           <button style={ghostButtonStyle} onClick={() => setShowJsonInput(!showJsonInput)}>
-              {showJsonInput ? '🔼 收起 Import' : '📥 导入 JSON Tokens (DTCG)'}
+              {showJsonInput ? '收起 Import' : '导入 JSON Tokens (DTCG)'}
           </button>
           
           {showJsonInput && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={jsonSectionStyle}>
               <textarea
                 placeholder="在此粘贴 Theme A.tokens.json 内容..."
                 value={jsonInput}
                 onInput={(e) => setJsonInput(e.currentTarget.value)}
-                style={{
-                  width: '100%',
-                  height: '100px',
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
-                  padding: '8px',
-                  background: tokens.colors.background,
-                  color: tokens.colors.textPrimary,
-                  border: `1px solid ${tokens.colors.grayBorder}`,
-                  borderRadius: '4px',
-                  resize: 'vertical'
-                }}
+                style={jsonTextareaStyle}
               />
               <button 
-                style={{ ...buttonStyle, fontSize: 11, padding: '6px' }}
+                style={jsonConfirmButtonStyle}
                 onClick={handleImportJsonTokens}
                 disabled={!jsonInput.trim()}
               >
-                🚀 确认导入
+                确认导入
               </button>
             </div>
           )}
@@ -191,18 +208,18 @@ export function DeveloperPanel() {
       </button>
 
       <button style={ghostButtonStyle} onClick={handleCombineVariants}>
-        📦 合并选中项为变体组 (Variants)
+        合并选中项为变体组 (Variants)
       </button>
 
       {/* Project UI Library Section */}
       <div style={{ marginTop: tokens.space[4] }}>
-        <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8, color: tokens.colors.textPrimary, display: 'flex', alignItems: 'center', gap: 4 }}>
-          🏗️ 项目 UI 库 (Dogfooding)
+        <div style={{ fontSize: tokens.fontSize[1], fontWeight: 600, marginBottom: 8, color: tokens.colors.textPrimary, display: 'flex', alignItems: 'center', gap: 4 }}>
+          项目 UI 库 (Dogfooding)
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {templates.map(template => (
             <div key={template.id} style={{ 
-              fontSize: 10, 
+              fontSize: tokens.fontSize[1], 
               padding: '8px 10px', 
               background: tokens.colors.surface, 
               border: `1px solid ${tokens.colors.grayBorder}`,
@@ -214,9 +231,9 @@ export function DeveloperPanel() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontWeight: 600, color: tokens.colors.textPrimary }}>{template.name}</div>
-                  <div style={{ color: tokens.colors.textSecondary, fontSize: 9, fontFamily: tokens.font.mono }}>{template.path}</div>
+                  <div style={{ color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1], fontFamily: tokens.font.mono }}>{template.path}</div>
                 </div>
-                <div style={{ background: tokens.colors.accentMuted, color: tokens.colors.accent, padding: '2px 4px', borderRadius: 2, fontSize: 8 }}>
+                <div style={{ background: tokens.colors.accentMuted, color: tokens.colors.accent, padding: '2px 4px', borderRadius: 2, fontSize: tokens.fontSize[1] }}>
                   v{template.version}
                 </div>
               </div>
@@ -225,23 +242,21 @@ export function DeveloperPanel() {
                   style={{ 
                     ...buttonStyle, 
                     padding: '4px 8px', 
-                    fontSize: 9, 
-                    background: tokens.colors.accent,
-                    color: '#fff'
+                    fontSize: tokens.fontSize[1], 
                   }} 
                   onClick={() => handleImportTemplate(template.id)}
                 >
-                  ⚡ 标准导入
+                  标准导入
                 </button>
                 <button 
                   style={{ 
                     ...ghostButtonStyle, 
                     padding: '4px 8px', 
-                    fontSize: 9,
+                    fontSize: tokens.fontSize[1],
                   }} 
                   onClick={() => handleCaptureUI(template.id)}
                 >
-                  📸 实时抓取
+                  实时抓取
                 </button>
               </div>
             </div>
@@ -251,8 +266,8 @@ export function DeveloperPanel() {
 
       {history.length > 0 && (
         <div style={{ marginTop: tokens.space[2] }}>
-          <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8, color: tokens.colors.textPrimary }}>
-            🕒 版本快照历史
+          <div style={{ fontSize: tokens.fontSize[1], fontWeight: 600, marginBottom: 8, color: tokens.colors.textPrimary }}>
+            版本快照历史
           </div>
           <div style={{ 
             display: 'flex', 
@@ -264,7 +279,7 @@ export function DeveloperPanel() {
           }}>
             {history.map((item: any, i: number) => (
               <div key={i} style={{ 
-                fontSize: 10, 
+                fontSize: tokens.fontSize[1], 
                 padding: '6px 8px', 
                 background: tokens.colors.background, 
                 border: `1px solid ${tokens.colors.grayBorder}`,
@@ -275,9 +290,9 @@ export function DeveloperPanel() {
               }}>
                 <div>
                   <div style={{ fontWeight: 600, color: tokens.colors.textPrimary }}>{item.version}</div>
-                  <div style={{ color: tokens.colors.textSecondary, fontSize: 9 }}>{item.message}</div>
+                  <div style={{ color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1] }}>{item.message}</div>
                 </div>
-                <div style={{ color: tokens.colors.textSecondary, fontSize: 9 }}>
+                <div style={{ color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1] }}>
                   {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
@@ -288,7 +303,7 @@ export function DeveloperPanel() {
 
       {lastExport && (
         <div style={{ marginTop: tokens.space[2] }}>
-          <div style={{ fontSize: 10, color: tokens.colors.textSecondary, marginBottom: 4 }}>
+          <div style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, marginBottom: 4 }}>
             最新导出结果 (可见于 Console):
           </div>
           <textarea 
@@ -296,7 +311,7 @@ export function DeveloperPanel() {
             style={{ 
               width: '100%', 
               height: '80px', 
-              fontSize: '10px', 
+              fontSize: tokens.fontSize[1], 
               fontFamily: 'monospace',
               background: tokens.colors.background,
               color: tokens.colors.textSecondary,

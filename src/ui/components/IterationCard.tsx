@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import { memo } from 'preact/compat';
 import { useState } from 'preact/hooks';
-import { Brain, ChevronRight, ChevronDown, Clock } from 'lucide-preact';
+import { Terminal, ChevronRight, ChevronDown, Clock } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
 import { IterationRecord } from '../../types/chat';
 import { MessageRenderer } from './MessageRenderer';
@@ -18,12 +18,16 @@ export const IterationCard = memo(({ iteration, isStreaming = false }: Iteration
 
   return (
     <div style={{
-      borderLeft: `2px solid ${isStreaming ? tokens.colors.accent : tokens.colors.grayBorder}`,
+      marginBottom: tokens.space[1],
+      padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+      borderRadius: 'var(--radius-3)',
+      transition: 'background 0.2s ease',
+      // Subtle indentation instead of vertical border
       marginLeft: tokens.space[1],
-      marginBottom: tokens.space[2],
-      paddingLeft: tokens.space[3],
-      transition: 'border-color 0.3s ease',
-    }}>
+    }}
+    onMouseEnter={(e) => (e.currentTarget.style.background = tokens.colors.alpha[1])}
+    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
         style={{
@@ -34,35 +38,48 @@ export const IterationCard = memo(({ iteration, isStreaming = false }: Iteration
           padding: `${tokens.space[1]}px 0`,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', color: tokens.colors.textSecondary }}>
-          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <div style={{ display: 'flex', alignItems: 'center', color: tokens.colors.textSecondary, opacity: 0.5 }}>
+          {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1 }}>
-          <Brain size={14} style={{ color: isStreaming ? tokens.colors.accent : tokens.colors.textSecondary }} />
+        {/* Terminal Icon matching ToolGroup */}
+        <div style={{
+          width: 18,
+          height: 18,
+          background: tokens.colors.surface,
+          border: `1px solid ${tokens.colors.alpha[3]}`,
+          borderRadius: 'var(--radius-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Terminal size={10} color={isStreaming ? tokens.colors.accent : tokens.colors.textSecondary} strokeWidth={2.5} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1, overflow: 'hidden' }}>
           <span style={{ 
-            fontSize: tokens.fontSize.xs, 
+            fontSize: tokens.fontSize[1], 
             fontWeight: 600,
             color: isStreaming ? tokens.colors.textPrimary : tokens.colors.textSecondary,
             textTransform: 'uppercase',
-            letterSpacing: '0.05em'
+            letterSpacing: '0.05em',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
           }}>
             {iteration.taskTitle || `Step ${iteration.iteration}`}
           </span>
         </div>
 
-        {!iteration.taskTitle && (
-          <span style={{ fontSize: tokens.fontSize.xs, color: tokens.colors.textSecondary, opacity: 0.5 }}>
-            (Iteration {iteration.iteration})
-          </span>
-        )}
+        {/* Label cleanup: removed redundant (Iteration X) */}
 
         {duration !== null && (
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
             gap: 4, 
-            fontSize: tokens.fontSize.xs, 
+            fontSize: tokens.fontSize[1], 
             color: tokens.colors.textSecondary 
           }}>
             <Clock size={10} />

@@ -3,7 +3,7 @@
  * @description Core runtime for the agentic loop. Orchestrates LLM calls and tool execution.
  */
 
-import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
+import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall, Part } from '../llm-client/providers/types';
 import { ToolDefinition, getToolsForMode } from './tools';
 import { IpcBridge } from './ipcBridge';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
@@ -44,6 +44,8 @@ export class AgentRuntime {
   private readonly THROTTLE_MS = 100;
   private lastProgressSummary: string = '';
   private identicalSummaryCount: number = 0;
+  private progressCallCount: number = 0;
+  private lastProgressHeaders: string[] = [];
 
   constructor(private options: AgentRuntimeOptions) {
     this.retryPolicy = new RetryPolicy();
@@ -451,6 +453,7 @@ export class AgentRuntime {
     this.toolCallSignatureHistory = [];
     this.lastThinkingText = '';
     this.thinkingOnlyIterations = 0;
+    this.progressCallCount = 0;
     this.retryPolicy.resetAll();
 
     // ============================================
@@ -458,7 +461,10 @@ export class AgentRuntime {
     // ============================================
     while (iteration < this.maxIterations) {
       iteration++;
-      console.log(`[AgentRuntime] Iteration ${iteration}/${this.maxIterations}`);
+      const currentTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
+      console.log(`[AgentRuntime] --- Iteration Start: ${iteration}/${this.maxIterations} ---`);
+      console.log(`[AgentRuntime] Context Budget: ${currentTokens}/${this.maxContextTokens} tokens (${Math.round(currentTokens/this.maxContextTokens*100)}%)`);
+      console.log(`[AgentRuntime] Visible messages: ${this.messages.filter(m => !m.hidden).length}, Hidden: ${this.messages.filter(m => m.hidden).length}`);
 
       // Timing for thinking timeout detection
       const iterationStartTime = Date.now();
@@ -495,7 +501,7 @@ export class AgentRuntime {
       // PHASE 2: SYSTEM PROMPT CONSTRUCTION
       // ----------------------------------------
       // 1. Core System Prompt Reconstruction (Hot-Swapping)
-      const systemPrompt = composeAgentSystemPrompt(
+      let systemPrompt = composeAgentSystemPrompt(
         { 
           ragResults: { prioritizedComponents: [], goldenTemplates: [] },
           intent: {}, 
@@ -506,6 +512,20 @@ export class AgentRuntime {
         this.options.provider,
         { mode }
       );
+
+      // [Self-Repair] Inject a USER-role recovery message when thinking loop detected.
+      // User messages have much higher salience than system prompt modifications for Gemini.
+      // The hidden rambling messages are already excluded from context (line 693+),
+      // so this user message becomes the last visible message, maximizing its impact.
+      if (this.thinkingOnlyIterations > 0) {
+        const recoveryMessage: LLMMessage = {
+          id: this.generateId('recovery'),
+          role: 'user',
+          content: `STOP TALKING. You have wasted ${this.thinkingOnlyIterations} turn(s) writing text instead of calling tools. Call a tool NOW. Current task: "${activeStep?.title || 'continue the design'}". Pick ONE: createNode, setNodeLayout, setNodeStyles, or complete_task.`
+        };
+        this.messages.push(recoveryMessage);
+        console.log(`[AgentRuntime] 🔧 Injected user-role recovery message (thinkingOnly: ${this.thinkingOnlyIterations})`);
+      }
 
       // Ensure system prompt is at index 0 and updated
       const existingSysIndex = this.messages.findIndex(m => m.role === 'system');
@@ -527,6 +547,11 @@ export class AgentRuntime {
       // ----------------------------------------
       // 2. Capture visible messages
       const visibleMessages = this.messages.filter(m => !m.hidden);
+      
+      // LOG VIZUALIZATION (Helpful for debugging loop recovery)
+      if (this.thinkingOnlyIterations > 0) {
+        console.log(`[AgentRuntime] 🔄 Loop Recovery Active. Context: ${visibleMessages.map(m => m.role).join(' -> ')}`);
+      }
       
       // LOG FOR DEBUGGING IN TESTS
       if (process.env.NODE_ENV === 'test') {
@@ -555,26 +580,63 @@ export class AgentRuntime {
       // In PLANNING mode, allow longer text (plans need more space)
       const ramblingThreshold = mode === 'PLANNING' 
         ? AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * 4  // 4x for planning
-        : AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * 2;
+        : AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD;      // Use default (1000) for EXECUTION/VERIFICATION
 
+      // [FIX] Force Gemini to produce at least one tool call in EXECUTION and VERIFICATION modes.
+      // This prevents the "cognitive loop" where Gemini generates pages of narration
+      // ("I'm now building the header...") without ever actually calling tools.
+      // PLANNING uses AUTO because planDesign is inherently a tool call.
+      const toolConfig = (mode === 'EXECUTION' || mode === 'VERIFICATION')
+        ? { mode: 'ANY' as const }
+        : { mode: 'AUTO' as const };
+
+      // [FIX] Reduce maxTokens in action modes to limit narration preamble.
+      // Default is 65536 which gives Gemini too much room for text before tool calls.
+      // EXECUTION/VERIFICATION iterations need ~1-4 tool calls, not 65K tokens of output.
+      // 2048 tokens is enough for brief reasoning + multiple tool calls.
+      // Combined with text stripping (line ~710), narration text never enters context.
+      const actionMaxTokens = (mode === 'EXECUTION' || mode === 'VERIFICATION') ? 2048 : undefined;
+
+      let currentIterationText = '';
       try {
         response = await this.options.provider.generate({
           messages: visibleMessages,
           tools: filteredTools,  // Use filtered tools based on mode
+          toolConfig,
+          maxTokens: actionMaxTokens,
           abortSignal: abortController.signal,
           streamTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
           onProgress: (chunk) => {
             notifyIterationStartOnce();
             
-            // Active Rambling Detection: Abort if text exceeds threshold during streaming
-            const accumulatedChars = (response?.text || '').length + chunk.length;
+            // Active Rambling Detection during streaming.
+            // EXECUTION mode uses toolConfig.mode='ANY' + reduced maxTokens.
+            // ANY guarantees tool calls BUT Gemini streams text BEFORE tool calls.
+            // Aborting in EXECUTION mode kills the stream before tool calls arrive.
+            // So we only abort in PLANNING/VERIFICATION modes.
+            currentIterationText += chunk;
+            const accumulatedChars = currentIterationText.length;
+
             if (accumulatedChars > ramblingThreshold) {
-                console.warn(`[AgentRuntime] Active rambling detected (${accumulatedChars} chars, mode: ${mode}) - aborting stream`);
+                console.warn(`[AgentRuntime] ⚠️ RAMBLING DETECTED: Stream aborted. Length: ${accumulatedChars} chars (Limit: ${ramblingThreshold}, Mode: ${mode})`);
+                console.warn(`[AgentRuntime] This is often a sign of a "Thinking Loop" where the model ignores instructions and just updates status.`);
+                
+                // [NEW] Extract progress header if present for de-duplication
+                const progressMatch = currentIterationText.match(/Progress: \*\*([^*]+)\*\*/);
+                if (progressMatch) {
+                    const header = progressMatch[1].trim();
+                    this.lastProgressHeaders.push(header);
+                    if (this.lastProgressHeaders.length > 5) this.lastProgressHeaders.shift();
+                }
+
                 abortController.abort();
             }
 
             const now = Date.now();
             if (now - this.lastNotificationTime >= this.THROTTLE_MS) {
+                if (accumulatedChars > ramblingThreshold * 0.8) {
+                    console.log(`[AgentRuntime] Near rambling threshold: ${accumulatedChars}/${ramblingThreshold} chars`);
+                }
               this.options.onProgress?.(chunk);
               this.lastNotificationTime = now;
             }
@@ -639,9 +701,11 @@ export class AgentRuntime {
         if (textLength > AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD) {
           // Long text without action = likely rambling
           this.thinkingOnlyIterations++;
-          console.warn(`[AgentRuntime] Thinking-only iteration detected (${this.thinkingOnlyIterations}/${AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS}). Text length: ${textLength}`);
+          console.warn(`[AgentRuntime] ⚠️ THINKING-ONLY ITERATION (${this.thinkingOnlyIterations}/${AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS})`);
+          console.warn(`[AgentRuntime] Result: Empty tool calls but response length is ${textLength} chars. (Threshold: ${AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD})`);
 
           if (this.thinkingOnlyIterations >= AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS) {
+            console.error(`[AgentRuntime] Terminating due to maximum consecutive thinking-only iterations (${AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS}).`);
             throw new Error('Agent stuck: multiple iterations with long thinking but no actions. Breaking loop.');
           }
         }
@@ -654,6 +718,46 @@ export class AgentRuntime {
       // Add model's response to history
       const modelMessage = this.options.provider.formatResponse(response);
       modelMessage.id = this.generateId('mdl');
+
+      // [FIX] Strip narration text from EXECUTION/VERIFICATION mode responses that contain tool calls.
+      // Gemini produces ~3000-5000 chars of repetitive narration ("I'm now focused on...") BEFORE tool calls.
+      // This text pollutes context (50K-70K tokens over 14 iterations) and reinforces the narration pattern.
+      // By removing text parts, we keep only functional content (tool calls + thoughts) in context.
+      if ((mode === 'EXECUTION' || mode === 'VERIFICATION') && response.toolCalls && response.toolCalls.length > 0) {
+        if (Array.isArray(modelMessage.content)) {
+          const originalLength = (modelMessage.content as Part[]).length;
+          modelMessage.content = (modelMessage.content as Part[]).filter(
+            (part: Part) => part.functionCall || part.thought
+          );
+          const stripped = originalLength - (modelMessage.content as Part[]).length;
+          if (stripped > 0) {
+            console.log(`[AgentRuntime] 🧹 Stripped ${stripped} narration text parts from ${mode} response. Kept ${(modelMessage.content as Part[]).length} functional parts.`);
+          }
+          
+          // [NEW] If ALL text was stripped and we have tool calls, also check for repetitive headers in the stripped text
+          const textContent = response.text || '';
+          const progressMatch = textContent.match(/Progress: \*\*([^*]+)\*\*/);
+          if (progressMatch) {
+            const header = progressMatch[1].trim();
+            this.lastProgressHeaders.push(header);
+            if (this.lastProgressHeaders.length > 5) this.lastProgressHeaders.shift();
+
+            // Detect identical headers in recent history
+            const sameHeaderCount = this.lastProgressHeaders.filter(h => h === header).length;
+            if (sameHeaderCount >= 3) {
+              console.warn(`[AgentRuntime] 🔄 Repeated Progress Header detected: "${header}" (${sameHeaderCount}x). Increasing loop suspicion.`);
+              this.thinkingOnlyIterations++; // Treat as a loop signal even if it has tools
+            }
+          }
+        }
+      }
+
+      // [Self-Repair] Hide rambling messages to clear the loop anchor from context
+      if (this.thinkingOnlyIterations > 0 && (!response.toolCalls || response.toolCalls.length === 0)) {
+        console.log(`[AgentRuntime] Hiding rambling turn from future context to break loop anchor.`);
+        modelMessage.hidden = true;
+      }
+      
       this.messages.push(modelMessage);
       this.approximateTokens += this.estimateTokens(modelMessage.content);
 
@@ -674,21 +778,31 @@ export class AgentRuntime {
             workflowResults.push({ name: tc.name, response: { success: true }, thought_signature: tc.thought_signature });
           } else if (tc.name === 'summarize_progress') {
             const summary = tc.args.summary;
+            this.progressCallCount++;
+
             if (summary === this.lastProgressSummary) {
               this.identicalSummaryCount++;
-              if (this.identicalSummaryCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD) {
-                const semanticError = mapToSemanticError('LOOP_DETECTED', `Repeating same progress summary: "${summary}"`);
-                workflowResults.push({ 
-                  name: tc.name, 
-                  response: { success: false, error: { code: 'LOOP_DETECTED', message: formatSemanticError(semanticError) } }, 
-                  thought_signature: tc.thought_signature 
-                });
-                continue;
-              }
-            } else {
-              this.lastProgressSummary = summary;
+            }
+
+            // Two termination conditions: identical 3x, OR total calls exceed threshold+2
+            if (this.identicalSummaryCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD ||
+                this.progressCallCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD + 2) {
+              const reason = this.identicalSummaryCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD
+                ? `Repeating same progress summary: "${summary}"`
+                : `summarize_progress called ${this.progressCallCount} times without completing task`;
+              const semanticError = mapToSemanticError('LOOP_DETECTED', reason);
+              workflowResults.push({
+                name: tc.name,
+                response: { success: false, error: { code: 'LOOP_DETECTED', message: formatSemanticError(semanticError) } },
+                thought_signature: tc.thought_signature
+              });
+              continue;
+            }
+
+            if (summary !== this.lastProgressSummary) {
               this.identicalSummaryCount = 0;
             }
+            this.lastProgressSummary = summary;
 
             if (tc.args.isComplete) {
               planState.completeTask(undefined, tc.args.summary);
@@ -719,10 +833,21 @@ export class AgentRuntime {
         // ----------------------------------------
         // PHASE 6: LOOP DETECTION
         // ----------------------------------------  
-        // A signature looks at tool name + target nodeId (if applicable)
+        // A signature looks at tool name + target nodeId (if applicable) + content fingerprint
         const semanticSignature = figmaToolCalls.map(tc => {
           const targetNodeId = tc.args?.nodeId || tc.args?.parentId;
-          return targetNodeId ? `${tc.name}(${targetNodeId})` : tc.name;
+          
+          // Content fingerprinting to avoid false loop detection on batch processing
+          let fingerprint = '';
+          if (tc.name === 'updateNodeProperties' && tc.args?.properties?.characters) {
+            fingerprint = `|txt:${tc.args.properties.characters.slice(0, 5)}`;
+          } else if (tc.name === 'setNodeStyles' && tc.args?.fills?.[0]) {
+            fingerprint = `|clr:${tc.args.fills[0]}`;
+          } else if (tc.name === 'applyDesignPatch' && tc.args?.patches?.length > 0) {
+            fingerprint = `|patch:${tc.args.patches.length}`;
+          }
+          
+          return targetNodeId ? `${tc.name}(${targetNodeId}${fingerprint})` : `${tc.name}${fingerprint}`;
         }).join('|');
 
         this.toolCallSignatureHistory.push(semanticSignature);

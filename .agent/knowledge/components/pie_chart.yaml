@@ -5,6 +5,4 @@ structure:
   children:
     - chart-canvas-round
     - chart-legend-vertical
-defaultProps:
-  padding: 24
-  gap: 20
+defaultProps: {}

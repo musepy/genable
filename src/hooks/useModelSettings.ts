@@ -5,7 +5,7 @@ import {
   SaveSettingsHandler,
   SettingsLoadedHandler,
 } from '../types'
-import { fetchModels } from '../engine/llm-client'
+import { ModelService, ProviderName } from '../services/ModelService'
 import { DEFAULT_MODEL, SUPPORTED_MODELS, MODEL_CACHE_TTL_MS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
 
@@ -61,11 +61,14 @@ export function useModelSettings() {
     
     isRefreshingRef.current = true
     try {
-      const ms = await fetchModels(providerName, key)
-      if (ms.length > 0) {
-        setSuggestedModels(ms)
+      // Use Service's silent warmCache method
+      await ModelService.warmCache(providerName, key)
+      
+      // Get refreshed models (will return from cache if just updated)
+      const result = await ModelService.getModels(providerName, key, false)
+      if (result.success && result.models.length > 0) {
+        setSuggestedModels(result.models)
         setCacheTimestamp(Date.now())
-        // Persist to storage (will be saved on next handleSaveSettings)
       }
     } catch (e) {
       // Silent fail for background refresh - don't disrupt UI
@@ -141,11 +144,17 @@ export function useModelSettings() {
     const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini;
     setApiKey(activeKey || '');
     
-    // [FIX] Reset state when switching providers to prevent stale models (Coupling Fix)
-    setSuggestedModels([]); 
+    // [FIX] Show static models first when switching providers to prevent flicker
+    const staticModels = ModelService.getStaticModels(providerName);
+    setSuggestedModels(staticModels); 
     setFetchStatus('idle');
     setSettingsError(null);
-  }, [providerName]); // Removed apiKeys from deps to avoid resetting on key type interaction, only on provider switch
+
+    // Trigger background refresh for the new provider
+    if (activeKey) {
+      refreshModelsInBackground(activeKey);
+    }
+  }, [providerName, refreshModelsInBackground]);
 
   /**
    * Update specific provider key
@@ -177,24 +186,31 @@ export function useModelSettings() {
    * Shows loading state (unlike background refresh)
    */
   const handleFetchModels = async (keyOverride?: string) => {
-    // [FIX] Resolve key from map if not overridden, ensuring match with providerName
-    // This prevents race condition where providerName updates but apiKey state is stale
     const keyToUse = keyOverride || apiKeys[providerName] || apiKey;
     setFetchStatus('fetching')
+    
     try {
-      const ms = await fetchModels(providerName, keyToUse)
-      setSuggestedModels(ms)
-      setCacheTimestamp(Date.now())
-      setFetchStatus('success')
+      const result = await ModelService.getModels(providerName, keyToUse, true)
       
-      // If current model is not in the fetched list, auto-select the best one
-      if (ms.length > 0 && !ms.find(m => m.name === modelName)) {
-        setModelName(ms[0].name)
+      if (result.success) {
+        setSuggestedModels(result.models)
+        setCacheTimestamp(Date.now())
+        setFetchStatus('success')
+        
+        // Auto-select model if current one is not in the list
+        if (result.models.length > 0 && !result.models.find(m => m.name === modelName)) {
+          setModelName(result.models[0].name)
+        }
+      } else {
+        // Fallback models are already in result.models if success is false
+        setSuggestedModels(result.models)
+        setFetchStatus('fail')
+        setSettingsError(result.error || 'Failed to fetch models')
       }
     } catch (e: unknown) {
       setFetchStatus('fail')
       setSettingsError(e instanceof Error ? e.message : 'Unknown error')
-      throw e // Re-throw for OnboardingView to catch
+      throw e
     }
   }
 

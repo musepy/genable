@@ -4,6 +4,4 @@ structure:
   layoutMode: HORIZONTAL
   children: []
 defaultProps:
-  gap: 0
   layoutSizingHorizontal: FILL
-  strokeWeight: 1

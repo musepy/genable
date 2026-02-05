@@ -11,6 +11,7 @@ import { NodeLayer, RenderContext, BaseRenderer } from './baseRenderer';
 import { PropertyTransformer } from '../propertyTransformer';
 import { PROPS } from '../../../constants/figma-api';
 import { fetchIconSvg } from '../assets/iconify';
+import { applySurgicalBinding, applyStrokeWeight } from './surgicalBinding';
 
 /**
  * IconRenderer - Creates icons from Iconify SVG API
@@ -123,7 +124,6 @@ export class IconRenderer extends BaseRenderer {
     if (!paint) return;
 
     // V5.4: Use shared Surgical Binding logic
-    const { applySurgicalBinding } = await import('./surgicalBinding');
     applySurgicalBinding(node, paint);
   }
 
@@ -133,9 +133,7 @@ export class IconRenderer extends BaseRenderer {
    */
   private applyStrokeWeightToSvg(node: SceneNode, weight: number): void {
     // V5.4: Use shared utility (imported synchronously since no async needed)
-    import('./surgicalBinding').then(({ applyStrokeWeight }) => {
-        applyStrokeWeight(node, weight);
-    });
+    applyStrokeWeight(node, weight);
   }
 }
 

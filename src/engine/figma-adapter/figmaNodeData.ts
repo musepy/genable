@@ -31,7 +31,10 @@ export function extractFigmaNodeData(node: SceneNode, keys: string[]): FigmaNode
     });
 
     // Special handling for nested/lived objects like fontName
-    if ('fontName' in node) data.fontName = node.fontName;
+    if ('fontName' in node) {
+        const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
+        data.fontName = figmaMixed !== undefined && node.fontName === figmaMixed ? null : node.fontName;
+    }
     if ('fills' in node) data.fills = node.fills;
     if ('strokes' in node) data.strokes = node.strokes;
     if ('effects' in node) data.effects = node.effects;

@@ -52,7 +52,7 @@ const ChevronUp = () => (
 
 const cardStyle: JSX.CSSProperties = {
   background: 'transparent',
-  zIndex: 1,
+  zIndex: tokens.zIndex.base,
   borderRadius: 'var(--radius-3)',
   padding: '0 var(--space-4)',
   contain: 'layout style',

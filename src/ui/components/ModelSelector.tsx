@@ -43,7 +43,7 @@ export function ModelSelector({
         style={{ 
           display: 'flex', 
           flexDirection: 'column',
-          gap: 4,
+          gap: tokens.space[1],
         }}
       >
         {/* Skeleton 占位器 - 3 个模型的骨架 */}
@@ -67,12 +67,12 @@ export function ModelSelector({
   if (models.length === 0) {
     return (
     <div style={{ 
-        padding: 12, 
+        padding: tokens.space[3], 
         border: 'var(--border-main)', 
         borderRadius: 'var(--radius-5)', 
         textAlign: 'center',
         color: 'var(--gray-9)',
-        fontSize: 12,
+        fontSize: tokens.fontSize[1],
       }}>
         Enter API Key to load models
       </div>
@@ -89,7 +89,7 @@ export function ModelSelector({
       style={{ 
         display: 'flex', 
         flexDirection: 'column',
-        gap: 4, // Reduced from 12px for a more compact list
+        gap: tokens.space[1],
       }}
     >
       {sortedModels.map((model, index) => {
@@ -131,9 +131,9 @@ export function ModelSelector({
             }}
           >
             <span style={{ 
-              fontSize: 12, // Standardized to 12px to match Popover
+              fontSize: tokens.fontSize[1],
               color: 'var(--gray-11)',
-              fontWeight: 400, // No bolding even when highlighted
+              fontWeight: 400,
               lineHeight: '16px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',

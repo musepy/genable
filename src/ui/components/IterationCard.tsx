@@ -78,7 +78,7 @@ export const IterationCard = memo(({ iteration, isStreaming = false }: Iteration
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
-            gap: 4, 
+            gap: tokens.space[1], 
             fontSize: tokens.fontSize[1], 
             color: tokens.colors.textSecondary 
           }}>

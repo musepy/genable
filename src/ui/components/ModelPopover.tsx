@@ -185,7 +185,7 @@ export function ModelPopover({
             width: 240,
             minWidth: 220,
             maxWidth: 'calc(100vw - 24px)',
-            zIndex: 50,
+            zIndex: tokens.zIndex.popover,
             maxHeight: 'min(360px, calc(100vh - 120px))',
             display: 'flex',
             flexDirection: 'column',
@@ -227,11 +227,11 @@ export function ModelPopover({
                         {model.displayName || model.name}
                       </span>
                       {isGemini3Family(model.name) && (
-                        <span style={{ 
-                          fontSize: '10px', 
-                          color: tokens.colors.gray[9],
-                          marginLeft: tokens.space[1] 
-                        }}>
+                      <span style={{ 
+                        fontSize: tokens.fontSize[1],
+                        color: tokens.colors.gray[9],
+                        marginLeft: tokens.space[1] 
+                      }}>
                           High
                         </span>
                       )}

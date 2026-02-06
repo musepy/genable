@@ -49,10 +49,10 @@ export function Header({
       {/* Settings Title (Left Aligned) - Moved to start */}
       {isSettingsOpen && (
         <div style={{ 
-          fontSize: 13, // Standardized 13px
-          fontWeight: 400, // No bolding
-          color: 'var(--gray-11)', // Softened color
-          paddingLeft: 'var(--space-3)' // 12px header + 12px local = 24px total
+          fontSize: tokens.fontSize[2],
+          fontWeight: 400,
+          color: 'var(--gray-11)',
+          paddingLeft: 'var(--space-3)'
         }}>
           Settings
         </div>

@@ -212,7 +212,7 @@ function Toast({ data, onDismiss }: ToastProps) {
         boxShadow: '0 4px 12px var(--gray-a4)',
         fontSize: 'var(--font-size-1)',
         fontFamily: tokens.font.sans,
-        maxWidth: 260,
+        maxWidth: 360,
         pointerEvents: 'auto',
         // Animation
         opacity: isVisible ? 1 : 0,
@@ -222,7 +222,7 @@ function Toast({ data, onDismiss }: ToastProps) {
       }}
     >
       <span style={{ fontSize: 'var(--font-size-2)' }}>{icons[data.variant]}</span>
-      <span style={{ flex: 1 }}>{data.message}</span>
+      <span style={{ flex: 1, whiteSpace: 'normal', wordWrap: 'break-word' }}>{data.message}</span>
       <button
         onClick={dismissWithAnimation}
         style={{

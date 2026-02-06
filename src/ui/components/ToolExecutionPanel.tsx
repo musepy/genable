@@ -61,11 +61,8 @@ export function ToolExecutionPanel({
 }: ToolExecutionPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const totalCount = toolCalls.length;
-  const toolSummary = totalCount > 0 ? `Use ${totalCount} tool${totalCount > 1 ? 's' : ''}` : '';
-  const headerText = thinkingStatus 
-    ? (toolSummary ? `${thinkingStatus} · ${toolSummary}` : thinkingStatus) 
-    : toolSummary;
+  const completedCount = toolCalls.filter(tc => tc.status === 'success').length;
+  const headerText = completedCount > 0 ? String(completedCount) : '';
 
   const resultNodes = extractResultNodes(toolCalls);
   const canExpand = !!thinkingDetail || resultNodes.length > 0;
@@ -97,6 +94,9 @@ export function ToolExecutionPanel({
             fontSize: tokens.fontSize[1],
             fontWeight: 500,
             color: tokens.colors.textPrimary,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}>
             {headerText}
           </span>
@@ -116,26 +116,9 @@ export function ToolExecutionPanel({
       {/* Expanded content */}
       {isExpanded && canExpand && (
         <div style={{ padding: `${tokens.space[2]}px 0` }}>
-          {thinkingStatus && (
-            <div style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-              {thinkingStatus}
-            </div>
-          )}
-
-          {thinkingDetail && (
-            <div style={{ 
-              marginTop: tokens.space[1], 
-              fontSize: tokens.fontSize[1], 
-              color: tokens.colors.textPrimary,
-              whiteSpace: 'pre-wrap',
-            }}>
-              {thinkingDetail}
-            </div>
-          )}
-
+          {/* Result nodes - displayed by default */}
           {resultNodes.length > 0 && (
             <div style={{ 
-              marginTop: tokens.space[2], 
               display: 'flex', 
               flexWrap: 'wrap', 
               gap: tokens.space[1],
@@ -166,6 +149,29 @@ export function ToolExecutionPanel({
                 </button>
               ))}
             </div>
+          )}
+
+          {/* Thinking detail - collapsible, no hardcoded text */}
+          {thinkingDetail && (
+            <details style={{ marginTop: resultNodes.length > 0 ? tokens.space[2] : 0 }}>
+              <summary style={{ 
+                fontSize: tokens.fontSize[1], 
+                color: tokens.colors.textSecondary,
+                cursor: 'pointer',
+                listStyle: 'none',
+              }}>
+                <span style={{ opacity: 0.5 }}>···</span>
+              </summary>
+              <div style={{ 
+                marginTop: tokens.space[1], 
+                fontSize: tokens.fontSize[1], 
+                color: tokens.colors.textPrimary,
+                whiteSpace: 'pre-wrap',
+                padding: tokens.space[1],
+              }}>
+                {thinkingDetail}
+              </div>
+            </details>
           )}
         </div>
       )}

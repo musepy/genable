@@ -169,7 +169,7 @@ function renderL3(content: string) {
                   position: 'absolute', 
                   top: tokens.space[2], 
                   right: tokens.space[2], 
-                  zIndex: 10
+                  zIndex: tokens.zIndex.base + 10
                 }}>
                   <Button 
                     variant="secondary" 
@@ -178,7 +178,7 @@ function renderL3(content: string) {
                     style={{ 
                       height: 24, 
                       padding: '0 8px', 
-                      fontSize: '12px',
+                      fontSize: tokens.fontSize[1],
                       background: tokens.colors.surface,
                       borderColor: tokens.colors.grayBorder
                     }}

@@ -41,20 +41,20 @@ const messageBubbleUserStyle = {
   background: tokens.colors.alpha[2],
   color: tokens.colors.textPrimary,
   borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
   width: '100%',
 };
 
 const messageBubbleModelStyle = {
   borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
   width: '100%',
 };
 
 const messageBubbleResultStyle = {
   background: tokens.colors.accentAlpha[2],
   borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
   width: '100%',
 };
 
@@ -172,7 +172,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
         return (
           <div key={msg.id || `msg-${i}`} className="message-enter" style={{ ...bubbleStyle as any, marginTop }}>
             {isUserMessage ? (
-              <span style={{ fontSize: tokens.fontSize[2], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-3)' }}>
+              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-3)' }}>
                 {safeText}
               </span>
             ) : (

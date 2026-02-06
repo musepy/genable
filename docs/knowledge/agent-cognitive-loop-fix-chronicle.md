@@ -78,16 +78,95 @@
 
 **预期效果**：Context 增长从 ~12K tokens/iteration 降至 ~2K tokens/iteration，叙述自我强化链路被打破。
 
+### 第 5 轮：深层 Context 爆炸问题诊断与修复（2026-02-05）
+
+**现象**：第 4 轮修复后，用户测试发现 context **仍然**从 2% 爆炸到 56%+（4377 → 111278 tokens），每个迭代产出 6-8 个 "Progress" 消息。
+
+**诊断过程**：
+
+1. **添加详细调试日志**：
+   ```typescript
+   // gemini.ts formatResponse
+   console.log(`[GeminiProvider.formatResponse] Tool calls exist (${count}). Text: ${textLen} chars, fullParts: ${partsCount}, categories: [${categories}]`);
+   ```
+
+2. **发现关键异常**：
+   ```
+   [GeminiProvider.formatResponse] Tool calls exist (1). Text: 2183 chars, fullParts: 9, textParts: 0
+   [GeminiProvider.formatResponse] 🧹 Filtered fullParts: 9 -> 9 (removed 0 text parts)
+   [GeminiProvider.formatResponse] ✅ Final content: 9 parts, ~29327 chars JSON
+   ```
+
+   **Text: 2183 chars** 但 **textParts: 0**！文本存在但没有被检测为 text parts。
+
+3. **根因发现**：Gemini 3 的 "Progress" 消息使用的是 **thought 格式**：
+   ```javascript
+   // Gemini 3 返回格式
+   { text: "I'm now focused on...", thought: true }  // thought-text 类型
+
+   // 而非普通 text
+   { text: "I'm now focused on..." }  // 纯 text 类型
+   ```
+
+   原来的过滤条件是 `part.functionCall || part.thought`，会**保留** thought parts，导致叙述文本进入 context。
+
+4. **第二个问题**：Tool results 没有被截断
+   ```
+   [AgentRuntime] 📊 Tool results added: 3388 tokens (~13549 chars)
+   ```
+   一个 tool result 就有 13549 chars，因为 `createNode` 返回完整节点属性（颜色、样式、子节点等）。
+
+**修复措施**：
+
+| 修复 | 文件 | 内容 |
+|:---|:---|:---|
+| **严格过滤** | `gemini.ts` | 过滤条件从 `part.functionCall \|\| part.thought` 改为 **`part.functionCall` only** |
+| **Tool Result 截断** | `agentRuntime.ts` | `cleanToolResult()` 添加 2000 chars 限制，只保留 nodeId, name, type, parentId 等关键字段 |
+| **详细诊断日志** | 两文件 | 添加 part categories、token 贡献追踪 |
+
+**关键代码变更**：
+
+```typescript
+// gemini.ts formatResponse - BEFORE
+content = response.fullParts.filter((part: any) =>
+  part.functionCall || part.thought  // ❌ 会保留 thought-text
+);
+
+// gemini.ts formatResponse - AFTER
+content = response.fullParts.filter((part: any) =>
+  part.functionCall  // ✅ 只保留 functionCall
+);
+```
+
+```typescript
+// agentRuntime.ts cleanToolResult - NEW
+const MAX_DATA_CHARS = 2000;
+if (dataJson.length > MAX_DATA_CHARS) {
+  cleaned.data = {
+    nodeId: cleaned.data.nodeId,
+    name: cleaned.data.name,
+    type: cleaned.data.type,
+    _truncated: true,
+    _originalSize: dataJson.length
+  };
+}
+```
+
+**预期效果**：
+- **Model message**：从 ~30000 chars 降至 ~500-1000 chars（只有 functionCall）
+- **Tool results**：从 ~13000 chars 降至 ~200 chars
+- **每迭代 context 增量**：从 ~7000 tokens 降至 ~300-500 tokens
+
 ---
 
 ## 三、最终修改文件清单
 
 | 文件 | 改动摘要 |
 |:---|:---|
-| `src/engine/agent/agentRuntime.ts` | toolConfig ANY、maxTokens 2048、文本剥离、user 恢复消息、流式中断策略、循环检测增强 |
+| `src/engine/agent/agentRuntime.ts` | toolConfig ANY、maxTokens 2048、文本剥离、user 恢复消息、流式中断策略、循环检测增强、**Tool Result 截断**、**Token 追踪日志** |
 | `src/engine/agent/agentPrompts.ts` | EXECUTION 模式 prompt 强化、DEEP_NODE_PROCESSING_PROTOCOL、DESIGN_FREEDOM |
 | `src/engine/agent/constants.ts` | RAMBLING_TEXT_THRESHOLD 1000→1500、压缩因子调整 |
-| `src/engine/llm-client/providers/gemini.ts` | temperature 0.7→0.4 |
+| `src/engine/llm-client/providers/gemini.ts` | temperature 0.7→0.4、**formatResponse 严格过滤（只保留 functionCall）**、**Part 分类诊断日志** |
 | `src/engine/services/AgentOrchestrator.ts` | token budget 4000→8000、skills 异步初始化 |
 | `src/engine/agent/skills/skillPromptComposer.ts` | DEFAULT_BUDGET 4000→8000 |
 | `src/ipc/handlers/toolCallHandler.ts` | 添加 inspectDesign IPC handler |
@@ -179,6 +258,96 @@ Gemini 对不同角色消息的响应优先级：
 1. **单纯的 Prompt 强化**：在 system prompt 中加入 "MUST start with tool call"、"NO text chatter" 等措辞，对已进入叙述模式的 Gemini 无效。
 2. **取消所有流式中断**：让 Gemini 跑完全程反而浪费更多时间和 tokens（从 3103 chars → 6171 chars），因为没有 ANY 模式时 Gemini 根本不会产出 tool calls。
 3. **仅依赖 `toolConfig.mode: 'ANY'` 而不做文本剥离**：Tool calls 到达了，但 context 以每次 ~1000-1500 tokens 的速度膨胀，14 次迭代后接近上限。
+4. **过滤 `text` 但保留 `thought`**：Gemini 3 将 "Progress" 叙述以 `{ text: "...", thought: true }` 格式输出，被 `part.thought` 条件保留，仍然污染 context。
+
+### 4.8 Gemini 3 Part 类型分类（重要发现）
+
+Gemini 3 的 streaming response 中 `parts` 有以下类型：
+
+| 类型 | 结构 | 内容 | 是否应保留 |
+|:---|:---|:---|:---|
+| `text` | `{ text: "..." }` | 普通文本输出 | ❌ |
+| `thought-string` | `{ thought: "..." }` | 思考过程（字符串形式） | ❌ |
+| `thought-text` | `{ text: "...", thought: true }` | "Progress" 叙述消息 | ❌ |
+| `functionCall` | `{ functionCall: { name, args }, thoughtSignature }` | 工具调用 | ✅ |
+
+**关键洞察**：Gemini 3 的 "Progress: **xxx**" 消息是 `thought-text` 类型，不是普通 `text`。过滤条件必须是 **`part.functionCall` only**，而非 `!part.text`。
+
+### 4.9 Tool Result 截断策略
+
+Tool 执行结果（如 `createNode`）可能返回大量数据：
+
+```javascript
+// 未截断的 createNode 返回值 (~10000+ chars)
+{
+  success: true,
+  data: {
+    nodeId: "123:456",
+    name: "Login Card",
+    type: "FRAME",
+    children: [...],        // 完整子节点树
+    fills: [...],           // 颜色定义
+    strokes: [...],         // 边框定义
+    effects: [...],         // 阴影/模糊
+    layoutProps: {...},     // 自动布局属性
+    constraints: {...},     // 约束
+    ...                     // 更多属性
+  }
+}
+```
+
+**截断策略**：只保留 Agent 链式操作需要的关键字段：
+
+```javascript
+// 截断后 (~150 chars)
+{
+  success: true,
+  data: {
+    nodeId: "123:456",
+    name: "Login Card",
+    type: "FRAME",
+    parentId: "0:1",
+    childrenCount: 5,
+    _truncated: true,
+    _originalSize: 10234
+  }
+}
+```
+
+**为什么这样截断有效**：
+- `nodeId` 是后续操作（setNodeLayout, setNodeStyles）的必需参数
+- `name` 和 `type` 帮助 Agent 理解当前节点上下文
+- `childrenCount` 告知是否有子节点（无需完整数组）
+- `_truncated` 标记提示 Agent 这是截断数据
+
+### 4.10 Context 增长调试方法论
+
+当 context 异常增长时，使用以下日志追踪：
+
+```typescript
+// 1. 每条消息的 token 贡献
+console.log(`[AgentRuntime] 📊 Model message added: ${tokens} tokens (~${chars} chars)`);
+console.log(`[AgentRuntime] 📊 Tool results added: ${tokens} tokens (~${chars} chars)`);
+
+// 2. Part 类型分类（发现隐藏的 thought-text）
+const categories = parts.map(p => {
+  if (p.functionCall) return 'functionCall';
+  if (p.thought && typeof p.thought === 'string') return 'thought-string';
+  if (p.thought === true && p.text) return 'thought-text';
+  if (p.text) return 'text';
+  return 'unknown';
+});
+console.log(`categories: [${categories.join(', ')}]`);
+
+// 3. 过滤效果验证
+console.log(`🧹 Filtered: ${before} -> ${after} (removed ${before - after})`);
+```
+
+**调试流程**：
+1. 观察 `Context Budget: X/Y tokens (Z%)` 每迭代的增长
+2. 检查 `Model message added` 和 `Tool results added` 的 token 数
+3. 如果 model message 过大，检查 `categories` 中是否有非 `functionCall`
+4. 如果 tool results 过大，检查是否触发了 `📦 Truncated` 日志
 
 ---
 
@@ -188,3 +357,41 @@ Gemini 对不同角色消息的响应优先级：
 2. **模式自适应 maxTokens**：根据当前 plan 步骤的复杂度动态调整（简单步骤 1024，复杂步骤 4096）。
 3. **Context 滑动窗口**：只保留最近 N 个 iteration 的完整消息，更早的 iteration 压缩为摘要。
 4. **Tool Call 批处理提示**：在 system prompt 中明确鼓励单次 iteration 产出多个 tool calls（当前 Gemini 倾向于每次只产出 1-2 个）。
+5. **Tool Result 智能截断**：根据工具类型动态决定保留哪些字段（createNode 保留 nodeId，inspectDesign 保留 children 列表等）。
+6. **Thought 内容利用**：虽然 thought 不应进入 context，但可以作为 streaming 进度更新展示给用户（UI 层面显示，不存储）。
+
+---
+
+## 六、问题诊断决策树
+
+```
+Context 异常增长
+├── 检查 Model message tokens
+│   ├── > 1000 tokens/iteration
+│   │   ├── 检查 categories 日志
+│   │   │   ├── 有 thought-text → 修复: 只保留 functionCall
+│   │   │   ├── 有 text → 修复: formatResponse 过滤
+│   │   │   └── 只有 functionCall → 检查 args 大小
+│   │   └── 检查 fullParts 过滤日志
+│   │       └── "removed 0" → 过滤条件有误
+│   └── < 500 tokens/iteration → 正常
+│
+└── 检查 Tool results tokens
+    ├── > 500 tokens/result
+    │   ├── 检查 cleanToolResult 日志
+    │   │   ├── 无 "data size" 日志 → 代码未部署
+    │   │   ├── 有 "📦 Truncated" → 截断生效
+    │   │   └── 有 "data size" 但无截断 → 检查阈值
+    │   └── 检查 tool response 结构
+    │       └── 不是 { success, data } → 截断逻辑不匹配
+    └── < 200 tokens/result → 正常
+```
+
+---
+
+## 七、版本历史
+
+| 日期 | 轮次 | 关键修复 | 效果 |
+|:---|:---|:---|:---|
+| 2026-02-04 | 1-4 | toolConfig ANY、流式中断策略、文本剥离 | 从 iteration 5 死循环 → iteration 14 完成 |
+| 2026-02-05 | 5 | 严格 functionCall-only 过滤、Tool Result 截断 | Context 增长预期从 ~7000 tokens/iter → ~300-500 tokens/iter |

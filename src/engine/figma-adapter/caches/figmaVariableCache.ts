@@ -20,9 +20,11 @@ export class FigmaVariableCache {
      * This replaces the inline logic in main.ts
      */
     public async warmup(): Promise<void> {
-    // [Fix]: Always refresh cache to ensure latest variables are picked up
-    // if (this.isWarmedUp) { return; }
-        
+        // Skip warmup if already cached within this session.
+        // Variables/styles don't change during a single agent run.
+        // Use invalidate() if an explicit refresh is needed.
+        if (this.isWarmedUp) { return; }
+
         console.log('[FigmaVariableCache] Warming up cache...');
         const start = Date.now();
         this.variableMap.clear();
@@ -93,6 +95,14 @@ export class FigmaVariableCache {
      */
     public isReady(): boolean {
         return this.isWarmedUp;
+    }
+
+    /**
+     * Invalidate the cache so the next warmup() call will refresh data.
+     * Call this if variables or styles have been modified during the session.
+     */
+    public invalidate(): void {
+        this.isWarmedUp = false;
     }
 }
 

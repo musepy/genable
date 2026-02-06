@@ -40,6 +40,123 @@ Use this to understand complex layouts or to find specific layers without multip
 };
 
 /**
+ * Tool: batchOperations
+ * Execute multiple Figma operations in a single ordered call.
+ */
+export const batchOperationsDefinition: ToolDefinition = {
+  name: 'batchOperations',
+  category: 'modify',
+  dependencies: [],
+  description: `
+[SUPER TOOL] Execute multiple Figma operations in a single ordered call.
+Use opId-based references (nodeRef/parentRef) to chain operations without guessing IDs.
+If referencing existing nodes, pass nodeId/parentId directly (do NOT use nodeRef/parentRef).
+Operations always execute sequentially.
+
+EXAMPLE (Hierarchical Row):
+{
+  "operations": [
+    {
+      "opId": "row-container",
+      "action": "createNode",
+      "params": {
+        "type": "FRAME",
+        "name": "Data Row",
+        "children": [
+          { "opId": "col-1", "action": "createNode", "params": { "type": "TEXT", "name": "Label", "characters": "Metric Name" } },
+          { "opId": "col-2", "action": "createNode", "params": { "type": "TEXT", "name": "Value", "characters": "1,234" } }
+        ]
+      }
+    },
+    {
+      "opId": "row-layout",
+      "action": "setNodeLayout",
+      "params": { "nodeRef": "row-container", "layoutMode": "HORIZONTAL", "gap": 12, "padding": { "horizontal": 16, "vertical": 8 } }
+    }
+  ]
+}
+`,
+  parameters: {
+    type: 'object',
+    properties: {
+      operations: {
+        type: 'array',
+        description: 'Ordered list of operations to execute',
+        items: {
+          type: 'object',
+          description: 'Single operation definition',
+          required: ['opId', 'action', 'params'],
+          properties: {
+            opId: {
+              type: 'string',
+              description: 'Unique operation ID (Virtual ID) for intra-batch references. Use this as a handle for nodes created in this batch.'
+            },
+            action: {
+              type: 'string',
+              description: 'Operation type to execute',
+              enum: [
+                'createNode',
+                'setNodeLayout',
+                'setNodeStyles',
+                'updateNodeProperties',
+                'createIcon',
+                'deleteNode',
+                'applyDesignPatch'
+              ]
+            },
+            params: {
+              type: 'object',
+              description: 'Parameters for the action. Use nodeRef/parentRef for opId references.',
+              properties: {
+                // Common params mentioned for documentation in schema
+                type: { type: 'string', description: 'Node type (e.g. FRAME, TEXT)' },
+                name: { type: 'string', description: 'Node name' },
+                parentId: { type: 'string', description: 'Real Figma parent ID' },
+                parentRef: { type: 'string', description: 'Virtual ID (opId) of the parent created in this batch' },
+                nodeId: { type: 'string', description: 'Real Figma node ID' },
+                nodeRef: { type: 'string', description: 'Virtual ID (opId) of the node to modify' },
+                // recursive creation support
+                children: {
+                  type: 'array',
+                  description: 'Recursive child operations (createNode only). opIds inside children can be referenced globally within the batch.',
+                  items: { type: 'object', description: 'Child createNode operation (shares opId, action, params structure)' }
+                }
+              }
+            },
+            dependsOn: {
+              type: 'array',
+              description: 'Optional list of opIds that must succeed before this operation',
+              items: { type: 'string', description: 'opId dependency' }
+            }
+          }
+        }
+      },
+      strategy: {
+        type: 'string',
+        description: 'Execution strategy (sequential only)',
+        enum: ['sequential'],
+      },
+      onError: {
+        type: 'string',
+        description: 'Error handling strategy for dependent operations',
+        enum: ['skip-dependents', 'continue'],
+      }
+    },
+    required: ['operations']
+  },
+  executionStrategy: 'sequential',
+  errors: {
+    'INVALID_ACTION': 'Action must be a supported operation type.',
+    'INVALID_OPERATION': 'Operation payload is missing required fields.',
+    'MISSING_REF': 'Referenced opId could not be resolved to a nodeId.',
+    'DEPENDENCY_SKIP': 'Operation skipped due to failed dependency.',
+    'NODE_NOT_FOUND': 'Target node does not exist.',
+    'APPLY_ERROR': 'Failed to apply operation.',
+    'PARTIAL_FAILURE': 'One or more operations failed.'
+  }
+};
+
+/**
  * Tool: applyDesignPatch
  * Batch update multiple properties across multiple nodes.
  */

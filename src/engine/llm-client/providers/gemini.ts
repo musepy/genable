@@ -51,9 +51,23 @@ export class GeminiProvider implements LLMProvider {
       maxOutputTokens: effectiveMaxTokens,
     };
 
-    // Enable thinking for all models that support it (Gemini 2.0+, 3.0, etc.) if configured
+    // Enable thinking for models that support it
     if (thinkingLevel) {
-      config.thinkingConfig = { includeThoughts: true };
+      if (isGemini3) {
+        // Gemini 3 uses thinkingLevel enum (minimal/low/medium/high).
+        // Pass the level directly — no token budget parameter available.
+        config.thinkingConfig = { includeThoughts: true, thinkingLevel };
+      } else {
+        // Gemini 2.5 uses thinkingBudget (token count).
+        // Cap budget to prevent runaway token consumption.
+        const thinkingBudgetByLevel: Record<string, number> = {
+          'minimal': 1024,
+          'low': 4096,
+          'high': 16384,
+        };
+        const budgetTokens = thinkingBudgetByLevel[thinkingLevel] ?? 4096;
+        config.thinkingConfig = { includeThoughts: true, thinkingBudget: budgetTokens };
+      }
     }
 
     if (responseSchema && !tools) {
@@ -184,47 +198,54 @@ You are equipped with professional design tools. Follow these rules:
   formatResponse(response: LLMResponse): LLMMessage {
     // If there are no tool calls, it's a simple text response
     if (!response.toolCalls || response.toolCalls.length === 0) {
-      return { 
+      console.log(`[GeminiProvider.formatResponse] No tool calls, returning text response (${(response.text || '').length} chars)`);
+      return {
         id: 'mdl_' + Math.random().toString(36).substring(7),
-        role: 'model', 
-        content: response.text || '' 
+        role: 'model',
+        content: response.text || ''
       };
     }
 
     // CRITICAL FOR GEMINI API: When tool calls exist, we must NOT include text content
     // in the same message if it follows a user turn. Function calls must come in a clean turn.
     //
-    // We use fullParts if available to preserve exact layout, but filter out text parts
-    // to ensure only function calls (and thoughts) are in this message.
+    // [FIX] ALWAYS strip text parts when tool calls exist. Gemini produces 2000-8000 chars
+    // of repetitive narration ("I'm now focused on...") BEFORE tool calls in streaming.
+    // This text pollutes context (50K-200K tokens over 40 iterations) and reinforces the narration pattern.
+    // We only keep functionCall and thought parts - text is discarded.
     let content: Part[];
-    
-    if (response.fullParts && response.fullParts.length > 0) {
-      content = response.fullParts.filter((part: any) =>
-        part.text || part.functionCall || part.thought
-      );
-      
-      // Fallback if filtering resulted in empty content (unexpected)
-      if (content.length === 0) {
-        content = response.toolCalls.map(tc => ({
-          functionCall: { name: tc.name, args: tc.args },
-          thought_signature: tc.thought_signature
-        }));
-      }
-    } else {
-      content = [];
-      if (response.text) content.push({ text: response.text });
-      if (response.thoughts) content.push({ text: response.thoughts, thought: true } as any);
-      
-      content.push(...response.toolCalls.map(tc => ({
-        functionCall: { name: tc.name, args: tc.args },
-        thought_signature: tc.thought_signature
-      })));
-    }
 
-    return { 
+    // [DEBUG] Log what we're working with
+    const originalTextLength = (response.text || '').length;
+    const fullPartsCount = response.fullParts?.length || 0;
+
+    // Debug: categorize all parts
+    const partCategories = response.fullParts?.map((p: any) => {
+      if (p.functionCall) return 'functionCall';
+      if (p.thought && typeof p.thought === 'string') return 'thought-string';
+      if (p.thought === true && p.text) return 'thought-text'; // Gemini 3 style: { text: "...", thought: true }
+      if (p.text) return 'text';
+      return 'unknown';
+    }) || [];
+    console.log(`[GeminiProvider.formatResponse] Tool calls exist (${response.toolCalls.length}). Text: ${originalTextLength} chars, fullParts: ${fullPartsCount}, categories: [${partCategories.join(', ')}]`);
+
+    // [FIX] Always build content from toolCalls directly.
+    // Gemini streaming fullParts can include large thought-text blobs that bloat context.
+    // toolCalls are already parsed and minimal, so use them exclusively.
+    console.log(`[GeminiProvider.formatResponse] Building content from toolCalls (ignoring fullParts/text)`);
+    content = response.toolCalls.map(tc => ({
+      functionCall: { name: tc.name, args: tc.args },
+      thought_signature: tc.thought_signature
+    }));
+
+    // [DEBUG] Final content size
+    const contentJson = JSON.stringify(content);
+    console.log(`[GeminiProvider.formatResponse] ✅ Final content: ${content.length} parts, ~${contentJson.length} chars JSON`);
+
+    return {
       id: 'mdl_' + Math.random().toString(36).substring(7),
-      role: 'model', 
-      content 
+      role: 'model',
+      content
     };
   }
 

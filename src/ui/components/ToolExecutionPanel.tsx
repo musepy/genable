@@ -35,6 +35,35 @@ function extractResultNodes(toolCalls: ToolCallRecord[] = []) {
 
   for (const tc of toolCalls) {
     const data = (tc.result as any)?.data || {};
+    const results = Array.isArray(data.results) ? data.results : [];
+    const nameByOpId = new Map<string, string>();
+
+    for (const result of results) {
+      if (result?.opId && result?.name) {
+        nameByOpId.set(result.opId, result.name);
+      }
+    }
+
+    for (const result of results) {
+      const nodeId = result?.nodeId;
+      if (!nodeId || map.has(nodeId)) continue;
+
+      const label =
+        result?.name ||
+        result?.opId ||
+        nodeId;
+
+      map.set(nodeId, { nodeId, label });
+    }
+
+    if (data.idMap && typeof data.idMap === 'object') {
+      for (const [opId, nodeId] of Object.entries(data.idMap)) {
+        if (typeof nodeId !== 'string' || map.has(nodeId)) continue;
+        const label = nameByOpId.get(opId) || opId || nodeId;
+        map.set(nodeId, { nodeId, label });
+      }
+    }
+
     const nodeId =
       data.nodeId ||
       (tc.result as any)?.nodeId ||

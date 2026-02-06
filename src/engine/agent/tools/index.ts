@@ -25,18 +25,19 @@ import { inspectDesignDefinition } from './inspectTool';
 
 import { validateLayoutDefinition } from './validationTools';
 
-import { applyDesignPatchDefinition } from './designSuperTools';
+import { applyDesignPatchDefinition, batchOperationsDefinition } from './designSuperTools';
 
 import { workflowTools } from './workflowTools';
 
 /**
  * All tool definitions for LLM function calling.
- * TOTAL: ~12 tools (reduced from 17+).
+ * TOTAL: ~13 tools (reduced from 17+).
  */
 export const agentTools = [
   ...workflowTools,             // new_task, update_todo_list, summarize_progress, complete_task
   ...projectUITools.definitions,
   inspectDesignDefinition,      // [NEW] Replaces getSelection, getDeepHierarchy, getNodeDSL
+  batchOperationsDefinition,    // Batch create/modify
   applyDesignPatchDefinition,   // Batch modify
   planDesignDefinition,         // Planning
   searchDesignKnowledgeDefinition,
@@ -71,6 +72,7 @@ const PLANNING_TOOLS = [
 
 const EXECUTION_TOOLS = [
   'inspectDesign',
+  'batchOperations',
   'createNode',
   'setNodeLayout',
   'setNodeStyles',
@@ -116,4 +118,3 @@ export function getToolsForMode(mode: 'PLANNING' | 'EXECUTION' | 'VERIFICATION',
 
 // Re-export types
 export * from './types';
-

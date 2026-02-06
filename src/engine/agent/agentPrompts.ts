@@ -22,21 +22,29 @@ export const AGENT_THINKING_PROTOCOL = `
 `;
 
 export const DEEP_NODE_PROCESSING_PROTOCOL = `
-## DEEP NODE PROCESSING PROTOCOL (SKELETON-FIRST)
-Priority: Structural Integrity > Content > Visual Styling. A component must "work" (layout/hierarchy) before it "looks good".
+## DEEP NODE PROCESSING PROTOCOL (INLINE-FIRST)
+Priority: Structural Integrity > Content = Visual Styling. A component must "work" (layout/hierarchy) before it looks perfect.
 
-1. **Mandatory Sequence**:
-   - **Phase 1: Skeleton (Structure & Layout)**: Create ALL nodes in your plan first. Apply Auto Layout, spacing, and alignment.
-   - **Phase 2: Content**: Replace all placeholders with final, meaningful text/icons.
-   - **Phase 3: Skin (Skinning/Polishing)**: ONLY after Phase 1 & 2 are complete, apply purely aesthetic styles (colors, font-weights, effects).
-2. **Style Lock**:
-   - DO NOT call \`updateNodeProperties\` for aesthetic tweaks (font-weight, corner-radius, color) until the overall Node Hierarchy of the component is 100% rendered.
-3. **No Aesthetic Narration**:
-   - NEVER describe your "styling process" or "aesthetic exploration". If you find yourself thinking about which color or font-weight looks better, STOP. Use a standard UI value and move to the next task.
+1. **Recommended Sequence**:
+   - **Create Nodes with Styles**: Use \`batchOperations\` to create nodes AND apply their styles in a SINGLE batch.
+     - Use inline parameters (fills, cornerRadius, etc.) in create operations when possible
+     - Group related nodes (e.g., button + text + icon) in one batch
+   - **Content Phase**: Replace placeholders with final meaningful text/icons if not set during creation
+   - **Polish Phase (Optional)**: Only if aesthetics need refinement, use \`applyDesignPatch\`
+
+2. **Inline Styling Principle**:
+   - PREFER: Creating a node with its \`fills\`, \`cornerRadius\`, \`padding\` in the SAME operation
+   - AVOID: Creating a bare node, then updating its styles in a separate tool call
+   - Example: Instead of createNode("Button") + setNodeStyles(buttonId), use createNode("Button", {fills: [...], cornerRadius: 8})
+
+3. **Batch Size Target**:
+   - Minimum 3 operations per \`batchOperations\` call
+   - Maximum 10 operations per batch (for readability and debugging)
+   - Single isolated operations are acceptable ONLY for complex computations or conditional logic
+
 4. **Anchor by ID**: 
    - Never guess IDs of deep nodes. Always use IDs returned from hierarchy inspection.
-5. **Batch Refining**:
-   - Use \`applyDesignPatch\` for multiple style updates to avoid iteration exhaustion.
+   - Use \`nodeRef\`/\`parentRef\` for intra-batch virtual references
 `;
 
 export const DYNAMIC_GUIDANCE = {
@@ -57,12 +65,33 @@ export const DYNAMIC_GUIDANCE = {
 - **ZERO Text Narration**:
   - DO NOT describe what you are doing (e.g., "Designing...", "Adding padding...", "Next, I will...").
   - DO NOT analyze your layout strategy or row/column logic in the text response (e.g., "I'm thinking about the structure of the table...").
-  - If you need to "think" or "plan", do it silently in your internal thinking space, then output ONLY the tool call.
+  - Do NOT produce long internal thinking. Keep reasoning brief (under 200 words). Output ONLY the tool call.
   - If you catch yourself writing descriptive text, STOP and call a tool instead.
+  - NEVER output "Progress:" headers, markdown headings, or status updates in text. Tool calls only.
 - **Loop Prevention**: If you repeat the same "Progress" headers or descriptions across turns, the system will mark it as a failure.
 - **ANTI-STRATEGY NARRATION**: 
   - DO NOT say "I am exploring different styles", "Refining the look", or "Planning the grid". 
   - If the structure (Nodes/Layout) is incomplete, Focus 100% on tool calls that build or position nodes.
+
+## BATCH EXECUTION RULE (MANDATORY - VIOLATION = FAILURE)
+- **EVERY response MUST contain 2+ tool calls.** Single-tool responses waste an entire LLM round-trip.
+  - The ONLY exception: the final \`complete_task\` call.
+  - If you have 1 createNode, ALWAYS add more: sibling nodes, child nodes, or style patches.
+
+- **Use \`batchOperations\`** to combine multiple Figma operations into ONE tool call.
+  - Use \`opId\` + \`nodeRef\`/\`parentRef\` for intra-batch dependency chaining.
+  - Use \`nodeId\`/\`parentId\` only for nodes created in previous iterations.
+
+- **Think in COMPONENT CHUNKS, not individual nodes**:
+  - ✅ CORRECT: ONE batchOperations = [create form container, create email input, create password input, create submit button, set layout on container] (5 ops in 1 call)
+  - ❌ WRONG: 5 separate iterations creating one node each
+
+- **Style Updates**: Batch ALL style changes into one \`applyDesignPatch\` with multiple patches, NOT one patch per iteration.
+
+## PROGRESS THROTTLE (MANDATORY)
+- You may call \`summarize_progress\` at most ONCE per response/iteration.
+- Never emit multiple \`summarize_progress\` calls in a single response.
+- Only call \`summarize_progress\` after meaningful tool execution. If no changes were made or you are done, call \`complete_task\`.
 
 ## POLISHING PHASE EXIT RULES
 When the main structure exists and you are making final adjustments:
@@ -75,6 +104,7 @@ When the main structure exists and you are making final adjustments:
    → Call \`complete_task\` immediately. Do NOT pursue pixel-perfection.
 3. **Anti-pattern Detection**: If you've called \`summarize_progress\` 2+ times without meaningful structural changes, you MUST call \`complete_task\` on the next turn.
 4. **Mandatory Action**: In EXECUTION mode, every response MUST contain at least one tool call that advances the design. Just updating the todo list is NOT enough.
+5. **Inline Perfection (P3)**: PREFER calling \`createNode\` or \`createIcon\` with both \`layout\` and \`styles\` in the SAME call. Do NOT create a raw node and style it later if the requirements are already known.
 
 ${DEEP_NODE_PROCESSING_PROTOCOL}
 `,
@@ -99,14 +129,10 @@ export const AGENT_CONTENT_REQUIREMENT = `
 `;
 
 export const AGENT_PARENT_CHILD_RULE = `
-## PARENT-CHILD CREATION (Figma Hard Constraint)
-⚠️ This is a Figma API limitation, NOT a suggestion:
-- Nodes CANNOT have children unless the parent EXISTS FIRST.
-- When building hierarchies:
-  1. Create parent node → WAIT for response → Get nodeId.
-  2. Create child node with parentId = parent's returned nodeId.
-- NEVER attempt parallel creation of parent and children.
-- NEVER guess or predict nodeIds - only use IDs from actual responses.
+## PARENT-CHILD CREATION (Optimized)
+- **Hierarchical Batching (Preferred)**: Use \`batchOperations\` to create multiple nested levels in a single call. Use \`opId\` for the parent and \`parentRef\` for the children within the SAME batch.
+- **Sequential Creation**: Only required when a child node depends on a parent that was created in a PREVIOUS iteration/tool call. In this case, use the real \`parentId\` from the response.
+- **Precision**: Never guess or predict real nodeIds - always use \`nodeRef\`/\`parentRef\` for intra-batch virtual references, or real IDs from tool responses.
 `;
 
 export const AGENT_DESIGN_FREEDOM = `

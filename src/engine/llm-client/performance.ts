@@ -29,9 +29,15 @@ export interface LLMPerformanceProfile {
  * Formula: (Tokens / Avg_TPS) + Thinking_Cost + Safety_Buffer
  */
 export function calculateTimeoutMs(profile: LLMPerformanceProfile): number {
-  // [Gemini Protocol] We no longer enforce client-side timeouts.
-  // The model should be allowed to think and generate as long as necessary.
-  return Infinity;
+  // Reasonable per-request timeout based on profile.
+  // Avg Gemini TPS ~100 tokens/s. Add thinking overhead + safety buffer.
+  const baseMs = (profile.maxOutputTokens / 100) * 1000;
+  const thinkingOverhead: Record<string, number> = {
+    'minimal': 5000,
+    'low': 15000,
+    'high': 30000,
+  };
+  return baseMs + (thinkingOverhead[profile.thinkingLevel] ?? 15000) + profile.safetyBufferMs;
 }
 
 /**

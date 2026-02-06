@@ -53,7 +53,6 @@ function injectMetaData() {
     // Figma's security scanner rejects any code containing forbidden patterns, even in strings/comments.
     // We sanitize these by breaking the keywords.
     const patterns = [
-      { regex: /\bimport\b/g, replacement: 'imp_ort' },
       { regex: /import\s*\(/g, replacement: 'imp_ort(' },
       { regex: /import\.\s*meta/g, replacement: 'imp_ort.meta' },
       { regex: /eval\s*\(/g, replacement: 'ev_al(' },

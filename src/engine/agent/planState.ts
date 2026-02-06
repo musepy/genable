@@ -27,8 +27,17 @@ class PlanStateManager {
   /**
    * Initialize or replace the current plan.
    */
+  private static readonly MAX_PLAN_STEPS = 10;
+
   setCurrentPlan(steps: any[]) {
-    this.currentPlan = steps.map((step, idx) => ({
+    // Cap plan size to prevent over-granular plans that waste iterations.
+    // If the model generated too many steps, keep only the first MAX_PLAN_STEPS.
+    const cappedSteps = steps.slice(0, PlanStateManager.MAX_PLAN_STEPS);
+    if (steps.length > PlanStateManager.MAX_PLAN_STEPS) {
+      console.warn(`[PlanState] Plan had ${steps.length} steps, capped to ${PlanStateManager.MAX_PLAN_STEPS}. Encourage the model to group related operations.`);
+    }
+
+    this.currentPlan = cappedSteps.map((step, idx) => ({
       ...step,
       stepId: step.stepId || `step_${Date.now()}_${idx}`,
       title: step.title || step.action || 'Untitled Step',

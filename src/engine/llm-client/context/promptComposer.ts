@@ -269,37 +269,41 @@ function compressSelectionContext(serializedNodes: any[], maxTokens: number): st
 const TOOL_EXAMPLES = `
 ## EXAMPLES
 
-### Example 1: Parallel Information Gathering ✅
-User: "优化当前选中的元素布局"
+### Example 1: batchOperations — Build a Complete Component in ONE Call ✅ (PREFERRED)
+User: "创建一个带标题的卡片"
 
-**Parallel batch (collect context):**
-[getSelection, getVariables, getStyles]
+**ONE batchOperations call creates the entire component:**
+batchOperations({
+  operations: [
+    { opId: "card", type: "createNode", params: { type: "FRAME", name: "Card Container", layout: { layoutMode: "VERTICAL", padding: { horizontal: 16, vertical: 16 }, gap: 12 }, styles: { fills: ["#FFFFFF"], cornerRadius: 12 } } },
+    { opId: "title", type: "createNode", params: { type: "TEXT", name: "Card Title", parentRef: "card", characters: "卡片标题" }, styles: { fills: ["#1A1A1A"] } },
+    { opId: "subtitle", type: "createNode", params: { type: "TEXT", name: "Card Subtitle", parentRef: "card", characters: "描述文字" }, styles: { fills: ["#666666"] } }
+  ]
+})
+→ Returns: { results: [{opId: "card", nodeId: "100:1"}, {opId: "title", nodeId: "100:2"}, {opId: "subtitle", nodeId: "100:3"}] }
 
-System responses:
-{selection: [{id: "123:456", name: "Card", type: "FRAME"}]}
-{variables: [...]}
-{styles: [...]}
-
-**Sequential execution (apply changes):**
-setNodeLayout({nodeId: "123:456", layoutMode: "VERTICAL", padding: {horizontal: 16, vertical: 16}, gap: 12})
+✅ 3 nodes + layout + styles in 1 tool call. Use opId + parentRef for parent-child chaining within the batch.
 
 ---
 
-### Example 2: Create with Dependencies ⚠️
-User: "创建一个带标题的卡片"
+### Example 2: Build an Entire Section Per Iteration ✅
+User: "Create a login form"
 
-**Step 1 - Create parent first:**
-createNode({type: "FRAME", name: "Card Container"})
-→ Returns: {nodeId: "100:1"}
+**Iteration 1 (2 tool calls):**
+batchOperations({operations: [
+  { opId: "form", type: "createNode", params: { type: "FRAME", name: "Login Form", layout: { layoutMode: "VERTICAL", gap: 16, padding: { horizontal: 24, vertical: 32 } } } },
+  { opId: "title", type: "createNode", params: { type: "TEXT", name: "Form Title", parentRef: "form", characters: "Sign In" } },
+  { opId: "email", type: "createNode", params: { type: "FRAME", name: "Email Input", parentRef: "form", layout: { layoutMode: "HORIZONTAL", padding: { horizontal: 12, vertical: 10 } }, styles: { cornerRadius: 8, strokes: ["#D0D5DD"] } } },
+  { opId: "emailLabel", type: "createNode", params: { type: "TEXT", name: "Email Text", parentRef: "email", characters: "email@example.com" } },
+  { opId: "password", type: "createNode", params: { type: "FRAME", name: "Password Input", parentRef: "form", layout: { layoutMode: "HORIZONTAL", padding: { horizontal: 12, vertical: 10 } }, styles: { cornerRadius: 8, strokes: ["#D0D5DD"] } } },
+  { opId: "pwLabel", type: "createNode", params: { type: "TEXT", name: "Password Text", parentRef: "password", characters: "••••••••" } },
+  { opId: "btn", type: "createNode", params: { type: "FRAME", name: "Sign In Button", parentRef: "form", layout: { layoutMode: "HORIZONTAL", padding: { horizontal: 16, vertical: 12 } }, styles: { fills: ["#4F46E5"], cornerRadius: 8 } } },
+  { opId: "btnText", type: "createNode", params: { type: "TEXT", name: "Button Label", parentRef: "btn", characters: "Sign In" } }
+]})
+summarize_progress({summary: "Login form created with all fields and button", isComplete: true})
 
-**Step 2 - Create child using parent ID:**
-createNode({type: "TEXT", name: "Card Title", parentId: "100:1", characters: "卡片标题"})
-→ Returns: {nodeId: "100:2"}
-
-**Step 3 - Configure parent layout:**
-setNodeLayout({nodeId: "100:1", layoutMode: "VERTICAL", gap: 12})
-
-⚠️ CRITICAL: Always use nodeId from createNode response. Never guess IDs.
+✅ Entire form built in 1 iteration with 2 tool calls (batchOperations + summarize_progress).
+❌ WRONG: Creating 1 node per iteration = 8 iterations = waste.
 
 ---
 
@@ -313,27 +317,6 @@ setNodeLayout({nodeId: "100:1", sizing: {horizontal: "HUG"}})
 **Recovery:**
 setNodeLayout({nodeId: "100:1", layoutMode: "VERTICAL", sizing: {horizontal: "HUG"}})
 → Success: {success: true}
-
----
-
-### Example 4: Multi-Level Hierarchy (CRITICAL - Sequential Only) ⚠️
-User: "Create a card with header containing title and icon"
-
-**Step 1 - Create root (no parentId):**
-createNode({type: "FRAME", name: "Card"})
-→ Returns: {nodeId: "100:1"}
-// ⚠️ WAIT for this response before Step 2!
-
-**Step 2 - Create child using Step 1's nodeId:**
-createNode({type: "FRAME", name: "Header", parentId: "100:1"})
-→ Returns: {nodeId: "100:2"}
-// ⚠️ WAIT for this response before Step 3!
-
-**Step 3 - Create grandchild using Step 2's nodeId:**
-createNode({type: "TEXT", name: "Title", parentId: "100:2", characters: "Card Title"})
-→ Returns: {nodeId: "100:3"}
-
-⚠️ NEVER call these in parallel! Each createNode MUST complete before using its nodeId.
 `;
 
 // ==========================================
@@ -457,22 +440,22 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         builder: (_deps, _tools, _budget) => buildAgentIdentity()
     },
     {
+        id: 'tool-examples',
+        priority: 1.1,
+        budgetKey: 'examples',
+        builder: (_deps, _tools, budget) => buildToolExamples(budget)
+    },
+    {
         id: 'mode-guidance',
-        priority: 1.2,
+        priority: 2,
         budgetKey: 'core',
         builder: (_deps, _tools, _budget, mode) => buildModeGuidance(mode || 'PLANNING')
     },
     {
         id: 'tool-format',
-        priority: 2,
+        priority: 2.1,
         budgetKey: 'tools',
         builder: (_deps, tools, budget) => buildToolFormat(tools, budget)
-    },
-    {
-        id: 'tool-examples',
-        priority: 3,
-        budgetKey: 'examples',
-        builder: (_deps, _tools, budget) => buildToolExamples(budget)
     },
     {
         id: 'selection-context',
@@ -574,7 +557,7 @@ export function composeSystemPrompt(
         ...AGENT_SECTION_REGISTRY,
         {
             id: 'provider-instructions',
-            priority: 1.5,
+            priority: 2.2,
             budgetKey: 'core' as const,
             builder: () => providerInstruction
         }

@@ -15,22 +15,17 @@ export const planDesignDefinition: ToolDefinition = {
   category: 'plan',
   dependencies: [],
   description: `
-[PLANNING] BEFORE creating any nodes, analyze the task and create a detailed execution plan.
-This tool helps ensure proper structure, dependencies, and content are planned before execution.
+[PLANNING] Create a CONCISE execution plan (MAX 8 steps). Each step should group related operations.
+Do NOT create one step per node — group sibling nodes, container+children, or related style changes into single steps.
 
-Use this tool to:
-1. Analyze user requirements and break down into steps
-2. Identify dependencies between nodes (e.g., parent must exist before child)
-3. Plan content for each TEXT node upfront
-4. Determine layout strategy (Auto Layout requirements)
-5. Verify naming conventions
+EXAMPLE: For "Create a login form with email, password, and sign-in button":
+- Step 1: Create root container "Login Form" with header (title + subtitle)
+- Step 2: Create form fields (email input + password input)
+- Step 3: Create sign-in button and social login buttons
+- Step 4: Apply final layout and styles
 
-EXAMPLE: For "Create a login form with title and button":
-- Step 1: Create container FRAME "Login Form"
-- Step 2: Create TEXT "Title" with content "Welcome Back"
-- Step 3: Create TEXT "Email Label" with content "Email"
-- Step 4: Create container FRAME "Email Input Group"
-- Step 5: Create TEXT "Button" with content "Sign In"
+ANTI-PATTERN (TOO GRANULAR - DO NOT DO THIS):
+- Step 1: Create container → Step 2: Create title → Step 3: Create subtitle → ... (20 steps)
 `,
   parameters: {
     type: 'object',
@@ -41,14 +36,14 @@ EXAMPLE: For "Create a login form with title and button":
       },
       steps: {
         type: 'array',
-        description: 'Ordered list of planned actions. Each step must include: stepNumber (number), action (string), parameters (object), reasoning (string)',
+        description: 'Ordered list of HIGH-LEVEL design milestones (NOT individual tool calls). Each step groups multiple related operations.',
         items: {
           type: 'object',
-          description: 'A single planned step with tool call details',
+          description: 'A component-level milestone that requires MULTIPLE tool calls to complete',
           properties: {
             stepNumber: { type: 'number', description: 'Step order (1, 2, 3...)' },
-            action: { type: 'string', description: 'Tool to call (createNode, setNodeLayout, etc.)' },
-            parameters: { type: 'object', description: 'Parameters for the tool call' },
+            action: { type: 'string', description: 'High-level description of what to build (e.g., "Build header section with logo, title, and navigation links"). NOT a tool name.' },
+            nodes: { type: 'array', items: { type: 'string', description: 'Name of a node/element to create' }, description: 'List of nodes/elements this step will create (e.g., ["Header Frame", "Logo", "Title Text", "Nav Links"])' },
             reasoning: { type: 'string', description: 'Why this step is needed' }
           }
         }
@@ -71,11 +66,11 @@ export const createNodeDefinition: ToolDefinition = {
   description: `
 [ATOMIC] Create FRAME, TEXT, RECTANGLE, ELLIPSE, or LINE.
 
-⚠️ SEQUENTIAL CONSTRAINT (Figma Hard Rule):
-When creating parent-child hierarchy:
-1. MUST wait for parent's createNode to return nodeId BEFORE creating child
-2. NEVER call createNode for child in parallel with parent
-3. parentId MUST be the exact nodeId from a COMPLETED previous createNode
+⚠️ HIERARCHY RULE:
+- For complex structures, use \`batchOperations\` with the \`children\` array to build deep hierarchies in a single call.
+- When creating parent-child hierarchy WITHOUT \`batchOperations\`:
+  1. MUST wait for parent's createNode to return nodeId BEFORE creating child.
+  2. parentId MUST be the exact nodeId from a COMPLETED previous createNode.
 
 Returns: {nodeId: "124:567"} - Use this ID as parentId for child nodes.
 `,
@@ -102,6 +97,47 @@ NEVER use a predicted, placeholder, or guessed ID.`
       characters: { 
         type: 'string', 
         description: 'Initial text content (Only used if type=TEXT). Defaults to "Text".' 
+      },
+      layout: {
+        type: 'object',
+        description: '[INLINE OPTIMIZATION] Configure Auto Layout (padding, gap, sizing) during creation to save iterations. Same schema as setNodeLayout.',
+        properties: {
+          layoutMode: { type: 'string', enum: ['NONE', 'HORIZONTAL', 'VERTICAL'], description: 'Auto layout direction' },
+          sizing: { 
+            type: 'object', 
+            description: 'Sizing rules',
+            properties: { 
+              horizontal: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Horizontal sizing' }, 
+              vertical: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Vertical sizing' } 
+            } 
+          },
+          padding: { 
+            type: 'object', 
+            description: 'Padding values',
+            properties: { 
+              horizontal: { type: 'number', description: 'Horizontal padding' }, 
+              vertical: { type: 'number', description: 'Vertical padding' }, 
+              top: { type: 'number', description: 'Top padding' }, 
+              right: { type: 'number', description: 'Right padding' }, 
+              bottom: { type: 'number', description: 'Bottom padding' }, 
+              left: { type: 'number', description: 'Left padding' } 
+            } 
+          },
+          gap: { type: 'number', description: 'Gap between children' },
+          width: { type: 'number', description: 'Explicit width' },
+          height: { type: 'number', description: 'Explicit height' }
+        }
+      },
+      styles: {
+        type: 'object',
+        description: '[INLINE OPTIMIZATION] Configure visual styles (fills, cornerRadius, etc.) during creation. Same schema as setNodeStyles.',
+        properties: {
+          fills: { type: 'array', items: { type: 'string', description: 'Hex or variable' }, description: 'Background/Text colors' },
+          strokes: { type: 'array', items: { type: 'string', description: 'Hex or variable' }, description: 'Stroke colors' },
+          strokeWeight: { type: 'number', description: 'Stroke thickness' },
+          cornerRadius: { type: 'number', description: 'Corner radius' },
+          opacity: { type: 'number', description: 'Layer opacity (0-1)' }
+        }
       },
       stepId: {
         type: 'string',
@@ -309,6 +345,27 @@ export const createIconDefinition: ToolDefinition = {
         type: 'string', 
         pattern: '^#[0-9A-Fa-f]{6}$',
         description: 'Icon color hex' 
+      },
+      layout: {
+        type: 'object',
+        description: '[INLINE OPTIMIZATION] Configure Auto Layout (padding, gap, sizing) during creation. Same schema as setNodeLayout.',
+        properties: {
+          sizing: { 
+            type: 'object', 
+            description: 'Sizing rules',
+            properties: { 
+              horizontal: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Horizontal sizing' }, 
+              vertical: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Vertical sizing' } 
+            } 
+          }
+        }
+      },
+      styles: {
+        type: 'object',
+        description: '[INLINE OPTIMIZATION] Configure visual styles (opacity) during creation. Same schema as setNodeStyles.',
+        properties: {
+          opacity: { type: 'number', description: 'Layer opacity (0-1)' }
+        }
       },
       stepId: {
         type: 'string',

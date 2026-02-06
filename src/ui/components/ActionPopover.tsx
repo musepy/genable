@@ -84,7 +84,7 @@ export function ActionPopover({ onSerializeSelection, disabled }: ActionPopoverP
             bottom: 'calc(100% + 8px)',
             left: 0,
             width: 220,
-            zIndex: 100,
+            zIndex: tokens.zIndex.popover,
           }}
         >
           <div style={{ padding: tokens.space[1] }}>

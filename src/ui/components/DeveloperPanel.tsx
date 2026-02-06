@@ -223,7 +223,7 @@ export function DeveloperPanel() {
               padding: '8px 10px', 
               background: tokens.colors.surface, 
               border: `1px solid ${tokens.colors.grayBorder}`,
-              borderRadius: 6,
+              borderRadius: 'var(--radius-2)',
               display: 'flex',
               flexDirection: 'column',
               gap: 8
@@ -233,7 +233,7 @@ export function DeveloperPanel() {
                   <div style={{ fontWeight: 600, color: tokens.colors.textPrimary }}>{template.name}</div>
                   <div style={{ color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1], fontFamily: tokens.font.mono }}>{template.path}</div>
                 </div>
-                <div style={{ background: tokens.colors.accentMuted, color: tokens.colors.accent, padding: '2px 4px', borderRadius: 2, fontSize: tokens.fontSize[1] }}>
+                <div style={{ background: tokens.colors.accentMuted, color: tokens.colors.accent, padding: '2px 4px', borderRadius: 'var(--radius-1)', fontSize: tokens.fontSize[1] }}>
                   v{template.version}
                 </div>
               </div>
@@ -283,7 +283,7 @@ export function DeveloperPanel() {
                 padding: '6px 8px', 
                 background: tokens.colors.background, 
                 border: `1px solid ${tokens.colors.grayBorder}`,
-                borderRadius: 4,
+                borderRadius: 'var(--radius-1)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center'
@@ -316,7 +316,7 @@ export function DeveloperPanel() {
               background: tokens.colors.background,
               color: tokens.colors.textSecondary,
               border: `1px solid ${tokens.colors.grayBorder}`,
-              borderRadius: '3px',
+              borderRadius: 'var(--radius-1)',
               padding: '4px'
             }}
             value={lastExport}

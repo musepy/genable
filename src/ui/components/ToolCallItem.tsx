@@ -31,7 +31,7 @@ export function ToolCallItem({ record }: ToolCallItemProps) {
     return (
       <div style={{ marginBottom: tokens.space[2] }}>
         <span style={{ color: color || tokens.colors.textSecondary, fontWeight: 600 }}>{label}:</span>
-        <pre style={{ margin: 0, padding: 4, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+          <pre style={{ margin: 0, padding: tokens.space[1], whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
           {JSON.stringify(data, null, 2)}
         </pre>
       </div>
@@ -72,7 +72,7 @@ export function ToolCallItem({ record }: ToolCallItemProps) {
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
-            gap: 4, 
+            gap: tokens.space[1], 
             fontSize: tokens.fontSize[1], 
             color: tokens.colors.textSecondary 
           }}>

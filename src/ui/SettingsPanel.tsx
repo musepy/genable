@@ -94,7 +94,7 @@ export function SettingsPanel({
             setProviderName(provider);
           }}
         >
-          <div className="api-module-title" style={{ fontSize: 13, fontWeight: 400 }}>
+          <div className="api-module-title" style={{ fontSize: tokens.fontSize[2], fontWeight: 400 }}>
             <span style={{ color: 'var(--gray-11)' }}>{name} API Key</span>
           </div>
           <ArrowIcon expanded={isExpanded} />
@@ -102,7 +102,7 @@ export function SettingsPanel({
         
         <div className="api-module-content">
           <div className="api-expand-inner">
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: tokens.space[4] }}>
               <Input 
                 type="password"
                 value={isCurrent ? apiKey : ''}
@@ -113,19 +113,19 @@ export function SettingsPanel({
                 placeholder="Enter your API key"
                 fullWidth
                 style={{ 
-                  height: 32, // Forced 32px height
-                  fontSize: 12, 
+                  height: 32,
+                  fontSize: tokens.fontSize[1],
                   border: 'var(--border-main)', 
                   borderRadius: 'var(--radius-5)'
                 }}
               />
             </div>
             
-            <div style={{ marginBottom: 4 }}>
+            <div style={{ marginBottom: tokens.space[1] }}>
               <label style={{ 
-                fontSize: 11, 
+                fontSize: tokens.fontSize[1],
                 color: 'var(--gray-9)', 
-                marginBottom: 6, 
+                marginBottom: tokens.space[2], 
                 display: 'block',
                 fontWeight: 400
               }}>
@@ -164,11 +164,11 @@ export function SettingsPanel({
           <div 
             onClick={() => setShowDeveloper(!showDeveloper)}
             style={{ 
-              fontSize: 12, 
+              fontSize: tokens.fontSize[1],
               color: 'var(--gray-9)', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 4, 
+              gap: tokens.space[1], 
               cursor: 'pointer',
               opacity: 0.6
             }}

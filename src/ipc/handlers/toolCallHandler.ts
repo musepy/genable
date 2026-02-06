@@ -577,6 +577,12 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                         }
 
                         const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
+                        // Detect silent parent resolution failures that cause node leaking to page root
+                        if (!explicitParent && parentResolution.parentId) {
+                            console.warn(`[batchOps] ⚠️ Parent '${parentResolution.parentId}' not found for op '${opId}' - node will leak to page root`);
+                        } else if (!explicitParent && !params.parentRef && !params.parentId) {
+                            console.warn(`[batchOps] ⚠️ No parent specified for op '${opId}' (${name || type}) - node placed at page root`);
+                        }
                         const node = await handleUnifiedRender({
                             type,
                             props: {
@@ -618,10 +624,15 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                         const childResults: any[] = [];
                         if (Array.isArray(children)) {
                             for (const childOp of children) {
-                                // Inject parentRef if not present
+                                // Inject parentRef only if not already specified
+                                const childParams = childOp.params || {};
+                                const hasExplicitParent = childParams.parentRef || childParams.parentId;
                                 const childResult = await executeSingleOperation({
                                     ...childOp,
-                                    params: { ...childOp.params, parentRef: opId }
+                                    params: {
+                                      ...childParams,
+                                      ...(!hasExplicitParent && { parentRef: opId })
+                                    }
                                 });
                                 childResults.push(childResult);
                             }
@@ -659,6 +670,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                         }
 
                         const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
+                        if (!explicitParent && parentResolution.parentId) {
+                            console.warn(`[batchOps] ⚠️ Parent '${parentResolution.parentId}' not found for icon op '${opId}' - node will leak to page root`);
+                        }
                         const node = await handleUnifiedRender({
                             type: 'ICON',
                             props: {

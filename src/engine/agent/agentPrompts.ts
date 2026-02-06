@@ -80,7 +80,10 @@ export const DYNAMIC_GUIDANCE = {
 
 - **Use \`batchOperations\`** to combine multiple Figma operations into ONE tool call.
   - Use \`opId\` + \`nodeRef\`/\`parentRef\` for intra-batch dependency chaining.
-  - Use \`nodeId\`/\`parentId\` only for nodes created in previous iterations.
+  - Use \`nodeId\`/\`parentId\` only for nodes created in previous iterations/tool calls.
+  - **CROSS-TURN ID CONTINUITY**: \`batchOperations\` returns an \`idMap\` (opId -> real nodeId). In subsequent turns, you MUST use the real \`nodeId\` from that map, NOT the virtual \`opId\`.
+
+- **Query-First Pattern**: Before inserting into an existing structure you don't own, call \`inspectDesign\` to get REAL nodeIds. Never guess parent IDs.
 
 - **Think in COMPONENT CHUNKS, not individual nodes**:
   - ✅ CORRECT: ONE batchOperations = [create form container, create email input, create password input, create submit button, set layout on container] (5 ops in 1 call)
@@ -131,8 +134,11 @@ export const AGENT_CONTENT_REQUIREMENT = `
 export const AGENT_PARENT_CHILD_RULE = `
 ## PARENT-CHILD CREATION (Optimized)
 - **Hierarchical Batching (Preferred)**: Use \`batchOperations\` to create multiple nested levels in a single call. Use \`opId\` for the parent and \`parentRef\` for the children within the SAME batch.
-- **Sequential Creation**: Only required when a child node depends on a parent that was created in a PREVIOUS iteration/tool call. In this case, use the real \`parentId\` from the response.
-- **Precision**: Never guess or predict real nodeIds - always use \`nodeRef\`/\`parentRef\` for intra-batch virtual references, or real IDs from tool responses.
+- **Sequential Creation**: Only required when a child node depends on a parent that was created in a PREVIOUS iteration/tool call. In this case, use the real \`parentId\` from the response \`idMap\` or inspection.
+- **Precision (Virtual vs Real IDs)**: 
+  - **Virtual (opId)**: Use \`nodeRef\`/\`parentRef\` ONLY within the same \`batchOperations\` call.
+  - **Real (nodeId)**: Use \`nodeId\`/\`parentId\` for ANY node already existing in Figma (returned in \`idMap\` or \`inspectDesign\`).
+- **Query-First**: If you are adding children to an existing node, you MUST \`inspectDesign\` first to get its real \`nodeId\`.
 `;
 
 export const AGENT_DESIGN_FREEDOM = `

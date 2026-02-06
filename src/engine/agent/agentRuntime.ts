@@ -49,6 +49,9 @@ export class AgentRuntime {
   private lastProgressHeaders: string[] = [];
   private hasPendingToolErrors: boolean = false;
   private collectionAttempts: number = 0; // 🔴 P1: Collection counter
+  private staleStepIterations: number = 0; // Track how long a step has been active without advancing
+  private lastActiveStepId: string | null = null; // Track which step was active last iteration
+  private readonly STALE_STEP_THRESHOLD = 15; // Force step completion after this many iterations
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createNode',
     'setNodeLayout',
@@ -187,15 +190,22 @@ export class AgentRuntime {
       const argsJson = JSON.stringify(sanitizedArgs);
       if (argsJson.length > this.MAX_HISTORY_ARGS_CHARS) {
         if (tc.name === 'batchOperations' && Array.isArray(sanitizedArgs.operations)) {
-          // Keep skeleton: opId + action + success indicator, drop params
+          // Keep skeleton: opId + action + essential refs, drop bloated params
           sanitizedArgs = {
             operations: sanitizedArgs.operations.map((op: any) => ({
               opId: op.opId,
               action: op.action,
               _paramsTruncated: true,
-              // Keep nodeRef/parentRef for dependency tracking
+              // Keep references for dependency tracking across history
               ...(op.params?.nodeRef && { nodeRef: op.params.nodeRef }),
               ...(op.params?.parentRef && { parentRef: op.params.parentRef }),
+              ...(op.params?.nodeId && { nodeId: op.params.nodeId }),
+              ...(op.params?.parentId && { parentId: op.params.parentId }),
+              ...(op.params?.name && { name: op.params.name }),
+              // Keep opIds of children for hierarchy tracing
+              ...(Array.isArray(op.params?.children) && {
+                childOpIds: op.params.children.map((c: any) => c.opId).filter(Boolean)
+              }),
             })),
             strategy: sanitizedArgs.strategy,
             onError: sanitizedArgs.onError,
@@ -768,6 +778,8 @@ export class AgentRuntime {
     this.lastThinkingText = '';
     this.thinkingOnlyIterations = 0;
     this.progressCallCount = 0;
+    this.staleStepIterations = 0;
+    this.lastActiveStepId = null;
     this.idCounter = 0; // Better to reset idCounter at start of run if not already reset
     this.retryPolicy.resetAll();
 
@@ -837,7 +849,51 @@ export class AgentRuntime {
           mode = 'EXECUTION';
         }
       }
-      
+
+      // ----------------------------------------
+      // STALE STEP DETECTION
+      // ----------------------------------------
+      // [FIX] Track how long the same step has been active. If a step stays active
+      // for too many iterations without completing, force-complete it and advance.
+      // This prevents the infinite applyDesignPatch loop where the model keeps
+      // "polishing" the same step without ever calling complete_task or summarize_progress.
+      if (activeStep) {
+        if (activeStep.stepId === this.lastActiveStepId) {
+          this.staleStepIterations++;
+        } else {
+          this.staleStepIterations = 0;
+          this.lastActiveStepId = activeStep.stepId;
+        }
+
+        if (this.staleStepIterations >= this.STALE_STEP_THRESHOLD) {
+          console.warn(`[AgentRuntime] ⚠️ STALE STEP: "${activeStep.title}" (${activeStep.stepId}) has been active for ${this.staleStepIterations} iterations. Force-completing.`);
+          planState.completeTask(activeStep.stepId, `Auto-completed after ${this.staleStepIterations} iterations`);
+          this.staleStepIterations = 0;
+          this.lastActiveStepId = null;
+
+          // Check if there are more steps or if we're done
+          const remainingSteps = planState.getPlan().filter(s => s.status === 'pending');
+          if (remainingSteps.length === 0) {
+            // All steps completed (or force-completed), transition to VERIFICATION
+            console.log(`[AgentRuntime] All plan steps completed. Transitioning to VERIFICATION.`);
+            mode = 'VERIFICATION';
+            // Inject a message to trigger complete_task
+            const completionMessage: LLMMessage = {
+              id: this.generateId('stale_done'),
+              role: 'user',
+              content: 'All plan steps have been completed. Call complete_task now with a summary of what was built.'
+            };
+            this.messages.push(completionMessage);
+          } else {
+            // Activate next step
+            const nextStep = remainingSteps[0];
+            planState.startTask(nextStep.title, nextStep.description, nextStep.stepId);
+            activeStep = planState.getActiveStep();
+            console.log(`[AgentRuntime] Advanced to next step: "${nextStep.title}" (${nextStep.stepId})`);
+          }
+        }
+      }
+
       // ----------------------------------------
       // PHASE 2: SYSTEM PROMPT CONSTRUCTION
       // ----------------------------------------
@@ -953,6 +1009,7 @@ export class AgentRuntime {
       let currentIterationText = '';
       const allowProgressStreaming = mode === 'PLANNING';
       let toolCallsForExecution: LLMToolCall[] = [];
+      let rawToolCallsForLoopDetection: LLMToolCall[] = []; // Pre-batch calls for stable fingerprinting
       try {
         response = await this.options.provider.generate({
           messages: visibleMessages,
@@ -1019,7 +1076,11 @@ export class AgentRuntime {
         });
 
         let rawToolCalls = response.toolCalls || [];
-        
+
+        // Save raw (pre-batch) tool calls for loop detection — these have stable signatures
+        // because they don't contain auto-generated opIds from buildBatchOperationsCall.
+        rawToolCallsForLoopDetection = [...rawToolCalls];
+
         // 🔴 P1: Collection-Execution Mode — DISABLED
         // Previously made an extra LLM call when model returned only 1 batchable tool,
         // to "collect" more operations. In practice this doubled latency for minimal gain
@@ -1029,7 +1090,7 @@ export class AgentRuntime {
             this.AUTO_BATCH_TOOL_NAMES.has(rawToolCalls[0].name)) {
           console.log(`[AgentRuntime] Single batchable tool (${rawToolCalls[0].name}). Executing directly without collection.`);
         }
-        
+
         const executionToolCalls = rawToolCalls.length > 1
           ? this.autoBatchToolCalls(rawToolCalls, mode)
           : rawToolCalls;
@@ -1040,6 +1101,8 @@ export class AgentRuntime {
         }
 
         toolCallsForExecution = executionToolCalls;
+        // [FIX] Use executionToolCalls (post-batch) for history — this matches
+        // what actually gets executed, preventing model/tool message mismatch.
         const historyToolCalls = this.sanitizeToolCallsForHistory(executionToolCalls);
         response.toolCalls = historyToolCalls;
 
@@ -1335,13 +1398,17 @@ export class AgentRuntime {
         // ----------------------------------------
         // PHASE 6: LOOP DETECTION (moved BEFORE figmaToolCalls check)
         // ----------------------------------------
-        // [FIX] Use ALL tool calls (response.toolCalls) for loop detection, not just figmaToolCalls.
-        // planDesign is a workflow tool and gets routed to workflowResults, not figmaToolCalls.
-        // Loop detection must run BEFORE the early continue for workflow-only iterations.
+        // [FIX] Use RAW (pre-batch) tool calls for loop detection fingerprinting.
+        // Auto-batched calls generate unique opIds (timestamp-based) each iteration,
+        // which defeats loop detection by producing different hashes every time.
+        // Raw tool calls have stable args from the LLM, enabling proper duplicate detection.
         const allToolCalls = toolCallsForExecution || [];
+        const loopDetectionCalls = rawToolCallsForLoopDetection.length > 0
+          ? rawToolCallsForLoopDetection
+          : allToolCalls;
 
         // A signature looks at tool name + target context + content fingerprint
-        const semanticSignature = allToolCalls.map(tc => {
+        const semanticSignature = loopDetectionCalls.map(tc => {
           const targetNodeId = tc.args?.nodeId;
           const parentId = tc.args?.parentId || tc.args?.parentRef;
 
@@ -1412,6 +1479,43 @@ export class AgentRuntime {
             `[LOOP DETECTED] Same action repeated ${identicalSignatureCount} times: ${semanticSignature}. ` +
             `Consider: (1) Check if previous tool succeeded (2) Try different approach (3) Call complete_task if done.`
           );
+        }
+
+        // [FIX] Secondary loop detector: catch "same tool type" repetition even with different args.
+        // The model may call applyDesignPatch with slightly different nodeIds/patches each time,
+        // producing different signatures but still being stuck in a polish loop.
+        // If the last N signatures all contain only the same tool name(s), it's likely a loop.
+        const MONOTONE_LOOP_THRESHOLD = 8; // More lenient than exact match since args differ
+        if (this.toolCallSignatureHistory.length >= MONOTONE_LOOP_THRESHOLD) {
+          const recentSignatures = this.toolCallSignatureHistory.slice(-MONOTONE_LOOP_THRESHOLD);
+          // Extract the set of tool names from each signature
+          const toolNamePatterns = recentSignatures.map(sig => {
+            const toolNames = sig.split('|')
+              .map(s => s.split('[')[0])
+              .filter(Boolean)
+              .sort()
+              .join('+');
+            return toolNames;
+          });
+          // If all recent iterations use the same tool name pattern
+          const allSamePattern = toolNamePatterns.every(p => p === toolNamePatterns[0]);
+          if (allSamePattern && toolNamePatterns[0]) {
+            // Only trigger for modify-only patterns (not read tools like inspectDesign)
+            const isModifyOnly = !toolNamePatterns[0].includes('inspectDesign') &&
+                                 !toolNamePatterns[0].includes('planDesign') &&
+                                 !toolNamePatterns[0].includes('complete_task');
+            if (isModifyOnly) {
+              console.warn(`[AgentRuntime] 🔄 MONOTONE LOOP: Same tool pattern "${toolNamePatterns[0]}" for ${MONOTONE_LOOP_THRESHOLD} consecutive iterations. Injecting completion hint.`);
+              // Instead of throwing, inject a strong completion hint
+              const completionHint: LLMMessage = {
+                id: this.generateId('mono_loop'),
+                role: 'user',
+                content: `⚠️ LOOP DETECTED: You have called "${toolNamePatterns[0]}" for ${MONOTONE_LOOP_THRESHOLD} consecutive iterations. The design is good enough. Call complete_task NOW with a summary. Do NOT make any more style changes.`
+              };
+              this.messages.push(completionHint);
+              this.approximateTokens += this.estimateTokens(completionHint.content);
+            }
+          }
         }
 
         // Early exit if only workflow tools (no figma tools to execute)
@@ -1644,6 +1748,59 @@ export class AgentRuntime {
       console.log(`[AgentRuntime] cleanToolResult: data size = ${dataJson.length} chars (limit: ${MAX_DATA_CHARS})`);
 
       if (dataJson.length > MAX_DATA_CHARS) {
+        // [MOD] Special handling for batchOperations results to preserve idMap
+        if (cleaned.data.idMap && cleaned.data.results) {
+          const BATCH_BUDGET = 4000; // Larger budget for batch results
+          const essentialData: any = {
+            idMap: cleaned.data.idMap, // Always keep full idMap
+            results: cleaned.data.results.map((r: any) => ({
+              opId: r.opId,
+              action: r.action,
+              success: r.success,
+              ...(r.nodeId && { nodeId: r.nodeId }),
+              ...(r.name && { name: r.name }),
+              ...(r.error && { 
+                error: { 
+                  code: r.error.code, 
+                  message: r.error.message,
+                  ...(r.error.semanticFeedback && { semanticFeedback: r.error.semanticFeedback })
+                } 
+              }),
+              ...(Array.isArray(r.children) && {
+                children: r.children.map((c: any) => ({
+                  opId: c.opId,
+                  success: c.success,
+                  ...(c.nodeId && { nodeId: c.nodeId }),
+                  ...(c.name && { name: c.name }),
+                }))
+              }),
+            })),
+            _truncated: true,
+            _originalSize: dataJson.length,
+          };
+
+          // layoutSnapshots: keep within remaining budget (prioritize root/parents)
+          if (cleaned.data.layoutSnapshots && typeof cleaned.data.layoutSnapshots === 'object') {
+            essentialData.layoutSnapshots = Object.fromEntries(
+              Object.entries(cleaned.data.layoutSnapshots)
+                .slice(0, 10) // Limit to first 10 snapshots to save space
+                .map(([opId, snap]: [string, any]) => [
+                  opId,
+                  {
+                    id: snap?.id || snap?.nodeId,
+                    width: snap?.width,
+                    height: snap?.height,
+                    // Minimal context: only dimensions are critical for layout reasoning
+                  }
+                ])
+            );
+          }
+
+          cleaned.data = essentialData;
+          console.log(`[AgentRuntime] 📦 Cleaned batch tool result data: ${dataJson.length} -> ${JSON.stringify(essentialData).length} chars`);
+          return cleaned;
+        }
+
         // For successful results, keep only essential fields
         if (cleaned.success && typeof cleaned.data === 'object') {
           const essentialData: any = {};

@@ -228,10 +228,14 @@ export class NodeLayoutService {
    */
   async resolveParent(parentId?: string): Promise<(BaseNode & ChildrenMixin) | null> {
     if (!parentId) return null;
-    
+
     const parent = await this.repository.findById(parentId);
     if (parent && this.repository.isContainer(parent)) {
       return parent as (BaseNode & ChildrenMixin);
+    }
+    // Parent ID was provided but couldn't be resolved - potential node leaking
+    if (parentId) {
+      console.warn(`[NodeLayoutService] ⚠️ resolveParent failed: '${parentId}' ${parent ? 'is not a container' : 'not found'} - child will leak to page root`);
     }
     return null;
   }

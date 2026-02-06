@@ -51,6 +51,7 @@ export const batchOperationsDefinition: ToolDefinition = {
 [SUPER TOOL] Execute multiple Figma operations in a single ordered call.
 Use opId-based references (nodeRef/parentRef) to chain operations without guessing IDs.
 If referencing existing nodes, pass nodeId/parentId directly (do NOT use nodeRef/parentRef).
+CROSS-TURN CONTINUITY: Response includes idMap mapping opId -> real nodeId. In subsequent turns, use REAL nodeIds from that map, NOT virtual opIds.
 Operations always execute sequentially.
 
 EXAMPLE (Hierarchical Row):

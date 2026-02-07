@@ -30,6 +30,7 @@ export interface PluginData {
   } | null
 
   patternSummary: string
+  editorMode: 'figma' | 'dev'
 }
 
 export function usePluginData() {
@@ -48,6 +49,7 @@ export function usePluginData() {
 
 
   const [patternSummary, setPatternSummary] = useState<string>('')
+  const [editorMode, setEditorMode] = useState<'figma' | 'dev'>('figma')
 
   useEffect(() => {
     const stopVars = on<SendVariablesHandler>('SEND_VARIABLES', (data) => setVariables(data.names))
@@ -90,6 +92,10 @@ export function usePluginData() {
         const prefix = data.type === 'warn' ? '⚠️' : data.type === 'success' ? '✅' : 'ℹ️';
         console.log(`[Plugin Log] ${prefix} ${data.message}`);
     });
+    
+    const stopEditorMode = on('SET_EDITOR_MODE', (data: { editorType: 'figma' | 'dev' }) => {
+      setEditorMode(data.editorType);
+    });
 
     emit<GetVariablesHandler>('GET_VARIABLES')
     emit('GET_LIBRARY_RESOURCES')
@@ -105,6 +111,7 @@ export function usePluginData() {
 
       stopComponents()
       stopLog()
+      stopEditorMode()
     }
   }, [])
 
@@ -115,6 +122,7 @@ export function usePluginData() {
     selectionStyles,
     analyzedPattern,
 
-    patternSummary
+    patternSummary,
+    editorMode
   }
 }

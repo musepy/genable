@@ -72,26 +72,20 @@ export function Header({
         </button>
       )}
       
-      {/* Spacer */}
-      <div className="header-spacer" />
+      <div style={{ flex: 1 }} />
 
       {/* Theme Toggle - Hidden in settings */}
       {!isSettingsOpen && (
         <button 
           className="header-icon-btn"
           onClick={onToggleTheme}
-          title={t.themeLabel(theme)}
-          aria-label={t.themeLabel(theme)}
+          title={theme === 'dark' ? t.light : t.dark}
+          aria-label={theme === 'dark' ? t.light : t.dark}
         >
-          {theme === 'dark' ? (
-            <Moon size={16} strokeWidth={2} />
-          ) : (
-            <Sun size={16} strokeWidth={2} />
-          )}
+          {theme === 'dark' ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
         </button>
       )}
 
-      {/* Settings Button */}
       <button
         className={`header-icon-btn ${isSettingsOpen ? 'is-active' : ''}`}
         onClick={onSettingsClick}

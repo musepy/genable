@@ -261,6 +261,11 @@ export interface SendExportedTokensHandler extends EventHandler {
   handler: (data: { tokens: any }) => void;
 }
 
+export interface ResizeHandler extends EventHandler {
+  name: 'RESIZE';
+  handler: (data: { height: number }) => void;
+}
+
 export interface SelectNodeHandler extends EventHandler {
   name: 'SELECT_NODE';
   handler: (data: {

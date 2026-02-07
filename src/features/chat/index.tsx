@@ -30,10 +30,10 @@ const messagesContainerStyle = {
   display: 'flex',
   flexDirection: 'column' as const,
   flex: 1,
-  minHeight: 0,
+  minHeight: 0, // CRITICAL for shrinking
   overflowY: 'auto' as const,
   padding: `${tokens.space[3]}px ${tokens.space[3]}px`,
-  paddingBottom: tokens.space[1], 
+  paddingBottom: tokens.space[3],
   gap: tokens.space[1],
 };
 
@@ -150,7 +150,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
         const isUserMessage = msg.role === 'user';
         const prevRole = i > 0 ? history[i - 1].role : null;
         const isCrossRole = prevRole !== null && prevRole !== msg.role;
-        const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[5] : tokens.space[1]);
+        const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[3] : tokens.space[1]);
 
         const hasToolCalls = !isUserMessage && Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0;
         const bubbleStyle = isUserMessage
@@ -172,7 +172,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
         return (
           <div key={msg.id || `msg-${i}`} className="message-enter" style={{ ...bubbleStyle as any, marginTop }}>
             {isUserMessage ? (
-              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-3)' }}>
+              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)' }}>
                 {safeText}
               </span>
             ) : (
@@ -318,9 +318,9 @@ export function ChatFeature(props: UseChatProps) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       {/* Messages Area */}
-      <div style={messagesContainerStyle} ref={containerRef}>
+      <div style={messagesContainerStyle} ref={containerRef} className="messages-mask">
         <MessageList
           history={history}
           expandedRawIds={expandedRawIds}
@@ -351,15 +351,13 @@ export function ChatFeature(props: UseChatProps) {
         {/* Scroll anchor for bottom */}
       </div>
 
-      {/* Input Area — floating with backdrop blur */}
+      {/* Input Area — Flex-anchored at bottom */}
       <div style={{
-        position: 'sticky' as const,
-        bottom: 0,
-        padding: tokens.space[3],
-        background: 'linear-gradient(to top, var(--color-background) 0%, var(--color-background) 80%, transparent 100%)',
-        backdropFilter: 'blur(5px)',
-        WebkitBackdropFilter: 'blur(5px)',
+        flexShrink: 0, // Prevent input itself from shrinking
+        padding: `0 ${tokens.space[3]}px ${tokens.space[3]}px`,
+        background: tokens.colors.background, 
         zIndex: 10,
+        position: 'relative',
       }}>
         {tokenUsage && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.space[2], padding: `0 ${tokens.space[2]}px`, gap: tokens.space[3], fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>

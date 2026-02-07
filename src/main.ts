@@ -1,6 +1,6 @@
 import './utils/compatibility';
 import { on, showUI, emit } from '@create-figma-plugin/utilities'
-import type { 
+import { 
   CloseHandler, 
   ClearStreamHandler,
   CreateLayersHandler, 
@@ -14,6 +14,7 @@ import type {
   LoadSettingsHandler,
   SaveSettingsHandler,
   SendLogHandler,
+  ResizeHandler,
   GetLibraryResourcesHandler,
   SendLibraryResourcesHandler,
   GetLocalComponentsHandler,
@@ -22,6 +23,7 @@ import type {
   ToolResultHandler,
   SelectNodeHandler
 } from './types'
+import { WINDOW_WIDTH, getIdealHeight } from './ui/constants/layout'
 import { renderNodeDSL } from './engine/figma-adapter/renderers/index'
 import { figmaVariableCache } from './engine/figma-adapter/caches/figmaVariableCache'
 import { getActiveEngineConfig } from './engine/engineConfig'
@@ -48,7 +50,7 @@ import { handleUnifiedRender, clearStream } from './ipc/helpers/renderHelper';
 
 const throttledRenderers = new Map<string, (...args: any[]) => void>();
 
-export default function () {
+export default async function () {
   console.log(`[Genable] 🚀 Plugin started | State-Driven Architecture`);
 
   initializeRenderers(
@@ -375,6 +377,10 @@ export default function () {
     }
   });
 
+  on<ResizeHandler>('RESIZE', (data) => {
+    figma.ui.resize(WINDOW_WIDTH, data.height);
+  });
+
   on<SendLogHandler>('SEND_LOG', (data) => {
     // [FIX] Forward log messages from UI back to UI via the Main thread.
     // This allows components in the UI thread to listen to logs emitted by other 
@@ -432,12 +438,10 @@ export default function () {
   }
 
   showUI({
-    height: figma.editorType === 'dev' ? 400 : 500,
-    width: 340
-  })
+    height: getIdealHeight(),
+    width: WINDOW_WIDTH
+  });
   
   // Pass editor mode to UI
-  setTimeout(() => {
-    emit('SET_EDITOR_MODE', { editorType: figma.editorType });
-  }, 200);
+  emit('SET_EDITOR_MODE', { editorType: figma.editorType });
 }

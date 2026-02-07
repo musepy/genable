@@ -63,7 +63,7 @@ const listStyle: JSX.CSSProperties = {
 
 const listItemStyle: JSX.CSSProperties = {
   marginBottom: tokens.space[1],
-  lineHeight: tokens.lineHeight[3],
+  lineHeight: tokens.lineHeight[2],
 };
 
 const headingStyle: JSX.CSSProperties = {
@@ -75,7 +75,7 @@ const headingStyle: JSX.CSSProperties = {
 const paragraphStyle: JSX.CSSProperties = {
   marginTop: tokens.space[1],
   marginBottom: tokens.space[1],
-  lineHeight: tokens.lineHeight[3],
+  lineHeight: tokens.lineHeight[2],
 };
 
 const linkStyle: JSX.CSSProperties = {
@@ -111,7 +111,7 @@ function renderL1(content: string) {
   const lines = content.split('\n');
   
   return (
-    <div style={{ fontSize: 'var(--font-size-1)', lineHeight: tokens.lineHeight[3] }}>
+    <div style={{ fontSize: 'var(--font-size-1)', lineHeight: tokens.lineHeight[2] }}>
       {lines.map((line, i) => {
         // List items
         if (line.match(/^[•\-\*]\s/)) {
@@ -138,8 +138,9 @@ function renderL1(content: string) {
 
 function renderL3(content: string) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+    <div style={{ fontSize: 'var(--font-size-1)' }}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
       components={{
         // Code blocks and inline code
         code: ({ node, inline, className, children, ...props }: any) => {
@@ -261,6 +262,7 @@ function renderL3(content: string) {
     >
       {content}
     </ReactMarkdown>
+    </div>
   );
 }
 

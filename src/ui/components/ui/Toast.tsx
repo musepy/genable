@@ -204,15 +204,16 @@ function Toast({ data, onDismiss }: ToastProps) {
       aria-live="polite"
       style={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: tokens.space[2],
         padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
         borderRadius: 'var(--radius-5)',
         border: '1px solid',
-        boxShadow: '0 4px 12px var(--gray-a4)',
+        boxShadow: '0 8px 24px var(--gray-a4)',
         fontSize: 'var(--font-size-1)',
         fontFamily: tokens.font.sans,
-        maxWidth: 360,
+        maxWidth: 300,
+        minWidth: 200,
         pointerEvents: 'auto',
         // Animation
         opacity: isVisible ? 1 : 0,

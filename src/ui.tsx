@@ -28,6 +28,8 @@ import { on, emit } from '@create-figma-plugin/utilities'
 import { CaptureUIHandler, SendCapturedUIHandler } from './types'
 import { DomCapture } from './ui/utils/DomCapture'
 import { TokenResolver } from './ui/utils/TokenResolver'
+import { WINDOW_WIDTH, getIdealHeight } from './ui/constants/layout'
+import { ResizeHandler } from './types'
 
 // Global Styles
 const containerStyle: h.JSX.CSSProperties = {
@@ -44,11 +46,8 @@ const mainContentStyle: h.JSX.CSSProperties = {
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
-  overflowY: 'auto',
-  overflowX: 'hidden',
-  scrollBehavior: 'smooth',
+  minHeight: 0, // CRITICAL for Flexbox shrinking
   position: 'relative',
-  isolation: 'isolate',
 }
 
 function PluginContent() {
@@ -131,6 +130,37 @@ function PluginContent() {
     return uncapture;
   }, []);
 
+  // L3: Window Resize Recovery
+  // When Figma compresses the plugin iframe (console drag, window resize),
+  // it does NOT restore the iframe height automatically. We detect this
+  // via window 'resize' event and request the ideal height back.
+  useEffect(() => {
+    const idealHeight = getIdealHeight();
+    let compressed = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleResize = () => {
+      const h = window.innerHeight;
+      if (h < idealHeight - 5) {
+        compressed = true;
+      }
+      // When resize events stop (user stopped dragging), check if we need to restore
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (compressed) {
+          emit<ResizeHandler>('RESIZE', { height: idealHeight });
+          compressed = false;
+        }
+      }, 400);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, []);
+
   const renderCaptureSandbox = () => {
     if (!captureTarget) return null;
 
@@ -192,7 +222,7 @@ function PluginContent() {
         position: 'absolute', 
         left: -5000, 
         top: 0, 
-        width: 340, 
+        width: WINDOW_WIDTH, 
         opacity: 0,
         pointerEvents: 'none' 
       }}>
@@ -209,16 +239,9 @@ function PluginContent() {
 
   // L3: Dogfood Tools State
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
-  const [editorMode, setEditorMode] = useState<'figma' | 'dev'>('figma');
   
   useEffect(() => {
     (window as any).toggleDeveloperPanel = () => setShowDeveloperTools(prev => !prev);
-    
-    const unbind = on('SET_EDITOR_MODE', (data: { editorType: 'figma' | 'dev' }) => {
-      console.log('[UI] Editor Mode:', data.editorType);
-      setEditorMode(data.editorType);
-    });
-    return unbind;
   }, []);
 
   // 4. Router / Switcher

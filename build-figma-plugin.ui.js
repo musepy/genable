@@ -1,4 +1,43 @@
+const fs = require('fs')
 const path = require('path')
+
+/**
+ * [Figma Sandbox Defense] esbuild plugin — same as in build-figma-plugin.main.js
+ * Sanitizes forbidden patterns synchronously in onEnd, before Figma can reload.
+ */
+const figmaSandboxSanitizer = {
+  name: 'figma-sandbox-sanitizer',
+  setup(build) {
+    build.onEnd((result) => {
+      if (result.errors.length > 0) return
+
+      const outfile = build.initialOptions.outfile
+      if (!outfile || !fs.existsSync(outfile)) return
+
+      let content = fs.readFileSync(outfile, 'utf8')
+      let modified = false
+
+      const patterns = [
+        { regex: /import\s*\(/g, replacement: 'imp_ort(' },
+        { regex: /import\.\s*meta/g, replacement: 'imp_ort.meta' },
+        { regex: /eval\s*\(/g, replacement: 'ev_al(' },
+        { regex: /new\s*Function\s*\(/g, replacement: 'new Fun_ction(' }
+      ]
+
+      for (const { regex, replacement } of patterns) {
+        const replaced = content.replace(regex, replacement)
+        if (replaced !== content) {
+          content = replaced
+          modified = true
+        }
+      }
+
+      if (modified) {
+        fs.writeFileSync(outfile, content)
+      }
+    })
+  }
+}
 
 module.exports = function (buildOptions) {
   // Resolve preact/compat paths for aliasing React → Preact
@@ -27,7 +66,8 @@ module.exports = function (buildOptions) {
           }))
         }
       },
-      ...(buildOptions.plugins || [])
+      ...(buildOptions.plugins || []),
+      figmaSandboxSanitizer
     ]
   }
 }

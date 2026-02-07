@@ -10,6 +10,12 @@ export const globalStyles = `
     --border-main: 0.5px solid var(--gray-a4);
   }
 
+  html, body, #create-figma-plugin {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
   body { 
     margin: 0; 
     font-family: var(--font-sans, Inter, system-ui, sans-serif); 
@@ -138,6 +144,24 @@ export const globalStyles = `
   .btn-ghost:active,
   .btn-ghost.is-pressed {
     background: var(--gray-a4);
+  }
+
+  /* --- Masking & Fading --- */
+  .messages-mask {
+    -webkit-mask-image: linear-gradient(to bottom, 
+      transparent 0%, 
+      black 16px, 
+      black calc(100% - 32px), 
+      transparent 100%
+    );
+    mask-image: linear-gradient(to bottom, 
+      transparent 0%, 
+      black 16px, 
+      black calc(100% - 32px), 
+      transparent 100%
+    );
+    /* Ensure the mask doesn't hide the scrollbar if possible in this environment, 
+       though Chrome usually masks everything. Adjusting padding can help. */
   }
 
   .error-banner {

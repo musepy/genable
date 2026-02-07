@@ -30,49 +30,27 @@ if (!isWatch) buildArgs.push('--minify');
 if (isWatch) buildArgs.push('--watch');
 
 /**
- * Inject version into output file
+ * Inject build version into output file.
+ *
+ * NOTE: Figma sandbox sanitization (import/eval/Function pattern breaking) is now
+ * handled by esbuild onEnd plugins in build-figma-plugin.main.js and
+ * build-figma-plugin.ui.js. This eliminates the race condition where Figma's file
+ * watcher would reload unsanitized code before the post-build sanitizer ran.
  */
 function injectMetaData() {
   const buildDir = path.join(__dirname, 'build');
-  const filesToProcess = ['main.js', 'ui.js'];
-  
-  for (const filename of filesToProcess) {
-    const outputPath = path.join(buildDir, filename);
-    if (!fs.existsSync(outputPath)) continue;
-    
-    let content = fs.readFileSync(outputPath, 'utf8');
-    let modified = false;
-    
-    // Replace Version (only for main.js)
-    if (filename === 'main.js' && content.includes('__BUILD_VERSION__')) {
-      content = content.replace(/__BUILD_VERSION__/g, buildTime);
-      modified = true;
-    }
-    
-    // [Figma Sandbox Final Defense]
-    // Figma's security scanner rejects any code containing forbidden patterns, even in strings/comments.
-    // We sanitize these by breaking the keywords.
-    const patterns = [
-      { regex: /import\s*\(/g, replacement: 'imp_ort(' },
-      { regex: /import\.\s*meta/g, replacement: 'imp_ort.meta' },
-      { regex: /eval\s*\(/g, replacement: 'ev_al(' },
-      { regex: /new\s*Function\s*\(/g, replacement: 'new Fun_ction(' }
-    ];
+  const outputPath = path.join(buildDir, 'main.js');
 
-    for (const { regex, replacement } of patterns) {
-      if (regex.test(content)) {
-        console.log(`⚠️  [${filename}] Sanitizing forbidden pattern: ${regex.source}`);
-        content = content.replace(regex, replacement);
-        modified = true;
-      }
-    }
-    
-    if (modified) {
-      fs.writeFileSync(outputPath, content);
-    }
+  if (!fs.existsSync(outputPath)) return;
+
+  let content = fs.readFileSync(outputPath, 'utf8');
+
+  if (content.includes('__BUILD_VERSION__')) {
+    content = content.replace(/__BUILD_VERSION__/g, buildTime);
+    fs.writeFileSync(outputPath, content);
   }
-  
-  console.log(`✅ Artifacts injected: ${buildTime}`);
+
+  console.log(`✅ Version injected: ${buildTime}`);
 }
 
 if (isWatch) {

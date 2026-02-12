@@ -10,31 +10,9 @@
 
 import { skillRegistry } from './SkillRegistry';
 import { SkillContextDependencies, SkillPromptSection } from './types';
-import { ToolDefinition } from '../tools/types';
-
-/**
- * Base agent identity (minimal, skill-agnostic).
- */
-const BASE_IDENTITY = `You are an intelligent design agent. You accomplish tasks by calling tools.
-
-## CORE PRINCIPLES
-- **Think, then Act**: Briefly plan before executing
-- **Iterate**: Start simple, refine progressively
-- **Use Tools**: Tools are your hands - use them to gather info and make changes
-
-## COMMUNICATION
-- Be concise in your reasoning
-- Focus on parameters and logic, not verbose explanations
-- Report results clearly to the user`;
-
-/**
- * Error recovery guidance (always included).
- */
-const ERROR_RECOVERY = `## ERROR RECOVERY
-When a tool returns an error:
-- \`PARENT_NOT_FOUND\`: Create the parent node first
-- \`NODE_NOT_FOUND\`: Use getSelection to find valid IDs
-- \`UNKNOWN_TOOL\`: Check available tools and use correct name`;
+import { ToolDefinition, AgentMode } from '../tools/types';
+import { IDENTITY as BASE_IDENTITY, ERROR_RECOVERY } from '../../prompt/promptRegistry';
+import { estimateTokens } from '../context/tokenEstimator';
 
 /**
  * Token budget configuration.
@@ -55,15 +33,6 @@ const DEFAULT_BUDGET: TokenBudget = {
   context: 1200,
 };
 
-/**
- * Estimate token count from text.
- */
-function estimateTokens(text: string): number {
-  // Chinese characters count more
-  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const otherChars = text.length - chineseChars;
-  return Math.ceil(chineseChars * 0.6 + otherChars / 4);
-}
 
 /**
  * Truncate text to fit within token budget.
@@ -128,15 +97,30 @@ function formatTools(tools: ToolDefinition[]): string {
 export function composeSkillBasedPrompt(
   deps: SkillContextDependencies,
   provider: { getToolSystemInstruction: (tools: ToolDefinition[]) => string },
-  options: { budget?: Partial<TokenBudget> } = {}
+  options: { 
+    budget?: Partial<TokenBudget>;
+    mode?: AgentMode;
+  } = {}
 ): string {
   const budget = { ...DEFAULT_BUDGET, ...options.budget };
+  const mode = options.mode || 'PLANNING';
   const parts: string[] = [];
   const budgetLog: { section: string; tokens: number }[] = [];
 
   // 1. Base Identity
   parts.push(BASE_IDENTITY);
   budgetLog.push({ section: 'identity', tokens: estimateTokens(BASE_IDENTITY) });
+
+  // 1.1 Mode Guidance (Hot-Swapped)
+  const modeGuidance: Record<string, string> = {
+    PLANNING: `## CURRENT PHASE: PLANNING\nYour goal is to understand the request and break it down into actionable steps. Use planning tools to create or update the task list. DO NOT perform design operations yet.`,
+    EXECUTION: `## CURRENT PHASE: EXECUTION\nPerform the design operations as planned. Use atomic tools to modify the design. Follow design aesthetics and quality rules.`,
+    RECOVERY: `## CURRENT PHASE: RECOVERY\nYou are in failure-recovery mode. Diagnose first with inspect tools, identify concrete causes, and only then resume execution with a changed strategy.`,
+    VERIFICATION: `## CURRENT PHASE: VERIFICATION\nInspect the results of your operations. Verify that the design matches the user request and meets quality standards.`
+  };
+  const currentGuidance = modeGuidance[mode];
+  parts.push(currentGuidance);
+  budgetLog.push({ section: 'mode-guidance', tokens: estimateTokens(currentGuidance) });
 
   // 2. Skill-injected sections
   const skillSections = skillRegistry.buildPromptSections(deps);

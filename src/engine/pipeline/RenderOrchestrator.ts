@@ -125,9 +125,22 @@ export class RenderOrchestrator {
             const rootNode = await renderNodeDSL(normalizedDSL, context as any);
             if (!rootNode) return null;
 
+            const explicitRootX = (normalizedDSL as any)?.props?.x;
+            const explicitRootY = (normalizedDSL as any)?.props?.y;
+            const hasExplicitRootXY =
+                typeof explicitRootX === 'number' ||
+                (typeof explicitRootX === 'string' && explicitRootX.trim() !== '') ||
+                typeof explicitRootY === 'number' ||
+                (typeof explicitRootY === 'string' && explicitRootY.trim() !== '');
+
             // [V7] PURE POSITIONING
             // Decision logic moved out of orchestrator's gut
-            if (meta?.position && 'x' in rootNode && 'y' in rootNode) {
+            if (hasExplicitRootXY && 'x' in rootNode && 'y' in rootNode) {
+                const parsedX = typeof explicitRootX === 'number' ? explicitRootX : parseFloat(String(explicitRootX ?? ''));
+                const parsedY = typeof explicitRootY === 'number' ? explicitRootY : parseFloat(String(explicitRootY ?? ''));
+                if (!isNaN(parsedX)) rootNode.x = parsedX;
+                if (!isNaN(parsedY)) rootNode.y = parsedY;
+            } else if (meta?.position && 'x' in rootNode && 'y' in rootNode) {
                 rootNode.x = meta.position.x;
                 rootNode.y = meta.position.y;
             } else if (context.depth === 0 && 'width' in rootNode && 'height' in rootNode) {

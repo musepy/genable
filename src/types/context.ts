@@ -1,4 +1,5 @@
 import { LibraryResource } from '../types';
+import type { AgentBehaviorConfig } from '../engine/agent/agentBehaviorConfig';
 
 
 export interface SelectionContext {
@@ -44,6 +45,9 @@ export interface PromptDependencies {
         isModifyMode?: boolean;
         originalTextContent?: string;
     };
+
+    // [6] Agent Behavior Config (from agentBehaviorConfig.ts)
+    behaviorConfig?: AgentBehaviorConfig;
 }
 
 export interface Intent {

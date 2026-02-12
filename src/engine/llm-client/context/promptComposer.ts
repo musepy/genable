@@ -1,7 +1,7 @@
 import { PromptDependencies } from '../../../types/context';
 import { PROMPT_SECTION_REGISTRY } from './sectionRegistry';
 import { configManager } from '../../../config/configManager';
-import { ToolDefinition } from '../../agent/tools/types';
+import { ToolDefinition, AgentMode } from '../../agent/tools/types';
 import { NodeSerializer } from '../../figma-adapter/nodeSerializer';
 import {
     AGENT_IDENTITY,
@@ -10,14 +10,19 @@ import {
     AGENT_NAMING_CONVENTION,
     AGENT_CONTENT_REQUIREMENT,
     AGENT_PARENT_CHILD_RULE,
-    AGENT_DESIGN_FREEDOM
+    AGENT_DESIGN_FREEDOM,
+    JSON_FORMAT_RULES
 } from '../../agent/agentPrompts';
+// Direct import for SCHEMA_RULES and DESIGN_AESTHETICS
+import { SCHEMA_RULES, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
+import { estimateTokens } from '../../agent/context/tokenEstimator';
+
 
 // ==========================================
 // Agent Mode Section Registry
 // ==========================================
 
-export type AgentMode = 'PLANNING' | 'EXECUTION' | 'VERIFICATION';
+
 
 /**
  * Feature flags for Agent mode prompt sections.
@@ -165,22 +170,6 @@ export function calculateBudget(options: {
     return 8000; // Default fallback (increased from 4000)
 }
 
-/**
- * Estimates token count from text content.
- * Uses a simple heuristic: ~4 characters per token for English text.
- */
-function estimateTokens(text: string): number {
-    // Improved estimation: count Chinese characters separately with multiplier
-    // Matching agentRuntime.ts implementation for consistency
-    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const otherChars = text.length - chineseChars;
-    
-    // Using multipliers from project constants where possible
-    const chineseTokens = Math.ceil(chineseChars * 2.0); // Simplified for local helper
-    const otherTokens = Math.ceil(otherChars / 4);
-    
-    return chineseTokens + otherTokens;
-}
 
 /**
  * Truncates text to fit within a token budget.
@@ -265,79 +254,8 @@ function compressSelectionContext(serializedNodes: any[], maxTokens: number): st
     return truncateToBudget(serialized, maxTokens);
 }
 
-// Extended Tool Examples
-const TOOL_EXAMPLES = `
-## EXAMPLES
-
-### Example 1: batchOperations — Build a Complete Component in ONE Call ✅ (PREFERRED)
-User: "创建一个带标题的卡片"
-
-**ONE batchOperations call creates the entire component:**
-batchOperations({
-  operations: [
-    { opId: "card", type: "createNode", params: { type: "FRAME", name: "Card Container", layout: { layoutMode: "VERTICAL", padding: { horizontal: 16, vertical: 16 }, gap: 12 }, styles: { fills: ["#FFFFFF"], cornerRadius: 12 } } },
-    { opId: "title", type: "createNode", params: { type: "TEXT", name: "Card Title", parentRef: "card", characters: "卡片标题" }, styles: { fills: ["#1A1A1A"] } },
-    { opId: "subtitle", type: "createNode", params: { type: "TEXT", name: "Card Subtitle", parentRef: "card", characters: "描述文字" }, styles: { fills: ["#666666"] } }
-  ]
-})
-→ Returns: { results: [{opId: "card", nodeId: "100:1"}, {opId: "title", nodeId: "100:2"}, {opId: "subtitle", nodeId: "100:3"}] }
-
-✅ 3 nodes + layout + styles in 1 tool call. Use opId + parentRef for parent-child chaining within the batch.
-
----
-
-### Example 2: Build an Entire Section Per Iteration ✅
-User: "Create a login form"
-
-**Iteration 1 (2 tool calls):**
-batchOperations({operations: [
-  { opId: "form", type: "createNode", params: { type: "FRAME", name: "Login Form", layout: { layoutMode: "VERTICAL", gap: 16, padding: { horizontal: 24, vertical: 32 } } } },
-  { opId: "title", type: "createNode", params: { type: "TEXT", name: "Form Title", parentRef: "form", characters: "Sign In" } },
-  { opId: "email", type: "createNode", params: { type: "FRAME", name: "Email Input", parentRef: "form", layout: { layoutMode: "HORIZONTAL", padding: { horizontal: 12, vertical: 10 } }, styles: { cornerRadius: 8, strokes: ["#D0D5DD"] } } },
-  { opId: "emailLabel", type: "createNode", params: { type: "TEXT", name: "Email Text", parentRef: "email", characters: "email@example.com" } },
-  { opId: "password", type: "createNode", params: { type: "FRAME", name: "Password Input", parentRef: "form", layout: { layoutMode: "HORIZONTAL", padding: { horizontal: 12, vertical: 10 } }, styles: { cornerRadius: 8, strokes: ["#D0D5DD"] } } },
-  { opId: "pwLabel", type: "createNode", params: { type: "TEXT", name: "Password Text", parentRef: "password", characters: "••••••••" } },
-  { opId: "btn", type: "createNode", params: { type: "FRAME", name: "Sign In Button", parentRef: "form", layout: { layoutMode: "HORIZONTAL", padding: { horizontal: 16, vertical: 12 } }, styles: { fills: ["#4F46E5"], cornerRadius: 8 } } },
-  { opId: "btnText", type: "createNode", params: { type: "TEXT", name: "Button Label", parentRef: "btn", characters: "Sign In" } }
-]})
-summarize_progress({summary: "Login form created with all fields and button", isComplete: true})
-
-✅ Entire form built in 1 iteration with 2 tool calls (batchOperations + summarize_progress).
-❌ WRONG: Creating 1 node per iteration = 8 iterations = waste.
-
----
-
-### Example 3: Error Recovery
-User: "添加 HUG 尺寸"
-
-**Attempt:**
-setNodeLayout({nodeId: "100:1", sizing: {horizontal: "HUG"}})
-→ Error: {code: "INVALID_SIZING", message: "HUG requires Auto Layout context"}
-
-**Recovery:**
-setNodeLayout({nodeId: "100:1", layoutMode: "VERTICAL", sizing: {horizontal: "HUG"}})
-→ Success: {success: true}
-
----
-
-### Example 4: Insert Into Existing Structure ✅ (QUERY-FIRST)
-User: "在现有的卡片中添加一个操作按钮栏"
-
-**Iteration 1 — Inspect existing structure:**
-inspectDesign({mode: "hierarchy", nodeId: "100:1", depth: 2})
-→ Returns: {id: "100:1", name: "Card", children: [{id: "100:2", name: "Title"}, {id: "100:3", name: "Body"}]}
-
-**Iteration 2 — Insert using REAL parentId from inspection:**
-batchOperations({operations: [
-  {opId: "action-bar", action: "createNode", params: {type: "FRAME", name: "Action Bar", parentId: "100:1", layout: {layoutMode: "HORIZONTAL", gap: 8}}},
-  {opId: "btn", action: "createNode", params: {type: "FRAME", name: "Confirm", parentRef: "action-bar", styles: {fills: ["#4F46E5"], cornerRadius: 6}, children: [
-    {opId: "btn-text", action: "createNode", params: {type: "TEXT", characters: "确认"}}
-  ]}}
-]})
-
-✅ Key: inspectDesign discovers real IDs → parentId inserts precisely.
-❌ WRONG: Guessing parentId without inspection.
-`;
+// Tool examples imported from centralized registry
+import { TOOL_EXAMPLES } from '../../prompt/promptRegistry';
 
 // ==========================================
 // Agent Section Builders
@@ -349,6 +267,7 @@ batchOperations({operations: [
 function buildAgentIdentity(): string {
     return [
         AGENT_IDENTITY.trim(),
+        SCHEMA_RULES.trim(),
         AGENT_PARENT_CHILD_RULE.trim(),
         AGENT_DESIGN_FREEDOM.trim(),
         AGENT_THINKING_PROTOCOL.trim(),
@@ -464,6 +383,33 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         priority: 1.1,
         budgetKey: 'examples',
         builder: (_deps, _tools, budget) => buildToolExamples(budget)
+    },
+    {
+        // Actionable visual quality guidance: shadows, colors, typography, checklist.
+        // Only injected in EXECUTION mode when enableAestheticsGuidance is true.
+        id: 'design-aesthetics',
+        priority: 1.5,
+        budgetKey: 'core',
+        builder: (deps, _tools, _budget, mode) => {
+            if (mode !== 'EXECUTION') return '';
+            if (deps.behaviorConfig && !deps.behaviorConfig.enableAestheticsGuidance) return '';
+            return DESIGN_AESTHETICS.trim();
+        }
+    },
+    {
+        // Pin the user's original request in the system prompt so it survives context compression.
+        id: 'instruction-anchor',
+        priority: 1.8,
+        budgetKey: 'core',
+        builder: (deps, _tools, _budget) => {
+            const originalRequest = deps.intent?.originalRequest;
+            if (!originalRequest) return '';
+            // Truncate to ~200 tokens to prevent budget bloat
+            const truncated = originalRequest.length > 800
+                ? originalRequest.slice(0, 800) + '...'
+                : originalRequest;
+            return `## USER REQUEST (ANCHORED)\n${truncated}\nYou MUST satisfy this request. Every tool call should advance toward fulfilling it.`;
+        }
     },
     {
         id: 'mode-guidance',

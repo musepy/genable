@@ -137,10 +137,5 @@ function extractJsonBlock(text: string): string | null {
   return null;
 }
 
-/**
- * Get token estimate for a string
- * Rough approximation: ~4 chars per token for English/code
- */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
+import { estimateTokens } from '../agent/context/tokenEstimator';
+export { estimateTokens };

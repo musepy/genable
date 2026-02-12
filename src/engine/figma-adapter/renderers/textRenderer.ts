@@ -77,16 +77,19 @@ export class TextRenderer extends BaseRenderer {
         const parentIsAutoLayout = context.parentLayoutMode !== undefined && context.parentLayoutMode !== 'NONE';
         const hSizing = props.layoutSizingHorizontal || 'HUG';
         const vSizing = props.layoutSizingVertical || 'HUG';
+        const isAbsoluteInAutoLayout = parentIsAutoLayout && String((props as any).layoutPositioning || '').toUpperCase() === 'ABSOLUTE';
         
         if (parentIsAutoLayout) {
             t.layoutSizingHorizontal = hSizing;
             t.layoutSizingVertical = vSizing;
             
             // Flex grow/stretch fallback
-            if (context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') t.layoutGrow = 1;
-            if (context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') t.layoutGrow = 1;
-            if (context.parentLayoutMode === 'HORIZONTAL' && vSizing === 'FILL') t.layoutAlign = 'STRETCH';
-            if (context.parentLayoutMode === 'VERTICAL' && hSizing === 'FILL') t.layoutAlign = 'STRETCH';
+            if (!isAbsoluteInAutoLayout) {
+                if (context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') t.layoutGrow = 1;
+                if (context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') t.layoutGrow = 1;
+                if (context.parentLayoutMode === 'HORIZONTAL' && vSizing === 'FILL') t.layoutAlign = 'STRETCH';
+                if (context.parentLayoutMode === 'VERTICAL' && hSizing === 'FILL') t.layoutAlign = 'STRETCH';
+            }
         }
 
         // Text-specific resize behavior

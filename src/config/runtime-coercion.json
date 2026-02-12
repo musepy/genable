@@ -8,6 +8,8 @@
         "itemSpacing": "gap",
         "paddingX": "padding",
         "paddingY": "padding",
-        "layout": "layoutMode"
+        "layout": "layoutMode",
+        "positionMode": "layoutPositioning",
+        "positioning": "layoutPositioning"
     }
 }

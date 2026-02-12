@@ -41,15 +41,17 @@ export class Normalizer {
         // 2. Lift Props: REMOVED for strict mode
         // this.liftProps(layer);
 
-        // 3. Property Transformation (Aliases & Coercion)
-        // Kept minimal for basic type safety (e.g. number parsing) but removed fuzzy aliases
+        // 3. Property Aliases (from runtime-coercion.json)
+        this.resolveAliases(layer.props);
+
+        // 4. Property Transformation (type coercion)
         this.coercePropertyValues(layer.props);
         
-        // 4. Enums: REMOVED fuzzy matching.
+        // 5. Enums: REMOVED fuzzy matching.
         // We can add strict validation here if we want to delete invalid enums.
         this.validateEnums(layer.props);
 
-        // 5. Recursive for children
+        // 6. Recursive for children
         if (Array.isArray(layer.children)) {
             if (layer.children.length === 0) {
                 delete (layer as any).children;
@@ -58,9 +60,11 @@ export class Normalizer {
             }
         }
 
-        // 6. Strict Sanitation: Remove legacy keys that are no longer lifted
-        if ('style' in layer) delete (layer as any).style;
-        if ('layout' in layer) delete (layer as any).layout;
+        // 7. Strict Sanitation: Remove legacy keys that are no longer lifted
+        // [V6.2 MOD]: Removed aggressive delete. We now prefer lifting in toolCallHandler.
+        // If they still exist here, we keep them as a fallback for the renderer.
+        // if ('style' in layer) delete (layer as any).style;
+        // if ('layout' in layer) delete (layer as any).layout;
 
         return layer;
     }
@@ -86,16 +90,48 @@ export class Normalizer {
         layer.type = layer.type.toUpperCase();
     }
 
-    // REMOVED: liftProps
-
-    // REMOVED: normalizePropertyAliases
+    /**
+     * Resolve common property aliases from runtime-coercion.json.
+     * Moves values from alias keys to canonical keys (e.g., "spacing" → "gap").
+     * Only applies when the canonical key is NOT already set.
+     */
+    private static resolveAliases(props: any): void {
+        const aliases = RUNTIME_CONFIG.propertyAliases as Record<string, string>;
+        for (const [alias, canonical] of Object.entries(aliases)) {
+            if (props[alias] !== undefined && props[canonical] === undefined) {
+                props[canonical] = props[alias];
+                delete props[alias];
+            } else if (props[alias] !== undefined) {
+                // Canonical already set, just clean up the alias
+                delete props[alias];
+            }
+        }
+    }
 
     private static coercePropertyValues(props: any): void {
         const numericFields = [
-            PROPS.width, PROPS.height, PROPS.gap, PROPS.strokeWeight, 
-            PROPS.cornerRadius, PROPS.fontSize, PROPS.paddingTop, 
-            PROPS.paddingRight, PROPS.paddingBottom, PROPS.paddingLeft
+            PROPS.width, PROPS.height, PROPS.gap, PROPS.strokeWeight,
+            PROPS.cornerRadius, PROPS.fontSize, PROPS.paddingTop,
+            PROPS.paddingRight, PROPS.paddingBottom, PROPS.paddingLeft,
+            PROPS.x, PROPS.y, PROPS.layoutGrow
         ];
+
+        // Support optional position object fallback: { position: { x, y } }
+        if (props.position && typeof props.position === 'object') {
+            if (props[PROPS.x] === undefined && (props.position as any).x !== undefined) {
+                props[PROPS.x] = (props.position as any).x;
+            }
+            if (props[PROPS.y] === undefined && (props.position as any).y !== undefined) {
+                props[PROPS.y] = (props.position as any).y;
+            }
+            delete props.position;
+        }
+
+        // Coerce unified padding (number or string → number)
+        if (props[PROPS.padding] !== undefined && typeof props[PROPS.padding] !== 'object') {
+            const parsed = parseFloat(props[PROPS.padding] as any);
+            props[PROPS.padding] = isNaN(parsed) ? undefined : parsed;
+        }
 
         numericFields.forEach(field => {
             if (props[field] !== undefined) {
@@ -114,6 +150,38 @@ export class Normalizer {
                 }).filter((f: any) => typeof f === 'string' && f.length > 0);
             }
         });
+
+        // Constraints aliases -> canonical Figma constraint values.
+        if (props[PROPS.constraints] && typeof props[PROPS.constraints] === 'object') {
+            const constraints = { ...(props[PROPS.constraints] as any) };
+            const normalizeHorizontal = (value: any): any => {
+                const v = String(value || '').toUpperCase();
+                const map: Record<string, string> = {
+                    LEFT: 'MIN',
+                    RIGHT: 'MAX',
+                    LEFT_RIGHT: 'STRETCH'
+                };
+                return map[v] || v || undefined;
+            };
+            const normalizeVertical = (value: any): any => {
+                const v = String(value || '').toUpperCase();
+                const map: Record<string, string> = {
+                    TOP: 'MIN',
+                    BOTTOM: 'MAX',
+                    TOP_BOTTOM: 'STRETCH'
+                };
+                return map[v] || v || undefined;
+            };
+
+            if (constraints.horizontal !== undefined) {
+                constraints.horizontal = normalizeHorizontal(constraints.horizontal);
+            }
+            if (constraints.vertical !== undefined) {
+                constraints.vertical = normalizeVertical(constraints.vertical);
+            }
+
+            props[PROPS.constraints] = constraints;
+        }
     }
 
     private static validateEnums(props: any): void {

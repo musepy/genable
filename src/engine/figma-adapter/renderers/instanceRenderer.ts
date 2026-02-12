@@ -101,6 +101,7 @@ export class InstanceRenderer extends BaseRenderer {
         const parentIsAutoLayout = _context.parentLayoutMode !== undefined && _context.parentLayoutMode !== 'NONE';
         const hSizing = props.layoutSizingHorizontal as 'FIXED' | 'HUG' | 'FILL' || 'HUG';
         const vSizing = props.layoutSizingVertical as 'FIXED' | 'HUG' | 'FILL' || 'HUG';
+        const isAbsoluteInAutoLayout = parentIsAutoLayout && String((dsl.props as any).layoutPositioning || '').toUpperCase() === 'ABSOLUTE';
 
         if (parentIsAutoLayout) {
             if ('layoutSizingHorizontal' in node) {
@@ -111,10 +112,12 @@ export class InstanceRenderer extends BaseRenderer {
             }
 
             // Flex grow/stretch fallbacks (for older parents or complex nesting)
-            if (_context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') (node as any).layoutGrow = 1;
-            if (_context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') (node as any).layoutGrow = 1;
-            if (_context.parentLayoutMode === 'HORIZONTAL' && vSizing === 'FILL') (node as any).layoutAlign = 'STRETCH';
-            if (_context.parentLayoutMode === 'VERTICAL' && hSizing === 'FILL') (node as any).layoutAlign = 'STRETCH';
+            if (!isAbsoluteInAutoLayout) {
+                if (_context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') (node as any).layoutGrow = 1;
+                if (_context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') (node as any).layoutGrow = 1;
+                if (_context.parentLayoutMode === 'HORIZONTAL' && vSizing === 'FILL') (node as any).layoutAlign = 'STRETCH';
+                if (_context.parentLayoutMode === 'VERTICAL' && hSizing === 'FILL') (node as any).layoutAlign = 'STRETCH';
+            }
         } else if ('layoutSizingHorizontal' in node) {
             // Non-AutoLayout parent: Fallback to FIXED
             (node as any).layoutSizingHorizontal = 'FIXED';

@@ -8,18 +8,15 @@ import { AgentRuntime } from '../agent/agentRuntime';
 import { GeminiProvider, OpenRouterProvider } from '../llm-client';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
+import { inferBehavior, resolveBehavior } from '../agent/agentBehaviorConfig';
 
 import { ChatMessage } from '../../types/chat';
 import { ThinkingLevel } from '../llm-client/types';
 import { SelectionStyles } from '../../types';
 import { emit } from '@create-figma-plugin/utilities';
 
-// Skill-based prompt system
 import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
-import { composeSkillBasedPrompt, buildSkillContextDeps } from '../agent/skills/skillPromptComposer';
-
-// Feature flag for skill system
-const USE_SKILL_SYSTEM = true;
+import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 
 export interface AgentPluginData {
   selectionStyles?: SelectionStyles | null;
@@ -44,6 +41,7 @@ export interface OrchestratorOptions {
   onToolResult?: (id: string, result: any) => void;
   onIteration?: (iteration: number, response: any, taskInfo?: { taskId: string, taskTitle: string }) => void;
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string, taskTitle: string }) => void;
+  loopPolicy?: Partial<AgentLoopPolicy>;
 }
 
 import { composeAgentSystemPrompt, calculateBudget } from '../llm-client/context/promptComposer';
@@ -57,8 +55,8 @@ export class AgentOrchestrator {
 
   constructor(private options: OrchestratorOptions) {}
 
-  private static async ensureSkillsInitialized(): Promise<void> {
-    if (!USE_SKILL_SYSTEM) return;
+  private static async ensureSkillsInitialized(enabled: boolean): Promise<void> {
+    if (!enabled) return;
     
     if (!AgentOrchestrator.initializationPromise) {
       AgentOrchestrator.initializationPromise = initializeSkills();
@@ -68,8 +66,9 @@ export class AgentOrchestrator {
   }
 
   async generate(prompt: string, pluginData: AgentPluginData, history: ChatMessage[]) {
+    const loopPolicy = resolveAgentLoopPolicy(this.options.loopPolicy);
     // 0. Ensure skills are fully loaded before starting
-    await AgentOrchestrator.ensureSkillsInitialized();
+    await AgentOrchestrator.ensureSkillsInitialized(loopPolicy.useSkillSystem);
 
     // [DI] Instantiate IpcBridge for this session
     const ipcBridge = new IpcBridge({
@@ -79,7 +78,7 @@ export class AgentOrchestrator {
 
     try {
       // 1. Initialize Agent
-      const agent = this.createAgent(pluginData, ipcBridge);
+      const agent = this.createAgent(pluginData, ipcBridge, prompt, loopPolicy);
 
       // 2. Run Agentic Loop
       this.options.onStatusChange('Agent starting...');
@@ -100,7 +99,12 @@ export class AgentOrchestrator {
   /**
    * Creates and configures the AgentRuntime with the appropriate provider and tools.
    */
-  private createAgent(pluginData: AgentPluginData, ipcBridge: IpcBridge): AgentRuntime {
+  private createAgent(
+    pluginData: AgentPluginData,
+    ipcBridge: IpcBridge,
+    prompt?: string,
+    loopPolicy?: AgentLoopPolicy
+  ): AgentRuntime {
     const { 
       apiKey, 
       modelName, 
@@ -128,42 +132,38 @@ export class AgentOrchestrator {
     }
 
     // Calculate total layout generation budget
+    const resolvedLoopPolicy = loopPolicy || resolveAgentLoopPolicy(this.options.loopPolicy);
     const totalBudget = calculateBudget({
-      totalTokens: 8000 // Matches composeAgentSystemPrompt default; 4000 was too small for 12+ tool definitions
+      totalTokens: resolvedLoopPolicy.promptBudgetTokens
     });
 
-    // Compose System Prompt
-    let systemPrompt: string;
-    let activeTools: ToolDefinition[];
+    // Unified behavior resolution (single entry point)
+    const hasSelection = !!pluginData.selectionStyles;
+    const behaviorConfig = resolveBehavior({
+      ...inferBehavior({ hasSelection, userPrompt: prompt || '' }),
+      thinkingLevel,
+      promptPolicy: {
+        useSkillSystem: resolvedLoopPolicy.useSkillSystem
+      }
+    });
 
-    if (USE_SKILL_SYSTEM) {
-      // Use skill-based prompt composition
-      const skillDeps = buildSkillContextDeps('', { designSystemId });
-      systemPrompt = composeSkillBasedPrompt(skillDeps, provider, { budget: { total: totalBudget } });
-      activeTools = getActiveAgentTools();
-      emit('SEND_LOG', { message: `Skills active: ${skillRegistry.getEnabled().map(s => s.id).join(', ')}`, type: 'info' });
-    } else {
-      // Legacy prompt composition
-      systemPrompt = composeAgentSystemPrompt(
-        {
-          ragResults: { prioritizedComponents: [], goldenTemplates: [] },
-          intent: {},
-          designSystemContext: { skillName: designSystemConfig.manifest.name }
-        },
-        tools,
-        provider,
-        { totalBudget }
-      );
-      activeTools = tools;
-    }
+    console.log(`[AgentOrchestrator] Behavior resolved: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}, thinking=${behaviorConfig.thinkingLevel}`);
 
     // Return configured runtime
+    // Note: skill system's getActiveAgentTools() resolves to the same agentTools definitions,
+    // so we use `tools` directly. Tool filtering by mode happens inside AgentRuntime.
     return new AgentRuntime({
       provider,
-      tools: activeTools,
-      systemPrompt,
-      ipcBridge, // [DI] Inject Bridge
-      toolExecutors: pluginData.toolExecutors, 
+      tools,
+      // systemPrompt is now lazily composed inside AgentRuntime.run() based on behaviorConfig
+      ipcBridge,
+      toolExecutors: pluginData.toolExecutors,
+      behaviorConfig,
+      loopPolicy: resolvedLoopPolicy,
+      selectionContext: {
+        hasSelection,
+        nodes: [],
+      },
       onIteration: (iteration: number, response: any, taskInfo?: any) => this.options.onIteration?.(iteration, response, taskInfo),
       onProgress: this.handleProgress.bind(this),
       onThinking: this.handleThinking.bind(this),

@@ -84,7 +84,9 @@ export class OpenRouterProvider implements LLMProvider {
 
   getToolSystemInstruction(tools: ToolDefinition[]): string {
     if (!tools || tools.length === 0) return '';
-    return "You are equipped with design tools. Use them to fulfill the user's request. Always respond with tool calls when appropriate.";
+    // Centralized in promptRegistry — single source of truth
+    const { TOOL_CALLING_PROTOCOL } = require('../../prompt/promptRegistry');
+    return TOOL_CALLING_PROTOCOL;
   }
 
   formatResponse(response: LLMResponse): LLMMessage {

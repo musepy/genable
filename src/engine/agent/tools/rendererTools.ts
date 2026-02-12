@@ -124,19 +124,58 @@ NEVER use a predicted, placeholder, or guessed ID.`
             } 
           },
           gap: { type: 'number', description: 'Gap between children' },
+          layoutPositioning: { type: 'string', enum: ['AUTO', 'ABSOLUTE'], description: 'For children in auto-layout parent: ABSOLUTE ignores auto-layout flow.' },
+          constraints: {
+            type: 'object',
+            description: 'Pin/scale behavior relative to parent (for non-auto-layout or ABSOLUTE children).',
+            properties: {
+              horizontal: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT'], description: 'Horizontal constraint' },
+              vertical: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM'], description: 'Vertical constraint' }
+            }
+          },
+          x: { type: 'number', description: 'Explicit x position. Works on non-auto-layout parent, or ABSOLUTE child in auto-layout parent.' },
+          y: { type: 'number', description: 'Explicit y position. Works on non-auto-layout parent, or ABSOLUTE child in auto-layout parent.' },
           width: { type: 'number', description: 'Explicit width' },
           height: { type: 'number', description: 'Explicit height' }
         }
       },
       styles: {
         type: 'object',
-        description: '[INLINE OPTIMIZATION] Configure visual styles (fills, cornerRadius, etc.) during creation. Same schema as setNodeStyles.',
+        description: '[DEPRECATED] Use props instead.',
         properties: {
           fills: { type: 'array', items: { type: 'string', description: 'Hex or variable' }, description: 'Background/Text colors' },
           strokes: { type: 'array', items: { type: 'string', description: 'Hex or variable' }, description: 'Stroke colors' },
           strokeWeight: { type: 'number', description: 'Stroke thickness' },
           cornerRadius: { type: 'number', description: 'Corner radius' },
           opacity: { type: 'number', description: 'Layer opacity (0-1)' }
+        }
+      },
+      props: {
+        type: 'object',
+        description: '[PREFERRED] Unified design properties (fills, cornerRadius, padding, gap, etc.)',
+        properties: {
+          fills: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Background colors' },
+          cornerRadius: { type: 'number', description: 'Corner radius (px)' },
+          padding: { type: 'number', description: 'Uniform padding (px)' },
+          gap: { type: 'number', description: 'Gap between children (px)' },
+          layoutMode: { type: 'string', enum: ['HORIZONTAL', 'VERTICAL', 'NONE'], description: 'Auto Layout mode' },
+          primaryAxisAlignItems: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN'], description: 'Primary axis alignment' },
+          counterAxisAlignItems: { type: 'string', enum: ['MIN', 'CENTER', 'MAX'], description: 'Counter axis alignment' },
+          layoutSizingHorizontal: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Horizontal sizing' },
+          layoutSizingVertical: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Vertical sizing' },
+          layoutPositioning: { type: 'string', enum: ['AUTO', 'ABSOLUTE'], description: 'ABSOLUTE = ignore parent auto layout flow (if parent is auto-layout)' },
+          constraints: {
+            type: 'object',
+            description: 'Pin/scale behavior relative to parent',
+            properties: {
+              horizontal: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT'], description: 'Horizontal constraint' },
+              vertical: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM'], description: 'Vertical constraint' }
+            }
+          },
+          x: { type: 'number', description: 'Explicit x position' },
+          y: { type: 'number', description: 'Explicit y position' },
+          width: { type: 'number', description: 'Fixed width' },
+          height: { type: 'number', description: 'Fixed height' }
         }
       },
       stepId: {
@@ -206,6 +245,23 @@ set layoutMode to VERTICAL/HORIZONTAL in the SAME setNodeLayout call.
         description: 'Padding values in pixels'
       },
       gap: { type: 'number', minimum: 0, description: 'Gap between children (Auto Layout only)' },
+      layoutPositioning: {
+        type: 'string',
+        enum: ['AUTO', 'ABSOLUTE'],
+        description: 'When parent is Auto Layout: ABSOLUTE lets this child ignore flow and use x/y.'
+      },
+      constraints: {
+        type: 'object',
+        description: 'Pin/scale behavior relative to parent.',
+        properties: {
+          horizontal: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT'], description: 'Horizontal constraint mode' },
+          vertical: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM'], description: 'Vertical constraint mode' }
+        }
+      },
+      x: { type: 'number', description: 'Explicit x position. Valid for non-auto-layout parent or ABSOLUTE child in auto-layout parent.' },
+      y: { type: 'number', description: 'Explicit y position. Valid for non-auto-layout parent or ABSOLUTE child in auto-layout parent.' },
+      layoutGrow: { type: 'number', description: 'Auto-layout grow value for flow children (typically 0 or 1).' },
+      layoutAlign: { type: 'string', enum: ['MIN', 'CENTER', 'MAX', 'STRETCH', 'INHERIT'], description: 'Auto-layout cross-axis alignment for flow children.' },
       width: { type: 'number', minimum: 0.01, description: 'Explicit width (only for FIXED sizing)' },
       height: { type: 'number', minimum: 0.01, description: 'Explicit height (only for FIXED sizing)' },
       stepId: {
@@ -362,9 +418,19 @@ export const createIconDefinition: ToolDefinition = {
       },
       styles: {
         type: 'object',
-        description: '[INLINE OPTIMIZATION] Configure visual styles (opacity) during creation. Same schema as setNodeStyles.',
+        description: '[DEPRECATED] Use props instead.',
         properties: {
           opacity: { type: 'number', description: 'Layer opacity (0-1)' }
+        }
+      },
+      props: {
+        type: 'object',
+        description: '[PREFERRED] Unified design properties (fills, opacity, width, height, etc.)',
+        properties: {
+          fills: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Icon colors' },
+          opacity: { type: 'number', description: 'Layer opacity (0-1)' },
+          width: { type: 'number', description: 'Icon width' },
+          height: { type: 'number', description: 'Icon height' }
         }
       },
       stepId: {

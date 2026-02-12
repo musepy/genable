@@ -127,38 +127,6 @@ export class FrameRenderer extends BaseRenderer {
         }
     }
 
-    private async applyEffects(f: FrameNode, props: NodeLayerProps): Promise<void> {
-        if (!props.effects || !Array.isArray(props.effects)) return;
-
-        const figmaEffects: Effect[] = [];
-
-        for (const eff of props.effects) {
-            const type = eff.type as string;
-            if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW') {
-                // Use PropertyTransformer or keep local specialized logic if it involves createPaint-like complexity
-                // But for effects, we currently use parseHexColor (simple RGB)
-                // [PURE TRUST] Removed hardcoded shadow defaults (color #00000014, offset 0/4, blur 16)
-                // If LLM doesn't provide them, Figma defaults or DS defaults should apply via context.
-                const dslColor = eff.color;
-                const { parseColor } = require('../../../utils/colorUtils');
-                const colorRGBA = dslColor ? parseColor(dslColor) : { r: 0, g: 0, b: 0, a: 0.1 }; // Minimal safe default if totally missing
-
-                figmaEffects.push({
-                    type: type as 'DROP_SHADOW' | 'INNER_SHADOW',
-                    color: colorRGBA,
-                    offset: eff.offset || { x: 0, y: 0 },
-                    radius: eff.radius || 0,
-                    spread: (eff as any).spread || 0,
-                    visible: (eff as any).visible !== false,
-                    blendMode: ((eff as any).blendMode as BlendMode) || 'NORMAL'
-                });
-            }
-        }
-
-        if (figmaEffects.length > 0) {
-            f.effects = figmaEffects;
-        }
-    }
 
     /**
      * Apply layout sizing mode and dimensions
@@ -267,7 +235,8 @@ export class FrameRenderer extends BaseRenderer {
         }
         
         // ========== 6. Child-specific adjustments (Flex fallbacks) ==========
-        if (!isRoot && parentHasAutoLayout) {
+        const isAbsoluteInAutoLayout = parentHasAutoLayout && String((props as any).layoutPositioning || '').toUpperCase() === 'ABSOLUTE';
+        if (!isRoot && parentHasAutoLayout && !isAbsoluteInAutoLayout) {
             // Primary Axis Growth
             if (context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') f.layoutGrow = 1;
             if (context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') f.layoutGrow = 1;

@@ -42,11 +42,12 @@ describe('PromptComposer - Agent Mode', () => {
         getToolSystemInstruction: (tools: ToolDefinition[]) => `PROVIDER_TOOLS_${tools.length}`
     };
 
-    it('should include agent core prompt', () => {
+    it('should include agent core prompt including schema rules', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
         expect(prompt).toContain('You are a Figma design agent');
         expect(prompt).toContain('CORE POLICIES');
         expect(prompt).toContain('NAMING CONVENTION');
+        expect(prompt).toContain('CANONICAL PROPERTY NAMES'); // From SCHEMA_RULES
     });
 
     it('should serialize tools correctly', () => {

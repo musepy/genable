@@ -4,14 +4,25 @@
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall, Part } from '../llm-client/providers/types';
-import { ToolDefinition, ToolParameter, getToolsForMode } from './tools';
+import { ToolDefinition, ToolParameter, getToolsForMode, AgentMode } from './tools';
 import { IpcBridge } from './ipcBridge';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { RetryPolicy, AgentErrorCategory } from './retryPolicy';
-import { DEFAULT_THINKING_LEVEL } from '../llm-client/config';
 import { planState } from './planState';
-import { AgentMode, composeAgentSystemPrompt } from '../llm-client/context/promptComposer';
+import { composeAgentSystemPrompt } from '../llm-client/context/promptComposer';
 import { mapToSemanticError, formatSemanticError } from '../utils/errorUtils';
+import { AgentBehaviorConfig, DEFAULT_BEHAVIOR, resolveBehavior } from './agentBehaviorConfig';
+import { composeSkillBasedPrompt, buildSkillContextDeps } from './skills/skillPromptComposer';
+import { estimateTokens } from './context/tokenEstimator';
+import { CONTEXT_CONSTANTS } from './context/constants';
+import { ToolResultCleaner } from './context/toolResultCleaner';
+import { ContextManager } from './context/contextManager';
+import {
+  AgentLoopPolicy,
+  resolveAgentLoopPolicy,
+  getToolModeForPhase,
+  getMaxTokensForPhase,
+} from './agentLoopPolicy';
 
 export interface AgentRuntimeOptions {
   provider: LLMProvider;
@@ -21,21 +32,26 @@ export interface AgentRuntimeOptions {
   maxContextTokens?: number; // Max tokens before context compression
   systemPrompt?: string;
   planId?: string; // Optional ID for persistent planning
+  behaviorConfig?: Partial<AgentBehaviorConfig>; // Agent behavior knobs (see agentBehaviorConfig.ts)
+  selectionContext?: { hasSelection: boolean; nodes: any[] }; // Current Figma selection
   onIteration?: (iteration: number, response: LLMResponse, taskInfo?: { taskId: string, taskTitle: string }) => void;
   onToolCall?: (toolCall: LLMToolCall) => void;
   onToolResult?: (toolCall: LLMToolCall, result: any) => void;
-  onProgress?: (chunk: string) => void;
+  onProgress?: (step: string) => void;
   onThinking?: (thought: string) => void;
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string, taskTitle: string }) => void;
   toolExecutors?: Record<string, import('./tools/types').ToolExecutor>;
+  designSystemId?: string; // Added for skill-based prompting
+  messages?: LLMMessage[]; // Initial messages for the context manager
+  loopPolicy?: Partial<AgentLoopPolicy>; // Unified runtime control policy
 }
 
 export class AgentRuntime {
-  private messages: LLMMessage[] = [];
   private maxIterations: number;
   private maxContextTokens: number;
-  private approximateTokens: number = 0;
+  private context: ContextManager;
   private retryPolicy: RetryPolicy;
+  private cleaner: ToolResultCleaner;
   private idCounter: number = 0;
   private lastThinkingText: string = '';
   private toolCallSignatureHistory: string[] = [];
@@ -48,10 +64,12 @@ export class AgentRuntime {
   private progressCallCount: number = 0;
   private lastProgressHeaders: string[] = [];
   private hasPendingToolErrors: boolean = false;
+  private consecutiveToolFailures: number = 0;
   private collectionAttempts: number = 0; // 🔴 P1: Collection counter
   private staleStepIterations: number = 0; // Track how long a step has been active without advancing
   private lastActiveStepId: string | null = null; // Track which step was active last iteration
-  private readonly STALE_STEP_THRESHOLD = 15; // Force step completion after this many iterations
+  private recoveryActive: boolean = false;
+  private recoveryIterations: number = 0;
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createNode',
     'setNodeLayout',
@@ -61,35 +79,30 @@ export class AgentRuntime {
     'deleteNode',
     'applyDesignPatch'
   ]);
+  systemPrompt?: string;
+  behaviorConfig: AgentBehaviorConfig;
+  loopPolicy: AgentLoopPolicy;
+  private originalUserRequest: string = '';
+  private currentMode: AgentMode = 'PLANNING'; 
+  private designSystemId?: string;
 
   constructor(private options: AgentRuntimeOptions) {
     this.retryPolicy = new RetryPolicy();
-    this.maxIterations = options.maxIterations || AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_ITERATIONS;
+    this.behaviorConfig = resolveBehavior(options.behaviorConfig);
+    this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
+    this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
     // FIX: Limit context to prevent MALFORMED_FUNCTION_CALL from excessive prompt size
     this.maxContextTokens = options.maxContextTokens || AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS;
-    
+    this.designSystemId = options.designSystemId; // Initialize designSystemId
+    this.cleaner = new ToolResultCleaner(options.tools);
+    this.context = new ContextManager(this.maxContextTokens, options.messages);
+
     // Disable throttling in tests
     if (process.env.NODE_ENV === 'test') {
       (this as any).THROTTLE_MS = 0;
     }
   }
 
-  /**
-   * Token estimation with Chinese character support.
-   */
-  private estimateTokens(content: string | any[]): number {
-    const text = typeof content === 'string' ? content : JSON.stringify(content);
-    
-    // Improved estimation: count Chinese characters separately
-    // 1 Chinese char ≈ 0.6 tokens (approx empirical value for Gemini)
-    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const otherChars = text.length - chineseChars;
-    
-    const chineseTokens = Math.ceil(chineseChars * AGENT_RUNTIME_CONSTANTS.ESTIMATION_CHINESE_CHAR_MULTIPLIER);
-    const otherTokens = Math.ceil(otherChars / AGENT_RUNTIME_CONSTANTS.ESTIMATION_CHARACTERS_PER_TOKEN);
-    
-    return chineseTokens + otherTokens;
-  }
 
   /**
    * Generates a unique ID with prefix, timestamp, random, and counter.
@@ -171,81 +184,15 @@ export class AgentRuntime {
     }
   }
 
-  /**
-   * Max chars for a single tool call's args when stored in history.
-   * ~750 tokens. Prevents batchOperations with deep children from bloating context.
-   */
-  private readonly MAX_HISTORY_ARGS_CHARS = 3000;
 
   private sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
-    const toolMap = new Map(this.options.tools.map(tool => [tool.name, tool]));
-
-    return toolCalls.map(tc => {
-      const def = toolMap.get(tc.name);
-      if (!def) return tc;
-      let sanitizedArgs = this.sanitizeArgsBySchema(tc.args, def.parameters as ToolParameter);
-
-      // Hard cap: truncate oversized args to prevent context explosion.
-      // batchOperations with recursive children or large inline styles can produce 30-50K chars.
-      const argsJson = JSON.stringify(sanitizedArgs);
-      if (argsJson.length > this.MAX_HISTORY_ARGS_CHARS) {
-        if (tc.name === 'batchOperations' && Array.isArray(sanitizedArgs.operations)) {
-          // Keep skeleton: opId + action + essential refs, drop bloated params
-          sanitizedArgs = {
-            operations: sanitizedArgs.operations.map((op: any) => ({
-              opId: op.opId,
-              action: op.action,
-              _paramsTruncated: true,
-              // Keep references for dependency tracking across history
-              ...(op.params?.nodeRef && { nodeRef: op.params.nodeRef }),
-              ...(op.params?.parentRef && { parentRef: op.params.parentRef }),
-              ...(op.params?.nodeId && { nodeId: op.params.nodeId }),
-              ...(op.params?.parentId && { parentId: op.params.parentId }),
-              ...(op.params?.name && { name: op.params.name }),
-              // Keep opIds of children for hierarchy tracing
-              ...(Array.isArray(op.params?.children) && {
-                childOpIds: op.params.children.map((c: any) => c.opId).filter(Boolean)
-              }),
-            })),
-            strategy: sanitizedArgs.strategy,
-            onError: sanitizedArgs.onError,
-            _truncated: true,
-            _originalSize: argsJson.length
-          };
-        } else if (tc.name === 'applyDesignPatch' && Array.isArray(sanitizedArgs.patches)) {
-          // Keep patch targets, drop detailed style values
-          sanitizedArgs = {
-            patches: sanitizedArgs.patches.map((p: any) => ({
-              nodeId: p.nodeId || p.nodeRef,
-              _hasLayout: !!p.layout,
-              _hasStyles: !!p.styles,
-              _hasProperties: !!p.properties,
-            })),
-            _truncated: true,
-            _originalSize: argsJson.length
-          };
-        } else {
-          // Generic truncation: keep tool name context only
-          sanitizedArgs = {
-            _truncated: true,
-            _tool: tc.name,
-            _originalSize: argsJson.length,
-            // Keep nodeId if present for reference
-            ...(sanitizedArgs.nodeId && { nodeId: sanitizedArgs.nodeId }),
-            ...(sanitizedArgs.name && { name: sanitizedArgs.name }),
-          };
-        }
-        console.log(`[AgentRuntime] ✂️ Truncated ${tc.name} args for history: ${argsJson.length} -> ${JSON.stringify(sanitizedArgs).length} chars`);
-      }
-
-      return { ...tc, args: sanitizedArgs };
-    });
+    return this.cleaner.sanitizeToolCallsForHistory(toolCalls);
   }
 
   private compactThoughtSignatures(): void {
     let lastToolIdx = -1;
-    for (let i = this.messages.length - 1; i >= 0; i--) {
-      const msg = this.messages[i];
+    for (let i = this.context.getAllMessages().length - 1; i >= 0; i--) {
+      const msg = this.context.getAllMessages()[i];
       if (msg.hidden || msg.role !== 'tool') continue;
       if (Array.isArray(msg.content) && msg.content.some((p: any) => p.functionResponse)) {
         lastToolIdx = i;
@@ -257,9 +204,9 @@ export class AgentRuntime {
     if (lastToolIdx !== -1) preserve.add(lastToolIdx);
 
     let mutated = false;
-    for (let i = 0; i < this.messages.length; i++) {
+    for (let i = 0; i < this.context.getAllMessages().length; i++) {
       if (preserve.has(i)) continue;
-      const msg = this.messages[i];
+      const msg = this.context.getAllMessages()[i];
       if (msg.hidden) continue;
       if (msg.role !== 'tool') continue;
       if (!Array.isArray(msg.content)) continue;
@@ -286,8 +233,8 @@ export class AgentRuntime {
     }
 
     if (mutated) {
-      this.approximateTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-      console.log(`[AgentRuntime] 🧽 Compacted thought signatures in tool history. Visible tokens: ${this.approximateTokens}`);
+      this.context.updateTokens();
+      console.log(`[AgentRuntime] 🧽 Compacted thought signatures in tool history. Visible tokens: ${this.context.getApproximateTokens()}`);
     }
   }
 
@@ -350,395 +297,10 @@ export class AgentRuntime {
   }
 
   /**
-   * Check if a message contains function calls (tool calls)
-   */
-  private hasFunctionCalls(msg: LLMMessage): boolean {
-    if (!Array.isArray(msg.content)) return false;
-    return msg.content.some((part: any) => part.functionCall);
-  }
-
-  /**
-   * Define a Turn structure for proper context management
-   * A Turn represents a complete interaction: User -> Model -> Tool(s)
-   */
-  private groupIntoTurns(messages: LLMMessage[]): Array<{ indices: number[]; tokens: number }> {
-    const turns: Array<{ indices: number[]; tokens: number }> = [];
-    let i = 0;
-
-    while (i < messages.length) {
-      const msg = messages[i];
-
-      // Skip system messages and hidden messages
-      if (msg.role === 'system' || msg.hidden) {
-        i++;
-        continue;
-      }
-
-      const turnIndices: number[] = [];
-
-      if (msg.role === 'user') {
-        // User-initiated turn: user → model → tool*
-        turnIndices.push(i);
-        i++;
-
-        // Collect the model response
-        if (i < messages.length && messages[i].role === 'model' && !messages[i].hidden) {
-          turnIndices.push(i);
-          const modelMsg = messages[i];
-
-          // If model has function calls, collect all following tool responses
-          if (this.hasFunctionCalls(modelMsg)) {
-            i++;
-            while (i < messages.length && messages[i].role === 'tool' && !messages[i].hidden) {
-              turnIndices.push(i);
-              i++;
-            }
-          } else {
-            i++;
-          }
-        }
-
-        // Calculate tokens for this turn
-        const tokens = turnIndices.reduce((sum, idx) => {
-          return sum + this.estimateTokens(messages[idx].content);
-        }, 0);
-
-        turns.push({ indices: turnIndices, tokens });
-      } else if (msg.role === 'model') {
-        // Model-initiated turn (agentic continuation): model → tool*
-        // This happens in multi-step agent loops where model calls tools
-        // without an intervening user message.
-        turnIndices.push(i);
-
-        if (this.hasFunctionCalls(msg)) {
-          i++;
-          while (i < messages.length && messages[i].role === 'tool' && !messages[i].hidden) {
-            turnIndices.push(i);
-            i++;
-          }
-        } else {
-          i++;
-        }
-
-        const tokens = turnIndices.reduce((sum, idx) => {
-          return sum + this.estimateTokens(messages[idx].content);
-        }, 0);
-
-        turns.push({ indices: turnIndices, tokens });
-      } else {
-        // Orphaned tool message without preceding model - group alone
-        turnIndices.push(i);
-        const tokens = this.estimateTokens(messages[i].content);
-        turns.push({ indices: turnIndices, tokens });
-        i++;
-      }
-    }
-
-    return turns;
-  }
-
-  /**
-   * Validate that the message sequence is valid for Gemini API
-   * Rules:
-   * 1. Must start with user message (or system then user)
-   * 2. No orphaned tool responses (must follow a model function call)
-   * 3. Model function calls must be followed by tool responses
-   */
-  private validateMessageSequence(messages: LLMMessage[]): { valid: boolean; error?: string } {
-    const visibleMessages = messages.filter(m => !m.hidden && m.role !== 'system');
-    
-    if (visibleMessages.length === 0) {
-      return { valid: true };
-    }
-    
-    // Rule 1: Must start with user message
-    if (visibleMessages[0].role !== 'user') {
-      return { 
-        valid: false, 
-        error: `Sequence must start with user message, but starts with ${visibleMessages[0].role}` 
-      };
-    }
-    
-    // Rule 2 & 3: Check function call pairs
-    for (let i = 0; i < visibleMessages.length; i++) {
-      const msg = visibleMessages[i];
-      
-      if (msg.role === 'model' && this.hasFunctionCalls(msg)) {
-        // Must have at least one tool response following
-        let hasToolResponse = false;
-        let j = i + 1;
-        while (j < visibleMessages.length && visibleMessages[j].role === 'tool') {
-          hasToolResponse = true;
-          j++;
-        }
-        
-        if (!hasToolResponse) {
-          return { 
-            valid: false, 
-            error: `Model message at index ${i} has function calls but no tool responses follow` 
-          };
-        }
-      }
-      
-      if (msg.role === 'tool') {
-        // Must be preceded by a model message with function calls
-        if (i === 0 || visibleMessages[i - 1].role !== 'model') {
-          return { 
-            valid: false, 
-            error: `Tool message at index ${i} is orphaned (no preceding model message)` 
-          };
-        }
-        
-        const prevModel = visibleMessages[i - 1];
-        if (!this.hasFunctionCalls(prevModel)) {
-          return { 
-            valid: false, 
-            error: `Tool message at index ${i} follows model without function calls` 
-          };
-        }
-      }
-    }
-    
-    return { valid: true };
-  }
-
-  /**
-   * Reversible context management using Turn-based truncation.
-   * 
-   * CRITICAL: Must preserve [User] -> [Model] -> [Tool] sequence integrity.
-   * Uses proper turn-based logic to ensure no orphaned messages.
+   * Delegates context management to ContextManager.
    */
   private async manageContext(): Promise<void> {
-    // Validate current sequence before any modifications
-    const validationBefore = this.validateMessageSequence(this.messages);
-    if (!validationBefore.valid) {
-      console.warn('[AgentRuntime] Message sequence invalid before truncation:', validationBefore.error);
-    }
-
-    const nonSystemVisibleMessages = this.messages.filter(m => m.role !== 'system' && !m.hidden);
-    
-    // SMART CLEANING: Remove redundant error turns (still useful for noise reduction)
-    const successfulTools = new Set<string>();
-    for (let i = nonSystemVisibleMessages.length - 1; i >= 0; i--) {
-      const msg = nonSystemVisibleMessages[i];
-      if (msg.role === 'tool' && Array.isArray(msg.content)) {
-        const results = msg.content as any[];
-        const isSuccess = results.every(r => r.functionResponse?.response?.success !== false);
-        if (isSuccess) {
-          results.forEach(r => successfulTools.add(r.functionResponse?.name));
-        } else {
-          const allFixed = results.every(r => successfulTools.has(r.functionResponse?.name));
-          if (allFixed && nonSystemVisibleMessages.length > AGENT_RUNTIME_CONSTANTS.REDUNDANT_ERROR_DROP_THRESHOLD) {
-             msg.hidden = true; // REVERSIBILITY: Just hide
-             continue;
-          }
-        }
-      }
-    }
-
-    const currentVisibleTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-    // Always sync approximateTokens to actual visible context
-    this.approximateTokens = currentVisibleTokens;
-
-    if (currentVisibleTokens <= this.maxContextTokens * AGENT_RUNTIME_CONSTANTS.CONTEXT_COMPRESSION_LIMIT_FACTOR) {
-      return;
-    }
-
-    // NEW: Use turn-based truncation
-    await this.truncateByTurns();
-
-    // Validate sequence after truncation
-    const validationAfter = this.validateMessageSequence(this.messages);
-    if (!validationAfter.valid) {
-      console.error('[AgentRuntime] CRITICAL: Message sequence invalid after truncation:', validationAfter.error);
-      // Attempt to fix by unhiding the most recent turn
-      await this.fixInvalidSequence();
-    }
-
-    // [ROBUSTNESS]: If still over budget after truncation (due to large single messages), 
-    // attempt summarization of the oldest visible blocks.
-    if (this.approximateTokens > this.maxContextTokens) {
-        await this.summarizeConversation().catch(err => {
-            console.warn('[AgentRuntime] Summarization failed, falling back to pure truncation robustness.', err);
-        });
-    }
-  }
-
-  /**
-   * Turn-based truncation: Hide oldest complete turns until budget is met.
-   * This ensures we never have orphaned messages.
-   */
-  private async truncateByTurns(): Promise<void> {
-    const minTurnsToKeep = 3; // Keep at least 3 complete turns
-    const currentVisibleTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-    let tokensToHide = currentVisibleTokens - (this.maxContextTokens * AGENT_RUNTIME_CONSTANTS.CONTEXT_COMPRESSION_LIMIT_FACTOR);
-    
-    if (tokensToHide <= 0) return;
-
-    // Group messages into turns
-    const turns = this.groupIntoTurns(this.messages);
-    
-    if (turns.length <= minTurnsToKeep) {
-      console.log(`[AgentRuntime] Not enough turns to truncate (${turns.length} <= ${minTurnsToKeep})`);
-      return;
-    }
-
-    let hiddenCount = 0;
-    let hiddenTokens = 0;
-
-    // Hide oldest turns first
-    for (let i = 0; i < turns.length - minTurnsToKeep; i++) {
-      if (tokensToHide <= 0) break;
-      
-      const turn = turns[i];
-      
-      // Hide all messages in this turn
-      for (const idx of turn.indices) {
-        this.messages[idx].hidden = true;
-        hiddenCount++;
-      }
-      
-      hiddenTokens += turn.tokens;
-      tokensToHide -= turn.tokens;
-    }
-
-    if (hiddenCount > 0) {
-      console.log(`[AgentRuntime] Context managed via turn-based truncation: hid ${hiddenCount} messages (${hiddenTokens} tokens). Current visible tokens: ${this.estimateTokens(this.messages.filter(m => !m.hidden))}`);
-      this.approximateTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-    }
-  }
-
-  /**
-   * Attempt to fix an invalid sequence by unhiding messages
-   */
-  private async fixInvalidSequence(): Promise<void> {
-    console.warn('[AgentRuntime] Attempting to fix invalid sequence...');
-
-    // Strategy 1: For each visible model message with function calls,
-    // ensure its tool responses are also visible.
-    const visibleMessages = this.messages.filter(m => !m.hidden && m.role !== 'system');
-    let fixed = false;
-
-    for (let msgIdx = 0; msgIdx < this.messages.length; msgIdx++) {
-      const msg = this.messages[msgIdx];
-      if (msg.hidden || msg.role !== 'model' || !this.hasFunctionCalls(msg)) continue;
-
-      // Check if next visible non-system message is a tool response
-      let hasToolResponse = false;
-      for (let j = msgIdx + 1; j < this.messages.length; j++) {
-        if (this.messages[j].role === 'system') continue;
-        if (this.messages[j].hidden && this.messages[j].role === 'tool') {
-          // Unhide tool response that was orphaned by truncation
-          this.messages[j].hidden = false;
-          hasToolResponse = true;
-          fixed = true;
-          console.log(`[AgentRuntime] Unhid tool response at index ${j} to fix orphaned model+tools`);
-        } else if (!this.messages[j].hidden && this.messages[j].role === 'tool') {
-          hasToolResponse = true;
-        }
-        // Stop once we hit a non-tool message
-        if (this.messages[j].role !== 'tool' && this.messages[j].role !== 'system') break;
-      }
-
-      // If no tool responses exist at all, hide the model message instead
-      if (!hasToolResponse) {
-        msg.hidden = true;
-        fixed = true;
-        console.log(`[AgentRuntime] Hid orphaned model message at index ${msgIdx} (no tool responses available)`);
-      }
-    }
-
-    // Strategy 2: Ensure sequence starts with user message
-    const firstVisibleIdx = this.messages.findIndex(m => !m.hidden && m.role !== 'system');
-    if (firstVisibleIdx !== -1 && this.messages[firstVisibleIdx].role !== 'user') {
-      for (let i = firstVisibleIdx - 1; i >= 0; i--) {
-        if (this.messages[i].role === 'system') continue;
-        this.messages[i].hidden = false;
-        fixed = true;
-        if (this.messages[i].role === 'user') {
-          console.log(`[AgentRuntime] Unhid message at index ${i} to ensure sequence starts with user`);
-          break;
-        }
-      }
-    }
-
-    // Re-sync token count after modifications
-    if (fixed) {
-      this.approximateTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-    }
-
-    // Re-validate
-    const validation = this.validateMessageSequence(this.messages);
-    if (validation.valid) {
-      console.log('[AgentRuntime] Sequence fixed successfully');
-    } else {
-      console.error('[AgentRuntime] Unable to fix sequence:', validation.error);
-    }
-  }
-
-  /**
-   * Summarizes a block of visible messages and replaces them with a single summary message.
-   * Original messages are marked hidden instead of deleted (Strong Reversibility).
-   * 
-   * [FIX]: Uses turn-based grouping to ensure no orphaned messages.
-   */
-  private async summarizeConversation(): Promise<void> {
-    const turns = this.groupIntoTurns(this.messages);
-    if (turns.length < 4) return; // Not enough context to summarize effectively (keep at least 3 turns + 1 to summarize)
-
-    // Summarize roughly half of the available turns
-    const turnsToSummarize = turns.slice(0, Math.floor(turns.length / 2));
-    const allIndicesToHide: number[] = [];
-    const allIdsToSummarize: string[] = [];
-
-    for (const turn of turnsToSummarize) {
-      allIndicesToHide.push(...turn.indices);
-      for (const idx of turn.indices) {
-        allIdsToSummarize.push(this.messages[idx].id);
-      }
-    }
-
-    if (allIndicesToHide.length === 0) return;
-
-    try {
-      const messagesToSummarize = allIndicesToHide.map(idx => this.messages[idx]);
-      const summaryText = await this.requestSummary(messagesToSummarize);
-      
-      // Hide originals
-      allIndicesToHide.forEach(idx => {
-        this.messages[idx].hidden = true;
-      });
-
-      // Add summary message at the position of the first hidden non-system message
-      const firstHiddenIdx = this.messages.findIndex(m => m.hidden && m.role !== 'system' && !m.summaryOf);
-      const insertIdx = firstHiddenIdx !== -1 ? firstHiddenIdx : (this.messages[0]?.role === 'system' ? 1 : 0);
-
-      this.messages.splice(insertIdx, 0, {
-        id: this.generateId('sum'),
-        role: 'system',
-        content: `SUMMARY OF PREVIOUS CONTEXT:\n${summaryText}`,
-        summaryOf: allIdsToSummarize
-      });
-
-      this.approximateTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-      console.log(`[AgentRuntime] Conversation summarized successfully (${turnsToSummarize.length} turns condensed).`);
-    } catch (e) {
-      // Robustness: failure just means we keep the original messages
-      console.warn('[AgentRuntime] Summarization request failed:', e);
-      throw e;
-    }
-  }
-
-  private async requestSummary(messages: LLMMessage[]): Promise<string> {
-    // Simple summary request using the same provider
-    const summaryResponse = await this.options.provider.generate({
-      messages: [
-        { id: 'sum_req', role: 'system', content: 'Summarize the following design conversation concisely, preserving critical decisions and node IDs.' },
-        ...messages
-      ],
-      maxTokens: 500
-    });
-    return summaryResponse.text || 'Context condensed.';
+    await this.context.manageContext();
   }
 
   /**
@@ -756,12 +318,15 @@ export class AgentRuntime {
    * 3. Termination: complete_task or max iterations
    */
   async run(userPrompt: string): Promise<string> {
-    this.messages.push({ 
+    // Store original request for instruction anchoring
+    this.originalUserRequest = userPrompt;
+
+    this.context.addMessage({
       id: this.generateId('usr'),
-      role: 'user', 
-      content: userPrompt 
+      role: 'user',
+      content: userPrompt,
+      pinned: this.behaviorConfig.enableInstructionAnchoring, // Survives context compression
     });
-    this.approximateTokens += this.estimateTokens(userPrompt);
 
     // Reset plan for new request unless explicitly persisting
     if (!this.options.planId) {
@@ -769,7 +334,7 @@ export class AgentRuntime {
     }
 
     // Proactive compression: trigger when usage exceeds threshold
-    if (this.approximateTokens > this.maxContextTokens * AGENT_RUNTIME_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
+    if (this.context.getApproximateTokens() > this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
       await this.manageContext();
     }
 
@@ -780,6 +345,8 @@ export class AgentRuntime {
     this.progressCallCount = 0;
     this.staleStepIterations = 0;
     this.lastActiveStepId = null;
+    this.recoveryActive = false;
+    this.recoveryIterations = 0;
     this.idCounter = 0; // Better to reset idCounter at start of run if not already reset
     this.retryPolicy.resetAll();
 
@@ -792,11 +359,11 @@ export class AgentRuntime {
       // 🟡 P2: compactThoughtSignatures disabled to protect prefix cache
       // this.compactThoughtSignatures(); 
       // Sync approximateTokens to actual visible context after manageContext
-      this.approximateTokens = this.estimateTokens(this.messages.filter(m => !m.hidden));
-      const currentTokens = this.approximateTokens;
+      this.context.updateTokens();
+      const currentTokens = this.context.getApproximateTokens();
       console.log(`[AgentRuntime] --- Iteration Start: ${iteration}/${this.maxIterations} ---`);
       console.log(`[AgentRuntime] Context Budget: ${currentTokens}/${this.maxContextTokens} tokens (${Math.round(currentTokens/this.maxContextTokens*100)}%)`);
-      console.log(`[AgentRuntime] Visible messages: ${this.messages.filter(m => !m.hidden).length}, Hidden: ${this.messages.filter(m => m.hidden).length}`);
+      console.log(`[AgentRuntime] Visible messages: ${this.context.getAllMessages().filter(m => !m.hidden).length}, Hidden: ${this.context.getMessages(true).length}`);
 
       // Hard stop: if context exceeds 120% of budget after compression, abort to prevent runaway costs
       if (currentTokens > this.maxContextTokens * 1.2) {
@@ -865,7 +432,7 @@ export class AgentRuntime {
           this.lastActiveStepId = activeStep.stepId;
         }
 
-        if (this.staleStepIterations >= this.STALE_STEP_THRESHOLD) {
+        if (this.staleStepIterations >= this.loopPolicy.staleStepThreshold) {
           console.warn(`[AgentRuntime] ⚠️ STALE STEP: "${activeStep.title}" (${activeStep.stepId}) has been active for ${this.staleStepIterations} iterations. Force-completing.`);
           planState.completeTask(activeStep.stepId, `Auto-completed after ${this.staleStepIterations} iterations`);
           this.staleStepIterations = 0;
@@ -883,7 +450,7 @@ export class AgentRuntime {
               role: 'user',
               content: 'All plan steps have been completed. Call complete_task now with a summary of what was built.'
             };
-            this.messages.push(completionMessage);
+            this.context.getAllMessages().push(completionMessage);
           } else {
             // Activate next step
             const nextStep = remainingSteps[0];
@@ -895,66 +462,61 @@ export class AgentRuntime {
       }
 
       // ----------------------------------------
-      // PHASE 2: SYSTEM PROMPT CONSTRUCTION
+      // RECOVERY MODE OVERRIDE
       // ----------------------------------------
-      // 1. Core System Prompt Reconstruction (Hot-Swapping)
-      // [Self-Repair] Inject a USER-role recovery message when thinking loop detected.
-      // User messages have much higher salience than system prompt modifications for Gemini.
-      // The hidden rambling messages are already excluded from context (line 693+),
-      // so this user message becomes the last visible message, maximizing its impact.
-      if (this.thinkingOnlyIterations > 0) {
-        const recoveryMessage: LLMMessage = {
-          id: this.generateId('recovery'),
-          role: 'user',
-          content: `STOP TALKING. You have wasted ${this.thinkingOnlyIterations} turn(s) writing text instead of calling tools. Call a tool NOW. Current task: "${activeStep?.title || 'continue the design'}". Pick ONE: createNode, setNodeLayout, setNodeStyles, or complete_task.`
-        };
-        this.messages.push(recoveryMessage);
-        console.log(`[AgentRuntime] 🔧 Injected user-role recovery message (thinkingOnly: ${this.thinkingOnlyIterations})`);
-      }
-      // 🟡 P2: Reuse or Generate System Prompt
-      const deps = {
-        ragResults: { prioritizedComponents: [], goldenTemplates: [] },
-        intent: {},
-        designSystemContext: { skillName: 'vanilla' },
-        selectionContext: { hasSelection: false, nodes: [] }
-      };
-      const filteredTools = getToolsForMode(mode, this.options.tools); // Define filteredTools here for system prompt
-      const systemPrompt = composeAgentSystemPrompt(
-        deps,
-        filteredTools,
-        this.options.provider,
-        {
-          totalBudget: this.maxContextTokens,
-          mode
+      if (this.loopPolicy.recovery.enabled && mode === 'EXECUTION') {
+        const shouldEnterRecovery = this.recoveryActive ||
+          this.consecutiveToolFailures >= this.loopPolicy.recovery.entryFailureThreshold;
+
+        if (shouldEnterRecovery) {
+          if (!this.recoveryActive) {
+            this.recoveryActive = true;
+            this.recoveryIterations = 0;
+            this.context.addMessage({
+              id: this.generateId('recovery_enter'),
+              role: 'user',
+              content: `RECOVERY MODE: ${this.consecutiveToolFailures} consecutive all-failure iterations detected. Diagnose with inspectDesign/validateLayout first, then resume with a changed strategy.`
+            });
+            console.warn('[AgentRuntime] Entering RECOVERY mode due to repeated failures.');
+          }
+          mode = 'RECOVERY';
         }
-      );
+      }
+
+      this.currentMode = mode; // Update currentMode for prompt composition
+      const filteredTools = getToolsForMode(mode, this.options.tools);
+
+      // ----------------------------------------
+      // PHASE 2: SYSTEM PROMPT HOT-SWAP
+      // ----------------------------------------
+      const systemPrompt = await this.composeSystemPrompt();
 
       // Ensure system prompt is at index 0 and updated
-      const existingSysIndex = this.messages.findIndex(m => m.role === 'system');
-      if (existingSysIndex !== -1) {
-        // Re-calculate if content actually changed to avoid unnecessary cache break (though it should be locked now)
-        if (this.messages[existingSysIndex].content !== systemPrompt) {
-          const sysMsg = this.messages.splice(existingSysIndex, 1)[0];
-          sysMsg.content = systemPrompt;
-          this.messages.unshift(sysMsg);
+      const existingSysIndices = this.context.getAllMessages()
+        .map((m, i) => m.role === 'system' ? i : -1)
+        .filter(i => i !== -1);
+      
+      if (existingSysIndices.length > 0) {
+        for (let i = existingSysIndices.length - 1; i >= 0; i--) {
+          this.context.getAllMessages().splice(existingSysIndices[i], 1);
         }
-      } else {
-        this.messages.unshift({
-          id: this.generateId('sys'),
-          role: 'system',
-          content: systemPrompt
-        });
       }
+
+      this.context.getAllMessages().unshift({
+        id: this.generateId('sys'),
+        role: 'system',
+        content: systemPrompt
+      });
+      console.log(`[AgentRuntime] 🔄 System prompt hot-swapped for mode: ${this.currentMode}`);
 
       // ----------------------------------------
       // PHASE 3: PREPARE LLM CALL
       // ----------------------------------------
-      // 2. Capture visible messages
-      const visibleMessages = this.messages.filter(m => !m.hidden);
-      
+      // System prompt is already in context (unshifted above)
+      const visibleMessages = this.context.getMessages();
       // LOG VIZUALIZATION (Helpful for debugging loop recovery)
       if (this.thinkingOnlyIterations > 0) {
-        console.log(`[AgentRuntime] 🔄 Loop Recovery Active. Context: ${visibleMessages.map(m => m.role).join(' -> ')}`);
+        console.log(`[AgentRuntime] 🔄 Loop Recovery Active. Context: ${this.context.getMessages().map(m => m.role).join(' -> ')}`);
       }
       
       // LOG FOR DEBUGGING IN TESTS
@@ -983,28 +545,18 @@ export class AgentRuntime {
       
       // [FIX] Rambling threshold varies by mode:
       // - PLANNING: 4x threshold (plans need more space for analysis)
-      // - EXECUTION/VERIFICATION with ANY mode: NO stream abort (tool calls come AFTER text)
+      // - EXECUTION/VERIFICATION/RECOVERY with ANY mode: NO stream abort (tool calls come AFTER text)
       // - Other modes: default threshold
-      const isAnyToolMode = mode === 'EXECUTION' || mode === 'VERIFICATION';
+      const resolvedToolMode = getToolModeForPhase(mode, this.loopPolicy, this.consecutiveToolFailures);
+      const isAnyToolMode = resolvedToolMode === 'ANY';
       const ramblingThreshold = mode === 'PLANNING'
-        ? AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * 4  // 4x for planning
+        ? AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * this.loopPolicy.planningRamblingMultiplier
         : isAnyToolMode
           ? Infinity  // [FIX] NEVER abort stream in ANY mode - tool calls arrive LAST
           : AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD;
 
-      // [FIX] Force Gemini to produce at least one tool call in EXECUTION and VERIFICATION modes.
-      // This prevents the "cognitive loop" where Gemini generates pages of narration
-      // ("I'm now building the header...") without ever actually calling tools.
-      // PLANNING uses AUTO because planDesign is inherently a tool call.
-      const toolConfig = (mode === 'EXECUTION' || mode === 'VERIFICATION')
-        ? { mode: 'ANY' as const }
-        : { mode: 'AUTO' as const };
-
-      // [FIX] maxTokens tuned for batching without args bloat.
-      // 2048 was too small (only 1 tool call). 8192 caused args explosion (40K+ chars per message).
-      // 4096 is the sweet spot: enough for 2-3 tool calls with moderate args.
-      // Combined with sanitizeToolCallsForHistory truncation, context stays controlled.
-      const actionMaxTokens = (mode === 'EXECUTION' || mode === 'VERIFICATION') ? 8192 : undefined;
+      const toolConfig = { mode: resolvedToolMode };
+      const actionMaxTokens = getMaxTokensForPhase(mode, this.loopPolicy);
 
       let currentIterationText = '';
       const allowProgressStreaming = mode === 'PLANNING';
@@ -1012,7 +564,7 @@ export class AgentRuntime {
       let rawToolCallsForLoopDetection: LLMToolCall[] = []; // Pre-batch calls for stable fingerprinting
       try {
         response = await this.options.provider.generate({
-          messages: visibleMessages,
+          messages: this.context.getMessages(),
           tools: filteredTools,  // Use filtered tools based on mode
           toolConfig,
           maxTokens: actionMaxTokens,
@@ -1072,7 +624,7 @@ export class AgentRuntime {
               this.lastThinkingText = thought;
             }
           },
-          thinkingLevel: DEFAULT_THINKING_LEVEL
+          thinkingLevel: this.behaviorConfig.thinkingLevel
         });
 
         let rawToolCalls = response.toolCalls || [];
@@ -1128,7 +680,7 @@ export class AgentRuntime {
               role: 'user',
               content: 'Your previous tool call had invalid syntax. Please emit a simpler, single tool call with valid JSON arguments. Use createNode, applyDesignPatch, or batchOperations.'
             };
-            this.messages.push(recoveryHint);
+            this.context.getAllMessages().push(recoveryHint);
           }
 
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -1166,17 +718,17 @@ export class AgentRuntime {
         // RETRY IMMEDIATELY instead of just counting - don't waste an iteration
         if (isAnyToolMode && textLength > AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD) {
           this.anyModeRetryCount = (this.anyModeRetryCount || 0) + 1;
-          console.error(`[AgentRuntime] 🚨 CRITICAL: ANY mode returned NO tool calls! Retry ${this.anyModeRetryCount}/2`);
+          console.error(`[AgentRuntime] 🚨 CRITICAL: ANY mode returned NO tool calls! Retry ${this.anyModeRetryCount}/${this.loopPolicy.anyModeNoToolRetryLimit}`);
           console.error(`[AgentRuntime] Response text length: ${textLength}, toolConfig was: ${JSON.stringify(toolConfig)}`);
 
-          if (this.anyModeRetryCount <= 2) {
+          if (this.anyModeRetryCount <= this.loopPolicy.anyModeNoToolRetryLimit) {
             // Inject a stronger recovery message and retry this iteration
             const forceToolMessage: LLMMessage = {
               id: this.generateId('force'),
               role: 'user',
               content: `CRITICAL ERROR: You generated ${textLength} characters of text but ZERO tool calls. This violates the ANY mode constraint. You MUST call a tool NOW. Pick ONE: createNode, setNodeLayout, setNodeStyles, updateNodeProperties, or complete_task. Do NOT write any more text - just call the tool.`
             };
-            this.messages.push(forceToolMessage);
+            this.context.getAllMessages().push(forceToolMessage);
             console.warn(`[AgentRuntime] 🔄 Retrying iteration ${iteration} with forced tool call message`);
             iteration--; // Retry this iteration
             continue;
@@ -1211,7 +763,7 @@ export class AgentRuntime {
       // 🟡 P2: append-only recovery (removed logic that hid model messages)
 // This text pollutes context (50K-70K tokens over 14 iterations) and reinforces the narration pattern.
       // By removing text parts, we keep only functional content (tool calls + thoughts) in context.
-      if ((mode === 'EXECUTION' || mode === 'VERIFICATION') && response.toolCalls && response.toolCalls.length > 0) {
+      if ((mode === 'EXECUTION' || mode === 'VERIFICATION' || mode === 'RECOVERY') && response.toolCalls && response.toolCalls.length > 0) {
         if (Array.isArray(modelMessage.content)) {
           const originalLength = (modelMessage.content as Part[]).length;
           const originalParts = modelMessage.content as Part[];
@@ -1258,18 +810,13 @@ export class AgentRuntime {
         modelMessage.hidden = true;
       }
       
-      this.messages.push(modelMessage);
-      const modelMessageTokens = this.estimateTokens(modelMessage.content);
-      // Only count visible messages toward the budget
-      if (!modelMessage.hidden) {
-        this.approximateTokens += modelMessageTokens;
-      }
-
+      this.context.addMessage(modelMessage);
+      
       // [DEBUG] Track token growth per message
       const contentJson = typeof modelMessage.content === 'string'
         ? modelMessage.content
         : JSON.stringify(modelMessage.content);
-      console.log(`[AgentRuntime] 📊 Model message added: ${modelMessageTokens} tokens (~${contentJson.length} chars). Total: ${this.approximateTokens} tokens`);
+      console.log(`[AgentRuntime] 📊 Model message added. Total visible: ${this.context.getApproximateTokens()} tokens`);
 
       // ----------------------------------------
       // PHASE 5: TOOL EXECUTION
@@ -1352,7 +899,7 @@ export class AgentRuntime {
               const semanticError = mapToSemanticError('LOOP_DETECTED', reason);
               workflowResults.push({
                 name: tc.name,
-                response: { success: false, error: { code: 'LOOP_DETECTED', message: formatSemanticError(semanticError) } },
+                response: { success: false, error: { code: 'LOOP_DETECTION', message: formatSemanticError(semanticError) } },
                 thought_signature: tc.thought_signature
               });
               continue;
@@ -1485,7 +1032,7 @@ export class AgentRuntime {
         // The model may call applyDesignPatch with slightly different nodeIds/patches each time,
         // producing different signatures but still being stuck in a polish loop.
         // If the last N signatures all contain only the same tool name(s), it's likely a loop.
-        const MONOTONE_LOOP_THRESHOLD = 8; // More lenient than exact match since args differ
+        const MONOTONE_LOOP_THRESHOLD = this.loopPolicy.monotoneLoopThreshold;
         if (this.toolCallSignatureHistory.length >= MONOTONE_LOOP_THRESHOLD) {
           const recentSignatures = this.toolCallSignatureHistory.slice(-MONOTONE_LOOP_THRESHOLD);
           // Extract the set of tool names from each signature
@@ -1512,21 +1059,32 @@ export class AgentRuntime {
                 role: 'user',
                 content: `⚠️ LOOP DETECTED: You have called "${toolNamePatterns[0]}" for ${MONOTONE_LOOP_THRESHOLD} consecutive iterations. The design is good enough. Call complete_task NOW with a summary. Do NOT make any more style changes.`
               };
-              this.messages.push(completionHint);
-              this.approximateTokens += this.estimateTokens(completionHint.content);
+              this.context.addMessage(completionHint);
             }
           }
         }
 
         // Early exit if only workflow tools (no figma tools to execute)
         if (figmaToolCalls.length === 0) {
+           if (mode === 'RECOVERY') {
+             this.recoveryIterations++;
+             this.context.addMessage({
+               id: this.generateId('recovery_workflow_only'),
+               role: 'user',
+               content: `RECOVERY requires at least one diagnostic tool call (${this.loopPolicy.recovery.preferredTools.join(', ')}). Workflow-only calls are insufficient.`
+             });
+
+             if (this.recoveryIterations >= this.loopPolicy.recovery.maxIterations) {
+               this.recoveryActive = false;
+               this.recoveryIterations = 0;
+               this.consecutiveToolFailures = 0;
+             }
+           }
+
            const workflowResultsMessage = this.options.provider.formatToolResults(workflowResults);
            workflowResultsMessage.id = this.generateId('tol');
-           this.messages.push(workflowResultsMessage);
-           const workflowTokens = this.estimateTokens(workflowResultsMessage.content);
-           this.approximateTokens += workflowTokens;
-           // [DEBUG] Track workflow-only results
-           console.log(`[AgentRuntime] 📊 Workflow results added: ${workflowTokens} tokens. Total: ${this.approximateTokens} tokens`);
+           this.context.addMessage(workflowResultsMessage);
+           console.log(`[AgentRuntime] 📊 Workflow results added. Total: ${this.context.getApproximateTokens()} tokens`);
            iteration++;
           continue;
         }
@@ -1613,38 +1171,101 @@ export class AgentRuntime {
 
         if (figmaToolCalls.length > 0) {
           const figmaToolNames = new Set(figmaToolCalls.map(tc => tc.name));
-          const hadErrors = toolResults.some(tr => tr.response?.success === false && figmaToolNames.has(tr.name));
+          const figmaResults = toolResults.filter(tr => figmaToolNames.has(tr.name));
+          const figmaSuccessCount = figmaResults.filter(tr => tr.response?.success !== false).length;
+          const figmaFailCount = figmaResults.filter(tr => tr.response?.success === false).length;
+          const hadErrors = figmaFailCount > 0;
           this.hasPendingToolErrors = hadErrors;
+          const preferredRecoveryToolUsed = figmaToolCalls.some(tc =>
+            this.loopPolicy.recovery.preferredTools.includes(tc.name)
+          );
+
+          if (mode === 'RECOVERY') {
+            this.recoveryIterations++;
+
+            if (preferredRecoveryToolUsed && figmaSuccessCount > 0) {
+              this.recoveryActive = false;
+              this.recoveryIterations = 0;
+              this.consecutiveToolFailures = 0;
+              this.context.addMessage({
+                id: this.generateId('recovery_exit'),
+                role: 'user',
+                content: 'Recovery evidence collected successfully. Resume EXECUTION with a different strategy and avoid repeating failed operations.'
+              });
+              console.log('[AgentRuntime] RECOVERY complete. Resuming normal execution.');
+            } else if (!preferredRecoveryToolUsed) {
+              this.context.addMessage({
+                id: this.generateId('recovery_enforce'),
+                role: 'user',
+                content: `RECOVERY requires diagnosis tools first. Call one of: ${this.loopPolicy.recovery.preferredTools.join(', ')}.`
+              });
+            } else if (this.recoveryIterations >= this.loopPolicy.recovery.maxIterations) {
+              this.recoveryActive = false;
+              this.recoveryIterations = 0;
+              this.consecutiveToolFailures = 0;
+              this.context.addMessage({
+                id: this.generateId('recovery_timeout'),
+                role: 'user',
+                content: 'Recovery attempts reached the limit. If the current design is acceptable, call complete_task. Otherwise resume EXECUTION with a clearly different approach.'
+              });
+              console.warn('[AgentRuntime] RECOVERY max iterations reached. Releasing recovery lock.');
+            }
+          } else {
+            // Track consecutive iterations where ALL figma tools failed.
+            if (figmaFailCount > 0 && figmaSuccessCount === 0) {
+              this.consecutiveToolFailures++;
+              console.warn(`[AgentRuntime] ⚠️ All figma tools failed this iteration. Consecutive failures: ${this.consecutiveToolFailures}/${this.loopPolicy.recovery.entryFailureThreshold}`);
+            } else if (figmaSuccessCount > 0) {
+              this.consecutiveToolFailures = 0;
+              this.recoveryActive = false;
+              this.recoveryIterations = 0;
+            }
+
+            // Escalate to explicit RECOVERY mode instead of repeatedly injecting soft hints.
+            if (this.loopPolicy.recovery.enabled &&
+                this.consecutiveToolFailures >= this.loopPolicy.recovery.entryFailureThreshold &&
+                !this.recoveryActive) {
+              this.recoveryActive = true;
+              this.recoveryIterations = 0;
+              this.context.addMessage({
+                id: this.generateId('fail_fb'),
+                role: 'user',
+                content: `🛑 TOOL FAILURE PATTERN: ${this.consecutiveToolFailures} consecutive iterations where ALL tool calls failed. Next turn is RECOVERY mode. Diagnose with ${this.loopPolicy.recovery.preferredTools.join('/')} before any write actions.`
+              });
+              console.error('[AgentRuntime] Consecutive failure threshold reached. Scheduled RECOVERY mode.');
+            }
+          }
         }
 
         // Add tool results to history using provider-specific formatting
         const toolResultsMessage = this.options.provider.formatToolResults(toolResults);
         toolResultsMessage.id = this.generateId('tol');
-        this.messages.push(toolResultsMessage);
-        const toolResultsTokens = this.estimateTokens(toolResultsMessage.content);
-        this.approximateTokens += toolResultsTokens;
+        this.context.addMessage(toolResultsMessage);
 
         // [DEBUG] Track token growth from tool results
+        const toolResultsTokens = estimateTokens(toolResultsMessage.content);
         const toolResultsJson = JSON.stringify(toolResultsMessage.content);
-        console.log(`[AgentRuntime] 📊 Tool results added: ${toolResultsTokens} tokens (~${toolResultsJson.length} chars). Total: ${this.approximateTokens} tokens`);
+        console.log(`[AgentRuntime] 📊 Tool results added: ${toolResultsTokens} tokens (~${toolResultsJson.length} chars). Total: ${this.context.getApproximateTokens()} tokens`);
 
         // [FIX] Single-tool-call feedback: when model emits only 1 tool in EXECUTION mode,
         // inject a hint to batch more operations next iteration. This is much cheaper than
         // the old "collection" approach (which made a full extra LLM call).
         if (mode === 'EXECUTION' && allToolCalls.length === 1 &&
-            allToolCalls[0].name !== 'complete_task' && allToolCalls[0].name !== 'summarize_progress') {
+            allToolCalls[0].name !== 'complete_task' && 
+            allToolCalls[0].name !== 'summarize_progress' &&
+            allToolCalls[0].name !== 'generateDesign' &&
+            allToolCalls[0].name !== 'batchOperations') {
           const batchHint: LLMMessage = {
             id: this.generateId('batch_hint'),
             role: 'user',
             content: `⚠️ You used only 1 tool call this turn. BATCH RULE: use batchOperations to combine 3-5+ operations per call. Create ALL remaining nodes for the current step in ONE batchOperations call.`
           };
-          this.messages.push(batchHint);
-          this.approximateTokens += this.estimateTokens(batchHint.content);
+          this.context.addMessage(batchHint);
           console.log(`[AgentRuntime] ⚠️ Single-tool hint injected (was: ${allToolCalls[0].name})`);
         }
 
         // Proactive compression after tool results added
-        if (this.approximateTokens > this.maxContextTokens * AGENT_RUNTIME_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
+        if (this.context.getApproximateTokens() > this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
           await this.manageContext();
         }
 
@@ -1661,7 +1282,7 @@ export class AgentRuntime {
             role: 'user',
             content: 'There are unresolved tool errors from the last actions. Fix the errors using tools before completing the task.'
           };
-          this.messages.push(recoveryMessage);
+          this.context.addMessage(recoveryMessage);
           console.warn('[AgentRuntime] Blocking text-only completion due to pending tool errors. Retrying with recovery message.');
           iteration--;
           continue;
@@ -1674,6 +1295,29 @@ export class AgentRuntime {
     }
 
     throw new Error(`Agent reached maximum iterations (${this.maxIterations})`);
+  }
+
+  private async composeSystemPrompt(): Promise<string> {
+    const deps: import('../../types/context').PromptDependencies = {
+      ragResults: { prioritizedComponents: [], goldenTemplates: [] },
+      designSystemContext: { skillName: this.designSystemId || 'default' },
+      intent: {
+        originalRequest: this.originalUserRequest,
+        requiresLayoutKnowledge: true
+      },
+      selectionContext: this.options.selectionContext,
+      behaviorConfig: this.behaviorConfig
+    };
+
+    return composeAgentSystemPrompt(
+      deps,
+      this.options.tools,
+      this.options.provider,
+      {
+        totalBudget: this.maxContextTokens,
+        mode: this.currentMode
+      }
+    );
   }
 
   private async executeToolWithTimeout(tc: LLMToolCall): Promise<any> {
@@ -1723,179 +1367,11 @@ export class AgentRuntime {
    * Tool results with large data payloads can consume excessive tokens.
    */
   private cleanToolResult(result: any): any {
-    if (!result || typeof result !== 'object') {
-      return result;
-    }
-
-    const cleaned = { ...result };
-
-    // Clean error object
-    if (cleaned.error && typeof cleaned.error === 'object') {
-      cleaned.error = {
-        message: cleaned.error.message || 'Unknown error',
-        code: cleaned.error.code,
-        ...(cleaned.error.semanticFeedback && { semanticFeedback: cleaned.error.semanticFeedback })
-      };
-    }
-
-    // [FIX] Truncate large data payloads to prevent context explosion
-    // Tool results like createNode can return full node properties (colors, styles, children, etc.)
-    // which accumulate to 50K-100K tokens over 20 iterations
-    const MAX_DATA_CHARS = 2000; // ~500 tokens max per tool result
-
-    if (cleaned.data) {
-      const dataJson = JSON.stringify(cleaned.data);
-      console.log(`[AgentRuntime] cleanToolResult: data size = ${dataJson.length} chars (limit: ${MAX_DATA_CHARS})`);
-
-      if (dataJson.length > MAX_DATA_CHARS) {
-        // [MOD] Special handling for batchOperations results to preserve idMap
-        if (cleaned.data.idMap && cleaned.data.results) {
-          const BATCH_BUDGET = 4000; // Larger budget for batch results
-          const essentialData: any = {
-            idMap: cleaned.data.idMap, // Always keep full idMap
-            results: cleaned.data.results.map((r: any) => ({
-              opId: r.opId,
-              action: r.action,
-              success: r.success,
-              ...(r.nodeId && { nodeId: r.nodeId }),
-              ...(r.name && { name: r.name }),
-              ...(r.error && { 
-                error: { 
-                  code: r.error.code, 
-                  message: r.error.message,
-                  ...(r.error.semanticFeedback && { semanticFeedback: r.error.semanticFeedback })
-                } 
-              }),
-              ...(Array.isArray(r.children) && {
-                children: r.children.map((c: any) => ({
-                  opId: c.opId,
-                  success: c.success,
-                  ...(c.nodeId && { nodeId: c.nodeId }),
-                  ...(c.name && { name: c.name }),
-                }))
-              }),
-            })),
-            _truncated: true,
-            _originalSize: dataJson.length,
-          };
-
-          // layoutSnapshots: keep within remaining budget (prioritize root/parents)
-          if (cleaned.data.layoutSnapshots && typeof cleaned.data.layoutSnapshots === 'object') {
-            essentialData.layoutSnapshots = Object.fromEntries(
-              Object.entries(cleaned.data.layoutSnapshots)
-                .slice(0, 10) // Limit to first 10 snapshots to save space
-                .map(([opId, snap]: [string, any]) => [
-                  opId,
-                  {
-                    id: snap?.id || snap?.nodeId,
-                    width: snap?.width,
-                    height: snap?.height,
-                    // Minimal context: only dimensions are critical for layout reasoning
-                  }
-                ])
-            );
-          }
-
-          cleaned.data = essentialData;
-          console.log(`[AgentRuntime] 📦 Cleaned batch tool result data: ${dataJson.length} -> ${JSON.stringify(essentialData).length} chars`);
-          return cleaned;
-        }
-
-        // For successful results, keep only essential fields
-        if (cleaned.success && typeof cleaned.data === 'object') {
-          const essentialData: any = {};
-
-          // Keep nodeId - essential for chaining operations
-          if (cleaned.data.nodeId) essentialData.nodeId = cleaned.data.nodeId;
-          if (cleaned.data.id) essentialData.id = cleaned.data.id;
-
-          // Keep node name and type for context
-          if (cleaned.data.name) essentialData.name = cleaned.data.name;
-          if (cleaned.data.type) essentialData.type = cleaned.data.type;
-
-          // Keep parent reference
-          if (cleaned.data.parentId) essentialData.parentId = cleaned.data.parentId;
-
-          // [FIX] Keep children skeleton for inspectDesign hierarchy results
-          // This allows Agent to see child structure (id, name, type) without full properties
-          if (Array.isArray(cleaned.data.children)) {
-            essentialData.childrenCount = cleaned.data.children.length;
-
-            const MAX_CHILDREN_SKELETON = 20;
-            const extractSkeleton = (node: any, depth: number): any => {
-              if (!node || depth > 2) return null;
-              const skeleton: any = {
-                id: node.id,
-                name: node.props?.name || node.name,
-                type: node.type
-              };
-              if (Array.isArray(node.children) && node.children.length > 0 && depth < 2) {
-                skeleton.children = node.children
-                  .slice(0, MAX_CHILDREN_SKELETON)
-                  .map((c: any) => extractSkeleton(c, depth + 1))
-                  .filter(Boolean);
-                if (node.children.length > MAX_CHILDREN_SKELETON) {
-                  skeleton._more = node.children.length - MAX_CHILDREN_SKELETON;
-                }
-              }
-              return skeleton;
-            };
-
-            essentialData.children = cleaned.data.children
-              .slice(0, MAX_CHILDREN_SKELETON)
-              .map((c: any) => extractSkeleton(c, 1))
-              .filter(Boolean);
-
-            if (cleaned.data.children.length > MAX_CHILDREN_SKELETON) {
-              essentialData._moreChildren = cleaned.data.children.length - MAX_CHILDREN_SKELETON;
-            }
-          }
-
-          // [FIX] Preserve idMap and layoutSnapshots for batchOperations feedback
-          if (cleaned.data.idMap && typeof cleaned.data.idMap === 'object') {
-            essentialData.idMap = cleaned.data.idMap;
-          }
-          if (cleaned.data.layoutSnapshots && typeof cleaned.data.layoutSnapshots === 'object') {
-            // Keep basic layout info from each snapshot
-            essentialData.layoutSnapshots = Object.fromEntries(
-              Object.entries(cleaned.data.layoutSnapshots).map(([opId, snap]: [string, any]) => [
-                opId,
-                {
-                  id: snap?.id || snap?.nodeId,
-                  name: snap?.name,
-                  type: snap?.type,
-                  x: snap?.x,
-                  y: snap?.y,
-                  width: snap?.width,
-                  height: snap?.height,
-                }
-              ])
-            );
-          }
-
-          // Add truncation notice
-          essentialData._truncated = true;
-          essentialData._originalSize = dataJson.length;
-
-          cleaned.data = essentialData;
-          console.log(`[AgentRuntime] 📦 Truncated tool result data: ${dataJson.length} -> ${JSON.stringify(essentialData).length} chars`);
-        } else {
-          // For non-object data or failures, just stringify and truncate
-          cleaned.data = {
-            _truncated: true,
-            _originalSize: dataJson.length,
-            summary: dataJson.substring(0, 500) + '...'
-          };
-          console.log(`[AgentRuntime] 📦 Truncated non-object tool result: ${dataJson.length} chars`);
-        }
-      }
-    }
-
-    return cleaned;
+    return this.cleaner.cleanToolResult(result);
   }
 
   public getMessages(): LLMMessage[] {
-    return this.messages;
+    return this.context.getAllMessages();
   }
 }
 

@@ -35,6 +35,17 @@ export type LayoutMode = v.InferOutput<typeof LayoutModeSchema>;
 export const AxisAlignSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN', 'BASELINE']);
 
 /**
+ * Auto-layout child positioning
+ */
+export const LayoutPositioningSchema = v.picklist(['AUTO', 'ABSOLUTE']);
+
+/**
+ * Constraint axes (allow canonical and common alias labels from design tools)
+ */
+export const HorizontalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT']);
+export const VerticalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM']);
+
+/**
  * Stroke alignment
  */
 export const StrokeAlignSchema = v.picklist(['INSIDE', 'OUTSIDE', 'CENTER']);
@@ -103,6 +114,15 @@ export const NodeLayerPropsSchema = v.looseObject({
     // Layout sizing
     [PROPS.layoutSizingHorizontal]: v.optional(LayoutSizingSchema),
     [PROPS.layoutSizingVertical]: v.optional(LayoutSizingSchema),
+    [PROPS.layoutPositioning]: v.optional(LayoutPositioningSchema),
+    [PROPS.layoutGrow]: v.optional(v.union([v.number(), v.string()])),
+    [PROPS.layoutAlign]: v.optional(v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'INHERIT'])),
+    [PROPS.constraints]: v.optional(v.object({
+        horizontal: v.optional(HorizontalConstraintSchema),
+        vertical: v.optional(VerticalConstraintSchema)
+    })),
+    [PROPS.x]: v.optional(v.union([v.number(), v.string()])),
+    [PROPS.y]: v.optional(v.union([v.number(), v.string()])),
 
     // Frame-specific: AutoLayout
     [PROPS.layoutMode]: v.optional(LayoutModeSchema),

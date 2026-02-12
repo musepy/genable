@@ -63,16 +63,12 @@ EXAMPLE (Hierarchical Row):
       "params": {
         "type": "FRAME",
         "name": "Data Row",
+        "props": { "layoutMode": "HORIZONTAL", "gap": 12, "padding": 16 },
         "children": [
-          { "opId": "col-1", "action": "createNode", "params": { "type": "TEXT", "name": "Label", "characters": "Metric Name" } },
-          { "opId": "col-2", "action": "createNode", "params": { "type": "TEXT", "name": "Value", "characters": "1,234" } }
+          { "opId": "col-1", "action": "createNode", "params": { "type": "TEXT", "name": "Label", "props": { "characters": "Metric Name" } } },
+          { "opId": "col-2", "action": "createNode", "params": { "type": "TEXT", "name": "Value", "props": { "characters": "1,234" } } }
         ]
       }
-    },
-    {
-      "opId": "row-layout",
-      "action": "setNodeLayout",
-      "params": { "nodeRef": "row-container", "layoutMode": "HORIZONTAL", "gap": 12, "padding": { "horizontal": 16, "vertical": 8 } }
     }
   ]
 }
@@ -141,6 +137,10 @@ EXAMPLE (Hierarchical Row):
         type: 'string',
         description: 'Error handling strategy for dependent operations',
         enum: ['skip-dependents', 'continue'],
+      },
+      stepId: {
+        type: 'string',
+        description: 'Optional step ID from planDesign to mark as completed upon success'
       }
     },
     required: ['operations']
@@ -172,7 +172,7 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
   parameters: {
     type: 'object',
     properties: {
-      patches: {
+    patches: {
         type: 'array',
         description: 'List of changes to apply',
         items: {
@@ -203,7 +203,20 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
                     horizontal: { type: 'string', description: 'Horizontal sizing' }, 
                     vertical: { type: 'string', description: 'Vertical sizing' } 
                   } 
-                }
+                },
+                layoutPositioning: { type: 'string', enum: ['AUTO', 'ABSOLUTE'], description: 'ABSOLUTE ignores parent auto layout flow' },
+                constraints: {
+                  type: 'object',
+                  description: 'Parent pin/scale behavior',
+                  properties: {
+                    horizontal: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | LEFT | RIGHT | LEFT_RIGHT' },
+                    vertical: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | TOP | BOTTOM | TOP_BOTTOM' }
+                  }
+                },
+                x: { type: 'number', description: 'Explicit x position' },
+                y: { type: 'number', description: 'Explicit y position' },
+                layoutGrow: { type: 'number', description: 'Auto-layout grow factor' },
+                layoutAlign: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | INHERIT' }
               }
             },
             styles: { 
@@ -221,15 +234,45 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
             },
             properties: {
               type: 'object',
-              description: 'Optional text or general property changes',
+              description: '[DEPRECATED] Use props instead.',
               properties: {
                 characters: { type: 'string', description: 'Text content' },
                 fontSize: { type: 'number', description: 'Font size' }
+              }
+            },
+            props: {
+              type: 'object',
+              description: '[PREFERRED] Unified design properties',
+              properties: {
+                fills: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Colors' },
+                cornerRadius: { type: 'number', description: 'Corner radius' },
+                padding: { type: 'number', description: 'Padding' },
+                gap: { type: 'number', description: 'Gap' },
+                layoutMode: { type: 'string', enum: ['HORIZONTAL', 'VERTICAL', 'NONE'], description: 'Layout mode' },
+                layoutPositioning: { type: 'string', enum: ['AUTO', 'ABSOLUTE'], description: 'ABSOLUTE ignores parent auto layout flow' },
+                constraints: {
+                  type: 'object',
+                  description: 'Parent pin/scale behavior',
+                  properties: {
+                    horizontal: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | LEFT | RIGHT | LEFT_RIGHT' },
+                    vertical: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | TOP | BOTTOM | TOP_BOTTOM' }
+                  }
+                },
+                x: { type: 'number', description: 'Explicit x position' },
+                y: { type: 'number', description: 'Explicit y position' },
+                characters: { type: 'string', description: 'Text content' },
+                fontSize: { type: 'number', description: 'Font size' },
+                width: { type: 'number', description: 'Width' },
+                height: { type: 'number', description: 'Height' }
               }
             }
           },
           required: ['nodeId']
         }
+      },
+      stepId: {
+        type: 'string',
+        description: 'Optional step ID from planDesign to mark as completed upon success'
       }
     },
     required: ['patches']

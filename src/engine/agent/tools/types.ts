@@ -4,6 +4,8 @@
  * Defines the structure for tool registration and execution results.
  */
 
+export type AgentMode = 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION';
+
 /**
  * Metadata for a tool, used for registration and prompt generation.
  */

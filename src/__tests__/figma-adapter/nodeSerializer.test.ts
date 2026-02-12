@@ -44,6 +44,7 @@ describe('NodeSerializer - Compression', () => {
       visible: false,      // NON-DEFAULT
       opacity: 0.5,        // NON-DEFAULT
       layoutMode: 'HORIZONTAL', // NON-DEFAULT
+      constraints: { horizontal: 'MAX', vertical: 'MIN' }, // NON-DEFAULT
       children: [],
     } as any;
 
@@ -52,6 +53,7 @@ describe('NodeSerializer - Compression', () => {
     expect(serialized.props.visible).toBe(false);
     expect(serialized.props.opacity).toBe(0.5);
     expect(serialized.props.layoutMode).toBe('HORIZONTAL');
+    expect(serialized.props.constraints).toEqual({ horizontal: 'MAX', vertical: 'MIN' });
   });
 
   it('should respect maxDepth limit', () => {

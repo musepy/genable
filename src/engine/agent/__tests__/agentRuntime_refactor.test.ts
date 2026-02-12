@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentRuntime } from '../agentRuntime';
 import { LLMProvider } from '../../llm-client/providers/types';
 import { AGENT_RUNTIME_CONSTANTS } from '../constants';
+import { estimateTokens } from '../context/tokenEstimator';
 
 describe('AgentRuntime Refactor Verification', () => {
   let mockProvider: LLMProvider;
@@ -117,14 +118,12 @@ describe('AgentRuntime Refactor Verification', () => {
   });
 
   it('should estimate tokens correctly for Chinese characters', () => {
-    const runtime = new AgentRuntime({ provider: mockProvider, tools: [] });
-    
     const englishText = 'Hello world'; // 11 chars -> 3 tokens (round up 11/4)
     const chineseText = '你好世界'; // 4 chars -> 4 * 2.0 = 8 tokens
     const mixedText = 'Hello你好'; // 5 eng + 2 chi -> ceil(5/4) + 2*2.0 = 2 + 4 = 6 tokens
     
-    expect((runtime as any).estimateTokens(englishText)).toBe(3);
-    expect((runtime as any).estimateTokens(chineseText)).toBe(8);
-    expect((runtime as any).estimateTokens(mixedText)).toBe(6); 
+    expect(estimateTokens(englishText)).toBe(3);
+    expect(estimateTokens(chineseText)).toBe(8);
+    expect(estimateTokens(mixedText)).toBe(6); 
   });
 });

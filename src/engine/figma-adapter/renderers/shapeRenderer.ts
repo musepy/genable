@@ -59,5 +59,8 @@ export class ShapeRenderer extends BaseRenderer {
                 (node as any).strokeWeight = PropertyTransformer.deserialize(props.strokeWeight, PROPS.strokeWeight);
             }
         }
+
+        // 3. Effects (Shadows/Blurs) - Unified implementation from BaseRenderer
+        await this.applyEffects(node, props);
     }
 }

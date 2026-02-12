@@ -39,6 +39,10 @@ export const PROPS = {
   gap: 'gap',                             
   layoutGrow: 'layoutGrow',
   layoutAlign: 'layoutAlign',
+  layoutPositioning: 'layoutPositioning',  // AUTO | ABSOLUTE (child of auto-layout parent)
+  constraints: 'constraints',              // { horizontal, vertical } pin/scale behavior
+  x: 'x',                                  // Absolute/local X position
+  y: 'y',                                  // Absolute/local Y position
   width: 'width',                         // For fixed size
   height: 'height',                       // For fixed size
 
@@ -110,6 +114,36 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0 },
   [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar', defaultValue: 0 },
   [PROPS.paddingLeft]: { figmaKey: 'paddingLeft', type: 'scalar', defaultValue: 0 },
+  [PROPS.layoutGrow]: { figmaKey: 'layoutGrow', type: 'scalar', defaultValue: 0 },
+  [PROPS.layoutAlign]: {
+    figmaKey: 'layoutAlign',
+    type: 'enum',
+    enumMap: {
+      'MIN': 'MIN',
+      'CENTER': 'CENTER',
+      'MAX': 'MAX',
+      'STRETCH': 'STRETCH',
+      'INHERIT': 'INHERIT'
+    },
+    defaultValue: 'INHERIT'
+  },
+  [PROPS.layoutPositioning]: {
+    figmaKey: 'layoutPositioning',
+    type: 'enum',
+    enumMap: {
+      'AUTO': 'AUTO',
+      'RELATIVE': 'AUTO',
+      'ABSOLUTE': 'ABSOLUTE'
+    },
+    defaultValue: 'AUTO'
+  },
+  [PROPS.constraints]: {
+    figmaKey: 'constraints',
+    type: 'object',
+    defaultValue: { horizontal: 'MIN', vertical: 'MIN' }
+  },
+  [PROPS.x]: { figmaKey: 'x', type: 'scalar', defaultValue: 0 },
+  [PROPS.y]: { figmaKey: 'y', type: 'scalar', defaultValue: 0 },
   [PROPS.width]: { figmaKey: 'width', type: 'scalar' },
   [PROPS.height]: { figmaKey: 'height', type: 'scalar' },
 
@@ -164,6 +198,5 @@ export const STROKE_ALIGNS = {
   OUTSIDE: 'OUTSIDE',
   CENTER: 'CENTER',
 } as const;
-
 
 

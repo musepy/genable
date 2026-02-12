@@ -17,6 +17,7 @@ import { projectUITools } from '../../engine/agent/tools/projectUITools';
 import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
 import { validateVisibility } from '../../engine/validation/visibilityValidator';
 import { patchCache } from '../../engine/validation/patchCache';
+import { TreeReconstructor } from '../../engine/figma-adapter/treeReconstructor';
 
 export interface ToolCallData {
   toolName: string;
@@ -112,14 +113,15 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // 2. Atomic Creation
       // ==========================================
       case 'createNode': {
-        const { type, name, parentId, characters } = parameters;
+        const { type, name, parentId, characters, props: flatProps } = parameters;
         const explicitParent = await nodeLayoutService.resolveParent(parentId);
         
         const node = await handleUnifiedRender({
           type,
           props: { 
             name: name || 'unnamed', 
-            characters: characters || '' 
+            characters: characters || '',
+            ...(flatProps || {})
           },
           designSystemId: context?.designSystemId || 'vanilla',
           streamSessionId: 'agent-' + Date.now(),
@@ -169,9 +171,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // 3. Atomic Layout
       // ==========================================
       case 'setNodeLayout': {
-        const { nodeId, layoutMode, sizing, padding, gap, width, height } = parameters;
-        
-        const layoutData = { layoutMode, sizing, width, height, gap, padding };
+        const { nodeId, stepId: _stepId, ...layoutData } = parameters;
         if (!patchCache.shouldApply(nodeId, 'layout', layoutData)) {
           // Idempotency: Return clean success
           response = { success: true, data: { nodeId } };
@@ -279,7 +279,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // 6. Special Creation Tools
       // ==========================================
       case 'createIcon': {
-        const { iconName, size, color, parentId } = parameters;
+        const { iconName, size, color, parentId, props: flatProps } = parameters;
         const explicitParent = await nodeLayoutService.resolveParent(parentId);
         
         const node = await handleUnifiedRender({
@@ -288,7 +288,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             iconName, 
             width: size, 
             height: size, 
-            fills: color ? [color] : undefined 
+            fills: color ? [color] : undefined,
+            ...(flatProps || {})
           },
           designSystemId: context?.designSystemId || 'vanilla',
           streamSessionId: 'agent-' + Date.now(),
@@ -559,7 +560,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             try {
                 switch (action) {
                     case 'createNode': {
-                        const { type, name, characters, children } = params;
+                        const { type, name, characters, children, props: flatProps } = params;
                         if (!type) {
                             opResult = {
                                 opId,
@@ -587,7 +588,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                             type,
                             props: {
                                 name: name || 'unnamed',
-                                characters: characters || ''
+                                characters: characters || '',
+                                ...(flatProps || {})
                             },
                             designSystemId: context?.designSystemId || 'vanilla',
                             streamSessionId: `agent-batch-${Date.now()}-${opId}`,
@@ -718,8 +720,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                             break;
                         }
 
-                        const { layoutMode, sizing, padding, gap, width, height } = params;
-                        const layoutData = { layoutMode, sizing, width, height, gap, padding };
+                        const { nodeId: _nodeId, nodeRef: _nodeRef, stepId: _stepId, ...layoutData } = params;
                         
                         if (!patchCache.shouldApply(resolved.nodeId!, 'layout', layoutData)) {
                             // Idempotency: Return clean success to the agent
@@ -887,7 +888,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                         }
 
                         for (const patch of resolvedPatches) {
-                            const { nodeId, layout, styles, properties } = patch;
+                            const { nodeId, layout, styles, properties: legacyProps, props: newProps } = patch;
+                            const properties = newProps || legacyProps;
                             let nodeSkipped = true;
 
                             if (layout) {
@@ -999,6 +1001,10 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                 error: { code: 'PARTIAL_FAILURE', message: 'One or more operations failed.' }
             }
             : { success: true, data: { results, idMap, layoutSnapshots } };
+
+        if (response.success && parameters.stepId) {
+            planState.completeTask(parameters.stepId);
+        }
         break;
       }
 
@@ -1090,7 +1096,166 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       }
 
       // ==========================================
-      // 10. Unknown Tool
+      // 10. One-Shot Design Generation
+      // ==========================================
+      case 'generateDesign': {
+        const { nodes } = parameters;
+
+        if (!Array.isArray(nodes) || nodes.length === 0) {
+          response = {
+            success: false,
+            error: { code: 'INVALID_INPUT', message: 'generateDesign requires a non-empty nodes array.' }
+          };
+          break;
+        }
+
+        // Known style/layout properties that belong inside props.
+        // Used as a safety net to catch LLM outputs that place these on the node object directly.
+        const KNOWN_STYLE_KEYS = [
+          'layoutMode', 'gap', 'padding', 'fills', 'strokes',
+          'cornerRadius', 'width', 'height', 'fontSize', 'fontWeight',
+          'characters', 'layoutSizingHorizontal', 'layoutSizingVertical',
+          'primaryAxisAlignItems', 'counterAxisAlignItems',
+          'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+          'opacity', 'visible', 'rotation', 'strokeWeight', 'effects',
+          'cornerSmoothing', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+          'layoutGrow', 'layoutAlign', 'layoutPositioning', 'constraints', 'x', 'y', 'itemSpacing',
+          'iconName'
+        ];
+
+        // Pre-process: Lift nested layout/styles into props for consistency
+        // LLM may output either flat props or nested layout/styles objects at top level
+        for (const node of nodes) {
+          if (!node.props) node.props = {};
+
+          // [DIAGNOSTIC] Log raw node structure before any lifting
+          const rawNodeKeys = Object.keys(node).filter(k => k !== 'id' && k !== 'parent' && k !== 'type' && k !== 'props');
+          const rawPropsKeys = Object.keys(node.props);
+          if (rawNodeKeys.length > 0 || rawPropsKeys.length <= 1) {
+            console.log(`[generateDesign] 🔍 Node "${node.id}" BEFORE lifting — top-level keys: [${rawNodeKeys.join(', ')}], props keys: [${rawPropsKeys.join(', ')}]`);
+          }
+
+          // 1. Lift from props.layout/props.styles (Existing)
+          if (node.props.layout && typeof node.props.layout === 'object') {
+            Object.assign(node.props, node.props.layout);
+            delete node.props.layout;
+          }
+          if (node.props.styles && typeof node.props.styles === 'object') {
+            Object.assign(node.props, node.props.styles);
+            delete node.props.styles;
+          }
+
+          // 2. Lift from top-level node.layout/node.styles/node.style
+          // catches LLM structure mismatch where it puts these keys alongside 'props'
+          const topLevelLayout = (node as any).layout;
+          const topLevelStyles = (node as any).styles || (node as any).style;
+          
+          if (topLevelLayout && typeof topLevelLayout === 'object') {
+            console.log(`[generateDesign] Lifting top-level layout for node: ${node.id}`);
+            Object.assign(node.props, topLevelLayout);
+            delete (node as any).layout;
+          }
+          if (topLevelStyles && typeof topLevelStyles === 'object') {
+            console.log(`[generateDesign] Lifting top-level styles for node: ${node.id}`);
+            Object.assign(node.props, topLevelStyles);
+            delete (node as any).styles;
+            delete (node as any).style;
+          }
+
+          // 3. Safety Net: Lift any known style properties found on the node top-level into props
+          // This catches cases where LLM places e.g. layoutMode, fills, gap directly on the node
+          // instead of inside the props object.
+          for (const key of KNOWN_STYLE_KEYS) {
+            if ((node as any)[key] !== undefined && node.props[key] === undefined) {
+              console.log(`[generateDesign] ⚠️ Safety net: lifting "${key}" from node top-level to props for "${node.id}"`);
+              node.props[key] = (node as any)[key];
+              delete (node as any)[key];
+            }
+          }
+
+          // Ensure name fallback to id
+          if (!node.props.name && node.id) {
+            node.props.name = node.id;
+          }
+
+          // [DIAGNOSTIC] Log final props after all lifting
+          const finalPropsKeys = Object.keys(node.props);
+          const hasStyling = finalPropsKeys.some(k => ['layoutMode', 'fills', 'gap', 'padding', 'width', 'height', 'fontSize', 'cornerRadius'].includes(k));
+          console.log(`[generateDesign] ✅ Node "${node.id}" AFTER lifting — props keys (${finalPropsKeys.length}): [${finalPropsKeys.join(', ')}]${!hasStyling ? ' ⚠️ NO STYLING DETECTED' : ''}`);
+        }
+
+        // Reconstruct flat list → tree
+        const reconstructor = new TreeReconstructor();
+        const { root, errors: reconErrors, warnings: reconWarnings } = reconstructor.reconstruct(nodes);
+
+        if (!root) {
+          response = {
+            success: false,
+            error: {
+              code: 'RECONSTRUCTION_FAILED',
+              message: reconErrors.join('; ') || 'Failed to reconstruct node tree.'
+            }
+          };
+          break;
+        }
+
+        if (reconWarnings.length > 0) {
+          console.warn('[generateDesign] Reconstruction warnings:', reconWarnings);
+        }
+
+        // [DIAGNOSTIC] Verify root props survived reconstruction
+        console.log(`[generateDesign] 🌳 Root after reconstruction — type: ${root.type}, props keys: [${Object.keys(root.props || {}).join(', ')}], children: ${root.children?.length || 0}`);
+
+        // Render the full tree in one pass via the existing pipeline
+        const rootNode = await handleUnifiedRender({
+          ...root, // type, props, children — this is a valid NodeLayer
+          designSystemId: context?.designSystemId || 'vanilla',
+          streamSessionId: `generate-design-${Date.now()}`,
+          meta: { traceId: `generate-design-${Date.now()}` }
+        }, false);
+
+        if (!rootNode) {
+          response = {
+            success: false,
+            error: { code: 'RENDER_FAILED', message: 'Tree reconstructed but rendering failed.' }
+          };
+          break;
+        }
+
+        // Collect created node IDs for agent context - Concise version
+        const idMap: Record<string, string> = {};
+        const collectIds = (node: SceneNode, flatNodes: typeof nodes) => {
+          // Identify which flat node this Figma node belongs to by checking name match
+          const match = flatNodes.find(f => (f.props?.name || f.id) === node.name);
+          if (match && !idMap[match.id]) {
+            idMap[match.id] = node.id;
+          }
+          if ('children' in node) {
+            for (const child of (node as FrameNode).children) {
+              collectIds(child, flatNodes);
+            }
+          }
+        };
+        collectIds(rootNode, nodes);
+
+        response = {
+          success: true,
+          data: {
+            rootNodeId: rootNode.id,
+            totalNodes: Object.keys(idMap).length,
+            idMap, // Logical ID -> Figma Node ID
+            warnings: reconWarnings.length > 0 ? reconWarnings : undefined
+          }
+        };
+
+        if (response.success && parameters.stepId) {
+          planState.completeTask(parameters.stepId);
+        }
+        break;
+      }
+
+      // ==========================================
+      // 11. Unknown Tool
       // ==========================================
       default:
         response = {

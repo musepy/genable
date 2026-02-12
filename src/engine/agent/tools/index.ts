@@ -27,6 +27,8 @@ import { validateLayoutDefinition } from './validationTools';
 
 import { applyDesignPatchDefinition, batchOperationsDefinition } from './designSuperTools';
 
+import { generateDesignDefinition } from './generateDesignTool';
+
 import { workflowTools } from './workflowTools';
 
 /**
@@ -37,6 +39,7 @@ export const agentTools = [
   ...workflowTools,             // new_task, update_todo_list, summarize_progress, complete_task
   ...projectUITools.definitions,
   inspectDesignDefinition,      // [NEW] Replaces getSelection, getDeepHierarchy, getNodeDSL
+  generateDesignDefinition,     // One-shot full component tree
   batchOperationsDefinition,    // Batch create/modify
   applyDesignPatchDefinition,   // Batch modify
   planDesignDefinition,         // Planning
@@ -57,6 +60,7 @@ export const agentTools = [
  * 
  * PLANNING mode: Only planning + read + knowledge tools
  * EXECUTION mode: Only execution tools (no planDesign)
+ * RECOVERY mode: Read/diagnose first, then finalize or resume
  * VERIFICATION mode: Only read + validate + complete_task
  */
 const PLANNING_TOOLS = [
@@ -72,6 +76,7 @@ const PLANNING_TOOLS = [
 
 const EXECUTION_TOOLS = [
   'inspectDesign',
+  'generateDesign',
   'batchOperations',
   'createNode',
   'setNodeLayout',
@@ -92,11 +97,19 @@ const VERIFICATION_TOOLS = [
   'complete_task'
 ];
 
+const RECOVERY_TOOLS = [
+  'inspectDesign',
+  'validateLayout',
+  'update_todo_list',
+  'summarize_progress',
+  'complete_task'
+];
+
 /**
  * Filter tools based on agent mode.
  * Returns only tools appropriate for the current phase.
  */
-export function getToolsForMode(mode: 'PLANNING' | 'EXECUTION' | 'VERIFICATION', allTools: typeof agentTools): typeof agentTools {
+export function getToolsForMode(mode: 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION', allTools: typeof agentTools): typeof agentTools {
   let allowedNames: string[];
   
   switch (mode) {
@@ -108,6 +121,9 @@ export function getToolsForMode(mode: 'PLANNING' | 'EXECUTION' | 'VERIFICATION',
       break;
     case 'VERIFICATION':
       allowedNames = VERIFICATION_TOOLS;
+      break;
+    case 'RECOVERY':
+      allowedNames = RECOVERY_TOOLS;
       break;
     default:
       return allTools;

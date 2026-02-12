@@ -10,23 +10,14 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Default maximum tokens before triggering context compression */
   DEFAULT_MAX_CONTEXT_TOKENS: 200000,
   
-  /** Rough token estimation factor (1 token ≈ 4 characters) */
-  ESTIMATION_CHARACTERS_PER_TOKEN: 4,
-
-  /** Adjust factor for Chinese characters (actual observed ratio ~2.0 for modern LLMs) */
-  ESTIMATION_CHINESE_CHAR_MULTIPLIER: 2.0,
-  
   /** Factor of max context tokens to trigger compression (e.g., 0.7 = 70%) */
-  CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.8,
+  // CONTEXT_COMPRESSION_LIMIT_FACTOR moved to context/constants.ts
   
   /** Factor of max context tokens to trigger proactive compression (e.g., 0.75 = 75%) */
-  CONTEXT_PROACTIVE_COMPRESSION_FACTOR: 0.85,
-  
-  /** Minimum number of messages to keep during context continuity */
-  MIN_MESSAGES_TO_KEEP: 10,
+  // CONTEXT_PROACTIVE_COMPRESSION_FACTOR moved to context/constants.ts
   
   /** Minimum number of messages before redundant error cleanup is allowed */
-  REDUNDANT_ERROR_DROP_THRESHOLD: 10,
+  // REDUNDANT_ERROR_DROP_THRESHOLD moved to context/constants.ts
 
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
   LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for inspectDesign
@@ -42,6 +33,12 @@ export const AGENT_RUNTIME_CONSTANTS = {
   
   /** Minimum text length to consider as "rambling" (chars). Gemini streams text before tool calls, so this must be high enough to not abort before tool calls arrive. */
   RAMBLING_TEXT_THRESHOLD: 1500,
+
+  /** Maximum chars for batch operation results including idMap + results (~2500 tokens) */
+  // TOOL_RESULT_BATCH_BUDGET moved to context/constants.ts
+
+  /** Consecutive iterations where ALL tool calls fail before injecting planning fallback */
+  CONSECUTIVE_FAILURE_THRESHOLD: 3,
 } as const;
 
 export const IPC_CONSTANTS = {

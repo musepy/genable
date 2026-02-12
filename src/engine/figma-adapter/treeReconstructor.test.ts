@@ -34,6 +34,17 @@ describe('TreeReconstructor', () => {
         expect(root?.children).toHaveLength(2); // Root + promoted Orphan inside the virtual wrapper
     });
 
+    it('should NOT generate orphan warnings for parent: null', () => {
+        const nodes: FlatNode[] = [
+            { id: 'root', parent: null, type: NODE_TYPES.FRAME, props: { name: 'Root' } }
+        ];
+
+        const { root, warnings } = reconstructor.reconstruct(nodes);
+
+        expect(warnings).toHaveLength(0);
+        expect(root?.id).toBe('root');
+    });
+
     it('should wrap multiple roots in a container', () => {
         const nodes: FlatNode[] = [
             { id: 'r1', parent: null, type: NODE_TYPES.FRAME, props: { name: 'Root 1' } },

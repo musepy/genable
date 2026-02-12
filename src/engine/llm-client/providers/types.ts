@@ -21,6 +21,7 @@ export interface LLMMessage {
   content: string | Part[];
   hidden?: boolean; // If true, this message is excluded from the current context sent to LLM
   summaryOf?: string[]; // IDs of original messages that this message summarizes
+  pinned?: boolean; // If true, this message survives context compression (e.g., original user request)
 }
 
 export interface Part {

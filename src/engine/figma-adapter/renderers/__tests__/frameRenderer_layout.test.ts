@@ -186,4 +186,31 @@ describe('FrameRenderer Layout Sizing Logic', () => {
         // Horizontal should have been set to FIXED in the catch block
         expect(mockNode.layoutSizingHorizontal).toBe('FIXED');
     });
+
+    it('should not force layoutGrow/layoutAlign when child uses ABSOLUTE positioning in auto-layout parent', async () => {
+        const dsl = {
+            type: 'FRAME',
+            props: {
+                name: 'Absolute Child',
+                layoutSizingHorizontal: 'FILL',
+                layoutSizingVertical: 'FILL',
+                layoutPositioning: 'ABSOLUTE'
+            },
+            children: []
+        };
+
+        mockNode.layoutGrow = undefined;
+        mockNode.layoutAlign = undefined;
+
+        const context: any = {
+            parent: {} as any,
+            depth: 1,
+            parentLayoutMode: 'HORIZONTAL'
+        };
+
+        (renderer as any).applyLayoutSizing(mockNode, dsl, context);
+
+        expect(mockNode.layoutGrow).toBeUndefined();
+        expect(mockNode.layoutAlign).toBeUndefined();
+    });
 });

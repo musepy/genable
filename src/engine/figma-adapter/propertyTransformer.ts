@@ -151,8 +151,15 @@ export class PropertyTransformer {
                         ...base,
                         color: rgbToHex(shadow.color.r, shadow.color.g, shadow.color.b), // Simple hex for now
                         offset: shadow.offset,
-                        radius: shadow.radius,
+                        blur: shadow.radius, // Map radius to blur in DSL
                         spread: shadow.spread
+                    };
+                }
+                if (eff.type === 'LAYER_BLUR' || eff.type === 'BACKGROUND_BLUR') {
+                    const blurEffect = eff as BlurEffect;
+                    return {
+                        ...base,
+                        blur: blurEffect.radius // Map radius to blur in DSL
                     };
                 }
                 return base;
@@ -186,6 +193,10 @@ export class PropertyTransformer {
 
         if (meta.type === 'array') {
             // Complex arrays like effects require deep comparison
+            return this.deepEqual(currentState, dslValue);
+        }
+
+        if (meta.type === 'object') {
             return this.deepEqual(currentState, dslValue);
         }
 

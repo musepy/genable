@@ -1,0 +1,141 @@
+import { ChatMessage, ToolCallRecord } from '../../types/chat';
+
+interface DigestMeta {
+  modelName?: string;
+}
+
+/**
+ * Tool-specific parameter extractors to keep only essential info.
+ */
+const parameterExtractors: Record<string, (params: any) => string> = {
+  batchOperations: (params) => {
+    if (!params.operations || !Array.isArray(params.operations)) {
+      return params._truncated ? '[Truncated Operations]' : JSON.stringify(params).slice(0, 100);
+    }
+    return params.operations
+      .map((op: any) => {
+        const action = op.action || op.type || '?';
+        const name = op.params?.name || op.name || op.params?.nodeId || op.nodeId || op.opId || '?';
+        const type = op.params?.type ? `/${op.params.type}` : '';
+        return `${action}(${name}${type})`;
+      })
+      .join(', ');
+  },
+  applyDesignPatch: (params) => {
+    if (!Array.isArray(params.patches)) {
+      if (params._truncated && params.patches) return `[${params.patches.length} patches truncated]`;
+      return JSON.stringify(params).slice(0, 100);
+    }
+    return params.patches
+      .map((p: any) => `${p.nodeId || p.nodeRef || '?'}{${Object.keys(p).filter(k => !['nodeId', 'nodeRef'].includes(k)).join(',')}}`)
+      .join(', ');
+  },
+  createIcon: (params) => `${params.name || '?'}, ${params.size || 'default'}, ${params.color || 'default'}`,
+  planDesign: (params) => `${params.approach || 'default'}, steps:${params.steps?.length || 0}`,
+  inspectDesign: (params) => `nodeIds: ${params.nodeIds?.join(',') || params.nodeId || '?'}`,
+  complete_task: (params) => (params.summary || '').slice(0, 80),
+  renderSubtree: (params) => `${params.nodeId || '?'}, ${params.type || '?'}`,
+  patchNode: (params) => `${params.nodeId || '?'}, ${params.type || '?'}`,
+};
+
+/**
+ * Extracts key information from tool results.
+ */
+function extractResultInfo(tool: ToolCallRecord): string {
+  if (tool.status === 'error') return '';
+  if (tool.name === 'batchOperations' && tool.result?.idMap) {
+    const mappings = Object.entries(tool.result.idMap)
+      .map(([key, id]) => `${key}→${id}`)
+      .join(', ');
+    return mappings ? `ids: ${mappings}` : '';
+  }
+  return '';
+}
+
+/**
+ * Generates a concise summary of Agent execution logs.
+ * Target: 90%+ compression for long logs.
+ */
+export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): string {
+  const lines: string[] = [];
+  let totalTools = 0;
+  let errorTools = 0;
+  let startTime = 0;
+  let endTime = 0;
+  let prompt = '';
+
+  // Analysis pass
+  history.forEach(msg => {
+    if (msg.role === 'user' && !prompt) {
+      prompt = msg.text.trim();
+    }
+    if (msg.toolCalls) {
+      msg.toolCalls.forEach(tool => {
+        totalTools++;
+        if (tool.status === 'error') errorTools++;
+        if (!startTime || tool.startTime < startTime) startTime = tool.startTime;
+        if (!endTime || (tool.endTime && tool.endTime > endTime)) endTime = tool.endTime!;
+      });
+    }
+  });
+
+  const duration = endTime > startTime ? ((endTime - startTime) / 1000).toFixed(1) : '0';
+  const totalIterations = history.filter(m => m.role === 'model' && m.iterations).reduce((acc, m) => acc + (m.iterations?.length || 0), 0);
+
+  // Header
+  lines.push('=== AGENT DIGEST ===');
+  lines.push(`Prompt: "${prompt.slice(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
+  lines.push(`Iterations: ${totalIterations} | Duration: ${duration}s | Tools: ${totalTools - errorTools} ok, ${errorTools} err`);
+  lines.push('');
+
+  // Timeline
+  lines.push('--- TIMELINE ---');
+  let toolIndex = 1;
+  history.forEach(msg => {
+    if (msg.role === 'model' && msg.toolCalls) {
+      msg.toolCalls.forEach(tool => {
+        const status = tool.status === 'error' ? 'ERR' : 'OK';
+        const toolDuration = tool.endTime ? `${tool.endTime - tool.startTime}ms` : '?';
+        lines.push(`#${toolIndex} [${tool.name}] ${toolDuration} ${status}`);
+        
+        // Extract thinking if available (approximate link to tool call)
+        // Note: Real link is via iteration toolCallIds, but for digest a sequential flow is usually enough
+        
+        const extractor = parameterExtractors[tool.name];
+        const paramsStr = extractor ? extractor(tool.parameters) : JSON.stringify(tool.parameters).slice(0, 100);
+        lines.push(`   params: {${paramsStr}}`);
+
+        const resultInfo = extractResultInfo(tool);
+        if (resultInfo) lines.push(`   ${resultInfo}`);
+
+        if (tool.error) {
+          lines.push(`   error: "${tool.error.split('\n')[0]}"`);
+        }
+        
+        lines.push('');
+        toolIndex++;
+      });
+    }
+  });
+
+  // Errors section
+  if (errorTools > 0) {
+    lines.push('--- ERRORS ---');
+    toolIndex = 1;
+    history.forEach(msg => {
+      if (msg.role === 'model' && msg.toolCalls) {
+        msg.toolCalls.forEach(tool => {
+          if (tool.status === 'error') {
+            lines.push(`#${toolIndex} ${tool.name}: "${tool.error?.split('\n')[0]}"`);
+          }
+          toolIndex++;
+        });
+      }
+    });
+    lines.push('');
+  }
+
+  lines.push('=== END DIGEST ===');
+
+  return lines.join('\n');
+}

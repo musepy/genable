@@ -238,15 +238,25 @@ import { TOOL_EXAMPLES } from '../../prompt/promptRegistry';
 // ==========================================
 
 /**
- * Build Agent Identity section (Priority 1)
+ * Build Universal Core Identity section (Priority 1)
+ * Contains identity, design freedom, and fundamentals needed in ALL modes.
  */
-function buildAgentIdentity(): string {
+function buildUniversalCoreIdentity(): string {
     return [
         AGENT_IDENTITY.trim(),
+        AGENT_DESIGN_FREEDOM.trim(),
+        AGENT_THINKING_PROTOCOL.trim()
+    ].join('\n\n');
+}
+
+/**
+ * Build Execution Protocol section (Priority 1.2)
+ * Contains strict JSON schema and naming rules needed ONLY during execution.
+ */
+function buildExecutionProtocol(): string {
+    return [
         SCHEMA_RULES.trim(),
         AGENT_PARENT_CHILD_RULE.trim(),
-        AGENT_DESIGN_FREEDOM.trim(),
-        AGENT_THINKING_PROTOCOL.trim(),
         AGENT_NAMING_CONVENTION.trim(),
         AGENT_CONTENT_REQUIREMENT.trim()
     ].join('\n\n');
@@ -391,7 +401,17 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         id: 'agent-identity',
         priority: 1,
         budgetKey: 'core',
-        builder: (_deps, _tools, _budget) => buildAgentIdentity()
+        builder: (_deps, _tools, _budget) => buildUniversalCoreIdentity()
+    },
+    {
+        id: 'execution-protocol',
+        priority: 1.2,
+        budgetKey: 'core',
+        builder: (_deps, _tools, _budget, mode) => {
+            // Only inject schema and naming rules in EXECUTION or RECOVERY modes
+            if (mode !== 'EXECUTION' && mode !== 'RECOVERY') return '';
+            return buildExecutionProtocol();
+        }
     },
     {
         id: 'tool-examples',

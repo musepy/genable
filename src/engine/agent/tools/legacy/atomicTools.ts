@@ -1,60 +1,5 @@
-/**
- * @file rendererTools.ts
- * @description Renderer-related tools for the Agent.
- * Only Atomic tools are exposed to ensure precise control over the design process.
- */
-
-import { ToolDefinition } from './types';
-import { TEXT_PROPS_SCHEMA } from '../../../constants/figma-api';
-
-// ==========================================
-// 0. Planning Tool (ReAct Pattern)
-// ==========================================
-
-export const planDesignDefinition: ToolDefinition = {
-  name: 'planDesign',
-  category: 'plan',
-  dependencies: [],
-  description: `
-[PLANNING] Create a CONCISE execution plan (MAX 8 steps). Each step should group related operations.
-Do NOT create one step per node — group sibling nodes, container+children, or related style changes into single steps.
-
-EXAMPLE: For "Create a login form with email, password, and sign-in button":
-- Step 1: Create root container "Login Form" with header (title + subtitle)
-- Step 2: Create form fields (email input + password input)
-- Step 3: Create sign-in button and social login buttons
-- Step 4: Apply final layout and styles
-
-ANTI-PATTERN (TOO GRANULAR - DO NOT DO THIS):
-- Step 1: Create container → Step 2: Create title → Step 3: Create subtitle → ... (20 steps)
-`,
-  parameters: {
-    type: 'object',
-    properties: {
-      analysis: {
-        type: 'string',
-        description: 'Analysis of the user request and design requirements'
-      },
-      steps: {
-        type: 'array',
-        description: 'Ordered list of HIGH-LEVEL design milestones (NOT individual tool calls). Each step groups multiple related operations.',
-        items: {
-          type: 'object',
-          description: 'A component-level milestone that requires MULTIPLE tool calls to complete',
-          properties: {
-            stepNumber: { type: 'number', description: 'Step order (1, 2, 3...)' },
-            action: { type: 'string', description: 'High-level description of what to build (e.g., "Build header section with logo, title, and navigation links"). NOT a tool name.' },
-            nodes: { type: 'array', items: { type: 'string', description: 'Name of a node/element to create' }, description: 'List of nodes/elements this step will create (e.g., ["Header Frame", "Logo", "Title Text", "Nav Links"])' },
-            reasoning: { type: 'string', description: 'Why this step is needed' }
-          }
-        }
-      }
-    },
-    required: ['analysis', 'steps']
-  },
-  executionStrategy: 'sequential',
-  errors: {}
-};
+import { ToolDefinition } from '../types';
+import { TEXT_PROPS_SCHEMA } from '../../../../constants/figma-api';
 
 // ==========================================
 // 1. node creation (Atomic Entry Point)
@@ -68,8 +13,8 @@ export const createNodeDefinition: ToolDefinition = {
 [ATOMIC] Create FRAME, TEXT, RECTANGLE, ELLIPSE, or LINE.
 
 ⚠️ HIERARCHY RULE:
-- For complex structures, use \`batchOperations\` with the \`children\` array to build deep hierarchies in a single call.
-- When creating parent-child hierarchy WITHOUT \`batchOperations\`:
+- For complex structures, use 'batchOperations' with the 'children' array to build deep hierarchies in a single call.
+- When creating parent-child hierarchy WITHOUT 'batchOperations':
   1. MUST wait for parent's createNode to return nodeId BEFORE creating child.
   2. parentId MUST be the exact nodeId from a COMPLETED previous createNode.
 
@@ -90,10 +35,7 @@ Returns: {nodeId: "124:567"} - Use this ID as parentId for child nodes.
       },
       parentId: {
         type: 'string',
-        description: `[BLOCKING DEPENDENCY] Parent node ID from a COMPLETED createNode call.
-⚠️ MUST wait for parent createNode to return before using this.
-If omitted, node is added to current page (root level).
-NEVER use a predicted, placeholder, or guessed ID.`
+        description: '[BLOCKING DEPENDENCY] Parent node ID from a COMPLETED createNode call.\n⚠️ MUST wait for parent createNode to return before using this.\nIf omitted, node is added to current page (root level).\nNEVER use a predicted, placeholder, or guessed ID.'
       },
       characters: { 
         type: 'string', 
@@ -372,92 +314,4 @@ Use nodeId from createNode response.
     'NODE_NOT_FOUND': 'Node not found. Use nodeId from createNode response.',
     'FONT_NOT_LOADED': 'Font not available. Please use a default font or ensure it is loaded.'
   }
-};
-
-// ==========================================
-// 5. createIcon (Specialized)
-// ==========================================
-
-export const createIconDefinition: ToolDefinition = {
-  name: 'createIcon',
-  category: 'create',
-  dependencies: [],
-  description: 'Fetch and create an icon from Iconify library.',
-  parameters: {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'Optional semantic ID' },
-      parentId: { type: 'string', description: 'Parent node ID' },
-      iconName: {
-        type: 'string',
-        description: 'Iconify name (e.g., "lucide:home", "mdi:account")'
-      },
-      size: { type: 'number', minimum: 1, maximum: 1000, description: 'Size in pixels (default 24)' },
-      color: { 
-        type: 'string', 
-        pattern: '^#[0-9A-Fa-f]{6}$',
-        description: 'Icon color hex' 
-      },
-      layout: {
-        type: 'object',
-        description: '[INLINE OPTIMIZATION] Configure Auto Layout (padding, gap, sizing) during creation. Same schema as setNodeLayout.',
-        properties: {
-          sizing: { 
-            type: 'object', 
-            description: 'Sizing rules',
-            properties: { 
-              horizontal: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Horizontal sizing' }, 
-              vertical: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Vertical sizing' } 
-            } 
-          }
-        }
-      },
-      styles: {
-        type: 'object',
-        description: '[DEPRECATED] Use props instead.',
-        properties: {
-          opacity: { type: 'number', description: 'Layer opacity (0-1)' }
-        }
-      },
-      props: {
-        type: 'object',
-        description: '[PREFERRED] Unified design properties (fills, opacity, width, height, etc.)',
-        properties: {
-          fills: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Icon colors' },
-          opacity: { type: 'number', description: 'Layer opacity (0-1)' },
-          width: { type: 'number', description: 'Icon width' },
-          height: { type: 'number', description: 'Icon height' }
-        }
-      },
-      stepId: {
-        type: 'string',
-        description: 'Optional step ID from planDesign to mark as completed upon success'
-      }
-    },
-    required: ['iconName']
-  },
-  executionStrategy: 'sequential',
-  errors: {
-    'ICON_NOT_FOUND': 'The icon name provided could not be found in the Iconify library.',
-    'PARENT_NOT_FOUND': 'Parent node not found.'
-  }
-};
-
-// ==========================================
-// 6. deleteNode
-// ==========================================
-
-export const deleteNodeDefinition: ToolDefinition = {
-  name: 'deleteNode',
-  category: 'modify',
-  dependencies: [],
-  description: 'Remove a node from the document.',
-  parameters: {
-    type: 'object',
-    properties: {
-      nodeId: { type: 'string', description: 'ID of node to delete' }
-    },
-    required: ['nodeId']
-  },
-  executionStrategy: 'sequential'
 };

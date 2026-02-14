@@ -13,7 +13,8 @@ import { ToolExecutionPanel } from '../../ui/components/ToolExecutionPanel'
 import { RawOutputPanel } from '../../ui/components/RawOutputPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { Button } from '../../ui/components/Button'
-import { Copy, Code } from 'lucide-preact'
+import { Copy, Code, FileText } from 'lucide-preact'
+import { generateLogDigest } from './logDigest'
 import { on, emit } from '@create-figma-plugin/utilities'
 import { SendSerializedSelectionHandler, SerializeSelectionHandler, SelectNodeHandler } from '../../types'
 import { useClipboard } from '../../ui/hooks/useClipboard'
@@ -370,6 +371,23 @@ export function ChatFeature(props: UseChatProps) {
 
         <ErrorBanner error={error} errorActions={errorActions} />
         
+        {history.length > 0 && !loading && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: tokens.space[2] }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<FileText size={12} />}
+              onClick={() => {
+                const digest = generateLogDigest(history, { modelName });
+                copy(digest);
+              }}
+              style={{ color: tokens.colors.textSecondary }}
+            >
+              Copy Digest
+            </Button>
+          </div>
+        )}
+
         <PromptInput
           value={prompt}
           onChange={(v) => setPrompt(v)}

@@ -12,14 +12,23 @@ import {
 import { projectUITools } from './projectUITools';
 
 import { 
-  planDesignDefinition,
+  planDesignDefinition 
+} from './planningTools';
+
+import {
+  createIconDefinition
+} from './iconTools';
+
+import {
+  deleteNodeDefinition
+} from './nodeTools';
+
+import {
   createNodeDefinition,
   setNodeLayoutDefinition,
   setNodeStylesDefinition,
-  createIconDefinition,
-  updateNodePropertiesDefinition,
-  deleteNodeDefinition
-} from './rendererTools';
+  updateNodePropertiesDefinition
+} from './legacy/atomicTools';
 
 import { inspectDesignDefinition } from './inspectTool';
 
@@ -53,11 +62,11 @@ export const agentTools = [
   searchDesignKnowledgeDefinition,
   getComponentAnatomyDefinition,
   getFigmaLayoutRulesDefinition,
-  createNodeDefinition,         // Create
-  setNodeLayoutDefinition,      // Layout
-  setNodeStylesDefinition,      // Styles
+  createNodeDefinition,         // Create (Legacy)
+  setNodeLayoutDefinition,      // Layout (Legacy)
+  setNodeStylesDefinition,      // Styles (Legacy)
   createIconDefinition,         // Icons
-  updateNodePropertiesDefinition,
+  updateNodePropertiesDefinition, // (Legacy)
   deleteNodeDefinition,
   validateLayoutDefinition
 ];

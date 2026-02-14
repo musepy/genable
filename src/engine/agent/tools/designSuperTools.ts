@@ -1,4 +1,6 @@
 import { ToolDefinition } from './types';
+import { TEXT_PROPS_SCHEMA } from '../../../constants/figma-api';
+import { COMPACT_PROPS_SCHEMA, FLAT_NODE_SCHEMA } from './stateTools';
 
 /**
  * @file designSuperTools.ts
@@ -98,7 +100,8 @@ EXAMPLE (Hierarchical Row):
                 'updateNodeProperties',
                 'createIcon',
                 'deleteNode',
-                'applyDesignPatch'
+                'applyDesignPatch',
+                'patchNode'
               ]
             },
             params: {
@@ -107,7 +110,6 @@ EXAMPLE (Hierarchical Row):
               properties: {
                 // Common params mentioned for documentation in schema
                 type: { type: 'string', description: 'Node type (e.g. FRAME, TEXT)' },
-                name: { type: 'string', description: 'Node name' },
                 parentId: { type: 'string', description: 'Real Figma parent ID' },
                 parentRef: { type: 'string', description: 'Virtual ID (opId) of the parent created in this batch' },
                 nodeId: { type: 'string', description: 'Real Figma node ID' },
@@ -115,9 +117,62 @@ EXAMPLE (Hierarchical Row):
                 // recursive creation support
                 children: {
                   type: 'array',
-                  description: 'Recursive child operations (createNode only). opIds inside children can be referenced globally within the batch.',
-                  items: { type: 'object', description: 'Child createNode operation (shares opId, action, params structure)' }
-                }
+                  description: 'Recursive child operations (createNode only).',
+                  items: { 
+                    type: 'object', 
+                    description: 'Child createNode operation',
+                    properties: {
+                      opId: { type: 'string', description: 'Unique ID' },
+                      action: { type: 'string', description: 'Must be createNode' },
+                      params: { 
+                        type: 'object', 
+                        description: 'Parameters for child creation',
+                        properties: { 
+                          type: { type: 'string', description: 'Node type (FRAME | TEXT | ICON | etc.)' }, 
+                          props: { 
+                            type: 'object',
+                            description: 'Visual properties',
+                            properties: {
+                              ...COMPACT_PROPS_SCHEMA
+                            }
+                          } 
+                        } 
+                      }
+                    }
+                  }
+                },
+                // State-Driven Tool Support
+                /* 
+                // PAUSED: renderSubtree support in batch
+                nodes: {
+                  type: 'array',
+                  description: 'For renderSubtree: Flat list of nodes.',
+                  items: FLAT_NODE_SCHEMA
+                },
+                */
+                props: {
+                  type: 'object',
+                  description: 'For patchNode: Properties to update.',
+                  properties: COMPACT_PROPS_SCHEMA
+                },
+                stepId: { type: 'string', description: 'Optional step ID pass-through' },
+                // Top-level params for "flat" support
+                ...COMPACT_PROPS_SCHEMA,
+                iconName: { type: 'string', description: 'For ICON nodes' },
+                size: { type: 'number', description: 'For ICON nodes' },
+                color: { type: 'string', description: 'For ICON/TEXT nodes' }
+              }
+            },
+            reason: {
+              type: 'string',
+              description: 'Why this operation is being performed. Helps maintain context and avoid redundant loops.'
+            },
+            preconditions: {
+              type: 'object',
+              description: 'Optional validation rules to check before execution.',
+              properties: {
+                nodeType: { type: 'string', description: 'Expected node type (e.g. FRAME, TEXT)' },
+                parentHasAutoLayout: { type: 'boolean', description: 'Requires parent to have auto-layout' }
               }
             },
             dependsOn: {
@@ -151,6 +206,7 @@ EXAMPLE (Hierarchical Row):
     'INVALID_OPERATION': 'Operation payload is missing required fields.',
     'MISSING_REF': 'Referenced opId could not be resolved to a nodeId.',
     'DEPENDENCY_SKIP': 'Operation skipped due to failed dependency.',
+    'PARENT_NOT_FOUND': 'Specified parent node could not be resolved.',
     'NODE_NOT_FOUND': 'Target node does not exist.',
     'APPLY_ERROR': 'Failed to apply operation.',
     'PARTIAL_FAILURE': 'One or more operations failed.'
@@ -232,9 +288,9 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
                 opacity: { type: 'number', description: 'Opacity' }
               }
             },
-            properties: {
+            textAndFont: {
               type: 'object',
-              description: '[DEPRECATED] Use props instead.',
+              description: '[DEPRECATED] Use props instead. Previously named "properties".',
               properties: {
                 characters: { type: 'string', description: 'Text content' },
                 fontSize: { type: 'number', description: 'Font size' }
@@ -260,10 +316,9 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
                 },
                 x: { type: 'number', description: 'Explicit x position' },
                 y: { type: 'number', description: 'Explicit y position' },
-                characters: { type: 'string', description: 'Text content' },
-                fontSize: { type: 'number', description: 'Font size' },
                 width: { type: 'number', description: 'Width' },
-                height: { type: 'number', description: 'Height' }
+                height: { type: 'number', description: 'Height' },
+                ...TEXT_PROPS_SCHEMA,
               }
             }
           },
@@ -273,6 +328,10 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
       stepId: {
         type: 'string',
         description: 'Optional step ID from planDesign to mark as completed upon success'
+      },
+      reason: {
+        type: 'string',
+        description: 'Why this design patch is being applied.'
       }
     },
     required: ['patches']

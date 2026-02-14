@@ -73,7 +73,14 @@ export class GeminiErrorHandler {
       );
     }
 
-    // Default rethrow
+    // Default rethrow - but ensure it's a useful string if the source is an unknown object
+    if (typeof error === 'object' && error !== null && !error.message) {
+      const fallbackMsg = `Unknown SDK Error: ${JSON.stringify(error)}`;
+      const wrappedError = new Error(fallbackMsg);
+      (wrappedError as any).rawError = error;
+      throw wrappedError;
+    }
+    
     throw error;
   }
 

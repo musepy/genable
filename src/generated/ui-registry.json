@@ -101,7 +101,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-12T04:31:34.062Z"
+    "timestamp": "2026-02-13T15:08:33.428Z"
   },
   "onboarding": {
     "name": "Onboarding View",
@@ -115,8 +115,8 @@
           "layoutMode": "HORIZONTAL",
           "gap": 0,
           "primaryAxisAlignItems": "CENTER",
-          "counterAxisAlignItems": "CENTER",
-          "paddingTop": 24,
+          "counterAxisAlignItems": "MIN",
+          "paddingTop": 32,
           "paddingRight": 24,
           "paddingBottom": 24,
           "paddingLeft": 24
@@ -156,6 +156,22 @@
                       "name": "div",
                       "width": 0,
                       "height": 0,
+                      "paddingTop": 2,
+                      "paddingRight": 8,
+                      "paddingBottom": 2,
+                      "paddingLeft": 8,
+                      "characters": "First-time setup",
+                      "fontSize": 12,
+                      "fontWeight": "",
+                      "fontFamily": ""
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
+                      "width": 0,
+                      "height": 0,
                       "layoutMode": "HORIZONTAL",
                       "gap": 0,
                       "primaryAxisAlignItems": "MIN",
@@ -175,11 +191,7 @@
                           "paddingTop": null,
                           "paddingRight": null,
                           "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "Connect Gemini AI",
-                          "fontSize": 16,
-                          "fontWeight": "600",
-                          "fontFamily": "Inter"
+                          "paddingLeft": null
                         }
                       }
                     ]
@@ -193,26 +205,12 @@
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
-                      "paddingLeft": null
-                    },
-                    "children": [
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "a",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "Google AI Studio",
-                          "fontSize": null,
-                          "fontWeight": "",
-                          "fontFamily": ""
-                        }
-                      }
-                    ]
+                      "paddingLeft": null,
+                      "characters": "Add your API key to start generating UI. You can switch providers now and keep using the same chat flow.",
+                      "fontSize": 12,
+                      "fontWeight": "",
+                      "fontFamily": "Inter"
+                    }
                   }
                 ]
               },
@@ -253,7 +251,7 @@
                           "layoutMode": "HORIZONTAL",
                           "gap": 0,
                           "primaryAxisAlignItems": "MIN",
-                          "counterAxisAlignItems": "CENTER",
+                          "counterAxisAlignItems": "MIN",
                           "paddingTop": null,
                           "paddingRight": null,
                           "paddingBottom": null,
@@ -261,18 +259,174 @@
                         },
                         "children": [
                           {
-                            "type": "FRAME",
+                            "type": "RECTANGLE",
                             "props": {
-                              "name": "input",
+                              "name": "button",
                               "width": 0,
                               "height": 0,
-                              "paddingTop": 0,
-                              "paddingRight": 16,
-                              "paddingBottom": 0,
-                              "paddingLeft": 16
+                              "paddingTop": null,
+                              "paddingRight": null,
+                              "paddingBottom": null,
+                              "paddingLeft": null,
+                              "characters": "Gemini",
+                              "fontSize": 12,
+                              "fontWeight": "500",
+                              "fontFamily": ""
+                            }
+                          },
+                          {
+                            "type": "RECTANGLE",
+                            "props": {
+                              "name": "button",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": null,
+                              "paddingRight": null,
+                              "paddingBottom": null,
+                              "paddingLeft": null,
+                              "characters": "OpenRouter",
+                              "fontSize": 12,
+                              "fontWeight": "500",
+                              "fontFamily": ""
                             }
                           }
                         ]
+                      },
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null
+                        },
+                        "children": [
+                          {
+                            "type": "RECTANGLE",
+                            "props": {
+                              "name": "div",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": null,
+                              "paddingRight": null,
+                              "paddingBottom": null,
+                              "paddingLeft": null,
+                              "characters": "API Key",
+                              "fontSize": 12,
+                              "fontWeight": "",
+                              "fontFamily": ""
+                            }
+                          },
+                          {
+                            "type": "RECTANGLE",
+                            "props": {
+                              "name": "div",
+                              "width": 0,
+                              "height": 0,
+                              "layoutMode": "HORIZONTAL",
+                              "gap": 0,
+                              "primaryAxisAlignItems": "MIN",
+                              "counterAxisAlignItems": "CENTER",
+                              "paddingTop": null,
+                              "paddingRight": null,
+                              "paddingBottom": null,
+                              "paddingLeft": null
+                            },
+                            "children": [
+                              {
+                                "type": "FRAME",
+                                "props": {
+                                  "name": "input",
+                                  "width": 0,
+                                  "height": 0,
+                                  "paddingTop": 0,
+                                  "paddingRight": 48,
+                                  "paddingBottom": 0,
+                                  "paddingLeft": 16
+                                }
+                              },
+                              {
+                                "type": "RECTANGLE",
+                                "props": {
+                                  "name": "div",
+                                  "width": 0,
+                                  "height": 0,
+                                  "paddingTop": null,
+                                  "paddingRight": null,
+                                  "paddingBottom": null,
+                                  "paddingLeft": null
+                                },
+                                "children": [
+                                  {
+                                    "type": "TEXT",
+                                    "props": {
+                                      "name": "button",
+                                      "width": 0,
+                                      "height": 0,
+                                      "paddingTop": 0,
+                                      "paddingRight": 0,
+                                      "paddingBottom": 0,
+                                      "paddingLeft": 0,
+                                      "characters": "Show",
+                                      "fontSize": 12,
+                                      "fontWeight": "",
+                                      "fontFamily": ""
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "paddingTop": null,
+                          "paddingRight": null,
+                          "paddingBottom": null,
+                          "paddingLeft": null
+                        },
+                        "children": [
+                          {
+                            "type": "RECTANGLE",
+                            "props": {
+                              "name": "a",
+                              "width": 0,
+                              "height": 0,
+                              "paddingTop": null,
+                              "paddingRight": null,
+                              "paddingBottom": null,
+                              "paddingLeft": null,
+                              "characters": "Google AI Studio",
+                              "fontSize": null,
+                              "fontWeight": "",
+                              "fontFamily": ""
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "type": "RECTANGLE",
+                        "props": {
+                          "name": "div",
+                          "width": 0,
+                          "height": 0,
+                          "layoutMode": "HORIZONTAL",
+                          "gap": 0,
+                          "primaryAxisAlignItems": "MIN",
+                          "counterAxisAlignItems": "CENTER",
+                          "paddingTop": 4,
+                          "paddingRight": 8,
+                          "paddingBottom": 4,
+                          "paddingLeft": 8
+                        }
                       }
                     ]
                   }
@@ -317,7 +471,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-12T04:31:34.108Z"
+    "timestamp": "2026-02-13T15:08:33.487Z"
   },
   "button": {
     "name": "Standard Button",
@@ -339,7 +493,7 @@
         }
       }
     ],
-    "timestamp": "2026-02-12T04:31:34.115Z"
+    "timestamp": "2026-02-13T15:08:33.493Z"
   },
   "prompt-input": {
     "name": "Prompt Input",
@@ -465,7 +619,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-12T04:31:34.154Z"
+    "timestamp": "2026-02-13T15:08:33.511Z"
   },
   "settings-panel": {
     "name": "Settings Panel",
@@ -889,6 +1043,40 @@
                     }
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 12,
+              "paddingRight": 0,
+              "paddingBottom": 12,
+              "paddingLeft": 0
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "CENTER",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "characters": "© 2026 Genable",
+                  "fontSize": null,
+                  "fontWeight": "500",
+                  "fontFamily": ""
+                }
               },
               {
                 "type": "RECTANGLE",
@@ -896,6 +1084,10 @@
                   "name": "div",
                   "width": 0,
                   "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "CENTER",
+                  "counterAxisAlignItems": "CENTER",
                   "paddingTop": null,
                   "paddingRight": null,
                   "paddingBottom": null,
@@ -905,88 +1097,50 @@
                   {
                     "type": "RECTANGLE",
                     "props": {
-                      "name": "div",
+                      "name": "a",
                       "width": 0,
                       "height": 0,
                       "layoutMode": "HORIZONTAL",
                       "gap": 0,
-                      "primaryAxisAlignItems": "CENTER",
+                      "primaryAxisAlignItems": "MIN",
                       "counterAxisAlignItems": "CENTER",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
+                      "paddingLeft": null
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "span",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
                       "paddingLeft": null,
-                      "characters": "© 2026 Genable",
+                      "characters": "|",
                       "fontSize": null,
-                      "fontWeight": "500",
+                      "fontWeight": "",
                       "fontFamily": ""
                     }
                   },
                   {
                     "type": "RECTANGLE",
                     "props": {
-                      "name": "div",
+                      "name": "span",
                       "width": 0,
                       "height": 0,
-                      "layoutMode": "HORIZONTAL",
-                      "gap": 0,
-                      "primaryAxisAlignItems": "CENTER",
-                      "counterAxisAlignItems": "CENTER",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
-                      "paddingLeft": null
-                    },
-                    "children": [
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "a",
-                          "width": 0,
-                          "height": 0,
-                          "layoutMode": "HORIZONTAL",
-                          "gap": 0,
-                          "primaryAxisAlignItems": "MIN",
-                          "counterAxisAlignItems": "CENTER",
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null
-                        }
-                      },
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "span",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "|",
-                          "fontSize": null,
-                          "fontWeight": "",
-                          "fontFamily": ""
-                        }
-                      },
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "span",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "v1.0.0",
-                          "fontSize": null,
-                          "fontWeight": "",
-                          "fontFamily": ""
-                        }
-                      }
-                    ]
+                      "paddingLeft": null,
+                      "characters": "v1.0.0",
+                      "fontSize": null,
+                      "fontWeight": "",
+                      "fontFamily": ""
+                    }
                   }
                 ]
               }
@@ -995,7 +1149,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-12T04:31:34.197Z"
+    "timestamp": "2026-02-13T15:08:33.542Z"
   },
   "chat-message": {
     "name": "Chat Message",
@@ -1031,6 +1185,6 @@
         ]
       }
     ],
-    "timestamp": "2026-02-12T04:31:34.200Z"
+    "timestamp": "2026-02-13T15:08:33.545Z"
   }
 }

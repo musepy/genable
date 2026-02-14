@@ -45,7 +45,7 @@ import { ImportTokensHandler, ExportTokensHandler, SendExportedTokensHandler, Co
 // NEW: Refactored IPC Handlers and Services
 // ==========================================
 import { handleToolCall } from './ipc/handlers/toolCallHandler';
-import { handleLoadSettings, handleSaveSettings } from './ipc/handlers/settingsHandler';
+import { handleLoadSettings, handleSaveSettings, handleResetSettings } from './ipc/handlers/settingsHandler';
 import { handleUnifiedRender, clearStream } from './ipc/helpers/renderHelper';
 
 const throttledRenderers = new Map<string, (...args: any[]) => void>();
@@ -203,6 +203,8 @@ export default async function () {
   on<LoadSettingsHandler>('LOAD_SETTINGS', handleLoadSettings);
 
   on<SaveSettingsHandler>('SAVE_SETTINGS', handleSaveSettings);
+
+  on<import('./types').ResetSettingsHandler>('RESET_SETTINGS', handleResetSettings);
 
   on<CloseHandler>('CLOSE', function () {
     figma.closePlugin()

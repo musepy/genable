@@ -46,7 +46,8 @@ module.exports = function (buildOptions) {
   return {
     ...buildOptions,
     define: {
-      global: 'window'
+      global: 'window',
+      __DEV__: JSON.stringify(buildOptions.dev || false)
     },
     // Ensure ALL react imports (including jsx-runtime) are aliased to preact/compat
     // The built-in preact-compat plugin only handles "react" and "react-dom",

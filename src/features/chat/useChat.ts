@@ -258,7 +258,23 @@ export function useChat({
         setToolCallsWithRef(prev => [...prev, newTc]);
       },
       onToolResult: (id, result) => {
-        const updater = (t: ToolCallRecord) => t.id === id ? { ...t, status: 'success' as const, result, endTime: Date.now() } : t;
+        const updater = (t: ToolCallRecord) => {
+          if (t.id !== id) return t;
+
+          const isError = result?.success === false;
+          const status: ToolCallRecord['status'] = isError ? 'error' : 'success';
+          const errorMessage = isError
+            ? (result?.error?.message || result?.error?.code || 'Tool execution failed.')
+            : undefined;
+
+          return {
+            ...t,
+            status,
+            result,
+            error: errorMessage,
+            endTime: Date.now()
+          };
+        };
         
         setHistory(prev => {
           const next = [...prev];

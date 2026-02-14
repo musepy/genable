@@ -56,8 +56,8 @@ export class LayoutMath {
                 if (parentBounds) {
                     return this.centerInParent(parentBounds, nodeDimensions);
                 }
-                // Fallback to manual or viewport if parent missing
-                return manualPosition || viewportCenter || { x: 0, y: 0 };
+                // No viewport fallback here: parent-centered placement must stay in parent space.
+                return manualPosition || { x: 0, y: 0 };
             
             case 'MANUAL':
                 return manualPosition || viewportCenter || { x: 0, y: 0 };

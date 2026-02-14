@@ -16,6 +16,7 @@ import {
 // Direct import for SCHEMA_RULES and DESIGN_AESTHETICS
 import { SCHEMA_RULES, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
 import { estimateTokens } from '../../agent/context/tokenEstimator';
+import { skillRegistry } from '../../agent/skills/SkillRegistry';
 
 
 // ==========================================
@@ -209,34 +210,9 @@ function truncateToBudget(text: string, maxTokens: number): string {
     return truncated + '\n[... truncated due to token budget]';
 }
 
-/**
- * Compresses tool definitions to fit within budget.
- * Removes optional parameter descriptions if needed.
- */
 function compressTools(tools: ToolDefinition[], maxTokens: number): string {
-    let serialized = serializeTools(tools);
-
-    if (estimateTokens(serialized) <= maxTokens) {
-        return serialized;
-    }
-
-    // First compression: Remove optional parameters
-    const essentialTools = tools.map(tool => {
-        const requiredParams = Object.entries(tool.parameters.properties)
-            .filter(([name]) => tool.parameters.required?.includes(name))
-            .map(([name, schema]) => `  - ${name}: ${schema.description}`)
-            .join('\n');
-        return `- ${tool.name}: ${tool.description}${requiredParams ? '\n' + requiredParams : ''}`;
-    }).join('\n\n');
-
-    if (estimateTokens(essentialTools) <= maxTokens) {
-        return essentialTools;
-    }
-
-    // Second compression: Only tool names and descriptions
-    const minimalTools = tools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n');
-
-    return truncateToBudget(minimalTools, maxTokens);
+    const serialized = serializeTools(tools);
+    return truncateToBudget(serialized, maxTokens);
 }
 
 /**
@@ -363,6 +339,39 @@ function buildSelectionContext(deps: PromptDependencies, budget: number): string
     return selectionHeader + compressedNodes + selectionFooter;
 }
 
+/**
+ * Build Iteration State Summary section (Priority 0.1 - Top of prompt)
+ */
+function buildIterationStateSummary(deps: PromptDependencies): string {
+    const activeStep = deps.activeStep;
+    const log = deps.operationLog || [];
+    
+    if (!activeStep && log.length === 0) return '';
+
+    const lines = ['## CURRENT ITERATION STATE'];
+    
+    if (activeStep) {
+        lines.push(`- **Active Task**: "${activeStep.title}"`);
+    }
+
+    if (log.length > 0) {
+        const last3 = log.slice(-3).reverse();
+        const opSummaries = last3.map(op => {
+            const status = op.success ? '✅' : '❌';
+            const id = op.opId ? ` (${op.opId})` : '';
+            const reason = op.reason ? ` - *${op.reason}*` : '';
+            const error = op.error ? ` [Error: ${op.error}]` : '';
+            const corrections = op.diffInfo && op.diffInfo.length > 0 
+                ? `\n    ⚠️ [System Correction]: ${op.diffInfo.join('; ')}` 
+                : '';
+            return `  ${status} ${op.action}${id}${reason}${error}${corrections}`;
+        });
+        lines.push(`- **Recent History** (last 3 ops):\n${opSummaries.join('\n')}`);
+    }
+
+    return lines.join('\n');
+}
+
 // ==========================================
 // Agent Section Registry
 // ==========================================
@@ -372,6 +381,12 @@ function buildSelectionContext(deps: PromptDependencies, budget: number): string
  * Separated from Linear pipeline registry for better maintainability.
  */
 const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
+    {
+        id: 'iteration-state',
+        priority: 0.1, // Appear at the very top
+        budgetKey: 'core',
+        builder: (deps) => buildIterationStateSummary(deps)
+    },
     {
         id: 'agent-identity',
         priority: 1,
@@ -428,6 +443,20 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         priority: 5,
         budgetKey: 'selection',
         builder: (deps, _tools, budget) => buildSelectionContext(deps, budget)
+    },
+    {
+        id: 'skill-context',
+        priority: 3,
+        budgetKey: 'context',
+        builder: (deps) => {
+            const skillSections = skillRegistry.buildPromptSections({
+                userPrompt: deps.intent?.originalRequest,
+                selection: deps.selectionContext ? [deps.selectionContext] : undefined,
+                designSystemId: deps.designSystemContext?.skillName,
+            });
+            if (skillSections.length === 0) return '';
+            return skillSections.map(s => s.content).filter(Boolean).join('\n\n');
+        }
     },
     {
         id: 'optional-knowledge',
@@ -549,21 +578,21 @@ export function composeSystemPrompt(
             if (content) {
                 const usedTokens = estimateTokens(content);
                 
-                // Calculate how much we consumed from the bucket vs surplus
-                // 1. Prioritize consuming global surplus
-                const consumedFromSurplus = Math.min(usedTokens, globalSurplus);
-                globalSurplus -= consumedFromSurplus;
-
-                // 2. Consume remainder from the bucket
-                const consumedFromBucket = Math.max(0, usedTokens - consumedFromSurplus);
-                const bucketRemainder = currentBucketAmount - consumedFromBucket;
-
-                // 3. Any leftover from the bucket flows into global surplus for the NEXT section
-                globalSurplus += Math.max(0, bucketRemainder);
+                // Calculate surplus/deficit relative to the bucket
+                const bucketRemainder = currentBucketAmount - usedTokens;
                 
-                // 4. Update the bucket to reflect consumption
-                const key = section.budgetKey as keyof TokenBudget;
-                runningBuckets[key] = Math.max(0, bucketRemainder);
+                if (bucketRemainder >= 0) {
+                    // Used less than the bucket: bucket is "consumed", leftover goes to surplus
+                    globalSurplus += bucketRemainder;
+                } else {
+                    // Used more than the bucket: consume from existing surplus
+                    const deficit = Math.abs(bucketRemainder);
+                    globalSurplus = Math.max(0, globalSurplus - deficit);
+                }
+
+                // Once a section with a specific key is processed, its "initial" allocation
+                // is moved into the globalSurplus pool for subsequent sections.
+                runningBuckets[section.budgetKey] = 0;
                 
                 parts.push(content);
                 budgetLog.push({
@@ -607,15 +636,12 @@ function isValidSceneNode(node: any): node is SceneNode {
 }
 
 /**
- * Helper to serialize tool definitions into a readable format for the prompt.
+ * Helper to serialize tool definitions into a compact format for the prompt.
+ * Parameters are omitted here because they are already provided to the model 
+ * via the Function Calling JSON Schema (function_declarations).
  */
 function serializeTools(tools: ToolDefinition[]): string {
-    return tools.map(tool => {
-        const params = Object.entries(tool.parameters.properties)
-            .map(([name, schema]) => `  - ${name} (${schema.type}): ${schema.description}${tool.parameters.required?.includes(name) ? ' [Required]' : ''}`)
-            .join('\n');
-        return `- ${tool.name}: ${tool.description}\n${params}`;
-    }).join('\n\n');
+    return tools.map(tool => `- **${tool.name}**: ${tool.description}`).join('\n');
 }
 
 /**

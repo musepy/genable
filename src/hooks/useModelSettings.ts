@@ -5,9 +5,11 @@ import {
   SaveSettingsHandler,
   SettingsLoadedHandler,
 } from '../types'
-import { ModelService, ProviderName } from '../services/ModelService'
+import { ModelService } from '../services/ModelService'
 import { DEFAULT_MODEL, SUPPORTED_MODELS, MODEL_CACHE_TTL_MS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
+
+type ApiKeyMap = Record<'gemini' | 'openrouter', string>
 
 /**
  * Model Settings Hook with SWR (Stale-While-Revalidate) Pattern
@@ -21,7 +23,7 @@ export function useModelSettings() {
   const { toast } = useToast()
   
   const [apiKey, setApiKey] = useState<string>('')
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({ gemini: '', openrouter: '' })
+  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '' })
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL)
   const [providerName, setProviderName] = useState<'gemini' | 'openrouter'>('gemini')
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
@@ -78,51 +80,80 @@ export function useModelSettings() {
     }
   }, [providerName])
 
+  const loadSettings = useCallback(() => {
+    emit<LoadSettingsHandler>('LOAD_SETTINGS')
+  }, [])
+
+  const persistSettings = useCallback((next: {
+    apiKey: string;
+    apiKeys: ApiKeyMap;
+    modelName: string;
+    providerName: 'gemini' | 'openrouter';
+  }) => {
+    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
+      apiKey: next.apiKey,
+      apiKeys: next.apiKeys,
+      modelName: next.modelName,
+      providerName: next.providerName,
+      availableModels: suggestedModels,
+      cacheTimestamp
+    })
+  }, [suggestedModels, cacheTimestamp])
+
   /**
    * Listen for settings updates
    * Re-binds when dependencies change (like refreshModelsInBackground)
    */
   useEffect(() => {
     return on<SettingsLoadedHandler>('SETTINGS_LOADED', (s) => {
-      // 1. Update Keys
-      if (s.apiKeys) {
-        setApiKeys(s.apiKeys)
-        // Only set apiKey if we don't have one or if we're initializing
-        // This prevents overwriting user input during a refresh
-        if (!isInitialized) {
-          const initialKey = s.providerName === 'openrouter' ? s.apiKeys.openrouter : s.apiKeys.gemini;
-          setApiKey(initialKey || s.apiKey || '')
-          setHasConfig(!!(initialKey || s.apiKey))
-        }
-      } else if (s.apiKey) {
-        // Legacy single key support
-        if (!isInitialized) {
-          setApiKey(s.apiKey)
-          setHasConfig(true)
-        }
-        setApiKeys(prev => ({ ...prev, [s.providerName || 'gemini']: s.apiKey }))
-      } else {
-        setShowSettings(true)
+      const nextProvider = s.providerName || 'gemini'
+      const nextApiKeys: ApiKeyMap = {
+        gemini: s.apiKeys?.gemini || '',
+        openrouter: s.apiKeys?.openrouter || '',
       }
 
-      // 2. Update Model/Provider if not user-initiated
-      // Only sync these on initial load to avoid overwriting user selection
-      if (!isInitialized) {
-        if (s.modelName) setModelName(s.modelName)
-        if (s.providerName) setProviderName(s.providerName)
+      // Legacy single key support
+      if (!s.apiKeys && s.apiKey) {
+        nextApiKeys[nextProvider] = s.apiKey
+      }
+
+      const activeKey = nextProvider === 'openrouter' ? nextApiKeys.openrouter : nextApiKeys.gemini
+      const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || s.apiKey)
+
+      setApiKeys(nextApiKeys)
+
+      // Force-sync empty state after reset even when already initialized
+      if (!isInitialized || !hasAnyKey) {
+        setProviderName(nextProvider)
+        setApiKey(activeKey || '')
+        setHasConfig(Boolean(activeKey))
+        setShowSettings(false)
+        setSettingsError(null)
+        setFetchStatus('idle')
+      }
+
+      if (!isInitialized && s.modelName) {
+        setModelName(s.modelName)
+      } else if (!hasAnyKey) {
+        setModelName(DEFAULT_MODEL)
       }
 
       if (s.availableModels && s.availableModels.length > 0) {
         setSuggestedModels(s.availableModels)
+      } else if (!hasAnyKey) {
+        setSuggestedModels(ModelService.getStaticModels(nextProvider))
       }
+
       if (s.cacheTimestamp) {
         setCacheTimestamp(s.cacheTimestamp)
+      } else if (!hasAnyKey) {
+        setCacheTimestamp(0)
       }
       
       // SWR: Trigger background refresh if cache is stale and we have an API key
-      if (s.apiKey && isCacheStale(s.cacheTimestamp || 0)) {
+      if (activeKey && isCacheStale(s.cacheTimestamp || 0)) {
         // Delay slightly to not block initial render
-        setTimeout(() => refreshModelsInBackground(s.apiKey), 100)
+        setTimeout(() => refreshModelsInBackground(activeKey), 100)
       }
       
       setIsInitialized(true)
@@ -134,8 +165,8 @@ export function useModelSettings() {
    * Only runs once on mount
    */
   useEffect(() => {
-    emit<LoadSettingsHandler>('LOAD_SETTINGS')
-  }, [])
+    loadSettings()
+  }, [loadSettings])
 
   /**
    * Sync active apiKey when providerName changes
@@ -168,18 +199,34 @@ export function useModelSettings() {
   };
 
   const handleSaveSettings = () => {
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', { 
-      apiKey, 
+    persistSettings({
+      apiKey,
       apiKeys,
-      modelName, 
-      providerName,
-      availableModels: suggestedModels,
-      cacheTimestamp 
+      modelName,
+      providerName
     })
     setHasConfig(true)
     setShowSettings(false)
     toast('Settings saved successfully', 'success')
   }
+
+  const completeOnboarding = useCallback((key: string) => {
+    const nextApiKeys: ApiKeyMap = {
+      ...apiKeys,
+      [providerName]: key,
+    }
+    setApiKey(key)
+    setApiKeys(nextApiKeys)
+    setHasConfig(true)
+    setShowSettings(false)
+    persistSettings({
+      apiKey: key,
+      apiKeys: nextApiKeys,
+      modelName,
+      providerName,
+    })
+    toast('Connected successfully', 'success')
+  }, [apiKeys, modelName, persistSettings, providerName, toast])
 
   /**
    * Explicit model fetch - used during onboarding/settings
@@ -206,6 +253,9 @@ export function useModelSettings() {
         setSuggestedModels(result.models)
         setFetchStatus('fail')
         setSettingsError(result.error || 'Failed to fetch models')
+        if (keyOverride) {
+          throw new Error(result.error || 'Invalid API key')
+        }
       }
     } catch (e: unknown) {
       setFetchStatus('fail')
@@ -213,6 +263,38 @@ export function useModelSettings() {
       throw e
     }
   }
+
+  /**
+   * Simulate a logout for testing purposes.
+   * Does NOT clear storage, only resets UI state.
+   */
+  const simulateLogout = useCallback(() => {
+    const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini
+    setApiKey(activeKey || '')
+    setHasConfig(false);
+    setShowSettings(false);
+    setSettingsError(null);
+    setFetchStatus('idle');
+    toast('Logged out (Simulation)', 'default');
+  }, [apiKeys, providerName, toast]);
+
+  const simulateEmptyState = useCallback(() => {
+    setApiKey('')
+    setHasConfig(false)
+    setShowSettings(false)
+    setSettingsError(null)
+    setFetchStatus('idle')
+    setSuggestedModels(ModelService.getStaticModels(providerName))
+    toast('Now simulating first-time user (empty state)', 'default')
+  }, [providerName, toast])
+
+  const restoreSavedSession = useCallback(() => {
+    setIsInitialized(false)
+    setSettingsError(null)
+    setFetchStatus('idle')
+    loadSettings()
+    toast('Restored saved session', 'success')
+  }, [loadSettings, toast])
 
   return {
     apiKey,
@@ -236,10 +318,14 @@ export function useModelSettings() {
     settingsError,
     fetchStatus,
     handleSaveSettings,
+    completeOnboarding,
     handleFetchModels,
     // New SWR additions
     getModels,
     refreshModelsInBackground,
     isCacheStale: isCacheStale(cacheTimestamp),
+    simulateLogout,
+    simulateEmptyState,
+    restoreSavedSession,
   }
 }

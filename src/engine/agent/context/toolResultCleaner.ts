@@ -36,24 +36,44 @@ export class ToolResultCleaner {
     const dataJson = JSON.stringify(cleaned.data);
     const MAX_DATA_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
 
-    if (dataJson.length <= MAX_DATA_CHARS) return cleaned;
+    // For oversized results, attempt structural cleaning if possible
+    if (dataJson.length > MAX_DATA_CHARS) {
+      const isSpecializedTool = cleaned.name === 'applyDesignPatch' || 
+                                cleaned.name === 'generateDesign' || 
+                                cleaned.name === 'batchOperations' ||
+                                cleaned.name === 'renderElement' ||
+                                cleaned.name === 'patchElement';
+      if (isSpecializedTool && cleaned.data) {
+        // For these tools, use structural distillation rather than string truncation
+        cleaned.data = cleaned.data.results 
+          ? this.cleanBatchResult(cleaned.data, dataJson.length) 
+          : this.cleanSuccessfulResult(cleaned.data, dataJson.length);
+        return cleaned;
+      }
+      
+      if (cleaned.success && typeof cleaned.data === 'object') {
+        // Attempt structural cleaning for oversized successful objects
+        cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
+        return cleaned;
+      }
 
-    // Special handling for batchOperations results
-    if (cleaned.data.idMap && cleaned.data.results) {
-      cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
-      return cleaned;
-    }
-
-    // For successful results, keep only essential fields
-    if (cleaned.success && typeof cleaned.data === 'object') {
-      cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
-    } else {
-      // For non-object data or failures, just stringify and truncate
+      // Final fallback for non-object, failures, or non-specialized large data
+      const idMap = cleaned.data?.idMap;
       cleaned.data = {
         _truncated: true,
         _originalSize: dataJson.length,
-        summary: dataJson.substring(0, 500) + '...'
+        summary: dataJson.substring(0, 500) + '...',
+        // Always preserve idMap if it exists at the top level of data
+        ...(idMap && { idMap })
       };
+      return cleaned;
+    }
+
+    // Results within budget
+    if (cleaned.data.results && cleaned.data.idMap) {
+      cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
+    } else if (cleaned.success && typeof cleaned.data === 'object') {
+      cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
     }
 
     return cleaned;
@@ -68,6 +88,9 @@ export class ToolResultCleaner {
         success: r.success,
         ...(r.nodeId && { nodeId: r.nodeId }),
         ...(r.name && { name: r.name }),
+        // TIER 1: Feedback signals
+        ...(r.diff && { diff: r.diff }),
+        ...(r.diffInfo && { diffInfo: r.diffInfo }),
         ...(r.error && { 
           error: { 
             code: r.error.code, 
@@ -84,6 +107,8 @@ export class ToolResultCleaner {
           }))
         }),
       })),
+      // TIER 0: Critical signals
+      ...(data.rollback && { rollback: data.rollback }),
       _truncated: true,
       _originalSize: originalSize,
     };
@@ -122,6 +147,12 @@ export class ToolResultCleaner {
         essentialData._moreChildren = data.children.length - MAX_CHILDREN_SKELETON;
       }
     }
+
+    // TIER 1: Feedback signals
+    if (data.diff) essentialData.diff = data.diff;
+    if (data.diffInfo) essentialData.diffInfo = data.diffInfo;
+    if (data.visibilityWarnings) essentialData.visibilityWarnings = data.visibilityWarnings;
+    if (data.visibilityAutoFixed) essentialData.visibilityAutoFixed = data.visibilityAutoFixed;
 
     // Preserve idMap and layoutSnapshots
     if (data.idMap && typeof data.idMap === 'object') {
@@ -277,6 +308,25 @@ export class ToolResultCleaner {
         _truncated: true,
         _originalSize: originalLength
       };
+    } else if (toolName === 'renderElement' && sanitizedArgs.element) {
+      return {
+        parentId: sanitizedArgs.parentId,
+        element: {
+          type: sanitizedArgs.element.type,
+          props: this.truncateFigmaProps(sanitizedArgs.element.props),
+          childrenCount: Array.isArray(sanitizedArgs.element.children) ? sanitizedArgs.element.children.length : 0,
+          _childrenTruncated: true
+        },
+        _truncated: true,
+        _originalSize: originalLength
+      };
+    } else if (toolName === 'patchElement') {
+      return {
+        nodeId: sanitizedArgs.nodeId,
+        fragment: this.truncateFigmaProps(sanitizedArgs.fragment),
+        _truncated: true,
+        _originalSize: originalLength
+      };
     } else {
       return {
         _truncated: true,
@@ -286,5 +336,19 @@ export class ToolResultCleaner {
         ...(sanitizedArgs.name && { name: sanitizedArgs.name }),
       };
     }
+  }
+
+  /**
+   * Truncates Figma properties to only keep essential visual cues in history.
+   */
+  private truncateFigmaProps(props: any): any {
+    if (!props || typeof props !== 'object') return props;
+    const essentialKeys = ['name', 'fills', 'width', 'height', 'layoutMode', 'characters', 'semantic'];
+    const truncated: Record<string, any> = {};
+    for (const key of essentialKeys) {
+      if (props[key] !== undefined) truncated[key] = props[key];
+    }
+    truncated._othersTruncated = true;
+    return truncated;
   }
 }

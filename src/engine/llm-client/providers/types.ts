@@ -29,10 +29,12 @@ export interface Part {
   functionCall?: {
     name: string;
     args: any;
+    id?: string;
   };
   functionResponse?: {
     name: string;
     response: any;
+    id?: string;
   };
   /** Unique identifier for tool call, required for OpenAI-compatible APIs */
   tool_call_id?: string;
@@ -161,14 +163,16 @@ export function formatResponseDefault(response: LLMResponse): LLMMessage {
 
 /**
  * Default implementation for formatToolResults (standard tool results -> message mapping)
+ * NOTE: thought_signature is NOT included in functionResponse per Gemini API protocol.
+ * thoughtSignature is only allowed in model turns (functionCall, thought, text parts).
  */
 export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
   return {
     id: 'gen_' + Math.random().toString(36).substring(7),
     role: 'tool',
     content: results.map(tr => ({
-      functionResponse: { name: tr.name, response: tr.response },
-      ...(tr.thought_signature && { thought_signature: tr.thought_signature })
+      functionResponse: { name: tr.name, response: tr.response }
+      // thought_signature intentionally omitted - not allowed in functionResponse
     }))
   };
 }

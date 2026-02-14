@@ -132,6 +132,11 @@ export interface SaveSettingsHandler extends EventHandler {
   handler: (settings: Settings) => void;
 }
 
+export interface ResetSettingsHandler extends EventHandler {
+  name: 'RESET_SETTINGS';
+  handler: () => void;
+}
+
 export interface SettingsLoadedHandler extends EventHandler {
   name: 'SETTINGS_LOADED';
   handler: (settings: Settings) => void;

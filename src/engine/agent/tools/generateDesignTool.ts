@@ -10,6 +10,7 @@
  */
 
 import { ToolDefinition } from './types';
+import { TEXT_PROPS_SCHEMA } from '../../../constants/figma-api';
 
 export const generateDesignDefinition: ToolDefinition = {
   name: 'generateDesign',
@@ -20,6 +21,7 @@ export const generateDesignDefinition: ToolDefinition = {
 Output ALL nodes as a flat list with parent references. The system reconstructs and renders the full tree.
 
 This is the PREFERRED tool for creating new designs. Use createNode only for single-node edits.
+You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto", "Poppins", "Noto Sans SC").
 
 ## Output Format Rules
 1. First node MUST have parent: null (root).
@@ -40,7 +42,7 @@ This is the PREFERRED tool for creating new designs. Use createNode only for sin
           description: 'A node: {id, parent, type, props}',
           properties: {
             id: { type: 'string', description: 'Semantic ID (e.g., "email-label", "submit-btn")' },
-            parent: { type: 'string', description: 'Parent node ID, or null for root node' },
+            parent: { type: 'string', description: 'Parent node ID. For root node, use "root" or empty string.' },
             type: { type: 'string', description: 'FRAME | TEXT | RECTANGLE | ELLIPSE | LINE | ICON' },
             props: {
               type: 'object',
@@ -78,9 +80,7 @@ This is the PREFERRED tool for creating new designs. Use createNode only for sin
                 height: { type: 'number', description: 'Height in px (for FIXED sizing)' },
                 layoutSizingHorizontal: { type: 'string', description: 'FIXED | HUG | FILL' },
                 layoutSizingVertical: { type: 'string', description: 'FIXED | HUG | FILL' },
-                characters: { type: 'string', description: 'Text content (TEXT nodes only)' },
-                fontSize: { type: 'number', description: 'Font size in px' },
-                fontWeight: { type: 'string', description: 'e.g. "Bold", "Medium", "Regular"' },
+                ...TEXT_PROPS_SCHEMA,
                 opacity: { type: 'number', description: '0.0 to 1.0' },
                 effects: {
                   type: 'array',
@@ -88,7 +88,7 @@ This is the PREFERRED tool for creating new designs. Use createNode only for sin
                     type: 'object',
                     description: 'Effect: {type, color, offset, blur, spread}',
                     properties: {
-                      type: { type: 'string', description: 'DROP_SHADOW | INNER_SHADOW | LAYER_BLUR | BACKGROUND_BLUR' },
+                      effectType: { type: 'string', description: 'DROP_SHADOW | INNER_SHADOW | LAYER_BLUR | BACKGROUND_BLUR' },
                       color: { type: 'string', description: 'Hex+alpha e.g. "#0000001A" (10% black), "#4F46E533" (20% indigo)' },
                       offset: { type: 'object', description: '{x, y} in px', properties: { x: { type: 'number', description: 'Horizontal offset' }, y: { type: 'number', description: 'Vertical offset' } } },
                       blur: { type: 'number', description: 'Blur radius (4=subtle, 16=medium, 32=dramatic)' },

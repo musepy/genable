@@ -11,6 +11,7 @@
  */
 
 import { NodeLayer, RenderContext, BaseRenderer } from './baseRenderer';
+import { isAbsolutePositioned, getFlexFallbacks } from '../../utils/LayoutValidator';
 
 /**
  * Renderer for INSTANCE type nodes
@@ -101,7 +102,6 @@ export class InstanceRenderer extends BaseRenderer {
         const parentIsAutoLayout = _context.parentLayoutMode !== undefined && _context.parentLayoutMode !== 'NONE';
         const hSizing = props.layoutSizingHorizontal as 'FIXED' | 'HUG' | 'FILL' || 'HUG';
         const vSizing = props.layoutSizingVertical as 'FIXED' | 'HUG' | 'FILL' || 'HUG';
-        const isAbsoluteInAutoLayout = parentIsAutoLayout && String((dsl.props as any).layoutPositioning || '').toUpperCase() === 'ABSOLUTE';
 
         if (parentIsAutoLayout) {
             if ('layoutSizingHorizontal' in node) {
@@ -111,12 +111,10 @@ export class InstanceRenderer extends BaseRenderer {
                 (node as any).layoutSizingVertical = vSizing;
             }
 
-            // Flex grow/stretch fallbacks (for older parents or complex nesting)
-            if (!isAbsoluteInAutoLayout) {
-                if (_context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') (node as any).layoutGrow = 1;
-                if (_context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') (node as any).layoutGrow = 1;
-                if (_context.parentLayoutMode === 'HORIZONTAL' && vSizing === 'FILL') (node as any).layoutAlign = 'STRETCH';
-                if (_context.parentLayoutMode === 'VERTICAL' && hSizing === 'FILL') (node as any).layoutAlign = 'STRETCH';
+            if (!isAbsolutePositioned(dsl.props)) {
+                const flex = getFlexFallbacks(hSizing, vSizing, _context.parentLayoutMode);
+                if (flex.layoutGrow !== undefined) (node as any).layoutGrow = flex.layoutGrow;
+                if (flex.layoutAlign) (node as any).layoutAlign = flex.layoutAlign;
             }
         } else if ('layoutSizingHorizontal' in node) {
             // Non-AutoLayout parent: Fallback to FIXED

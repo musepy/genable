@@ -8,6 +8,8 @@ injectionType: system
 tools:
   - planDesign
   - generateDesign
+  - renderElement
+  - patchElement
   - inspectDesign
   - createNode
   - setNodeLayout
@@ -39,9 +41,41 @@ generateDesign({nodes: [
 
 This is faster and more reliable than creating nodes one-by-one.
 
-### Node-by-Node (for edits only)
+### NEW: State-Driven Operations (PREFERRED)
 
-Use `createNode` / `setNodeLayout` / `setNodeStyles` only for modifying existing designs or adding single nodes.
+For high-level creation and modification, use `renderElement` and `patchElement`. These avoid atomic loops and are much more token-efficient.
+
+#### renderElement (Create Tree)
+Create a complete component or sub-tree in a single call.
+```json
+renderElement({
+  "parentId": "123:456",
+  "element": {
+    "type": "FRAME",
+    "props": {"name": "Button", "layoutMode": "HORIZONTAL", "padding": 12, "fills": ["#4F46E5"], "cornerRadius": 8},
+    "children": [
+      {"type": "TEXT", "props": {"name": "label", "characters": "Submit", "fills": ["#FFFFFF"]}}
+    ]
+  }
+})
+```
+
+#### patchElement (Modify State)
+Incrementally update an element by merging properties. Preserves children automatically.
+```json
+patchElement({
+  "nodeId": "123:456",
+  "fragment": {"fills": ["#EF4444"], "padding": 16}
+})
+```
+
+### Node-by-Node (LEGACY - use only for single node tweaks)
+
+Avoid using `createNode` / `setNodeLayout` / `setNodeStyles` in loops. Preferred:
+1. `generateDesign` (for complex NEW trees)
+2. `renderElement` (for NEW sub-trees or single complex nodes)
+3. `patchElement` (for UPDATING existing nodes)
+4. `batchOperations` (for executing multiple state-driven calls at once)
 
 ### Key Rules
 - **generateDesign**: First node must have `parent: null` (root). All others reference parent by id.

@@ -62,6 +62,13 @@ export class SettingsService {
       providerName: settings.providerName
     });
   }
+
+  /**
+   * Clear all settings.
+   */
+  async clearSettings(): Promise<void> {
+    await this.repository.clearSettings();
+  }
 }
 
 // Export singleton instance

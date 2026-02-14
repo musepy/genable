@@ -48,6 +48,24 @@ export interface PromptDependencies {
 
     // [6] Agent Behavior Config (from agentBehaviorConfig.ts)
     behaviorConfig?: AgentBehaviorConfig;
+
+    // [7] Runtime Operation Log (Incremental Improvement #2)
+    operationLog?: Array<{
+        opId?: string;
+        action: string;
+        reason?: string;
+        success: boolean;
+        timestamp: number;
+        error?: string;
+        diffInfo?: string[];
+    }>;
+
+    // [8] Active Step (Incremental Improvement #4)
+    activeStep?: {
+        stepId: string;
+        title: string;
+        description?: string;
+    } | null;
 }
 
 export interface Intent {

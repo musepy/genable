@@ -166,4 +166,85 @@ describe('batchOperations - Hierarchical Transactions', () => {
             expect.objectContaining({ fills: expect.any(Array) })
         );
     });
+
+    it('fails createNode when explicit parent cannot be resolved', async () => {
+        (nodeLayoutService.resolveParent as any).mockResolvedValueOnce(null);
+
+        await handleToolCall({
+            toolName: 'batchOperations',
+            parameters: {
+                operations: [
+                    {
+                        opId: 'child',
+                        action: 'createNode',
+                        params: {
+                            type: 'FRAME',
+                            name: 'Child',
+                            parentId: 'missing-parent'
+                        }
+                    }
+                ]
+            },
+            requestId: 'test-req-parent-missing'
+        });
+
+        expect(handleUnifiedRender).not.toHaveBeenCalled();
+
+        const toolResultCall = (emit as any).mock.calls.find((call: any[]) => call[0] === 'TOOL_RESULT');
+        const payload = toolResultCall?.[1];
+        expect(payload.response.success).toBe(false);
+        expect(payload.response.error.code).toBe('PARTIAL_FAILURE');
+        expect(payload.response.data.results[0].error.code).toBe('PARENT_NOT_FOUND');
+    });
+
+    it('rolls back created nodes when batch has partial failure', async () => {
+        const createdNodeId = '100:9';
+        const createdNode = {
+            id: createdNodeId,
+            type: 'FRAME',
+            name: 'Transient Node',
+            removed: false,
+            remove: vi.fn(function (this: any) {
+                this.removed = true;
+            })
+        };
+
+        (handleUnifiedRender as any).mockResolvedValueOnce({ id: createdNodeId, name: 'Transient Node' });
+        (mockFigma.getNodeByIdAsync as any).mockImplementation(async (id: string) => {
+            if (id === createdNodeId) return createdNode;
+            return null;
+        });
+        (nodeLayoutService.applyLayout as any).mockResolvedValueOnce({
+            success: false,
+            error: { code: 'APPLY_ERROR', message: 'forced failure' }
+        });
+
+        await handleToolCall({
+            toolName: 'batchOperations',
+            parameters: {
+                operations: [
+                    {
+                        opId: 'create-ok',
+                        action: 'createNode',
+                        params: { type: 'FRAME', name: 'Transient Node' }
+                    },
+                    {
+                        opId: 'bad-op',
+                        action: 'setNodeLayout',
+                        params: { nodeRef: 'create-ok', layoutMode: 'HORIZONTAL' }
+                    }
+                ]
+            },
+            requestId: 'test-req-rollback'
+        });
+
+        const toolResultCall = (emit as any).mock.calls.find((call: any[]) => call[0] === 'TOOL_RESULT');
+        const payload = toolResultCall?.[1];
+        expect(payload.response.success).toBe(false);
+        expect(payload.response.error.code).toBe('PARTIAL_FAILURE');
+        expect(payload.response.data.rollback).toEqual(
+            expect.objectContaining({ attempted: 1, removed: 1 })
+        );
+        expect(payload.response.data.idMap).toEqual({});
+    });
 });

@@ -27,7 +27,10 @@ export class IconRenderer extends BaseRenderer {
 
   protected async createNode(dsl: NodeLayer): Promise<SceneNode | null> {
     const props = dsl.props as { iconName?: string; width?: number; height?: number; fills?: string[] };
-    const { iconName, width = 24, height = 24 } = props;
+    const { iconName, width: rawW = 24, height: rawH = 24 } = props;
+    const size = Math.max(rawW, rawH); // Force square
+    const width = size;
+    const height = size;
 
     if (!iconName) {
       console.warn('[IconRenderer] Missing iconName, creating placeholder');

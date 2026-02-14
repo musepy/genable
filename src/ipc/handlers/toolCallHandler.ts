@@ -18,12 +18,35 @@ import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVaria
 import { validateVisibility } from '../../engine/validation/visibilityValidator';
 import { patchCache } from '../../engine/validation/patchCache';
 import { TreeReconstructor } from '../../engine/figma-adapter/treeReconstructor';
+import { diffIntendedVsActual } from '../../engine/validation/mutationDiff';
+import { shouldSkipIdempotent, completeStep } from '../helpers/idempotentApply';
+import {
+  BatchExecutor,
+  BatchOpResult,
+  ActionContext,
+  resolveNodeId as batchResolveNodeId,
+  resolveParentId as batchResolveParentId
+} from './batchExecutor';
+import { deepMerge } from '../../utils/objectUtils';
 
 export interface ToolCallData {
   toolName: string;
   parameters: any;
   context?: ToolContext;
   requestId: string;
+}
+
+/** Properties that flatProps CANNOT override (safety-critical mappings) */
+const PROTECTED_KEYS = new Set(['type']);
+
+function sanitizeFlatProps(flatProps: Record<string, any> | undefined): Record<string, any> {
+  if (!flatProps) return {};
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(flatProps)) {
+    if (PROTECTED_KEYS.has(key)) continue;
+    result[key] = value;
+  }
+  return result;
 }
 
 /**
@@ -121,7 +144,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           props: { 
             name: name || 'unnamed', 
             characters: characters || '',
-            ...(flatProps || {})
+            ...sanitizeFlatProps(flatProps)
           },
           designSystemId: context?.designSystemId || 'vanilla',
           streamSessionId: 'agent-' + Date.now(),
@@ -161,9 +184,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           } 
         };
         
-        if (node && parameters.stepId) {
-          planState.completeTask(parameters.stepId);
-        }
+        if (node) completeStep(parameters.stepId);
         break;
       }
 
@@ -172,21 +193,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
       case 'setNodeLayout': {
         const { nodeId, stepId: _stepId, ...layoutData } = parameters;
-        if (!patchCache.shouldApply(nodeId, 'layout', layoutData)) {
-          // Idempotency: Return clean success
-          response = { success: true, data: { nodeId } };
-          if (parameters.stepId) {
-            planState.completeTask(parameters.stepId);
-          }
-          break;
-        }
+        const layoutSkip = shouldSkipIdempotent(nodeId, 'layout', layoutData, parameters.stepId);
+        if (layoutSkip.skip) { response = layoutSkip.response; break; }
 
         response = await nodeLayoutService.applyLayout(nodeId, layoutData);
         if (response.success) {
           response.data = { ...response.data, applied: layoutData };
-          if (parameters.stepId) {
-            planState.completeTask(parameters.stepId);
-          }
+          completeStep(parameters.stepId);
         }
         break;
       }
@@ -196,23 +209,15 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
       case 'setNodeStyles': {
         const { nodeId, fills, strokes, strokeWeight, cornerRadius, opacity } = parameters;
-        
+
         const stylesData = { fills, strokes, strokeWeight, cornerRadius, opacity };
-        if (!patchCache.shouldApply(nodeId, 'styles', stylesData)) {
-          // Idempotency: Return clean success
-          response = { success: true, data: { nodeId } };
-          if (parameters.stepId) {
-            planState.completeTask(parameters.stepId);
-          }
-          break;
-        }
+        const stylesSkip = shouldSkipIdempotent(nodeId, 'styles', stylesData, parameters.stepId);
+        if (stylesSkip.skip) { response = stylesSkip.response; break; }
 
         response = await nodeLayoutService.applyStyles(nodeId, stylesData);
         if (response.success) {
           response.data = { ...response.data, applied: stylesData };
-          if (parameters.stepId) {
-            planState.completeTask(parameters.stepId);
-          }
+          completeStep(parameters.stepId);
         }
         break;
       }
@@ -223,14 +228,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       case 'updateNodeProperties': {
         const { nodeId, properties } = parameters;
 
-        if (!patchCache.shouldApply(nodeId, 'properties', properties)) {
-          // Idempotency: Return clean success
-          response = { success: true, data: { nodeId } };
-          if (parameters.stepId) {
-            planState.completeTask(parameters.stepId);
-          }
-          break;
-        }
+        const propsSkip = shouldSkipIdempotent(nodeId, 'properties', properties, parameters.stepId);
+        if (propsSkip.skip) { response = propsSkip.response; break; }
 
         const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
         
@@ -269,9 +268,137 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           } 
         };
 
-        if (response.success && parameters.stepId) {
-          planState.completeTask(parameters.stepId);
+        if (response.success) completeStep(parameters.stepId);
+        break;
+      }
+
+      // ==========================================
+      // 5.5. State-Driven / High-Level Tools
+      // ==========================================
+      case 'renderSubtree': {
+        const { nodes, parentId, stepId } = parameters;
+
+        if (!Array.isArray(nodes) || nodes.length === 0) {
+          response = {
+            success: false,
+            error: { code: 'INVALID_INPUT', message: 'renderSubtree requires a non-empty nodes array' }
+          };
+          break;
         }
+
+        // Reconstruct flat list -> tree
+        const reconstructor = new TreeReconstructor();
+        const { root, errors, warnings } = reconstructor.reconstruct(nodes);
+
+        if (!root) {
+          response = {
+            success: false,
+            error: { code: 'RECONSTRUCTION_FAILED', message: errors.join('; ') || 'Failed to reconstruct subtree' }
+          };
+          break;
+        }
+
+        const explicitParent = await nodeLayoutService.resolveParent(parentId);
+
+        const node = await handleUnifiedRender({
+          ...root,
+          designSystemId: context?.designSystemId || 'vanilla',
+          streamSessionId: 'agent-subtree-' + Date.now(),
+          meta: { traceId: 'agent-tool' }
+        }, false, explicitParent);
+
+        let visibilityWarnings: any[] = [];
+        let autoFixed: string[] = [];
+
+        if (node) {
+          // Validate strict visibility
+          const visResult = validateVisibility(node);
+          if (!visResult.valid) {
+            visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
+            visibilityWarnings = visResult.issues.filter(i => i.severity === 'warning');
+            autoFixed = visResult.autoFixed;
+          }
+        }
+
+        response = {
+          success: !!node,
+          data: {
+            nodeId: node?.id,
+            name: node?.name,
+            type: node?.type,
+            reconstructionWarnings: warnings.length > 0 ? warnings : undefined,
+            visibilityWarnings: visibilityWarnings.length > 0 ? visibilityWarnings : undefined,
+            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined
+          }
+        };
+
+        if (node) completeStep(stepId);
+        break;
+      }
+
+      case 'patchNode': {
+        const { nodeId, props, stepId } = parameters;
+
+        if (!nodeId || !props || Object.keys(props).length === 0) {
+          response = {
+            success: false,
+            error: { code: 'INVALID_INPUT', message: 'patchNode requires nodeId and non-empty props.' }
+          };
+          break;
+        }
+
+        const skipCheck = shouldSkipIdempotent(nodeId, 'properties', props, stepId);
+        if (skipCheck.skip) {
+          response = skipCheck.response;
+          break;
+        }
+
+        const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
+        if (!node) {
+          response = {
+            success: false,
+            error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` }
+          };
+          break;
+        }
+
+        const currentDSL = NodeSerializer.serialize(node);
+        const mergedProps = deepMerge(currentDSL.props || {}, props);
+
+        const result = await handleUnifiedRender({
+          ...currentDSL,
+          props: mergedProps,
+          __modifyMode: 'UPDATE',
+          __modifyTargetId: nodeId,
+          designSystemId: context?.designSystemId || 'vanilla',
+          streamSessionId: 'agent-patch-node-' + Date.now(),
+          meta: { traceId: 'agent-tool' }
+        }, false, node.parent as any);
+
+        let visibilityWarnings: any[] = [];
+        let autoFixed: string[] = [];
+
+        if (result) {
+          const visResult = validateVisibility(result);
+          if (!visResult.valid) {
+            visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
+            visibilityWarnings = visResult.issues.filter(i => i.severity === 'warning');
+            autoFixed = visResult.autoFixed;
+          }
+        }
+
+        response = {
+          success: !!result,
+          data: {
+            nodeId: nodeId,
+            modified: true,
+            propsUpdated: Object.keys(props),
+            visibilityWarnings: visibilityWarnings.length > 0 ? visibilityWarnings : undefined,
+            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined
+          }
+        };
+
+        if (response.success) completeStep(stepId);
         break;
       }
 
@@ -282,6 +409,11 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         const { iconName, size, color, parentId, props: flatProps } = parameters;
         const explicitParent = await nodeLayoutService.resolveParent(parentId);
         
+        const sanitized = sanitizeFlatProps(flatProps);
+        // Icon size is controlled by 'size' parameter, don't let flatProps override width/height
+        delete sanitized.width;
+        delete sanitized.height;
+
         const node = await handleUnifiedRender({
           type: 'ICON',
           props: { 
@@ -289,7 +421,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             width: size, 
             height: size, 
             fills: color ? [color] : undefined,
-            ...(flatProps || {})
+            ...sanitized
           },
           designSystemId: context?.designSystemId || 'vanilla',
           streamSessionId: 'agent-' + Date.now(),
@@ -307,10 +439,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         }
         
         response = { success: !!node, data: { nodeId: node?.id } };
-
-        if (node && parameters.stepId) {
-          planState.completeTask(parameters.stepId);
-        }
+        if (node) completeStep(parameters.stepId);
         break;
       }
 
@@ -425,596 +554,59 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           break;
         }
 
-        const allowedActions = new Set([
-          'createNode',
-          'setNodeLayout',
-          'setNodeStyles',
-          'updateNodeProperties',
-          'createIcon',
-          'deleteNode',
-          'applyDesignPatch'
-        ]);
-
-        const results: any[] = [];
-        const idMap: Record<string, string> = {};
-        const opStatus = new Map<string, { success: boolean; error?: { code: string; message: string } }>();
-        const seenOpIds = new Set<string>();
-
-        const recordResult = (opId: string | undefined, result: any) => {
-          results.push(result);
-          if (opId) {
-            opStatus.set(opId, { success: result.success, error: result.error });
+        const executor = new BatchExecutor({
+          allowedActions: new Set([
+            'createNode', 'setNodeLayout', 'setNodeStyles',
+            'updateNodeProperties', 'createIcon', 'deleteNode', 'applyDesignPatch',
+            'renderSubtree', 'patchNode'
+          ]),
+          onError,
+          executeAction: (action, params, ctx) =>
+            executeBatchAction(action, params, ctx, context),
+          validatePreconditions,
+          captureSnapshot: async (nodeId) => {
+            const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
+            return node ? NodeSerializer.serialize(node) : undefined;
+          },
+          performDiff: async (opId, action, params, nodeId) => {
+            const finalNode = await figma.getNodeByIdAsync(nodeId);
+            if (!finalNode) return {};
+            const serialized = NodeSerializer.serialize(finalNode as SceneNode);
+            const diff = diffIntendedVsActual(params, serialized);
+            if (!diff.hasDiscrepancy) return {};
+            console.log(`[batchOps] 🔍 Diff detected for op '${opId}':`, diff.messages);
+            return {
+              diff: diff.actionable.length > 0 ? diff.actionable : undefined,
+              diffInfo: diff.informational.length > 0
+                ? diff.informational.map((msg: string) => `[Auto-corrected] ${msg}`)
+                : undefined
+            };
           }
-        };
+        });
 
-        const dependencyError = (depId: string, status?: { success: boolean; error?: { code: string; message: string } }) => {
-          const detail = status?.error?.message ? ` ${status.error.message}` : '';
-          const message = status
-            ? `Dependency '${depId}' failed.${detail}`
-            : `Dependency '${depId}' was not executed before this operation.`;
-          const code = onError === 'skip-dependents' ? 'DEPENDENCY_SKIP' : 'MISSING_REF';
-          return { code, message };
-        };
-
-        const shouldSkipForDependencies = (deps: Set<string>) => {
-          for (const depId of deps) {
-            const status = opStatus.get(depId);
-            if (!status) return dependencyError(depId);
-            if (!status.success) return dependencyError(depId, status);
-          }
-          return null;
-        };
-
-        const addRefDependency = (deps: Set<string>, ref: any) => {
-          if (typeof ref === 'string' && ref !== 'root') {
-            deps.add(ref);
-          }
-        };
-
-        const resolveNodeId = (params: any): { nodeId?: string; error?: { code: string; message: string } } => {
-          if (params?.nodeId) return { nodeId: params.nodeId };
-          if (params?.nodeRef) {
-            const nodeId = idMap[params.nodeRef];
-            if (!nodeId) {
-              return { error: { code: 'MISSING_REF', message: `nodeRef '${params.nodeRef}' could not be resolved to a nodeId.` } };
-            }
-            return { nodeId };
-          }
-          return { error: { code: 'MISSING_REF', message: 'nodeId or nodeRef is required.' } };
-        };
-
-        const resolveParentId = (params: any): { parentId?: string; error?: { code: string; message: string } } => {
-          if (params?.parentId) return { parentId: params.parentId };
-          if (!params?.parentRef || params.parentRef === 'root') return { parentId: undefined };
-          const parentId = idMap[params.parentRef];
-          if (!parentId) {
-            return { error: { code: 'MISSING_REF', message: `parentRef '${params.parentRef}' could not be resolved to a nodeId.` } };
-          }
-          return { parentId };
-        };
-
-          const executeSingleOperation = async (operation: any): Promise<any> => {
-            const opId = operation?.opId;
-            const action = operation?.action;
-            const params = operation?.params || {};
-
-            if (!opId || typeof opId !== 'string') {
-                return {
-                    opId,
-                    action,
-                    success: false,
-                    error: { code: 'INVALID_OPERATION', message: 'opId is required for each operation.' }
-                };
-            }
-
-            if (seenOpIds.has(opId)) {
-                return {
-                    opId,
-                    action,
-                    success: false,
-                    error: { code: 'INVALID_OPERATION', message: `Duplicate opId '${opId}' in batch.` }
-                };
-            }
-            seenOpIds.add(opId);
-
-            if (!action || typeof action !== 'string' || !allowedActions.has(action)) {
-                return {
-                    opId,
-                    action,
-                    success: false,
-                    error: { code: 'INVALID_ACTION', message: `Unsupported action '${action}'.` }
-                };
-            }
-
-            const deps = new Set<string>();
-            if (Array.isArray(operation?.dependsOn)) {
-                for (const dep of operation.dependsOn) {
-                    if (typeof dep === 'string') deps.add(dep);
-                }
-            }
-
-            if (action === 'createNode' || action === 'createIcon') {
-                addRefDependency(deps, params?.parentRef);
-            } else if (action === 'applyDesignPatch') {
-                const patches = Array.isArray(params?.patches) ? params.patches : [];
-                for (const patch of patches) {
-                    addRefDependency(deps, patch?.nodeRef);
-                }
-            } else {
-                addRefDependency(deps, params?.nodeRef);
-            }
-
-            const dependencyIssue = shouldSkipForDependencies(deps);
-            if (dependencyIssue) {
-                return {
-                    opId,
-                    action,
-                    success: false,
-                    skipped: onError === 'skip-dependents',
-                    error: dependencyIssue
-                };
-            }
-
-            let opResult: any = { opId, action, success: false };
-
-            try {
-                switch (action) {
-                    case 'createNode': {
-                        const { type, name, characters, children, props: flatProps } = params;
-                        if (!type) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'INVALID_OPERATION', message: 'createNode requires type.' }
-                            };
-                            break;
-                        }
-
-                        const parentResolution = resolveParentId(params);
-                        if (parentResolution.error) {
-                            opResult = { opId, action, success: false, error: parentResolution.error };
-                            break;
-                        }
-
-                        const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
-                        // Detect silent parent resolution failures that cause node leaking to page root
-                        if (!explicitParent && parentResolution.parentId) {
-                            console.warn(`[batchOps] ⚠️ Parent '${parentResolution.parentId}' not found for op '${opId}' - node will leak to page root`);
-                        } else if (!explicitParent && !params.parentRef && !params.parentId) {
-                            console.warn(`[batchOps] ⚠️ No parent specified for op '${opId}' (${name || type}) - node placed at page root`);
-                        }
-                        const node = await handleUnifiedRender({
-                            type,
-                            props: {
-                                name: name || 'unnamed',
-                                characters: characters || '',
-                                ...(flatProps || {})
-                            },
-                            designSystemId: context?.designSystemId || 'vanilla',
-                            streamSessionId: `agent-batch-${Date.now()}-${opId}`,
-                            meta: { traceId: 'agent-batch-tool' }
-                        }, false, explicitParent);
-
-                        if (!node) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'APPLY_ERROR', message: 'Failed to create node.' }
-                            };
-                            break;
-                        }
-
-                        // Register ID for virtual mapping
-                        idMap[opId] = node.id;
-                        opStatus.set(opId, { success: true });
-
-                        // 🟢 P3: Inline Layout/Styles support in batch
-                        if (params.layout) {
-                          await nodeLayoutService.applyLayout(node.id, params.layout);
-                        }
-                        if (params.styles) {
-                          await nodeLayoutService.applyStyles(node.id, params.styles);
-                        }
-
-                        const visResult = validateVisibility(node);
-                        if (!visResult.valid) {
-                            visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
-                        }
-
-                        const childResults: any[] = [];
-                        if (Array.isArray(children)) {
-                            for (const childOp of children) {
-                                // Inject parentRef only if not already specified
-                                const childParams = childOp.params || {};
-                                const hasExplicitParent = childParams.parentRef || childParams.parentId;
-                                const childResult = await executeSingleOperation({
-                                    ...childOp,
-                                    params: {
-                                      ...childParams,
-                                      ...(!hasExplicitParent && { parentRef: opId })
-                                    }
-                                });
-                                childResults.push(childResult);
-                            }
-                        }
-
-                        opResult = {
-                            opId,
-                            action,
-                            success: true,
-                            nodeId: node.id,
-                            name: node.name,
-                            children: childResults.length > 0 ? childResults : undefined,
-                            visibilityWarnings: visResult.issues.filter(i => i.severity === 'warning').length > 0 ? visResult.issues.filter(i => i.severity === 'warning') : undefined,
-                            visibilityAutoFixed: visResult.autoFixed.length > 0 ? visResult.autoFixed : undefined
-                        };
-                        break;
-                    }
-
-                    case 'createIcon': {
-                        const { iconName, size, color } = params;
-                        if (!iconName) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'INVALID_OPERATION', message: 'createIcon requires iconName.' }
-                            };
-                            break;
-                        }
-
-                        const parentResolution = resolveParentId(params);
-                        if (parentResolution.error) {
-                            opResult = { opId, action, success: false, error: parentResolution.error };
-                            break;
-                        }
-
-                        const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
-                        if (!explicitParent && parentResolution.parentId) {
-                            console.warn(`[batchOps] ⚠️ Parent '${parentResolution.parentId}' not found for icon op '${opId}' - node will leak to page root`);
-                        }
-                        const node = await handleUnifiedRender({
-                            type: 'ICON',
-                            props: {
-                                iconName,
-                                width: size,
-                                height: size,
-                                fills: color ? [color] : undefined
-                            },
-                            designSystemId: context?.designSystemId || 'vanilla',
-                            streamSessionId: `agent-batch-${Date.now()}-${opId}`,
-                            meta: { traceId: 'agent-batch-tool' }
-                        }, false, explicitParent);
-
-                        if (!node) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'APPLY_ERROR', message: 'Failed to create icon.' }
-                            };
-                            break;
-                        }
-
-                        idMap[opId] = node.id;
-                        opStatus.set(opId, { success: true });
-
-                        // 🟢 P3: Inline Layout/Styles support for Icon in batch
-                        if (params.layout) {
-                          await nodeLayoutService.applyLayout(node.id, params.layout);
-                        }
-                        if (params.styles) {
-                          await nodeLayoutService.applyStyles(node.id, params.styles);
-                        }
-
-                        opResult = { opId, action, success: true, nodeId: node.id, name: node.name || iconName };
-                        break;
-                    }
-
-                     case 'setNodeLayout': {
-                        const resolved = resolveNodeId(params);
-                        if (resolved.error) {
-                            opResult = { opId, action, success: false, error: resolved.error };
-                            break;
-                        }
-
-                        const { nodeId: _nodeId, nodeRef: _nodeRef, stepId: _stepId, ...layoutData } = params;
-                        
-                        if (!patchCache.shouldApply(resolved.nodeId!, 'layout', layoutData)) {
-                            // Idempotency: Return clean success to the agent
-                            opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                            if (params?.stepId) {
-                                planState.completeTask(params.stepId);
-                            }
-                            break;
-                        }
-
-                        const layoutResponse = await nodeLayoutService.applyLayout(resolved.nodeId!, layoutData);
-
-                        if (!layoutResponse.success) {
-                            opResult = { opId, action, success: false, nodeId: resolved.nodeId, error: layoutResponse.error };
-                        } else {
-                            opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                        }
-                        break;
-                    }
-
-                    case 'setNodeStyles': {
-                        const resolved = resolveNodeId(params);
-                        if (resolved.error) {
-                            opResult = { opId, action, success: false, error: resolved.error };
-                            break;
-                        }
-
-                        const { fills, strokes, strokeWeight, cornerRadius, opacity } = params;
-                        const stylesData = { fills, strokes, strokeWeight, cornerRadius, opacity };
-
-                        if (!patchCache.shouldApply(resolved.nodeId!, 'styles', stylesData)) {
-                            // Idempotency: Return clean success to the agent
-                            opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                            if (params?.stepId) {
-                                planState.completeTask(params.stepId);
-                            }
-                            break;
-                        }
-
-                        const stylesResponse = await nodeLayoutService.applyStyles(resolved.nodeId!, stylesData);
-
-                        if (!stylesResponse.success) {
-                            opResult = { opId, action, success: false, nodeId: resolved.nodeId, error: stylesResponse.error };
-                        } else {
-                            opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                        }
-                        break;
-                    }
-
-                     case 'updateNodeProperties': {
-                        const resolved = resolveNodeId(params);
-                        if (resolved.error) {
-                            opResult = { opId, action, success: false, error: resolved.error };
-                            break;
-                        }
-
-                        const { properties } = params;
-                        if (!properties) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'INVALID_OPERATION', message: 'updateNodeProperties requires properties.' }
-                            };
-                            break;
-                        }
-
-                        if (!patchCache.shouldApply(resolved.nodeId!, 'properties', properties)) {
-                            // Idempotency: Return clean success to the agent
-                            opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                            if (params?.stepId) {
-                                planState.completeTask(params.stepId);
-                            }
-                            break;
-                        }
-
-                        const node = await figma.getNodeByIdAsync(resolved.nodeId!) as SceneNode;
-                        if (!node) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'NODE_NOT_FOUND', message: `Node ${resolved.nodeId} not found.` }
-                            };
-                            break;
-                        }
-
-                        const serialized = NodeSerializer.serialize(node);
-                        const updatedDSL = {
-                            ...serialized,
-                            props: { ...(serialized.props || {}), ...properties }
-                        };
-
-                        const result = await handleUnifiedRender({
-                            ...updatedDSL,
-                            __modifyMode: 'UPDATE',
-                            __modifyTargetId: resolved.nodeId,
-                            designSystemId: context?.designSystemId || 'vanilla',
-                            streamSessionId: `agent-batch-update-${Date.now()}-${opId}`,
-                            meta: { traceId: 'agent-batch-tool' }
-                        }, false, node.parent as any);
-
-                        if (!result) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                nodeId: resolved.nodeId,
-                                error: { code: 'APPLY_ERROR', message: 'Failed to update node properties.' }
-                            };
-                            break;
-                        }
-
-                        opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                        break;
-                    }
-
-                    case 'deleteNode': {
-                        const resolved = resolveNodeId(params);
-                        if (resolved.error) {
-                            opResult = { opId, action, success: false, error: resolved.error };
-                            break;
-                        }
-
-                        const deleteResponse = await nodeLayoutService.deleteNode(resolved.nodeId!);
-                        if (!deleteResponse.success) {
-                            opResult = { opId, action, success: false, nodeId: resolved.nodeId, error: deleteResponse.error };
-                        } else {
-                            opResult = { opId, action, success: true, nodeId: resolved.nodeId };
-                        }
-                        break;
-                    }
-
-                    case 'applyDesignPatch': {
-                        const patches = Array.isArray(params?.patches) ? params.patches : [];
-                        if (patches.length === 0) {
-                            opResult = {
-                                opId,
-                                action,
-                                success: false,
-                                error: { code: 'INVALID_OPERATION', message: 'applyDesignPatch requires patches array.' }
-                            };
-                            break;
-                        }
-
-                        const resolvedPatches = [];
-                        let patchError: { code: string; message: string } | null = null;
-                        let skippedCount = 0;
-
-                        for (const patch of patches) {
-                            const patchNodeId = patch?.nodeId || (patch?.nodeRef ? idMap[patch.nodeRef] : undefined);
-                            if (!patchNodeId) {
-                                patchError = {
-                                    code: 'MISSING_REF',
-                                    message: `patch nodeRef '${patch?.nodeRef}' could not be resolved to a nodeId.`
-                                };
-                                break;
-                            }
-                            resolvedPatches.push({ ...patch, nodeId: patchNodeId });
-                        }
-
-                        if (patchError) {
-                            opResult = { opId, action, success: false, error: patchError };
-                            break;
-                        }
-
-                        for (const patch of resolvedPatches) {
-                            const { nodeId, layout, styles, properties: legacyProps, props: newProps } = patch;
-                            const properties = newProps || legacyProps;
-                            let nodeSkipped = true;
-
-                            if (layout) {
-                                if (patchCache.shouldApply(nodeId, 'layout', layout)) {
-                                    nodeSkipped = false;
-                                    const layoutResult = await nodeLayoutService.applyLayout(nodeId, layout);
-                                    if (!layoutResult.success && !patchError) {
-                                        patchError = layoutResult.error || { code: 'APPLY_ERROR', message: 'Failed to apply layout patch.' };
-                                    }
-                                }
-                            }
-                            if (styles) {
-                                if (patchCache.shouldApply(nodeId, 'styles', styles)) {
-                                    nodeSkipped = false;
-                                    const stylesResult = await nodeLayoutService.applyStyles(nodeId, styles);
-                                    if (!stylesResult.success && !patchError) {
-                                        patchError = stylesResult.error || { code: 'APPLY_ERROR', message: 'Failed to apply style patch.' };
-                                    }
-                                }
-                            }
-                            if (properties) {
-                                if (patchCache.shouldApply(nodeId, 'properties', properties)) {
-                                    nodeSkipped = false;
-                                    const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
-                                    if (!node) {
-                                        patchError = { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` };
-                                    } else {
-                                        const serialized = NodeSerializer.serialize(node);
-                                        try {
-                                            await handleUnifiedRender({
-                                                ...serialized,
-                                                props: { ...(serialized.props || {}), ...properties },
-                                                __modifyMode: 'UPDATE',
-                                                __modifyTargetId: nodeId,
-                                            }, false, node.parent as any);
-                                        } catch (e: any) {
-                                            if (!patchError) {
-                                                patchError = { code: 'APPLY_ERROR', message: e.message };
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (nodeSkipped && !patch.layout && !patch.styles && !patch.properties) {
-                                // Empty or already applied
-                            } else if (nodeSkipped) {
-                                skippedCount++;
-                            }
-                        }
-
-                        if (patchError) {
-                            opResult = { opId, action, success: false, error: patchError };
-                        } else {
-                            opResult = {
-                                opId,
-                                action,
-                                success: true,
-                                patched: resolvedPatches.length,
-                                skipped: skippedCount > 0 ? skippedCount : undefined,
-                                message: skippedCount > 0 ? `Skipped ${skippedCount} redundant patches.` : undefined
-                            };
-                        }
-                        break;
-                    }
-                }
-            } catch (e: any) {
-                opResult = {
-                    opId,
-                    action,
-                    success: false,
-                    error: { code: 'APPLY_ERROR', message: e.message }
-                };
-            }
-
-            if (opResult?.success && opResult?.nodeId && action !== 'deleteNode') {
-                if (!idMap[opId]) idMap[opId] = opResult.nodeId;
-            }
-
-            if (opResult?.success && params?.stepId) {
-                planState.completeTask(params.stepId);
-            }
-
-            recordResult(opId, opResult);
-            return opResult;
-        };
-
-        for (const operation of operations) {
-            await executeSingleOperation(operation);
-        }
-
-        const layoutSnapshots: Record<string, any> = {};
-        for (const [opId, nodeId] of Object.entries(idMap)) {
-            try {
-                const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
-                if (node) {
-                    layoutSnapshots[opId] = NodeSerializer.serialize(node);
-                }
-            } catch (e) {
-                console.warn(`[Agent] Failed to capture snapshot for ${opId} (${nodeId})`, e);
-            }
-        }
-
-        const hasFailures = results.some(r => !r.success);
-        response = hasFailures
-            ? {
-                success: false,
-                data: { results, idMap, layoutSnapshots },
-                error: { code: 'PARTIAL_FAILURE', message: 'One or more operations failed.' }
-            }
-            : { success: true, data: { results, idMap, layoutSnapshots } };
-
-        if (response.success && parameters.stepId) {
-            planState.completeTask(parameters.stepId);
-        }
+        response = await executor.execute(operations, { 
+          stepId: parameters.stepId, 
+          outputPolicy: 'DISTILLED' 
+        });
         break;
       }
 
       case 'applyDesignPatch': {
+        // Validate preconditions for all patches before executing any
+        const patchValidation = await validatePreconditions('applyDesignPatch', parameters);
+        if (!patchValidation.valid) {
+          response = { success: false, error: { code: 'PRECONDITION_FAILED', message: patchValidation.error || 'Precondition check failed.' } };
+          break;
+        }
+
         const { patches } = parameters;
         const results = [];
         let totalSkipped = 0;
 
         for (const patch of patches) {
-          const { nodeId, layout, styles, properties } = patch;
+          const { nodeId, layout, styles, properties: legacyProperties, textAndFont } = patch;
+          const properties = textAndFont || legacyProperties;
+          
           const patchSummary: any = { nodeId, applied: {} };
           let nodeSkipped = true;
           
@@ -1040,7 +632,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
                 const serialized = NodeSerializer.serialize(node);
                 await handleUnifiedRender({
                   ...serialized,
-                  props: { ...(serialized.props || {}), ...properties },
+                  props: deepMerge(serialized.props || {}, sanitizeFlatProps(properties)),
                   __modifyMode: 'UPDATE',
                   __modifyTargetId: nodeId,
                 }, false, node.parent as any);
@@ -1262,6 +854,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           success: false,
           error: { code: 'UNKNOWN_TOOL', message: `Tool '${toolName}' not found in main registry.` }
         };
+        break;
     }
   } catch (e: any) {
     console.error(`[Agent] Tool Execution Error (${toolName}):`, e);
@@ -1271,5 +864,491 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
     };
   }
 
-  emit<ToolResultHandler>('TOOL_RESULT', { requestId, response });
+  emit<ToolResultHandler>('TOOL_RESULT', { requestId, response: response! });
+}
+
+/**
+ * Execute a single batch action. Delegates Figma API calls for each action type.
+ * Used as the `executeAction` callback for BatchExecutor.
+ */
+async function executeBatchAction(
+  action: string,
+  params: any,
+  ctx: ActionContext,
+  toolContext?: ToolContext
+): Promise<BatchOpResult> {
+  switch (action) {
+    case 'createNode': {
+      const { type, name, characters, children, props: flatProps } = params;
+      if (!type) {
+        return { success: false, error: { code: 'INVALID_OPERATION', message: 'createNode requires type.' } };
+      }
+
+      const parentResolution = batchResolveParentId(params, ctx.idMap);
+      if (parentResolution.error) {
+        return { success: false, error: parentResolution.error };
+      }
+
+      const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
+      if (!explicitParent && parentResolution.parentId) {
+        return {
+          success: false,
+          error: {
+            code: 'PARENT_NOT_FOUND',
+            message: `Parent '${parentResolution.parentId}' not found. Aborting createNode to prevent page-root leakage.`
+          }
+        };
+      } else if (!explicitParent && !params.parentRef && !params.parentId) {
+        console.warn(`[batchOps] ⚠️ No parent specified for '${name || type}' - node placed at page root`);
+      }
+
+      const node = await handleUnifiedRender({
+        type,
+        props: {
+          name: name || 'unnamed',
+          characters: characters || '',
+          ...sanitizeFlatProps(flatProps)
+        },
+        designSystemId: toolContext?.designSystemId || 'vanilla',
+        streamSessionId: `agent-batch-${Date.now()}`,
+        meta: { traceId: 'agent-batch-tool' }
+      }, false, explicitParent);
+
+      if (!node) {
+        return { success: false, error: { code: 'APPLY_ERROR', message: 'Failed to create node.' } };
+      }
+
+      // Register in idMap via callback
+      ctx.registerCreated(params._opId || '', node.id);
+
+      if (params.layout) await nodeLayoutService.applyLayout(node.id, params.layout);
+      if (params.styles) await nodeLayoutService.applyStyles(node.id, params.styles);
+
+      const visResult = validateVisibility(node);
+      if (!visResult.valid) {
+        visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
+      }
+
+      // Process inline children
+      const childResults: BatchOpResult[] = [];
+      if (Array.isArray(children)) {
+        for (const childOp of children) {
+          const childParams = childOp.params || {};
+          const hasExplicitParent = childParams.parentRef || childParams.parentId;
+          const childResult = await ctx.executeChild({
+            ...childOp,
+            params: {
+              ...childParams,
+              ...(!hasExplicitParent && { parentRef: params._opId })
+            }
+          });
+          childResults.push(childResult);
+        }
+      }
+
+        return {
+        success: true,
+        nodeId: node.id,
+        name: node.name,
+        children: childResults.length > 0 ? childResults : undefined,
+        visibilityWarnings: visResult.issues.filter(i => i.severity === 'warning').length > 0
+          ? visResult.issues.filter(i => i.severity === 'warning')
+          : undefined,
+        visibilityAutoFixed: visResult.autoFixed.length > 0 ? visResult.autoFixed : undefined
+      };
+    }
+
+    case 'renderSubtree': {
+      const { nodes } = params;
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        return { success: false, error: { code: 'INVALID_INPUT', message: 'renderSubtree requires non-empty nodes array.' } };
+      }
+
+      // Reconstruct flat list -> tree
+      const reconstructor = new TreeReconstructor();
+      const { root, errors, warnings } = reconstructor.reconstruct(nodes);
+
+      if (!root) {
+        return { success: false, error: { code: 'RECONSTRUCTION_FAILED', message: errors.join('; ') } };
+      }
+
+      const parentResolution = batchResolveParentId(params, ctx.idMap);
+      if (parentResolution.error) {
+        return { success: false, error: parentResolution.error };
+      }
+
+      const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
+
+      const node = await handleUnifiedRender({
+        ...root,
+        designSystemId: toolContext?.designSystemId || 'vanilla',
+        streamSessionId: `agent-batch-subtree-${Date.now()}`,
+        meta: { traceId: 'agent-batch-tool' }
+      }, false, explicitParent);
+
+      if (!node) {
+        return { success: false, error: { code: 'APPLY_ERROR', message: 'Failed to render subtree.' } };
+      }
+
+      ctx.registerCreated(params._opId || '', node.id);
+
+      const visResult = validateVisibility(node);
+      if (!visResult.valid) {
+        visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
+      }
+
+      return {
+        success: true,
+        nodeId: node.id,
+        name: node.name,
+        type: node.type,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        visibilityWarnings: visResult.issues.filter(i => i.severity === 'warning').length > 0 ? visResult.issues.filter(i => i.severity === 'warning') : undefined
+      };
+    }
+
+    case 'patchNode': {
+      const resolved = batchResolveNodeId(params, ctx.idMap);
+      if (resolved.error) {
+        return { success: false, error: resolved.error };
+      }
+
+      const { props } = params;
+      if (!props || Object.keys(props).length === 0) {
+        return { success: false, error: { code: 'INVALID_INPUT', message: 'patchNode requires non-empty props.' } };
+      }
+
+      if (patchCache && !patchCache.shouldApply(resolved.nodeId!, 'properties', props)) {
+        return { success: true, nodeId: resolved.nodeId, message: 'Skipped - redundant update' };
+      }
+
+      const node = await figma.getNodeByIdAsync(resolved.nodeId!) as SceneNode;
+      if (!node) {
+        return { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${resolved.nodeId} not found.` } };
+      }
+
+      const currentDSL = NodeSerializer.serialize(node);
+      const mergedProps = deepMerge(currentDSL.props || {}, props);
+
+      const result = await handleUnifiedRender({
+        ...currentDSL,
+        props: mergedProps,
+        __modifyMode: 'UPDATE',
+        __modifyTargetId: resolved.nodeId,
+        designSystemId: toolContext?.designSystemId || 'vanilla',
+        streamSessionId: `agent-batch-patch-${Date.now()}`,
+        meta: { traceId: 'agent-batch-tool' }
+      }, false, node.parent as any);
+
+      if (!result) {
+        return { success: false, nodeId: resolved.nodeId, error: { code: 'APPLY_ERROR', message: 'Failed to patch node.' } };
+      }
+
+      const visResult = validateVisibility(result);
+      if (!visResult.valid) {
+        visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
+      }
+
+      return { 
+        success: true, 
+        nodeId: resolved.nodeId, 
+        modified: true,
+        propsUpdated: Object.keys(props),
+        visibilityWarnings: visResult.issues.filter(i => i.severity === 'warning').length > 0 ? visResult.issues.filter(i => i.severity === 'warning') : undefined
+      };
+    }
+
+    case 'createIcon': {
+      const { iconName, size, color } = params;
+      if (!iconName) {
+        return { success: false, error: { code: 'INVALID_OPERATION', message: 'createIcon requires iconName.' } };
+      }
+
+      const parentResolution = batchResolveParentId(params, ctx.idMap);
+      if (parentResolution.error) {
+        return { success: false, error: parentResolution.error };
+      }
+
+      const explicitParent = await nodeLayoutService.resolveParent(parentResolution.parentId);
+      if (!explicitParent && parentResolution.parentId) {
+        return {
+          success: false,
+          error: {
+            code: 'PARENT_NOT_FOUND',
+            message: `Parent '${parentResolution.parentId}' not found. Aborting createIcon to prevent page-root leakage.`
+          }
+        };
+      }
+
+      const sanitized = sanitizeFlatProps(params.props);
+      delete sanitized.width;
+      delete sanitized.height;
+
+      const node = await handleUnifiedRender({
+        type: 'ICON',
+        props: {
+          iconName,
+          width: size,
+          height: size,
+          fills: color ? [color] : undefined,
+          ...sanitized
+        },
+        designSystemId: toolContext?.designSystemId || 'vanilla',
+        streamSessionId: `agent-batch-${Date.now()}`,
+        meta: { traceId: 'agent-batch-tool' }
+      }, false, explicitParent);
+
+      if (!node) {
+        return { success: false, error: { code: 'APPLY_ERROR', message: 'Failed to create icon.' } };
+      }
+
+      ctx.registerCreated(params._opId || '', node.id);
+
+      if (params.layout) await nodeLayoutService.applyLayout(node.id, params.layout);
+      if (params.styles) await nodeLayoutService.applyStyles(node.id, params.styles);
+
+      return { success: true, nodeId: node.id, name: node.name || iconName };
+    }
+
+    case 'setNodeLayout': {
+      const resolved = batchResolveNodeId(params, ctx.idMap);
+      if (resolved.error) {
+        return { success: false, error: resolved.error };
+      }
+
+      const { nodeId: _nodeId, nodeRef: _nodeRef, stepId: _stepId, ...layoutData } = params;
+
+      if (!patchCache.shouldApply(resolved.nodeId!, 'layout', layoutData)) {
+        if (params?.stepId) planState.completeTask(params.stepId);
+        return { success: true, nodeId: resolved.nodeId };
+      }
+
+      const layoutResponse = await nodeLayoutService.applyLayout(resolved.nodeId!, layoutData);
+      return layoutResponse.success
+        ? { success: true, nodeId: resolved.nodeId }
+        : { success: false, nodeId: resolved.nodeId, error: layoutResponse.error };
+    }
+
+    case 'setNodeStyles': {
+      const resolved = batchResolveNodeId(params, ctx.idMap);
+      if (resolved.error) {
+        return { success: false, error: resolved.error };
+      }
+
+      const { fills, strokes, strokeWeight, cornerRadius, opacity } = params;
+      const stylesData = { fills, strokes, strokeWeight, cornerRadius, opacity };
+
+      if (!patchCache.shouldApply(resolved.nodeId!, 'styles', stylesData)) {
+        if (params?.stepId) planState.completeTask(params.stepId);
+        return { success: true, nodeId: resolved.nodeId };
+      }
+
+      const stylesResponse = await nodeLayoutService.applyStyles(resolved.nodeId!, stylesData);
+      return stylesResponse.success
+        ? { success: true, nodeId: resolved.nodeId }
+        : { success: false, nodeId: resolved.nodeId, error: stylesResponse.error };
+    }
+
+    case 'updateNodeProperties': {
+      const resolved = batchResolveNodeId(params, ctx.idMap);
+      if (resolved.error) {
+        return { success: false, error: resolved.error };
+      }
+
+      const { properties } = params;
+      if (!properties) {
+        return { success: false, error: { code: 'INVALID_OPERATION', message: 'updateNodeProperties requires properties.' } };
+      }
+
+      if (!patchCache.shouldApply(resolved.nodeId!, 'properties', properties)) {
+        if (params?.stepId) planState.completeTask(params.stepId);
+        return { success: true, nodeId: resolved.nodeId };
+      }
+
+      const node = await figma.getNodeByIdAsync(resolved.nodeId!) as SceneNode;
+      if (!node) {
+        return { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${resolved.nodeId} not found.` } };
+      }
+
+      const serialized = NodeSerializer.serialize(node);
+      const result = await handleUnifiedRender({
+        ...serialized,
+        props: { ...(serialized.props || {}), ...properties },
+        __modifyMode: 'UPDATE',
+        __modifyTargetId: resolved.nodeId,
+        designSystemId: toolContext?.designSystemId || 'vanilla',
+        streamSessionId: `agent-batch-update-${Date.now()}`,
+        meta: { traceId: 'agent-batch-tool' }
+      }, false, node.parent as any);
+
+      if (!result) {
+        return { success: false, nodeId: resolved.nodeId, error: { code: 'APPLY_ERROR', message: 'Failed to update node properties.' } };
+      }
+      return { success: true, nodeId: resolved.nodeId };
+    }
+
+    case 'deleteNode': {
+      const resolved = batchResolveNodeId(params, ctx.idMap);
+      if (resolved.error) {
+        return { success: false, error: resolved.error };
+      }
+
+      const deleteResponse = await nodeLayoutService.deleteNode(resolved.nodeId!);
+      return deleteResponse.success
+        ? { success: true, nodeId: resolved.nodeId }
+        : { success: false, nodeId: resolved.nodeId, error: deleteResponse.error };
+    }
+
+    case 'applyDesignPatch': {
+      const patches = Array.isArray(params?.patches) ? params.patches : [];
+      if (patches.length === 0) {
+        return { success: false, error: { code: 'INVALID_OPERATION', message: 'applyDesignPatch requires patches array.' } };
+      }
+
+      const resolvedPatches = [];
+      let patchError: { code: string; message: string } | null = null;
+      let skippedCount = 0;
+
+      for (const patch of patches) {
+        const patchNodeId = patch?.nodeId || (patch?.nodeRef ? ctx.idMap[patch.nodeRef] : undefined);
+        if (!patchNodeId) {
+          patchError = { code: 'MISSING_REF', message: `patch nodeRef '${patch?.nodeRef}' could not be resolved to a nodeId.` };
+          break;
+        }
+        resolvedPatches.push({ ...patch, nodeId: patchNodeId });
+      }
+
+      if (patchError) {
+        return { success: false, error: patchError };
+      }
+
+      for (const patch of resolvedPatches) {
+        const { nodeId, layout, styles, properties: legacyProps, props: newProps } = patch;
+        const properties = newProps || legacyProps;
+        let nodeSkipped = true;
+
+        if (layout) {
+          if (patchCache.shouldApply(nodeId, 'layout', layout)) {
+            nodeSkipped = false;
+            const layoutResult = await nodeLayoutService.applyLayout(nodeId, layout);
+            if (!layoutResult.success && !patchError) {
+              patchError = layoutResult.error || { code: 'APPLY_ERROR', message: 'Failed to apply layout patch.' };
+            }
+          }
+        }
+        if (styles) {
+          if (patchCache.shouldApply(nodeId, 'styles', styles)) {
+            nodeSkipped = false;
+            const stylesResult = await nodeLayoutService.applyStyles(nodeId, styles);
+            if (!stylesResult.success && !patchError) {
+              patchError = stylesResult.error || { code: 'APPLY_ERROR', message: 'Failed to apply style patch.' };
+            }
+          }
+        }
+        if (properties) {
+          if (patchCache.shouldApply(nodeId, 'properties', properties)) {
+            nodeSkipped = false;
+            const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
+            if (!node) {
+              patchError = { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` };
+            } else {
+              const serialized = NodeSerializer.serialize(node);
+              try {
+                await handleUnifiedRender({
+                  ...serialized,
+                  props: { ...(serialized.props || {}), ...sanitizeFlatProps(properties) },
+                  __modifyMode: 'UPDATE',
+                  __modifyTargetId: nodeId,
+                }, false, node.parent as any);
+              } catch (e: any) {
+                if (!patchError) {
+                  patchError = { code: 'APPLY_ERROR', message: e.message };
+                }
+              }
+            }
+          }
+        }
+
+        if (nodeSkipped && !patch.layout && !patch.styles && !patch.properties) {
+          // Empty or already applied
+        } else if (nodeSkipped) {
+          skippedCount++;
+        }
+      }
+
+      if (patchError) {
+        return { success: false, error: patchError };
+      }
+      return {
+        success: true,
+        patched: resolvedPatches.length,
+        skipped: skippedCount > 0 ? true : undefined,
+        message: skippedCount > 0 ? `Skipped ${skippedCount} of ${resolvedPatches.length} redundant patches.` : undefined
+      };
+    }
+
+    default:
+      return { success: false, error: { code: 'INVALID_ACTION', message: `Unsupported action '${action}'.` } };
+  }
+}
+
+/**
+ * [INCREMENTAL] Precondition Validation
+ *
+ * Validates layout constraints before execution to prevent Figma silent corrections.
+ * Covers both flat params (setNodeLayout) and patches arrays (applyDesignPatch).
+ */
+export async function validatePreconditions(action: string, params: any): Promise<{ valid: boolean, error?: string }> {
+  // --- applyDesignPatch: validate each patch in the patches array ---
+  if (action === 'applyDesignPatch' && Array.isArray(params.patches)) {
+    for (const patch of params.patches) {
+      const patchNodeId = patch.nodeId;
+      if (!patchNodeId) continue;
+
+      const layoutMode = patch.layout?.layoutMode || patch.props?.layoutMode;
+      if (layoutMode && layoutMode !== 'NONE') {
+        const node = await figma.getNodeByIdAsync(patchNodeId);
+        if (node?.type === 'TEXT') {
+          return { valid: false, error: `Patch on TEXT node '${patchNodeId}': layoutMode '${layoutMode}' not supported. TEXT nodes only accept layoutMode='NONE'.` };
+        }
+      }
+
+      const sizing = patch.layout?.sizing || patch.props?.sizing;
+      if (sizing && (sizing.horizontal === 'FILL' || sizing.vertical === 'FILL')) {
+        const node = await figma.getNodeByIdAsync(patchNodeId) as SceneNode;
+        if (node?.parent && !('layoutMode' in node.parent && node.parent.layoutMode !== 'NONE')) {
+          return { valid: false, error: `Patch on '${patchNodeId}': FILL sizing requires a parent with Auto Layout.` };
+        }
+      }
+    }
+    return { valid: true };
+  }
+
+  // --- Flat params (setNodeLayout, updateNodeProperties, etc.) ---
+  // 1. Text node layout constraints
+  if ((action === 'setNodeLayout' || action === 'applyDesignPatch') && params.layoutMode) {
+    const nodeId = params.nodeId;
+    if (nodeId) {
+      const node = await figma.getNodeByIdAsync(nodeId);
+      if (node?.type === 'TEXT' && params.layoutMode !== 'NONE') {
+        return { valid: false, error: `TEXT nodes do not support layoutMode '${params.layoutMode}'. Use layoutMode='NONE'.` };
+      }
+    }
+  }
+
+  // 2. FILL sizing constraints
+  if ((action === 'setNodeLayout' || action === 'applyDesignPatch') && params.sizing) {
+    const isFill = params.sizing.horizontal === 'FILL' || params.sizing.vertical === 'FILL';
+    if (isFill) {
+      const nodeId = params.nodeId;
+      if (nodeId) {
+        const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
+        if (node?.parent && !('layoutMode' in node.parent && node.parent.layoutMode !== 'NONE')) {
+          return { valid: false, error: `'FILL' sizing requires a parent with Auto Layout.` };
+        }
+      }
+    }
+  }
+
+  return { valid: true };
 }

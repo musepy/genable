@@ -23,8 +23,12 @@ export class GeminiProvider implements LLMProvider {
   /** Default stream timeout: 30 seconds */
   private static readonly DEFAULT_STREAM_TIMEOUT_MS = 30000;
 
+  private static readonly PROVIDER_VERSION = 'v2026-02-13-fix2';
+
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig, onProgress, onThinking, abortSignal, streamTimeoutMs } = options;
+
+    console.log(`[GeminiProvider ${GeminiProvider.PROVIDER_VERSION}] generate() called, tools=${tools?.length || 0}, toolConfig=${JSON.stringify(toolConfig)}`);
 
     const isGemini3 = isGemini3Model(this.modelName);
     const systemMessage = messages.find(m => m.role === 'system');
@@ -54,9 +58,11 @@ export class GeminiProvider implements LLMProvider {
     // Enable thinking for models that support it
     if (thinkingLevel) {
       if (isGemini3) {
-        // Gemini 3 uses thinkingLevel enum (minimal/low/medium/high).
-        // Pass the level directly — no token budget parameter available.
-        config.thinkingConfig = { includeThoughts: true, thinkingLevel };
+        // [FIX] Gemini 3 'thinkingLevel' is now safely supported because 
+        // thought_signatures are preserved in history.
+        config.thinkingConfig = { 
+          thinkingLevel: thinkingLevel.toUpperCase() // API expects uppercase 'LOW', 'MEDIUM', 'HIGH'
+        };
       } else {
         // Gemini 2.5 uses thinkingBudget (token count).
         // Cap budget to prevent runaway token consumption.
@@ -93,17 +99,54 @@ export class GeminiProvider implements LLMProvider {
       ];
       // Tool calling mode: 'AUTO' lets model decide, 'ANY' forces at least one tool call
       // Default to 'AUTO' to allow flexible responses
-      const mode = toolConfig?.mode || 'AUTO';
+      let mode = toolConfig?.mode || 'AUTO';
+
+      // [FIX] Gemini API returns 400 INVALID_ARGUMENT when using 'ANY' mode with many
+      // function declarations. Gemini 3: limit ~15 tools. Gemini 2.5: "too many states" error.
+      // Downgrade to 'AUTO' when tool count exceeds the safe threshold.
+      const ANY_MODE_TOOL_LIMIT = 12;
+      if (mode === 'ANY' && tools.length > ANY_MODE_TOOL_LIMIT) {
+        console.warn(
+          `[GeminiProvider] ⚠️ Downgrading toolConfig mode from ANY to AUTO: ${tools.length} tools exceeds limit ~${ANY_MODE_TOOL_LIMIT}`
+        );
+        mode = 'AUTO';
+      }
+
+      // [FIX] Defensively filter allowedTools to ensure they are a subset of provided tools.
+      // If we specify a tool in allowedFunctionNames that isn't in functionDeclarations, Gemini returns a 400.
+      const allowed = toolConfig?.allowedTools;
+      const declarationNames = tools.map(t => t.name);
+      const safeAllowed = allowed?.filter(name => declarationNames.includes(name));
+
       config.toolConfig = {
         functionCallingConfig: {
           mode: mode,
-          allowedFunctionNames: toolConfig?.allowedTools
+          allowedFunctionNames: (safeAllowed && safeAllowed.length > 0) ? safeAllowed : undefined
         }
       };
     }
 
     // Process history and contents
-    const contents = chatMessages.map(m => this.mapToGenAIContent(m));
+    const contents = chatMessages.map((m) => this.mapToGenAIContent(m));
+
+    // [DIAGNOSTIC] Log critical config for debugging 400 errors
+    console.log(`[GeminiProvider] 🔍 REQUEST CONFIG:`, {
+      model: this.modelName,
+      toolConfigMode: config.toolConfig?.functionCallingConfig?.mode || 'NONE',
+      toolCount: config.tools?.[0]?.functionDeclarations?.length || 0,
+      toolNames: config.tools?.[0]?.functionDeclarations?.map((t: any) => t.name) || [],
+      thinkingConfig: config.thinkingConfig,
+      maxOutputTokens: config.maxOutputTokens,
+      contentsCount: contents.length,
+      contentRoles: contents.map((c: any) => c.role),
+      contentPartCounts: contents.map((c: any) => c.parts?.length || 0),
+      systemInstructionLength: (config.systemInstruction || '').length,
+    });
+
+    // Full dump (truncated)
+    const fullRequest = { model: this.modelName, contents, config };
+    console.log(`[GeminiProvider] 🔍 FULL REQUEST DUMP:`,
+      JSON.stringify(fullRequest, null, 2).slice(0, 80000));
 
     if (onProgress || onThinking) {
       let result;
@@ -111,7 +154,7 @@ export class GeminiProvider implements LLMProvider {
       const effectiveTimeout = streamTimeoutMs || GeminiProvider.DEFAULT_STREAM_TIMEOUT_MS;
 
       try {
-        result = await this.client.models.generateContentStream({
+        result = await (this.client as any).models.generateContentStream({
           model: this.modelName,
           contents,
           config
@@ -165,7 +208,7 @@ export class GeminiProvider implements LLMProvider {
 
     let response;
     try {
-      response = await this.client.models.generateContent({
+      response = await (this.client as any).models.generateContent({
         model: this.modelName,
         contents,
         config
@@ -201,18 +244,14 @@ export class GeminiProvider implements LLMProvider {
       };
     }
 
-    // CRITICAL FOR GEMINI API: When tool calls exist, we must NOT include text content
-    // in the same message if it follows a user turn. Function calls must come in a clean turn.
-    //
-    // [FIX] ALWAYS strip text parts when tool calls exist. Gemini produces 2000-8000 chars
-    // of repetitive narration ("I'm now focused on...") BEFORE tool calls in streaming.
-    // This text pollutes context (50K-200K tokens over 40 iterations) and reinforces the narration pattern.
-    // We only keep functionCall and thought parts - text is discarded.
+    // [FIX] Protocol Transparency: Always include all original content parts.
+    // This ensures Thinking models have the full context needed for signature validation.
+    const fullPartsCount = response.fullParts?.length || 0;
+    console.log(`[GeminiProvider.formatResponse] Tool calls exist (${response.toolCalls.length}). Preserving all ${fullPartsCount} parts.`);
     let content: Part[];
 
     // [DEBUG] Log what we're working with
     const originalTextLength = (response.text || '').length;
-    const fullPartsCount = response.fullParts?.length || 0;
 
     // Debug: categorize all parts
     const partCategories = response.fullParts?.map((p: any) => {
@@ -224,14 +263,12 @@ export class GeminiProvider implements LLMProvider {
     }) || [];
     console.log(`[GeminiProvider.formatResponse] Tool calls exist (${response.toolCalls.length}). Text: ${originalTextLength} chars, fullParts: ${fullPartsCount}, categories: [${partCategories.join(', ')}]`);
 
-    // [FIX] Always build content from toolCalls directly.
-    // Gemini streaming fullParts can include large thought-text blobs that bloat context.
-    // toolCalls are already parsed and minimal, so use them exclusively.
-    console.log(`[GeminiProvider.formatResponse] Building content from toolCalls (ignoring fullParts/text)`);
-    content = response.toolCalls.map(tc => ({
-      functionCall: { name: tc.name, args: tc.args },
-      thought_signature: tc.thought_signature
-    }));
+    // [FIX] Protocol Transparency: Preserve all parts (thoughts, text, tool calls)
+    // filtering out only empty or invalid items.
+    content = (response.fullParts || []).filter((p: any) => {
+      // Keep everything that is not effectively empty
+      return p.functionCall || p.thought || (p.text && p.text.trim() !== '');
+    });
 
     // [DEBUG] Final content size
     const contentJson = JSON.stringify(content);
@@ -250,9 +287,10 @@ export class GeminiProvider implements LLMProvider {
         name: tr.name,
         response: tr.response
       },
-      // CRITICAL: Echo back thought_signature in the function response turns
-      ...(tr.thought_signature && { thought_signature: tr.thought_signature })
-    }));
+      // [FIX] Restore thought_signature propagation. Gemini 3 requires this
+      // in tool responses to maintain reasoning state.
+      thought_signature: tr.thought_signature
+    } as any));
 
     return { 
       id: 'tol_' + Math.random().toString(36).substring(7),
@@ -262,16 +300,9 @@ export class GeminiProvider implements LLMProvider {
   }
 
   private mapToLLMResponse(response: any): LLMResponse {
-    const candidate = response.candidates?.[0];
-    const finishReason = candidate?.finishReason;
-
-    // [DEBUG] Log the raw response structure to diagnose issues
-    // console.log('[GeminiProvider] Raw response:', JSON.stringify({
-    //   ...
-    // }, null, 2));
-
     GeminiErrorHandler.handleResponseError(response);
 
+    const candidate = response.candidates?.[0];
     const content = candidate?.content;
     const parts = content?.parts || [];
 
@@ -280,33 +311,63 @@ export class GeminiProvider implements LLMProvider {
     const toolCalls: LLMToolCall[] = [];
     const fullParts: Part[] = [];
 
+    // 1. Identify shared signature in this turn
+    const sharedSignature = parts.find((p: any) => p.thoughtSignature || p.thought_signature)
+      ? ((parts.find((p: any) => p.thoughtSignature || p.thought_signature) as any).thoughtSignature || 
+         (parts.find((p: any) => p.thoughtSignature || p.thought_signature) as any).thought_signature)
+      : undefined;
+
+    if (sharedSignature) {
+      console.log(`[GeminiProvider.mapToLLMResponse] Turn-level signature detected: "${sharedSignature.slice(0, 10)}..."`);
+    }
+
+    // 2. Process parts - but DO NOT collect standalone signature parts into fullParts
     for (const part of parts) {
-      if ('text' in part && part.text) {
-        text += part.text;
-        fullParts.push(part); // Preserve the original part object
-      } else if ('thought' in part && part.thought) {
-        thoughts += part.thought;
-        fullParts.push(part); // Preserve the original part object
-      } else if ('functionCall' in part && part.functionCall) {
-        // FIX: Use 'functionCall' instead of 'call' to match actual Gemini API response format
-        // Extract thoughtSignature (camelCase from API) and convert to internal snake_case
-        const thoughtSignature = (part as any).thoughtSignature || (part as any).thought_signature;
+      if ('functionCall' in part && part.functionCall) {
+        console.log(`[GeminiProvider.mapToLLMResponse] functionCall: ${part.functionCall.name}`);
+        const partSig = (part as any).thoughtSignature || (part as any).thought_signature;
+        const sig = partSig || sharedSignature;
+        
         const toolCall: LLMToolCall = {
           id: (part.functionCall as any).id || 'call_' + Math.random().toString(36).substring(7),
           name: part.functionCall.name,
           args: part.functionCall.args,
-          metadata: thoughtSignature ? { thought_signature: thoughtSignature } : undefined,
-          thought_signature: thoughtSignature
+          metadata: sig ? { thought_signature: sig } : undefined,
+          thought_signature: sig
         };
         toolCalls.push(toolCall);
-        
-        // Ensure we have a version with snake_case for internal logic, 
-        // but keep the original object as much as possible in fullParts
+
         fullParts.push({
           ...part,
-          thought_signature: thoughtSignature
+          functionCall: {
+            ...part.functionCall,
+            id: toolCall.id
+          },
+          thought_signature: sig
         });
+      } else if ('thought' in part && part.thought) {
+        const thoughtText = typeof part.thought === 'string' ? part.thought : (part as any).text || '';
+        if (thoughtText) thoughts += thoughtText;
+        
+        const partSig = (part as any).thoughtSignature || (part as any).thought_signature;
+        const sig = partSig || sharedSignature;
+        fullParts.push({
+          ...part,
+          thought_signature: sig
+        } as any);
+      } else if ('text' in part && part.text) {
+        text += part.text;
+        
+        // Protocol Transparency: Preserve original text part with its original signature (if any)
+        const partSig = (part as any).thoughtSignature || (part as any).thought_signature;
+        const sig = partSig || sharedSignature;
+        fullParts.push({
+          ...part,
+          thought_signature: sig
+        } as any);
       }
+      // CRITICAL: Standalone signature parts are NOT pushed to fullParts anymore.
+      // They are used only for extracting sharedSignature (handled above).
     }
 
     return {
@@ -322,13 +383,33 @@ export class GeminiProvider implements LLMProvider {
     };
   }
 
+  /**
+   * [FIX] Ensures the signature is valid base64. 
+   * Skips re-encoding if the string already looks like valid base64 
+   * to avoid corrupting Gemini signatures (which often contain URL-safe chars).
+   */
+  private ensureBase64(str: string): string {
+    if (!str) return '';
+    
+    // If it's already a clean base64 string, return it as is.
+    // Standard base64 and URL-safe base64 both allowed.
+    const base64Regex = /^[A-Za-z0-9+/_-]+=*$/;
+    if (base64Regex.test(str)) {
+      return str;
+    }
+
+    try {
+      return Buffer.from(str).toString('base64');
+    } catch (e) {
+      return str;
+    }
+  }
+
   private mapToGenAIContent(msg: LLMMessage): any {
     let role: string;
     if (msg.role === 'model') {
       role = 'model';
     } else if (msg.role === 'tool') {
-      // In Gemini SDK, function results are technically under the 'user' role 
-      // but are part of a specific Content structure.
       role = 'user'; 
     } else {
       role = 'user';
@@ -338,16 +419,27 @@ export class GeminiProvider implements LLMProvider {
       role,
       parts: typeof msg.content === 'string'
         ? [{ text: msg.content }]
-        : (msg.content as any[]).map(p => {
-          if (p.text) return { text: p.text };
-          if (p.thought) return { thought: p.thought };
+        : (msg.content as any[]).map((p, idx) => {
+          const rawSig = p.thought_signature || p.thoughtSignature;
+          const sig = rawSig ? this.ensureBase64(rawSig) : undefined;
+          
+          // CRITICAL: Order matters! Check functional parts (thought, functionCall, functionResponse) 
+          // before generic text, because a thought part may also contain text.
+          if (p.thought) {
+             // Gemini 3 style: { thought: true, text: "..." }
+             if (p.thought === true && p.text) {
+               return { text: p.text, thought: true, ...(sig && { thoughtSignature: sig }) };
+             }
+             // Gemini 2.5 style: { thought: "..." }
+             return { thought: p.thought, ...(sig && { thoughtSignature: sig }) };
+          }
           if (p.functionCall) {
             return {
               functionCall: {
                 name: p.functionCall.name,
                 args: p.functionCall.args
               },
-              thoughtSignature: p.thought_signature || p.thoughtSignature
+              ...(sig && { thoughtSignature: sig })
             };
           }
           if (p.functionResponse) {
@@ -356,10 +448,22 @@ export class GeminiProvider implements LLMProvider {
                 name: p.functionResponse.name,
                 response: p.functionResponse.response
               },
-              thoughtSignature: p.thought_signature || p.thoughtSignature
+              // [FIX] Propagate thought_signature (mapped to camelCase thoughtSignature)
+              // Gemini 3 Flash/Pro requires this on functionResponse parts to maintain session state.
+              ...(sig && { thoughtSignature: sig })
             };
           }
+          if (p.text) {
+            return { 
+              text: p.text
+            };
+          }
+          
           return { text: '' };
+        }).filter((p: any) => {
+           // Filter out "empty" parts
+           if (p.text === '' && Object.keys(p).length === 1) return false;
+           return (p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined);
         })
     };
   }

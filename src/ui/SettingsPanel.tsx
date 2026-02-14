@@ -32,6 +32,9 @@ export interface SettingsPanelProps {
   settingsError: string | null;
   onFetchModels: () => void;
   onSave: () => void;
+  onSimulateLogout?: () => void;
+  onSimulateEmptyState?: () => void;
+  onRestoreSession?: () => void;
   onClose?: () => void;
   localComponents?: LocalComponent[];
 }
@@ -48,6 +51,9 @@ export function SettingsPanel({
   settingsError,
   onFetchModels,
   onSave,
+  onSimulateLogout,
+  onSimulateEmptyState,
+  onRestoreSession,
   onClose,
   localComponents = []
 }: SettingsPanelProps) {
@@ -159,7 +165,7 @@ export function SettingsPanel({
           {renderApiModule('OpenRouter', 'openrouter')}
         </div>
 
-        {/* Developer Tools - Archived/Collapsible */}
+        {/* Developer Tools (Dogfood) */}
         <div style={{ marginTop: tokens.space[6], padding: `0 var(--space-3)` }}>
           <div 
             onClick={() => setShowDeveloper(!showDeveloper)}
@@ -178,24 +184,28 @@ export function SettingsPanel({
           </div>
           {showDeveloper && (
             <div style={{ marginTop: tokens.space[3] }}>
-              <DeveloperPanel />
+              <DeveloperPanel
+                onSimulateLogout={onSimulateLogout}
+                onSimulateEmptyState={onSimulateEmptyState}
+                onRestoreSession={onRestoreSession}
+              />
             </div>
           )}
         </div>
+      </div>
 
-        {/* ===== FOOTER ===== */}
-        <div className="settings-footer">
-          <div style={{ fontWeight: 500, color: 'var(--gray-11)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-            © 2026 Genable
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <a href="https://github.com/Muse404" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Github size={12} />
-              Muse404
-            </a>
-            <span style={{ color: 'var(--gray-a4)' }}>|</span>
-            <span style={{ color: 'var(--gray-9)' }}>v1.0.0</span>
-          </div>
+      {/* ===== FOOTER (Pinned to Bottom) ===== */}
+      <div className="settings-footer" style={{ borderTop: 'var(--border-main)', background: 'var(--color-background)', padding: '12px 0' }}>
+        <div style={{ fontWeight: 500, color: 'var(--gray-11)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+          © 2026 Genable
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <a href="https://github.com/Muse404" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Github size={12} />
+            Muse404
+          </a>
+          <span style={{ color: 'var(--gray-a4)' }}>|</span>
+          <span style={{ color: 'var(--gray-9)' }}>v1.0.0</span>
         </div>
       </div>
     </div>

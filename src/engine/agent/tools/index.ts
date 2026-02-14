@@ -29,6 +29,11 @@ import { applyDesignPatchDefinition, batchOperationsDefinition } from './designS
 
 import { generateDesignDefinition } from './generateDesignTool';
 
+import { 
+  renderSubtreeDefinition, 
+  patchNodeDefinition 
+} from './stateTools';
+
 import { workflowTools } from './workflowTools';
 
 /**
@@ -40,6 +45,8 @@ export const agentTools = [
   ...projectUITools.definitions,
   inspectDesignDefinition,      // [NEW] Replaces getSelection, getDeepHierarchy, getNodeDSL
   generateDesignDefinition,     // One-shot full component tree
+  renderSubtreeDefinition,      // [NEW] High-level state-driven render (Flat List)
+  patchNodeDefinition,          // [NEW] High-level state-driven patch (Props-Only)
   batchOperationsDefinition,    // Batch create/modify
   applyDesignPatchDefinition,   // Batch modify
   planDesignDefinition,         // Planning
@@ -77,6 +84,8 @@ const PLANNING_TOOLS = [
 const EXECUTION_TOOLS = [
   'inspectDesign',
   'generateDesign',
+  'renderSubtree',
+  'patchNode',
   'batchOperations',
   'createNode',
   'setNodeLayout',

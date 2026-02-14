@@ -151,13 +151,13 @@ export const globalStyles = `
     -webkit-mask-image: linear-gradient(to bottom, 
       transparent 0%, 
       black 16px, 
-      black calc(100% - 32px), 
+      black calc(100% - 16px), 
       transparent 100%
     );
     mask-image: linear-gradient(to bottom, 
       transparent 0%, 
       black 16px, 
-      black calc(100% - 32px), 
+      black calc(100% - 16px), 
       transparent 100%
     );
     /* Ensure the mask doesn't hide the scrollbar if possible in this environment, 

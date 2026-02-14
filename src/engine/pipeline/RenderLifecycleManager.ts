@@ -1,5 +1,3 @@
-import { LayoutMath } from '../utils/LayoutMath';
-
 /**
  * Manages the lifecycle and physical properties of Figma nodes.
  * Shielding the rest of the engine from Figma API proxy fragility.
@@ -39,7 +37,13 @@ export class RenderLifecycleManager {
         targetNode: SceneNode | null, 
         existingStreamRoot: SceneNode | null,
         explicitParent: (BaseNode & ChildrenMixin) | null = null
-    ) {
+    ): {
+        parent: (BaseNode & ChildrenMixin) | PageNode;
+        index: number | undefined;
+        position: { x: number; y: number } | undefined;
+        strategy: 'PARENT_CENTER' | 'VIEWPORT';
+        parentBounds?: { width: number; height: number };
+    } {
         const isTargetAlive = this.isNodeAlive(targetNode);
         const isStreamAlive = this.isNodeAlive(existingStreamRoot);
 
@@ -64,11 +68,25 @@ export class RenderLifecycleManager {
             position = { x: (targetNode as any).x, y: (targetNode as any).y };
         }
 
+        const hasParentBounds = !!(
+            targetParent &&
+            targetParent.type !== 'PAGE' &&
+            'width' in targetParent &&
+            'height' in targetParent
+        );
+        const parentBounds = hasParentBounds
+            ? {
+                width: (targetParent as any).width,
+                height: (targetParent as any).height
+            }
+            : undefined;
+
         return {
             parent: targetParent as any,
             index: targetIndex,
             position,
-            strategy: (isTargetAlive || explicitParent) ? 'PARENT_CENTER' : 'VIEWPORT'
+            strategy: (isTargetAlive || explicitParent) ? 'PARENT_CENTER' : 'VIEWPORT',
+            parentBounds
         };
     }
 }

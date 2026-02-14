@@ -71,6 +71,10 @@ export const PROPS = {
   textAutoResize: 'textAutoResize',
   lineHeight: 'lineHeight',
   letterSpacing: 'letterSpacing',
+  textCase: 'textCase',
+  textDecoration: 'textDecoration',
+  paragraphSpacing: 'paragraphSpacing',
+  paragraphIndent: 'paragraphIndent',
 
   // ==========================
   // Component / Meta
@@ -91,12 +95,15 @@ export interface PropDefinition {
   readonly type: 'scalar' | 'color' | 'enum' | 'object' | 'virtual' | 'array' | 'string';
   readonly enumMap?: Record<string, string>;
   readonly defaultValue?: any; // [PURE TRUST] Centralized default for data-driven transformation
+  // NEW: Normalization rules
+  readonly min?: number;        // scalar clamp lower bound
+  readonly max?: number;        // scalar clamp upper bound
 }
 
 export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.name]: { figmaKey: 'name', type: 'string' },
   [PROPS.visible]: { figmaKey: 'visible', type: 'scalar', defaultValue: true },
-  [PROPS.opacity]: { figmaKey: 'opacity', type: 'scalar', defaultValue: 1 },
+  [PROPS.opacity]: { figmaKey: 'opacity', type: 'scalar', defaultValue: 1, min: 0, max: 1 },
   
   // Layout
   [PROPS.layoutMode]: { 
@@ -109,12 +116,12 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.layoutSizingVertical]: { figmaKey: 'layoutSizingVertical', type: 'enum', defaultValue: 'FIXED' },
   [PROPS.primaryAxisAlignItems]: { figmaKey: 'primaryAxisAlignItems', type: 'enum', defaultValue: 'MIN' },
   [PROPS.counterAxisAlignItems]: { figmaKey: 'counterAxisAlignItems', type: 'enum', defaultValue: 'MIN' },
-  [PROPS.gap]: { figmaKey: 'itemSpacing', type: 'scalar', defaultValue: 0 }, // Note: itemSpacing in Figma API
-  [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar', defaultValue: 0 },
-  [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0 },
-  [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar', defaultValue: 0 },
-  [PROPS.paddingLeft]: { figmaKey: 'paddingLeft', type: 'scalar', defaultValue: 0 },
-  [PROPS.layoutGrow]: { figmaKey: 'layoutGrow', type: 'scalar', defaultValue: 0 },
+  [PROPS.gap]: { figmaKey: 'itemSpacing', type: 'scalar', defaultValue: 0, min: 0, max: 1000 }, // Note: itemSpacing in Figma API
+  [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
+  [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
+  [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
+  [PROPS.paddingLeft]: { figmaKey: 'paddingLeft', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
+  [PROPS.layoutGrow]: { figmaKey: 'layoutGrow', type: 'scalar', defaultValue: 0, min: 0, max: 1 },
   [PROPS.layoutAlign]: {
     figmaKey: 'layoutAlign',
     type: 'enum',
@@ -144,22 +151,31 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   },
   [PROPS.x]: { figmaKey: 'x', type: 'scalar', defaultValue: 0 },
   [PROPS.y]: { figmaKey: 'y', type: 'scalar', defaultValue: 0 },
-  [PROPS.width]: { figmaKey: 'width', type: 'scalar' },
-  [PROPS.height]: { figmaKey: 'height', type: 'scalar' },
+  [PROPS.width]: { figmaKey: 'width', type: 'scalar', min: 0.01, max: 10000 },
+  [PROPS.height]: { figmaKey: 'height', type: 'scalar', min: 0.01, max: 10000 },
 
   // Styling
   [PROPS.fills]: { figmaKey: 'fills', type: 'color', defaultValue: [] },
   [PROPS.strokes]: { figmaKey: 'strokes', type: 'color', defaultValue: [] },
-  [PROPS.strokeWeight]: { figmaKey: 'strokeWeight', type: 'scalar', defaultValue: 0 },
-  [PROPS.cornerRadius]: { figmaKey: 'cornerRadius', type: 'scalar', defaultValue: 0 },
+  [PROPS.strokeWeight]: { figmaKey: 'strokeWeight', type: 'scalar', defaultValue: 0, min: 0, max: 100 },
+  [PROPS.cornerRadius]: { figmaKey: 'cornerRadius', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   [PROPS.effects]: { figmaKey: 'effects', type: 'array', defaultValue: [] },
 
   // Text
   [PROPS.characters]: { figmaKey: 'characters', type: 'string' },
-  [PROPS.fontSize]: { figmaKey: 'fontSize', type: 'scalar' },
+  [PROPS.fontSize]: { figmaKey: 'fontSize', type: 'scalar', min: 1, max: 1000 },
   [PROPS.fontWeight]: { figmaKey: 'fontWeight', type: 'virtual' }, // Maps to fontName.style
   [PROPS.fontFamily]: { figmaKey: 'fontFamily', type: 'virtual' }, // Maps to fontName.family
-  
+  [PROPS.textAlignHorizontal]: { figmaKey: 'textAlignHorizontal', type: 'enum', enumMap: { LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT', JUSTIFIED: 'JUSTIFIED' } },
+  [PROPS.textAlignVertical]: { figmaKey: 'textAlignVertical', type: 'enum', enumMap: { TOP: 'TOP', CENTER: 'CENTER', BOTTOM: 'BOTTOM' } },
+  [PROPS.textAutoResize]: { figmaKey: 'textAutoResize', type: 'enum', enumMap: { NONE: 'NONE', WIDTH_AND_HEIGHT: 'WIDTH_AND_HEIGHT', HEIGHT: 'HEIGHT', TRUNCATE: 'TRUNCATE' } },
+  [PROPS.lineHeight]: { figmaKey: 'lineHeight', type: 'scalar', min: 0, max: 1000 },
+  [PROPS.letterSpacing]: { figmaKey: 'letterSpacing', type: 'scalar', min: -100, max: 1000 },
+  [PROPS.textCase]: { figmaKey: 'textCase', type: 'enum', enumMap: { ORIGINAL: 'ORIGINAL', UPPER: 'UPPER', LOWER: 'LOWER', TITLE: 'TITLE', SMALL_CAPS: 'SMALL_CAPS', SMALL_CAPS_FORCED: 'SMALL_CAPS_FORCED' } },
+  [PROPS.textDecoration]: { figmaKey: 'textDecoration', type: 'enum', enumMap: { NONE: 'NONE', UNDERLINE: 'UNDERLINE', STRIKETHROUGH: 'STRIKETHROUGH' } },
+  [PROPS.paragraphSpacing]: { figmaKey: 'paragraphSpacing', type: 'scalar', min: 0, max: 1000 },
+  [PROPS.paragraphIndent]: { figmaKey: 'paragraphIndent', type: 'scalar', min: 0, max: 1000 },
+
   // Virtual
   [PROPS.semantic]: { figmaKey: 'semantic', type: 'virtual' },
   [PROPS.variant]: { figmaKey: 'variant', type: 'virtual' },
@@ -197,6 +213,26 @@ export const STROKE_ALIGNS = {
   INSIDE: 'INSIDE',
   OUTSIDE: 'OUTSIDE',
   CENTER: 'CENTER',
+} as const;
+
+/**
+ * Shared JSON Schema fragment for text/typography properties.
+ * Import and spread into tool definition `props.properties` to keep schemas DRY.
+ */
+export const TEXT_PROPS_SCHEMA = {
+  characters: { type: 'string', description: 'Text content (TEXT nodes only)' },
+  fontSize: { type: 'number', description: 'Font size in px' },
+  fontWeight: { type: 'string', description: 'e.g. "Bold", "Medium", "Regular"' },
+  fontFamily: { type: 'string', description: 'Font family name. Supports any Google Font (e.g. "Roboto", "Poppins", "Noto Sans SC"). Defaults to "Inter".' },
+  lineHeight: { type: 'number', description: 'Line height in px (or {value, unit:"PERCENT"} for %)' },
+  letterSpacing: { type: 'number', description: 'Letter spacing in px' },
+  textAlignHorizontal: { type: 'string', description: 'LEFT | CENTER | RIGHT | JUSTIFIED' },
+  textAlignVertical: { type: 'string', description: 'TOP | CENTER | BOTTOM' },
+  textCase: { type: 'string', description: 'ORIGINAL | UPPER | LOWER | TITLE | SMALL_CAPS | SMALL_CAPS_FORCED' },
+  textDecoration: { type: 'string', description: 'NONE | UNDERLINE | STRIKETHROUGH' },
+  textAutoResize: { type: 'string', description: 'NONE | WIDTH_AND_HEIGHT | HEIGHT | TRUNCATE' },
+  paragraphSpacing: { type: 'number', description: 'Space between paragraphs in px' },
+  paragraphIndent: { type: 'number', description: 'First-line indent in px' },
 } as const;
 
 

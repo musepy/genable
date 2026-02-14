@@ -5,6 +5,7 @@
  */
 
 import { ToolDefinition } from './types';
+import { TEXT_PROPS_SCHEMA } from '../../../constants/figma-api';
 
 // ==========================================
 // 0. Planning Tool (ReAct Pattern)
@@ -135,8 +136,8 @@ NEVER use a predicted, placeholder, or guessed ID.`
           },
           x: { type: 'number', description: 'Explicit x position. Works on non-auto-layout parent, or ABSOLUTE child in auto-layout parent.' },
           y: { type: 'number', description: 'Explicit y position. Works on non-auto-layout parent, or ABSOLUTE child in auto-layout parent.' },
-          width: { type: 'number', description: 'Explicit width' },
-          height: { type: 'number', description: 'Explicit height' }
+          width: { type: 'number', description: 'Explicit width', minimum: 0.01 },
+          height: { type: 'number', description: 'Explicit height', minimum: 0.01 }
         }
       },
       styles: {
@@ -174,8 +175,9 @@ NEVER use a predicted, placeholder, or guessed ID.`
           },
           x: { type: 'number', description: 'Explicit x position' },
           y: { type: 'number', description: 'Explicit y position' },
-          width: { type: 'number', description: 'Fixed width' },
-          height: { type: 'number', description: 'Fixed height' }
+          width: { type: 'number', description: 'Fixed width', minimum: 0.01 },
+          height: { type: 'number', description: 'Fixed height', minimum: 0.01 },
+          ...TEXT_PROPS_SCHEMA,
         }
       },
       stepId: {
@@ -315,8 +317,8 @@ Use nodeId from createNode response.
         maxItems: 5,
         description: 'Stroke colors'
       },
-      strokeWeight: { type: 'number', minimum: 0, description: 'Stroke thickness' },
-      cornerRadius: { type: 'number', minimum: 0, description: 'Radius in pixels' },
+      strokeWeight: { type: 'number', minimum: 0, maximum: 100, description: 'Stroke thickness' },
+      cornerRadius: { type: 'number', minimum: 0, maximum: 1000, description: 'Radius in pixels' },
       opacity: { type: 'number', minimum: 0, maximum: 1, description: 'Layer opacity (0-1)' },
       stepId: {
         type: 'string',
@@ -355,13 +357,7 @@ Use nodeId from createNode response.
         type: 'object',
         description: 'Key-value pairs to update.',
         properties: {
-          // Text specific hints for the LLM
-          fontSize: { type: 'number', minimum: 1, description: 'Font size' },
-          fontWeight: { type: 'string', description: 'Check available weights for font' },
-          fontFamily: { type: 'string', description: 'Font family' },
-          textAlignHorizontal: { type: 'string', enum: ['LEFT', 'CENTER', 'RIGHT', 'JUSTIFIED'], description: 'Text alignment' },
-          textAlignVertical: { type: 'string', enum: ['TOP', 'CENTER', 'BOTTOM'], description: 'Vertical alignment' },
-          characters: { type: 'string', description: 'Update text content' }
+          ...TEXT_PROPS_SCHEMA,
         }
       },
       stepId: {
@@ -396,7 +392,7 @@ export const createIconDefinition: ToolDefinition = {
         type: 'string',
         description: 'Iconify name (e.g., "lucide:home", "mdi:account")'
       },
-      size: { type: 'number', minimum: 1, description: 'Size in pixels (default 24)' },
+      size: { type: 'number', minimum: 1, maximum: 1000, description: 'Size in pixels (default 24)' },
       color: { 
         type: 'string', 
         pattern: '^#[0-9A-Fa-f]{6}$',

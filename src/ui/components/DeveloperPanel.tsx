@@ -20,7 +20,8 @@ import {
   GetProjectTemplatesHandler,
   SendProjectTemplatesHandler,
   ImportProjectTemplateHandler,
-  CaptureUIHandler
+  CaptureUIHandler,
+  ResetSettingsHandler
 } from '../../types';
 import { useEffect, useState } from 'preact/hooks';
 
@@ -82,7 +83,17 @@ const jsonConfirmButtonStyle: h.JSX.CSSProperties = {
   padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
 };
 
-export function DeveloperPanel() {
+interface DeveloperPanelProps {
+  onSimulateLogout?: () => void;
+  onSimulateEmptyState?: () => void;
+  onRestoreSession?: () => void;
+}
+
+export function DeveloperPanel({
+  onSimulateLogout,
+  onSimulateEmptyState,
+  onRestoreSession
+}: DeveloperPanelProps) {
   const [lastExport, setLastExport] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
@@ -161,6 +172,27 @@ export function DeveloperPanel() {
     emit<CaptureUIHandler>('CAPTURE_UI', { componentId });
   };
 
+  const handleResetSettings = () => {
+    if (confirm('【危险】确认彻底清除所有设置？这将从插件存储中永久删除 API Keys。')) {
+      emit<ResetSettingsHandler>('RESET_SETTINGS');
+    }
+  };
+
+  const handleSimulateLogout = () => {
+    console.log('[Dev] Simulating logout...');
+    if (onSimulateLogout) onSimulateLogout();
+  };
+
+  const handleSimulateEmptyState = () => {
+    console.log('[Dev] Simulating fresh user empty state...');
+    if (onSimulateEmptyState) onSimulateEmptyState();
+  };
+
+  const handleRestoreSession = () => {
+    console.log('[Dev] Restoring saved session...');
+    if (onRestoreSession) onRestoreSession();
+  };
+
   return (
     <div style={panelStyle}>
       <div style={{ fontWeight: 600, fontSize: tokens.fontSize[2], marginBottom: -tokens.space[2], color: tokens.colors.textPrimary }}>
@@ -209,6 +241,34 @@ export function DeveloperPanel() {
 
       <button style={ghostButtonStyle} onClick={handleCombineVariants}>
         合并选中项为变体组 (Variants)
+      </button>
+
+      <button 
+        style={{ ...buttonStyle, background: tokens.colors.accentAlpha[2], color: tokens.colors.accent, borderColor: tokens.colors.accentAlpha[4] }} 
+        onClick={handleSimulateLogout}
+      >
+        模拟登出 (Simulate Sign Out)
+      </button>
+
+      <button
+        style={{ ...buttonStyle, background: tokens.colors.grayMuted, color: tokens.colors.textPrimary }}
+        onClick={handleSimulateEmptyState}
+      >
+        模拟新用户空态 (Keep Storage)
+      </button>
+
+      <button
+        style={{ ...ghostButtonStyle, borderColor: tokens.colors.accentAlpha[5], color: tokens.colors.accent }}
+        onClick={handleRestoreSession}
+      >
+        恢复已保存会话 (Reconnect Fast)
+      </button>
+
+      <button 
+        style={{ ...buttonStyle, marginTop: tokens.space[2], opacity: 0.6, fontSize: tokens.fontSize[1], padding: '4px 8px', height: 'auto', background: 'transparent', color: tokens.colors.error, border: `1px solid ${tokens.colors.errorBorder}` }} 
+        onClick={handleResetSettings}
+      >
+        彻底清空设置 (Factory Reset)
       </button>
 
       {/* Project UI Library Section */}

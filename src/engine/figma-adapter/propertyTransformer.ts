@@ -97,21 +97,33 @@ export class PropertyTransformer {
 
             case 'enum':
                 if (meta.enumMap && typeof dslValue === 'string') {
-                    return meta.enumMap[dslValue.toUpperCase()] || dslValue;
+                    const mapped = meta.enumMap[dslValue.toUpperCase()];
+                    if (mapped) return mapped;
+                    
+                    // NEW: Invalid enum -> return defaultValue instead of raw input
+                    console.warn(`[PropertyTransformer] Invalid enum "${dslValue}" for ${dslKey}, using default`);
+                    return meta.defaultValue ?? dslValue;
                 }
                 return dslValue;
 
-            case 'scalar':
-                if (dslValue === null || dslValue === undefined) return 0;
-                if (typeof dslValue === 'string' && !dslValue.startsWith('$')) {
+            case 'scalar': {
+                let num: number;
+                if (dslValue === null || dslValue === undefined) {
+                    num = meta.defaultValue ?? 0;
+                } else if (typeof dslValue === 'string' && !dslValue.startsWith('$')) {
                     const parsed = parseFloat(dslValue);
-                    return isNaN(parsed) ? 0 : parsed;
+                    num = isNaN(parsed) ? 0 : parsed;
+                } else if (typeof dslValue === 'number') {
+                    num = isNaN(dslValue) ? 0 : dslValue;
+                } else {
+                    return dslValue; // Variable reference ($token)
                 }
-                // V6.1 FIX: Prevent number NaN leak
-                if (typeof dslValue === 'number') {
-                    return isNaN(dslValue) ? 0 : dslValue;
-                }
-                return dslValue;
+
+                // NEW: Bounds clamping from metadata
+                if (meta.min !== undefined && num < meta.min) num = meta.min;
+                if (meta.max !== undefined && num > meta.max) num = meta.max;
+                return num;
+            }
 
             case 'string':
                 return String(dslValue ?? '');

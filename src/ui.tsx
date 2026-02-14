@@ -19,7 +19,6 @@ import { DeveloperPanel } from './ui/components/DeveloperPanel'
 // Global UI Layout & Styles
 import { Header } from './ui/components/Header'
 import { Iso } from './ui/components/layout/Iso'
-import { Stack } from './ui/components/layout/Stack'
 import { tokens, cssTokens, globalStyles } from './ui/design-system/tokens'
 import { thinkingStreamCss } from './ui/components/ThinkingStream'
 import { ToastProvider } from './ui/components/ui'
@@ -60,8 +59,9 @@ function PluginContent() {
     apiKey, setApiKey, modelName, setModelName, 
     providerName, setProviderName,
     suggestedModels, fetchStatus, settingsError,
-    hasConfig, setHasConfig, isInitialized, showSettings, setShowSettings,
-    handleSaveSettings, handleFetchModels
+    hasConfig, isInitialized, showSettings, setShowSettings,
+    handleSaveSettings, completeOnboarding, handleFetchModels,
+    simulateLogout, simulateEmptyState, restoreSavedSession
   } = settings
 
   // Key for remounting ChatFeature (replaces window.location.reload)
@@ -179,6 +179,9 @@ function PluginContent() {
           settingsError={settingsError}
           onFetchModels={() => handleFetchModels()}
           onSave={handleSaveSettings}
+          onSimulateLogout={simulateLogout}
+          onSimulateEmptyState={simulateEmptyState}
+          onRestoreSession={restoreSavedSession}
           localComponents={pluginData.localComponents}
         />
       );
@@ -196,7 +199,7 @@ function PluginContent() {
     } else if (captureTarget === 'button') {
       content = <Button>Capture Candidate</Button>;
     } else if (captureTarget === 'developer-panel') {
-      content = <DeveloperPanel />;
+      content = <DeveloperPanel onSimulateLogout={() => {}} onSimulateEmptyState={() => {}} onRestoreSession={() => {}} />;
     } else if (captureTarget === 'prompt-input') {
       content = (
         <PromptInput 
@@ -255,7 +258,11 @@ function PluginContent() {
       return (
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={mainContentStyle}>
-            <DeveloperPanel />
+            <DeveloperPanel
+              onSimulateLogout={simulateLogout}
+              onSimulateEmptyState={simulateEmptyState}
+              onRestoreSession={restoreSavedSession}
+            />
             <VerticalSpace space="large" />
             <Button variant="secondary" fullWidth onClick={() => setShowDeveloperTools(false)}>
               Back to Chat
@@ -272,11 +279,11 @@ function PluginContent() {
       return (
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <OnboardingView
-            onComplete={(key) => {
-              setApiKey(key);
-              setHasConfig(true);
-              handleSaveSettings(); // Will save with current state
-            }}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            providerName={providerName}
+            setProviderName={setProviderName}
+            onComplete={completeOnboarding}
             onFetchModels={(key) => handleFetchModels(key)}
             isLoading={fetchStatus === 'fetching'}
             error={settingsError}
@@ -348,6 +355,9 @@ function PluginContent() {
             settingsError={settingsError}
             onFetchModels={() => handleFetchModels()}
             onSave={handleSaveSettings}
+            onSimulateLogout={simulateLogout}
+            onSimulateEmptyState={simulateEmptyState}
+            onRestoreSession={restoreSavedSession}
             onClose={() => {
               handleSaveSettings();
               setIsSettingsClosing(true);

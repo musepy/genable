@@ -93,7 +93,8 @@ export async function handleUnifiedRender(
       position: placement.position,
       positionStrategy: placement.strategy as any,
       viewportCenter: figma.viewport.center,
-      parent: placement.parent,
+      parentBounds: placement.parentBounds,
+      parent: placement.parent as any,
       insertIndex: placement.index
     }
   });

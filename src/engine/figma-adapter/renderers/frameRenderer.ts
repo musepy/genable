@@ -6,6 +6,7 @@
 import { BaseRenderer, NodeLayer, RenderContext, LayoutMode, NodeLayerProps } from './baseRenderer';
 import { PropertyTransformer } from '../propertyTransformer';
 import { PROPS } from '../../../constants/figma-api';
+import { normalizeSizing, isAbsolutePositioned, getFlexFallbacks, SizingMode } from '../../utils/LayoutValidator';
 
 /**
  * FrameRenderer - Renders FRAME nodes with AutoLayout support
@@ -143,34 +144,13 @@ export class FrameRenderer extends BaseRenderer {
         const parentHasAutoLayout = context.parentLayoutMode && context.parentLayoutMode !== 'NONE';
         
         // ========== 1. Determine Sizing Modes ==========
-        let hSizing: 'FIXED' | 'HUG' | 'FILL' = props.layoutSizingHorizontal || 'HUG';
-        let vSizing: 'FIXED' | 'HUG' | 'FILL' = props.layoutSizingVertical || 'HUG';
-        
-        // V6 FIX: Root nodes on a page CAN be HUG if they have AutoLayout
-        // Only force FIXED if there's no layout mode
-        if (isRoot && !hasAutoLayout) {
-            hSizing = 'FIXED';
-            vSizing = 'FIXED';
-        }
-        
-        // CRITICAL VALIDATION: HUG requires Auto Layout on the node itself
-        if (!hasAutoLayout) {
-            if (hSizing === 'HUG') hSizing = 'FIXED';
-            if (vSizing === 'HUG') vSizing = 'FIXED';
-        }
-
-        // CRITICAL VALIDATION: FILL requires Auto Layout on the parent
-        if (!parentHasAutoLayout) {
-            if (hSizing === 'FILL') hSizing = isRoot ? 'FIXED' : 'HUG';
-            if (vSizing === 'FILL') vSizing = isRoot ? 'FIXED' : 'HUG';
-        }
-        
-        // Double check after demotions: if we ended up with HUG but still have no auto-layout
-        // (e.g. from FILL demotion), force FIXED
-        if (!hasAutoLayout) {
-            if (hSizing === 'HUG') hSizing = 'FIXED';
-            if (vSizing === 'HUG') vSizing = 'FIXED';
-        }
+        const normalized = normalizeSizing(
+            (props.layoutSizingHorizontal || 'HUG') as SizingMode,
+            (props.layoutSizingVertical || 'HUG') as SizingMode,
+            { hasAutoLayout: !!hasAutoLayout, parentHasAutoLayout: !!parentHasAutoLayout, isRoot }
+        );
+        let hSizing = normalized.h;
+        let vSizing = normalized.v;
 
         // If explicit dimensions provided without sizing mode, assume FIXED
         if (props.width && !props.layoutSizingHorizontal) {
@@ -235,15 +215,10 @@ export class FrameRenderer extends BaseRenderer {
         }
         
         // ========== 6. Child-specific adjustments (Flex fallbacks) ==========
-        const isAbsoluteInAutoLayout = parentHasAutoLayout && String((props as any).layoutPositioning || '').toUpperCase() === 'ABSOLUTE';
-        if (!isRoot && parentHasAutoLayout && !isAbsoluteInAutoLayout) {
-            // Primary Axis Growth
-            if (context.parentLayoutMode === 'HORIZONTAL' && hSizing === 'FILL') f.layoutGrow = 1;
-            if (context.parentLayoutMode === 'VERTICAL' && vSizing === 'FILL') f.layoutGrow = 1;
-            
-            // Counter Axis Stretching
-            if (context.parentLayoutMode === 'HORIZONTAL' && vSizing === 'FILL') f.layoutAlign = 'STRETCH';
-            if (context.parentLayoutMode === 'VERTICAL' && hSizing === 'FILL') f.layoutAlign = 'STRETCH';
+        if (!isRoot && parentHasAutoLayout && !isAbsolutePositioned(props)) {
+            const flex = getFlexFallbacks(hSizing, vSizing, context.parentLayoutMode);
+            if (flex.layoutGrow !== undefined) f.layoutGrow = flex.layoutGrow;
+            if (flex.layoutAlign) f.layoutAlign = flex.layoutAlign;
         }
     }
 

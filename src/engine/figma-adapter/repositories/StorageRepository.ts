@@ -79,6 +79,19 @@ export class StorageRepository {
   }
 
   /**
+   * Clear all settings from client storage
+   */
+  async clearSettings(): Promise<void> {
+    await Promise.all([
+      figma.clientStorage.deleteAsync(this.LEGACY_KEY),
+      figma.clientStorage.deleteAsync(this.GEMINI_KEY),
+      figma.clientStorage.deleteAsync(this.OPENROUTER_KEY),
+      figma.clientStorage.deleteAsync(this.MODEL_NAME_KEY),
+      figma.clientStorage.deleteAsync(this.PROVIDER_NAME_KEY)
+    ]);
+  }
+
+  /**
    * Get a generic value from storage
    */
   async get<T>(key: string): Promise<T | undefined> {

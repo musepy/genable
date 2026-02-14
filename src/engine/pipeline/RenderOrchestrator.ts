@@ -14,6 +14,7 @@ import { Normalizer } from './Normalizer';
 import { DesignSystemConfig } from '../../types/designSystem';
 import { figmaVariableCache } from '../figma-adapter/caches/figmaVariableCache';
 import { flowObserver, FlowPhase } from '../figma-adapter/observers/flowObserver';
+import { LayoutMath } from '../utils/LayoutMath';
 
 // ==========================================
 // REGISTRY FOR RECONCILIATION
@@ -144,7 +145,6 @@ export class RenderOrchestrator {
                 rootNode.x = meta.position.x;
                 rootNode.y = meta.position.y;
             } else if (context.depth === 0 && 'width' in rootNode && 'height' in rootNode) {
-                const { LayoutMath } = require('../utils/LayoutMath');
                 const strategy = meta?.positionStrategy || 'VIEWPORT';
                 
                 // [PRINCIPLED FIX]: Registry-based stability
@@ -153,6 +153,12 @@ export class RenderOrchestrator {
                 if (meta?.isStream && isAlreadyManaged && strategy === 'VIEWPORT') {
                     // Logic: The node has found its home in the first chunk, don't let viewport drift move it.
                 } else {
+                    if (strategy === 'PARENT_CENTER' && !meta?.parentBounds) {
+                        throw new Error(
+                            '[RenderOrchestrator] Missing parentBounds for PARENT_CENTER strategy. ' +
+                            'Refusing to fallback to viewport coordinates.'
+                        );
+                    }
                     const pos = LayoutMath.resolveRootPosition(strategy, {
                         viewportCenter: meta?.viewportCenter,
                         parentBounds: meta?.parentBounds,

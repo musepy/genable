@@ -77,7 +77,9 @@ export class AgentRuntime {
     'updateNodeProperties',
     'createIcon',
     'deleteNode',
-    'applyDesignPatch'
+    'applyDesignPatch',
+    'renderElement',
+    'patchElement'
   ]);
   systemPrompt?: string;
   behaviorConfig: AgentBehaviorConfig;
@@ -85,6 +87,15 @@ export class AgentRuntime {
   private originalUserRequest: string = '';
   private currentMode: AgentMode = 'PLANNING'; 
   private designSystemId?: string;
+  private operationLog: Array<{
+    opId?: string;
+    action: string;
+    reason?: string;
+    success: boolean;
+    timestamp: number;
+    error?: string;
+    diffInfo?: string[];
+  }> = [];
 
   constructor(private options: AgentRuntimeOptions) {
     this.retryPolicy = new RetryPolicy();
@@ -844,6 +855,7 @@ export class AgentRuntime {
 
             workflowResults.push({
               name: tc.name,
+              id: tc.id,
               response: {
                 success: true,
                 data: {
@@ -862,14 +874,15 @@ export class AgentRuntime {
             });
           } else if (tc.name === 'new_task') {
             planState.startTask(tc.args.title, tc.args.description, tc.args.stepId);
-            workflowResults.push({ name: tc.name, response: { success: true }, thought_signature: tc.thought_signature });
+            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
           } else if (tc.name === 'update_todo_list') {
             planState.updateTodos(tc.args.items);
-            workflowResults.push({ name: tc.name, response: { success: true }, thought_signature: tc.thought_signature });
+            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
           } else if (tc.name === 'summarize_progress') {
             if (progressCallsThisIteration >= 1) {
               workflowResults.push({
                 name: tc.name,
+                id: tc.id,
                 response: {
                   success: false,
                   error: {
@@ -899,6 +912,7 @@ export class AgentRuntime {
               const semanticError = mapToSemanticError('LOOP_DETECTED', reason);
               workflowResults.push({
                 name: tc.name,
+                id: tc.id,
                 response: { success: false, error: { code: 'LOOP_DETECTION', message: formatSemanticError(semanticError) } },
                 thought_signature: tc.thought_signature
               });
@@ -913,11 +927,12 @@ export class AgentRuntime {
             if (tc.args.isComplete) {
               planState.completeTask(undefined, tc.args.summary);
             }
-            workflowResults.push({ name: tc.name, response: { success: true }, thought_signature: tc.thought_signature });
+            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
           } else if (tc.name === 'complete_task') {
             if (this.hasPendingToolErrors) {
               workflowResults.push({
                 name: tc.name,
+                id: tc.id,
                 response: {
                   success: false,
                   error: {
@@ -1115,6 +1130,7 @@ export class AgentRuntime {
               this.options.onToolResult?.(tc, result);
               return {
                 name: tc.name,
+                id: tc.id,
                 response: this.cleanToolResult(result),
                 thought_signature: tc.thought_signature
               };
@@ -1152,7 +1168,7 @@ export class AgentRuntime {
               }
 
               this.options.onToolResult?.(tc, result);
-              const toolResult = this.cleanToolResult(result); // Clean result here
+              const toolResult = this.cleanToolResult(result, tc.name); // Pass tool name
 
               // NEW: Add semantic feedback to tool results
               if (!toolResult.success && toolResult.error) {
@@ -1162,11 +1178,49 @@ export class AgentRuntime {
 
               toolResults.push({
                 name: tc.name,
+                id: tc.id,
                 response: toolResult,
                 thought_signature: tc.thought_signature
               });
             }
           }
+        }
+
+        // [INCREMENTAL] Update Operation Log
+        for (const tr of toolResults) {
+          const tc = toolCallsForExecution.find(c => c.name === tr.name); // Simple match, enough for log
+          const success = tr.response?.success !== false;
+          
+          if (tr.name === 'batchOperations' && tr.response?.data?.results) {
+            // Unpack batch results into the log
+            const ops = (tc?.args as any)?.operations || [];
+            const results = tr.response.data.results;
+            results.forEach((res: any, idx: number) => {
+              const op = ops[idx];
+              this.operationLog.push({
+                opId: res.opId,
+                action: res.action,
+                reason: op?.reason,
+                success: res.success,
+                timestamp: Date.now(),
+                error: res.error?.message,
+                diffInfo: res.diffInfo
+              });
+            });
+          } else {
+            this.operationLog.push({
+              action: tr.name,
+              reason: (tc?.args as any)?.reason,
+              success: success,
+              timestamp: Date.now(),
+              error: tr.response?.error?.message,
+              diffInfo: tr.response?.data?.diffInfo
+            });
+          }
+        }
+        // Keep last 15 operations
+        if (this.operationLog.length > 15) {
+          this.operationLog = this.operationLog.slice(-15);
         }
 
         if (figmaToolCalls.length > 0) {
@@ -1306,7 +1360,10 @@ export class AgentRuntime {
         requiresLayoutKnowledge: true
       },
       selectionContext: this.options.selectionContext,
-      behaviorConfig: this.behaviorConfig
+      behaviorConfig: this.behaviorConfig,
+      // [INCREMENTAL] Provide operation log for prompt composition
+      operationLog: this.operationLog,
+      activeStep: planState.getActiveStep()
     };
 
     return composeAgentSystemPrompt(
@@ -1366,8 +1423,8 @@ export class AgentRuntime {
    * Clean and truncate tool results to prevent context explosion.
    * Tool results with large data payloads can consume excessive tokens.
    */
-  private cleanToolResult(result: any): any {
-    return this.cleaner.cleanToolResult(result);
+  private cleanToolResult(result: any, toolName?: string): any {
+    return this.cleaner.cleanToolResult({ ...result, ...(toolName && { name: toolName }) });
   }
 
   public getMessages(): LLMMessage[] {

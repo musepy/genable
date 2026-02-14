@@ -226,7 +226,7 @@ export abstract class BaseRenderer {
         // [V8] Core color utility for effect colors
 
         for (const eff of props.effects) {
-            const type = eff.type as string;
+            const type = (eff as any).effectType || (eff as any).type as string;
             
             if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW') {
                 const dslColor = eff.color;

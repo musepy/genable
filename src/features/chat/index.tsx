@@ -183,6 +183,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
                       toolCalls={msg.toolCalls}
                       thinkingStatus={thinkingStatus}
                       thinkingDetail={thinkingDetail}
+                      currentTaskTitle={lastIteration?.taskTitle}
                       onSelectNode={(nodeId) => {
                         const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
                         emit<SelectNodeHandler>('SELECT_NODE', { nodeId, smooth: !reduce, durationMs: 250 });

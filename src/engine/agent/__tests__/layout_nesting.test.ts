@@ -11,6 +11,8 @@ const mockPage = {
 const mockParent = {
   id: 'parent-123',
   type: 'FRAME',
+  width: 800,
+  height: 600,
   children: [],
   appendChild: vi.fn(),
   parent: mockPage,
@@ -29,32 +31,20 @@ describe('Layout Nesting Reproduction', () => {
     vi.clearAllMocks();
   });
 
-  it('SHOULD NOT ignore explicit parentId (Current Bug Simulation)', async () => {
-    // Current behavior: handleUnifiedRender doesn't pass parentId to resolvePlacement
-    // It only passes targetNode for modification or streamRoot.
-    
-    // Simulate what main.ts does now:
-    const targetNode = null; 
-    const existingStreamRoot = null;
-    
-    const placement = RenderLifecycleManager.resolvePlacement(targetNode, existingStreamRoot);
-    
-    // BUG: It defaults to currentPage even if the LLM provided a parentId in parameters
-    expect(placement.parent).toBe(mockPage);
+  it('uses explicit parent and provides parent bounds for parent-space positioning', async () => {
+    const explicitParent = await figma.getNodeByIdAsync('parent-123');
+    const placement = RenderLifecycleManager.resolvePlacement(null, null, explicitParent as any);
+
+    expect(placement.parent).toBe(mockParent);
+    expect(placement.strategy).toBe('PARENT_CENTER');
+    expect(placement.parentBounds).toEqual({ width: 800, height: 600 });
   });
 
-  it('SHOULD respect explicit parent if provided (Desired Fix)', async () => {
-    // We want to add an explicitParent parameter to resolvePlacement
-    const explicitParentId = 'parent-123';
-    const explicitParent = await figma.getNodeByIdAsync(explicitParentId);
-    
-    // We will update resolvePlacement to handle this
-    const placement = (RenderLifecycleManager as any).resolvePlacement(
-      null, 
-      null, 
-      explicitParent // New parameter
-    );
-    
-    expect(placement.parent).toBe(mockParent);
+  it('falls back to page + viewport strategy when no target and no explicit parent', () => {
+    const placement = RenderLifecycleManager.resolvePlacement(null, null);
+
+    expect(placement.parent).toBe(mockPage);
+    expect(placement.strategy).toBe('VIEWPORT');
+    expect(placement.parentBounds).toBeUndefined();
   });
 });

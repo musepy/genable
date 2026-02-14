@@ -71,15 +71,11 @@ export class AgentRuntime {
   private recoveryActive: boolean = false;
   private recoveryIterations: number = 0;
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
-    'createNode',
-    'setNodeLayout',
-    'setNodeStyles',
-    'updateNodeProperties',
     'createIcon',
     'deleteNode',
     'applyDesignPatch',
-    'renderElement',
-    'patchElement'
+    'renderSubtree',
+    'patchNode'
   ]);
   systemPrompt?: string;
   behaviorConfig: AgentBehaviorConfig;

@@ -87,11 +87,7 @@ const EXECUTION_TOOLS = [
   'renderSubtree',
   'patchNode',
   'batchOperations',
-  'createNode',
-  'setNodeLayout',
-  'setNodeStyles',
   'createIcon',
-  'updateNodeProperties',
   'deleteNode',
   'applyDesignPatch',
   'update_todo_list',
@@ -109,6 +105,10 @@ const VERIFICATION_TOOLS = [
 const RECOVERY_TOOLS = [
   'inspectDesign',
   'validateLayout',
+  'createNode',
+  'setNodeLayout',
+  'setNodeStyles',
+  'updateNodeProperties',
   'update_todo_list',
   'summarize_progress',
   'complete_task'

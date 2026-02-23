@@ -39,6 +39,11 @@ export interface ToolDefinition {
    * Example: setNodeLayout typically follows createNode.
    */
   dependencies?: string[];
+  /**
+   * Agent modes where this tool is available.
+   * If omitted, tool is available in all modes (backward compatible).
+   */
+  modes?: AgentMode[];
 }
 
 export interface ToolParameter {

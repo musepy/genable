@@ -65,7 +65,13 @@ export interface PromptDependencies {
         stepId: string;
         title: string;
         description?: string;
+        action?: string;
+        nodes?: string[];
+        reasoning?: string;
     } | null;
+
+    // [9] Plan Summary — used in VERIFICATION mode when activeStep is null
+    planSummary?: string;
 }
 
 export interface Intent {

@@ -46,5 +46,6 @@ ANTI-PATTERN (TOO GRANULAR - DO NOT DO THIS):
     required: ['analysis', 'steps']
   },
   executionStrategy: 'sequential',
+  modes: ['PLANNING'],
   errors: {}
 };

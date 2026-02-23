@@ -114,10 +114,7 @@ describe('batchOperations - Hierarchical Transactions', () => {
                         expect.objectContaining({ opId: 'parent-frame', nodeId: parentNodeId }),
                         expect.objectContaining({ opId: 'child-frame', nodeId: childNodeId })
                     ]),
-                    layoutSnapshots: expect.objectContaining({
-                        'parent-frame': expect.objectContaining({ id: parentNodeId }),
-                        'child-frame': expect.objectContaining({ id: childNodeId })
-                    })
+                    layoutSnapshots: {}
                 })
             })
         }));
@@ -194,6 +191,7 @@ describe('batchOperations - Hierarchical Transactions', () => {
         const payload = toolResultCall?.[1];
         expect(payload.response.success).toBe(false);
         expect(payload.response.error.code).toBe('PARTIAL_FAILURE');
+        expect(payload.response.error.message).toContain("1 operation failed in batch (First failure: opId='child', action='createNode', error='Parent 'missing-parent' not found.");
         expect(payload.response.data.results[0].error.code).toBe('PARENT_NOT_FOUND');
     });
 
@@ -242,6 +240,7 @@ describe('batchOperations - Hierarchical Transactions', () => {
         const payload = toolResultCall?.[1];
         expect(payload.response.success).toBe(false);
         expect(payload.response.error.code).toBe('PARTIAL_FAILURE');
+        expect(payload.response.error.message).toContain("1 operation failed in batch (First failure: opId='bad-op', action='setNodeLayout', error='forced failure')");
         expect(payload.response.data.rollback).toEqual(
             expect.objectContaining({ attempted: 1, removed: 1 })
         );

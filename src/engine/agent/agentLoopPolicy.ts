@@ -38,6 +38,16 @@ export interface RecoveryPolicy {
    * Token cap for RECOVERY phase responses.
    */
   maxOutputTokens: number;
+  /**
+   * Maximum total times RECOVERY mode can be entered per run.
+   * Prevents Recovery ↔ Execution oscillation that wastes iterations.
+   */
+  maxTotalCycles: number;
+  /**
+   * After the first recovery cycle, raise the entry threshold to this value.
+   * Makes re-entry harder, giving EXECUTION more room to self-correct.
+   */
+  escalatedFailureThreshold: number;
 }
 
 export interface AgentLoopPolicy {
@@ -51,6 +61,11 @@ export interface AgentLoopPolicy {
   promptBudgetTokens: number;
   useSkillSystem: boolean;
   recovery: RecoveryPolicy;
+  /**
+   * Max iterations VERIFICATION mode can spend fixing constraint violations
+   * before forcing completion. Prevents infinite fix loops.
+   */
+  verificationFixLimit: number;
 }
 
 export const DEFAULT_AGENT_LOOP_POLICY: AgentLoopPolicy = {
@@ -63,6 +78,7 @@ export const DEFAULT_AGENT_LOOP_POLICY: AgentLoopPolicy = {
   verificationMaxOutputTokens: 8192,
   promptBudgetTokens: 8000,
   useSkillSystem: true,
+  verificationFixLimit: 3,
   recovery: {
     enabled: true,
     entryFailureThreshold: AGENT_RUNTIME_CONSTANTS.CONSECUTIVE_FAILURE_THRESHOLD,
@@ -70,6 +86,8 @@ export const DEFAULT_AGENT_LOOP_POLICY: AgentLoopPolicy = {
     preferredTools: ['inspectDesign', 'validateLayout'],
     toolMode: 'AUTO',
     maxOutputTokens: 4096,
+    maxTotalCycles: 2,
+    escalatedFailureThreshold: 5,
   },
 };
 

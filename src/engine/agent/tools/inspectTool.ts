@@ -43,5 +43,6 @@ Use this instead of those tools.
     },
     required: ['mode']
   },
-  executionStrategy: 'parallel'
+  executionStrategy: 'parallel',
+  modes: ['PLANNING', 'EXECUTION', 'VERIFICATION', 'RECOVERY']
 };

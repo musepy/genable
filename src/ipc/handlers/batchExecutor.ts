@@ -151,18 +151,29 @@ export class BatchExecutor {
       completeStep(stepId);
     }
 
-    return hasFailures
-      ? {
-          success: false,
-          data: {
-            results: this.results,
-            idMap: this.idMap,
-            layoutSnapshots,
-            ...(rollbackResult ? { rollback: rollbackResult } : undefined)
-          },
-          error: { code: 'PARTIAL_FAILURE', message: 'One or more operations failed.' }
-        }
-      : { success: true, data: { results: this.results, idMap: this.idMap, layoutSnapshots } };
+    if (hasFailures) {
+      const failedOps = this.results.filter(r => !r.success);
+      const firstFailure = failedOps[0];
+      const failureCount = failedOps.length;
+      
+      const detailMsg = firstFailure 
+        ? ` (First failure: opId='${firstFailure.opId}', action='${firstFailure.action}', error='${firstFailure.error?.message || 'Unknown error'}')`
+        : '';
+      const message = `${failureCount} operation${failureCount > 1 ? 's' : ''} failed in batch${detailMsg}.`;
+
+      return {
+        success: false,
+        data: {
+          results: this.results,
+          idMap: this.idMap,
+          layoutSnapshots,
+          ...(rollbackResult ? { rollback: rollbackResult } : undefined)
+        },
+        error: { code: 'PARTIAL_FAILURE', message }
+      };
+    }
+
+    return { success: true, data: { results: this.results, idMap: this.idMap, layoutSnapshots } };
   }
 
   private async executeSingleOperation(operation: BatchOperation): Promise<BatchOpResult> {

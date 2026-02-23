@@ -177,16 +177,6 @@ export class AgentOrchestrator {
   // REUSABLE CALLBACK HANDLERS
   // ==========================================
 
-  private handleIteration(iteration: number, response: any) {
-    this.options.onStatusChange(`Thinking (Iteration ${iteration})...`);
-    if (response.thoughts) {
-      this.options.onThinkingUpdate(response.thoughts);
-    }
-    if (response.usage) {
-      this.options.onUsageUpdate?.(response.usage);
-    }
-  }
-
   private handleProgress(chunk: string) {
     console.log(`[Agent] Progress: ${chunk}`);
     // Optional: emit to UI if needed

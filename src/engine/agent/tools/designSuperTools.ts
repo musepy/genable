@@ -48,6 +48,7 @@ Use this to understand complex layouts or to find specific layers without multip
 export const batchOperationsDefinition: ToolDefinition = {
   name: 'batchOperations',
   category: 'modify',
+  modes: ['EXECUTION'],
   dependencies: [],
   description: `
 [SUPER TOOL] Execute multiple Figma operations in a single ordered call.
@@ -156,6 +157,60 @@ EXAMPLE (Hierarchical Row):
                   properties: COMPACT_PROPS_SCHEMA
                 },
                 stepId: { type: 'string', description: 'Optional step ID pass-through' },
+                // -------------------------------------------------------------
+                // Explicit array requirements
+                // -------------------------------------------------------------
+                patches: {
+                  type: 'array',
+                  description: 'For applyDesignPatch: Array of patch definitions. MUST be used for applyDesignPatch.',
+                  items: {
+                    type: 'object',
+                    description: 'A single patch operation',
+                    properties: {
+                      nodeId: { type: 'string', description: 'Real Figma node ID' },
+                      nodeRef: { type: 'string', description: 'Virtual ID (opId) of the node to modify' },
+                      layout: {
+                        type: 'object',
+                        description: 'Layout properties',
+                        properties: {
+                          layoutMode: { type: 'string', description: 'Auto layout mode (HORIZONTAL, VERTICAL, NONE)' },
+                          layoutAlign: { type: 'string', description: 'Align self (MIN, MAX, CENTER, STRETCH)' },
+                          primaryAxisAlignItems: { type: 'string', description: 'Primary axis alignment' },
+                          counterAxisAlignItems: { type: 'string', description: 'Counter axis alignment' },
+                          itemSpacing: { type: 'number', description: 'Spacing between children' },
+                          paddingLeft: { type: 'number', description: 'Left padding' },
+                          paddingRight: { type: 'number', description: 'Right padding' },
+                          paddingTop: { type: 'number', description: 'Top padding' },
+                          paddingBottom: { type: 'number', description: 'Bottom padding' },
+                          sizing: {
+                            type: 'object',
+                            description: 'Sizing constraints',
+                            properties: {
+                              horizontal: { type: 'string', description: 'Horizontal sizing (HUG, FILL, FIXED)' },
+                              vertical: { type: 'string', description: 'Vertical sizing (HUG, FILL, FIXED)' }
+                            }
+                          }
+                        }
+                      },
+                      styles: {
+                        type: 'object',
+                        description: 'Style properties',
+                        properties: {
+                          fills: { type: 'array', description: 'Fill properties', items: { type: 'object', description: 'Paint object' } },
+                          strokes: { type: 'array', description: 'Stroke properties', items: { type: 'object', description: 'Paint object' } },
+                          strokeWeight: { type: 'number', description: 'Stroke weight in pixels' },
+                          cornerRadius: { type: 'number', description: 'Corner radius in pixels' },
+                          opacity: { type: 'number', description: 'Layer opacity (0 to 1)' }
+                        }
+                      },
+                      props: {
+                        type: 'object',
+                        description: 'General node properties (characters, iconName, etc.)',
+                        properties: { ...COMPACT_PROPS_SCHEMA }
+                      }
+                    }
+                  }
+                },
                 // Top-level params for "flat" support
                 ...COMPACT_PROPS_SCHEMA,
                 iconName: { type: 'string', description: 'For ICON nodes' },
@@ -209,7 +264,7 @@ EXAMPLE (Hierarchical Row):
     'PARENT_NOT_FOUND': 'Specified parent node could not be resolved.',
     'NODE_NOT_FOUND': 'Target node does not exist.',
     'APPLY_ERROR': 'Failed to apply operation.',
-    'PARTIAL_FAILURE': 'One or more operations failed.'
+    'PARTIAL_FAILURE': 'One or more operations failed. Detailed summary included in the error message.'
   }
 };
 
@@ -220,6 +275,7 @@ EXAMPLE (Hierarchical Row):
 export const applyDesignPatchDefinition: ToolDefinition = {
   name: 'applyDesignPatch',
   category: 'modify',
+  modes: ['EXECUTION', 'VERIFICATION'],
   dependencies: [],
   description: `
 [SUPER TOOL] Apply multiple changes to multiple nodes in a single atomic operation.

@@ -52,7 +52,8 @@ interface TokenBudget {
     core: number;      // 身份 (不可压缩)
     tools: number;     // 工具定义
     examples: number;  // 完整示例
-    context: number;   // RAG 知识 (可压缩)
+    skills: number;    // Skill 系统知识 (专用预算，防挤压)
+    context: number;   // RAG / optional knowledge (可压缩)
     selection: number; // 当前选择 (可截断)
 }
 
@@ -64,16 +65,18 @@ interface TokenRatios {
     core: number;
     tools: number;
     examples: number;
+    skills: number;
     context: number;
     selection: number;
 }
 
 const DEFAULT_TOKEN_RATIOS: TokenRatios = {
-    core: 0.2,      // 20% for identity & instructions
+    core: 0.20,     // 20% for identity & instructions
     tools: 0.15,    // 15% for tool definitions
-    examples: 0.2,  // 20% for examples (reduced from 30%)
-    context: 0.25,  // 25% for RAG knowledge
-    selection: 0.2  // 20% for current selection
+    examples: 0.15, // 15% for examples (reduced from 20%)
+    skills: 0.15,   // 15% for skill system knowledge (dedicated bucket)
+    context: 0.15,  // 15% for optional/RAG knowledge (reduced from 25%)
+    selection: 0.20  // 20% for current selection
 };
 
 /**
@@ -84,12 +87,13 @@ const DEFAULT_TOKEN_RATIOS: TokenRatios = {
 const DEFAULT_TOKEN_BUDGET: TokenBudget = {
     core: 1600,      // 20% - identity + tool format (non-compressible)
     tools: 1200,     // 15% - tool definitions
-    examples: 1600,  // 20% - examples
-    context: 2000,   // 25% - RAG knowledge (compressible)
+    examples: 1200,  // 15% - examples
+    skills: 1200,    // 15% - skill system knowledge (dedicated)
+    context: 1200,   // 15% - optional/RAG knowledge (compressible)
     selection: 1600, // 20% - current selection (truncatable)
 };
 
-const SECTION_PRIORITY: (keyof TokenBudget)[] = ['core', 'tools', 'examples', 'context', 'selection'];
+const SECTION_PRIORITY: (keyof TokenBudget)[] = ['core', 'tools', 'examples', 'skills', 'context', 'selection'];
 
 /**
  * Liquid Budgeting: Calculates dynamic token allocations based on priorities.
@@ -104,6 +108,7 @@ function calculateLiquidBudget(
         core: 0,
         tools: 0,
         examples: 0,
+        skills: 0,
         context: 0,
         selection: 0,
     };
@@ -115,6 +120,7 @@ function calculateLiquidBudget(
         core: 0,
         tools: 0,
         examples: 0,
+        skills: 0,
         context: 0,
         selection: 0,
     };
@@ -355,13 +361,25 @@ function buildSelectionContext(deps: PromptDependencies, budget: number): string
 function buildIterationStateSummary(deps: PromptDependencies): string {
     const activeStep = deps.activeStep;
     const log = deps.operationLog || [];
-    
-    if (!activeStep && log.length === 0) return '';
+
+    if (!activeStep && !deps.planSummary && log.length === 0) return '';
 
     const lines = ['## CURRENT ITERATION STATE'];
-    
+
     if (activeStep) {
         lines.push(`- **Active Task**: "${activeStep.title}"`);
+        if (activeStep.action) {
+            lines.push(`- **Action**: ${activeStep.action}`);
+        }
+        if (activeStep.nodes && activeStep.nodes.length > 0) {
+            lines.push(`- **Target Nodes**: ${activeStep.nodes.join(', ')}`);
+        }
+        if (activeStep.reasoning) {
+            lines.push(`- **Reasoning**: ${activeStep.reasoning}`);
+        }
+    } else if (deps.planSummary) {
+        // VERIFICATION mode: activeStep is null but plan summary is available
+        lines.push(`- **Plan Summary**: ${deps.planSummary}`);
     }
 
     if (log.length > 0) {
@@ -467,7 +485,7 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
     {
         id: 'skill-context',
         priority: 3,
-        budgetKey: 'context',
+        budgetKey: 'skills',
         builder: (deps) => {
             const skillSections = skillRegistry.buildPromptSections({
                 userPrompt: deps.intent?.originalRequest,

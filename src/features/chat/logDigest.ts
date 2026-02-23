@@ -34,8 +34,20 @@ const parameterExtractors: Record<string, (params: any) => string> = {
   planDesign: (params) => `${params.approach || 'default'}, steps:${params.steps?.length || 0}`,
   inspectDesign: (params) => `nodeIds: ${params.nodeIds?.join(',') || params.nodeId || '?'}`,
   complete_task: (params) => (params.summary || '').slice(0, 80),
-  renderSubtree: (params) => `${params.nodeId || '?'}, ${params.type || '?'}`,
-  patchNode: (params) => `${params.nodeId || '?'}, ${params.type || '?'}`,
+  renderSubtree: (params) => {
+    if (Array.isArray(params.nodes)) return `nodes:${params.nodes.length}, parent:${params.parentId || 'root'}`;
+    return `${params.nodeId || '?'}, ${params.type || '?'}`;
+  },
+  patchNode: (params) => `${params.nodeId || '?'}, props:${Object.keys(params.props || {}).join(',')}`,
+  generateDesign: (params) => {
+    if (!Array.isArray(params.nodes)) return JSON.stringify(params).slice(0, 100);
+    const summary = params.nodes
+      .slice(0, 3)
+      .map((n: any) => `${n.type}(${n.props?.name || n.id || '?'})`)
+      .join(', ');
+    const more = params.nodes.length > 3 ? `... (+${params.nodes.length - 3} more)` : '';
+    return `nodes:${params.nodes.length} [${summary}${more}]`;
+  },
 };
 
 /**
@@ -43,8 +55,9 @@ const parameterExtractors: Record<string, (params: any) => string> = {
  */
 function extractResultInfo(tool: ToolCallRecord): string {
   if (tool.status === 'error') return '';
-  if (tool.name === 'batchOperations' && tool.result?.idMap) {
-    const mappings = Object.entries(tool.result.idMap)
+  const idMap = tool.result?.data?.idMap || tool.result?.idMap;
+  if (tool.name === 'batchOperations' && idMap) {
+    const mappings = Object.entries(idMap)
       .map(([key, id]) => `${key}→${id}`)
       .join(', ');
     return mappings ? `ids: ${mappings}` : '';

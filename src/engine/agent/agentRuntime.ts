@@ -12,7 +12,6 @@ import { planState } from './planState';
 import { composeAgentSystemPrompt } from '../llm-client/context/promptComposer';
 import { mapToSemanticError, formatSemanticError } from '../utils/errorUtils';
 import { AgentBehaviorConfig, DEFAULT_BEHAVIOR, resolveBehavior } from './agentBehaviorConfig';
-import { composeSkillBasedPrompt, buildSkillContextDeps } from './skills/skillPromptComposer';
 import { estimateTokens } from './context/tokenEstimator';
 import { CONTEXT_CONSTANTS } from './context/constants';
 import { ToolResultCleaner } from './context/toolResultCleaner';
@@ -23,6 +22,7 @@ import {
   getToolModeForPhase,
   getMaxTokensForPhase,
 } from './agentLoopPolicy';
+import { LoopDetector } from './loopDetector';
 
 export interface AgentRuntimeOptions {
   provider: LLMProvider;
@@ -54,7 +54,7 @@ export class AgentRuntime {
   private cleaner: ToolResultCleaner;
   private idCounter: number = 0;
   private lastThinkingText: string = '';
-  private toolCallSignatureHistory: string[] = [];
+  private loopDetector = new LoopDetector();
   private thinkingOnlyIterations: number = 0;
   private anyModeRetryCount: number = 0;
   private lastNotificationTime: number = 0;
@@ -65,11 +65,12 @@ export class AgentRuntime {
   private lastProgressHeaders: string[] = [];
   private hasPendingToolErrors: boolean = false;
   private consecutiveToolFailures: number = 0;
-  private collectionAttempts: number = 0; // 🔴 P1: Collection counter
   private staleStepIterations: number = 0; // Track how long a step has been active without advancing
   private lastActiveStepId: string | null = null; // Track which step was active last iteration
   private recoveryActive: boolean = false;
   private recoveryIterations: number = 0;
+  private totalRecoveryCycles: number = 0;
+  private verificationFixIterations: number = 0;
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createIcon',
     'deleteNode',
@@ -119,19 +120,6 @@ export class AgentRuntime {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 5);
     return `${prefix}_${timestamp}${random}${this.idCounter}`;
-  }
-
-  /**
-   * Stable short hash for loop-signature fingerprinting.
-   */
-  private hashString(value: string): string {
-    if (!value) return '0';
-    let hash = 0;
-    for (let i = 0; i < value.length; i++) {
-      hash = ((hash << 5) - hash) + value.charCodeAt(i);
-      hash |= 0; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(36);
   }
 
   private sanitizeOpId(value: string): string {
@@ -346,7 +334,7 @@ export class AgentRuntime {
     }
 
     let iteration = 0;
-    this.toolCallSignatureHistory = [];
+    this.loopDetector.reset();
     this.lastThinkingText = '';
     this.thinkingOnlyIterations = 0;
     this.progressCallCount = 0;
@@ -354,6 +342,8 @@ export class AgentRuntime {
     this.lastActiveStepId = null;
     this.recoveryActive = false;
     this.recoveryIterations = 0;
+    this.totalRecoveryCycles = 0;
+    this.verificationFixIterations = 0;
     this.idCounter = 0; // Better to reset idCounter at start of run if not already reset
     this.retryPolicy.resetAll();
 
@@ -361,7 +351,6 @@ export class AgentRuntime {
     // ITERATION LOOP
     // ============================================
     while (iteration < this.maxIterations) {
-      this.collectionAttempts = 0; // Reset collection counter for each iteration to allow batching
       await this.manageContext();
       // 🟡 P2: compactThoughtSignatures disabled to protect prefix cache
       // this.compactThoughtSignatures(); 
@@ -472,21 +461,44 @@ export class AgentRuntime {
       // RECOVERY MODE OVERRIDE
       // ----------------------------------------
       if (this.loopPolicy.recovery.enabled && mode === 'EXECUTION') {
+        // After first recovery cycle, raise the entry threshold to make re-entry harder
+        const effectiveThreshold = this.totalRecoveryCycles > 0
+          ? this.loopPolicy.recovery.escalatedFailureThreshold
+          : this.loopPolicy.recovery.entryFailureThreshold;
+
         const shouldEnterRecovery = this.recoveryActive ||
-          this.consecutiveToolFailures >= this.loopPolicy.recovery.entryFailureThreshold;
+          this.consecutiveToolFailures >= effectiveThreshold;
 
         if (shouldEnterRecovery) {
           if (!this.recoveryActive) {
-            this.recoveryActive = true;
-            this.recoveryIterations = 0;
-            this.context.addMessage({
-              id: this.generateId('recovery_enter'),
-              role: 'user',
-              content: `RECOVERY MODE: ${this.consecutiveToolFailures} consecutive all-failure iterations detected. Diagnose with inspectDesign/validateLayout first, then resume with a changed strategy.`
-            });
-            console.warn('[AgentRuntime] Entering RECOVERY mode due to repeated failures.');
+            // Check if we've exhausted recovery cycles
+            if (this.totalRecoveryCycles >= this.loopPolicy.recovery.maxTotalCycles) {
+              // Force completion instead of entering recovery again
+              this.context.addMessage({
+                id: this.generateId('recovery_cap'),
+                role: 'user',
+                content: `Recovery cycle limit reached (${this.totalRecoveryCycles} cycles). The design may be incomplete. Call complete_task NOW with a summary of what was built and what failed.`
+              });
+              console.warn(`[AgentRuntime] Recovery cycle cap reached (${this.totalRecoveryCycles}/${this.loopPolicy.recovery.maxTotalCycles}). Forcing completion.`);
+              // Stay in EXECUTION with completion hint, do NOT enter recovery
+            } else {
+              this.recoveryActive = true;
+              this.recoveryIterations = 0;
+              this.totalRecoveryCycles++;
+              const stepContext = activeStep
+                ? ` Current step: "${activeStep.title}".${activeStep.nodes?.length ? ` Target nodes: [${activeStep.nodes.join(', ')}].` : ''}`
+                : '';
+              this.context.addMessage({
+                id: this.generateId('recovery_enter'),
+                role: 'user',
+                content: `RECOVERY MODE (cycle ${this.totalRecoveryCycles}/${this.loopPolicy.recovery.maxTotalCycles}): ${this.consecutiveToolFailures} consecutive all-failure iterations detected.${stepContext} Diagnose with inspectDesign/validateLayout first, then resume with a changed strategy.`
+              });
+              console.warn(`[AgentRuntime] Entering RECOVERY mode (cycle ${this.totalRecoveryCycles}/${this.loopPolicy.recovery.maxTotalCycles}) due to repeated failures.`);
+              mode = 'RECOVERY';
+            }
+          } else {
+            mode = 'RECOVERY';
           }
-          mode = 'RECOVERY';
         }
       }
 
@@ -639,16 +651,6 @@ export class AgentRuntime {
         // Save raw (pre-batch) tool calls for loop detection — these have stable signatures
         // because they don't contain auto-generated opIds from buildBatchOperationsCall.
         rawToolCallsForLoopDetection = [...rawToolCalls];
-
-        // 🔴 P1: Collection-Execution Mode — DISABLED
-        // Previously made an extra LLM call when model returned only 1 batchable tool,
-        // to "collect" more operations. In practice this doubled latency for minimal gain
-        // (typically collecting 0-1 extra operations at the cost of 15-30s per call).
-        // The model should be prompted to emit multiple tools in one response instead.
-        if (mode === 'EXECUTION' && rawToolCalls.length === 1 &&
-            this.AUTO_BATCH_TOOL_NAMES.has(rawToolCalls[0].name)) {
-          console.log(`[AgentRuntime] Single batchable tool (${rawToolCalls[0].name}). Executing directly without collection.`);
-        }
 
         const executionToolCalls = rawToolCalls.length > 1
           ? this.autoBatchToolCalls(rawToolCalls, mode)
@@ -956,123 +958,27 @@ export class AgentRuntime {
         // ----------------------------------------
         // PHASE 6: LOOP DETECTION (moved BEFORE figmaToolCalls check)
         // ----------------------------------------
-        // [FIX] Use RAW (pre-batch) tool calls for loop detection fingerprinting.
-        // Auto-batched calls generate unique opIds (timestamp-based) each iteration,
-        // which defeats loop detection by producing different hashes every time.
-        // Raw tool calls have stable args from the LLM, enabling proper duplicate detection.
+        // Use RAW (pre-batch) tool calls for stable fingerprinting.
         const allToolCalls = toolCallsForExecution || [];
         const loopDetectionCalls = rawToolCallsForLoopDetection.length > 0
           ? rawToolCallsForLoopDetection
           : allToolCalls;
 
-        // A signature looks at tool name + target context + content fingerprint
-        const semanticSignature = loopDetectionCalls.map(tc => {
-          const targetNodeId = tc.args?.nodeId;
-          const parentId = tc.args?.parentId || tc.args?.parentRef;
+        const loopResult = this.loopDetector.detect(loopDetectionCalls, {
+          identical: AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD,
+          monotone: this.loopPolicy.monotoneLoopThreshold,
+        });
 
-          // [Phase 2.5] Declarative Fingerprinting Logic
-          // We use longer sampling (64 chars) and context (parentId) to distinguish similar nodes
-          let fingerprint = '';
-          const nameSample = tc.args?.name ? `|name:${this.sanitizeString(tc.args.name, 64)}` : '';
-          const contextSample = parentId ? `|parent:${this.sanitizeString(parentId, 32)}` : '';
-
-          if (tc.name === 'updateNodeProperties' && tc.args?.properties) {
-             const propsHash = this.hashString(JSON.stringify(tc.args.properties));
-             fingerprint = `|props:${propsHash}`;
-          } else if (tc.name === 'setNodeStyles' && (tc.args?.fills || tc.args?.strokes)) {
-             const stylesHash = this.hashString(JSON.stringify({ f: tc.args.fills, s: tc.args.strokes }));
-             fingerprint = `|style:${stylesHash}`;
-          } else if (tc.name === 'createNode') {
-            fingerprint = `${nameSample}${contextSample}`;
-          } else if (tc.name === 'createIcon' && tc.args?.iconName) {
-            fingerprint = `|icon:${tc.args.iconName}${contextSample}`;
-          } else if (tc.name === 'applyDesignPatch' && tc.args?.patches?.length > 0) {
-            // Group hash of patches to distinguish different patch sets
-            const patchHash = this.hashString(JSON.stringify(tc.args.patches.map((p: any) => ({ n: p.nodeId || p.nodeRef, l: !!p.layout, s: !!p.styles }))));
-            fingerprint = `|patch:${tc.args.patches.length}|hash:${patchHash}`;
-          } else if (tc.name === 'batchOperations' && Array.isArray(tc.args?.operations)) {
-            const opIds = tc.args.operations
-              .map((op: any) => op?.opId || op?.action)
-              .filter(Boolean)
-              .join(',');
-            fingerprint = `|batch:${tc.args.operations.length}|ops:${this.hashString(opIds)}`;
-          } else if (tc.name === 'summarize_progress' && tc.args?.summary) {
-            fingerprint = `|sum:${this.hashString(tc.args.summary)}`;
-          } else if (tc.name === 'update_todo_list' && tc.args?.items) {
-            fingerprint = `|todo:${this.hashString(JSON.stringify(tc.args.items))}`;
-          } else if (tc.name === 'new_task' && (tc.args?.title || tc.args?.description)) {
-            fingerprint = `|task:${this.hashString(tc.args.title + '|' + tc.args.description)}`;
-          } else if (tc.name === 'planDesign' && tc.args?.analysis) {
-            fingerprint = `|plan:${this.hashString(tc.args.analysis)}`;
-          } else if (tc.name === 'inspectDesign') {
-            // [FIX] Include mode and depth to distinguish different inspection calls
-            // This prevents false positive loop detection when Agent inspects with different parameters
-            const mode = tc.args?.mode || 'selection';
-            const depth = tc.args?.depth ?? 5;
-            fingerprint = `|mode:${mode}|depth:${depth}`;
+        if (loopResult) {
+          if (loopResult.fatal) {
+            throw new Error(loopResult.message);
           }
-
-          const identifier = targetNodeId || 'new';
-          return `${tc.name}[${identifier}${fingerprint}]`;
-        }).join('|');
-
-        this.toolCallSignatureHistory.push(semanticSignature);
-        if (this.toolCallSignatureHistory.length > 10) this.toolCallSignatureHistory.shift();
-
-        // Semantic Planning Loop Detection: Check for repeated planDesign calls without progress
-        // [FIX] Check ALL tool calls, not figmaToolCalls (planDesign is a workflow tool)
-        const planCallCount = allToolCalls.filter(tc => tc.name === 'planDesign').length;
-        if (planCallCount > 0) {
-          const recentPlanCalls = this.toolCallSignatureHistory.filter(sig => sig.includes('planDesign'));
-          if (recentPlanCalls.length >= 3) {
-            throw new Error(`Agent stuck in planning loop: planDesign called 3+ times consecutively. Try giving more specific instructions.`);
-          }
-        }
-
-        // Semantic Loop Detection: Check for repeating patterns using signatures
-        // [FIX] Moved BEFORE early exit to catch workflow-only loops too
-        const identicalSignatureCount = this.toolCallSignatureHistory.filter(sig => sig === semanticSignature).length;
-        if (identicalSignatureCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD) {
-          throw new Error(
-            `[LOOP DETECTED] Same action repeated ${identicalSignatureCount} times: ${semanticSignature}. ` +
-            `Consider: (1) Check if previous tool succeeded (2) Try different approach (3) Call complete_task if done.`
-          );
-        }
-
-        // [FIX] Secondary loop detector: catch "same tool type" repetition even with different args.
-        // The model may call applyDesignPatch with slightly different nodeIds/patches each time,
-        // producing different signatures but still being stuck in a polish loop.
-        // If the last N signatures all contain only the same tool name(s), it's likely a loop.
-        const MONOTONE_LOOP_THRESHOLD = this.loopPolicy.monotoneLoopThreshold;
-        if (this.toolCallSignatureHistory.length >= MONOTONE_LOOP_THRESHOLD) {
-          const recentSignatures = this.toolCallSignatureHistory.slice(-MONOTONE_LOOP_THRESHOLD);
-          // Extract the set of tool names from each signature
-          const toolNamePatterns = recentSignatures.map(sig => {
-            const toolNames = sig.split('|')
-              .map(s => s.split('[')[0])
-              .filter(Boolean)
-              .sort()
-              .join('+');
-            return toolNames;
+          // Non-fatal loop: inject completion hint
+          this.context.addMessage({
+            id: this.generateId('mono_loop'),
+            role: 'user',
+            content: loopResult.hint || loopResult.message,
           });
-          // If all recent iterations use the same tool name pattern
-          const allSamePattern = toolNamePatterns.every(p => p === toolNamePatterns[0]);
-          if (allSamePattern && toolNamePatterns[0]) {
-            // Only trigger for modify-only patterns (not read tools like inspectDesign)
-            const isModifyOnly = !toolNamePatterns[0].includes('inspectDesign') &&
-                                 !toolNamePatterns[0].includes('planDesign') &&
-                                 !toolNamePatterns[0].includes('complete_task');
-            if (isModifyOnly) {
-              console.warn(`[AgentRuntime] 🔄 MONOTONE LOOP: Same tool pattern "${toolNamePatterns[0]}" for ${MONOTONE_LOOP_THRESHOLD} consecutive iterations. Injecting completion hint.`);
-              // Instead of throwing, inject a strong completion hint
-              const completionHint: LLMMessage = {
-                id: this.generateId('mono_loop'),
-                role: 'user',
-                content: `⚠️ LOOP DETECTED: You have called "${toolNamePatterns[0]}" for ${MONOTONE_LOOP_THRESHOLD} consecutive iterations. The design is good enough. Call complete_task NOW with a summary. Do NOT make any more style changes.`
-              };
-              this.context.addMessage(completionHint);
-            }
-          }
         }
 
         // Early exit if only workflow tools (no figma tools to execute)
@@ -1236,7 +1142,8 @@ export class AgentRuntime {
             if (preferredRecoveryToolUsed && figmaSuccessCount > 0) {
               this.recoveryActive = false;
               this.recoveryIterations = 0;
-              this.consecutiveToolFailures = 0;
+              // Decay instead of full reset — prevents immediate re-entry into recovery
+              this.consecutiveToolFailures = Math.max(0, this.consecutiveToolFailures - 1);
               this.context.addMessage({
                 id: this.generateId('recovery_exit'),
                 role: 'user',
@@ -1252,7 +1159,8 @@ export class AgentRuntime {
             } else if (this.recoveryIterations >= this.loopPolicy.recovery.maxIterations) {
               this.recoveryActive = false;
               this.recoveryIterations = 0;
-              this.consecutiveToolFailures = 0;
+              // Decay instead of full reset — prevents immediate re-entry into recovery
+              this.consecutiveToolFailures = Math.max(0, this.consecutiveToolFailures - 1);
               this.context.addMessage({
                 id: this.generateId('recovery_timeout'),
                 role: 'user',
@@ -1283,6 +1191,31 @@ export class AgentRuntime {
                 content: `🛑 TOOL FAILURE PATTERN: ${this.consecutiveToolFailures} consecutive iterations where ALL tool calls failed. Next turn is RECOVERY mode. Diagnose with ${this.loopPolicy.recovery.preferredTools.join('/')} before any write actions.`
               });
               console.error('[AgentRuntime] Consecutive failure threshold reached. Scheduled RECOVERY mode.');
+            }
+          }
+        }
+
+        // ----------------------------------------
+        // VERIFICATION FIX LOOP
+        // ----------------------------------------
+        if (mode === 'VERIFICATION') {
+          const validateResult = toolResults.find(tr => tr.name === 'validateLayout');
+          if (validateResult?.response?.data?.hasErrors) {
+            this.verificationFixIterations++;
+            if (this.verificationFixIterations < this.loopPolicy.verificationFixLimit) {
+              this.context.addMessage({
+                id: this.generateId('vfix'),
+                role: 'user',
+                content: `Layout constraint errors detected (fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}). Use patchNode or applyDesignPatch to fix the reported errors, then call validateLayout again.`
+              });
+              console.log(`[AgentRuntime] VERIFICATION fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}`);
+            } else {
+              this.context.addMessage({
+                id: this.generateId('vfix_done'),
+                role: 'user',
+                content: 'Maximum verification fix attempts reached. Call complete_task with a note about remaining constraint issues.'
+              });
+              console.warn(`[AgentRuntime] VERIFICATION fix limit reached (${this.verificationFixIterations}). Forcing completion.`);
             }
           }
         }
@@ -1359,7 +1292,8 @@ export class AgentRuntime {
       behaviorConfig: this.behaviorConfig,
       // [INCREMENTAL] Provide operation log for prompt composition
       operationLog: this.operationLog,
-      activeStep: planState.getActiveStep()
+      activeStep: planState.getActiveStep(),
+      planSummary: planState.getSummary()
     };
 
     return composeAgentSystemPrompt(

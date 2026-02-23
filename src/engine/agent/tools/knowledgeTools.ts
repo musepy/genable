@@ -13,6 +13,7 @@ import { ToolDefinition, ToolExecutor, ToolResponse } from './types';
 export const searchDesignKnowledgeDefinition: ToolDefinition = {
   name: 'searchDesignKnowledge',
   category: 'knowledge',
+  modes: ['PLANNING'],
   dependencies: [],
   description: 'Search for UI/UX design knowledge, aesthetic directions, visual inspiration, style priorities, color palettes, or industry-specific patterns.',
   parameters: {
@@ -106,6 +107,7 @@ export const searchDesignKnowledge: ToolExecutor<{
 export const getComponentAnatomyDefinition: ToolDefinition = {
   name: 'getComponentAnatomy',
   category: 'knowledge',
+  modes: ['PLANNING'],
   dependencies: [],
   description: 'Retrieve a REFERENCE structural blueprint for a specific UI component. Use ONLY when user explicitly requests project/system patterns. For custom or relative adjustments, rely on your own design reasoning.',
   parameters: {
@@ -182,6 +184,7 @@ export const getComponentAnatomy: ToolExecutor<{
 export const getFigmaLayoutRulesDefinition: ToolDefinition = {
   name: 'getFigmaLayoutRules',
   category: 'knowledge',
+  modes: ['PLANNING'],
   dependencies: [],
   description: 'Retrieve specific Figma layout constraints and rules (Do/Don\'t) to ensure design system compliance.',
   parameters: {

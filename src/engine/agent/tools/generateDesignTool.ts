@@ -110,5 +110,6 @@ You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto"
     },
     required: ['nodes']
   },
-  executionStrategy: 'sequential'
+  executionStrategy: 'sequential',
+  modes: ['EXECUTION']
 };

@@ -44,6 +44,7 @@ import {
 } from './stateTools';
 
 import { workflowTools } from './workflowTools';
+import { ToolDefinition, AgentMode } from './types';
 
 /**
  * All tool definitions for LLM function calling.
@@ -72,82 +73,12 @@ export const agentTools = [
 ];
 
 /**
- * Plan/Act Tool Filtering
- * 
- * PLANNING mode: Only planning + read + knowledge tools
- * EXECUTION mode: Only execution tools (no planDesign)
- * RECOVERY mode: Read/diagnose first, then finalize or resume
- * VERIFICATION mode: Only read + validate + complete_task
- */
-const PLANNING_TOOLS = [
-  'planDesign',
-  'inspectDesign',
-  'searchDesignKnowledge',
-  'getComponentAnatomy',
-  'getFigmaLayoutRules',
-  'new_task',
-  'update_todo_list',
-  ...projectUITools.definitions.map(t => t.name)
-];
-
-const EXECUTION_TOOLS = [
-  'inspectDesign',
-  'generateDesign',
-  'renderSubtree',
-  'patchNode',
-  'batchOperations',
-  'createIcon',
-  'deleteNode',
-  'applyDesignPatch',
-  'update_todo_list',
-  'summarize_progress',
-  'complete_task'
-];
-
-const VERIFICATION_TOOLS = [
-  'inspectDesign',
-  'validateLayout',
-  'summarize_progress',
-  'complete_task'
-];
-
-const RECOVERY_TOOLS = [
-  'inspectDesign',
-  'validateLayout',
-  'createNode',
-  'setNodeLayout',
-  'setNodeStyles',
-  'updateNodeProperties',
-  'update_todo_list',
-  'summarize_progress',
-  'complete_task'
-];
-
-/**
  * Filter tools based on agent mode.
- * Returns only tools appropriate for the current phase.
+ * Each tool declares its own `modes` in its ToolDefinition.
+ * If `modes` is omitted, the tool is available in all modes.
  */
-export function getToolsForMode(mode: 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION', allTools: typeof agentTools): typeof agentTools {
-  let allowedNames: string[];
-  
-  switch (mode) {
-    case 'PLANNING':
-      allowedNames = PLANNING_TOOLS;
-      break;
-    case 'EXECUTION':
-      allowedNames = EXECUTION_TOOLS;
-      break;
-    case 'VERIFICATION':
-      allowedNames = VERIFICATION_TOOLS;
-      break;
-    case 'RECOVERY':
-      allowedNames = RECOVERY_TOOLS;
-      break;
-    default:
-      return allTools;
-  }
-  
-  return allTools.filter(tool => allowedNames.includes(tool.name));
+export function getToolsForMode(mode: AgentMode, allTools: ToolDefinition[]): ToolDefinition[] {
+  return allTools.filter(tool => !tool.modes || tool.modes.includes(mode));
 }
 
 // Re-export types

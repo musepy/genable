@@ -17,6 +17,14 @@ export interface PlanStep {
   todos: TodoItem[];
   startedAt?: number;
   completedAt?: number;
+  /** High-level action description from planDesign (e.g. "Build header with logo and nav") */
+  action?: string;
+  /** Expected node names to create in this step */
+  nodes?: string[];
+  /** Why this step is needed */
+  reasoning?: string;
+  /** Original step ordering from planDesign */
+  stepNumber?: number;
 }
 
 class PlanStateManager {
@@ -130,10 +138,13 @@ class PlanStateManager {
     const completed = this.currentPlan.filter(s => s.status === 'completed').length;
     const total = this.currentPlan.length;
     const active = this.getActiveStep();
-    
+
     let summary = `${completed}/${total} tasks completed.`;
     if (active) {
       summary += ` Currently working on: "${active.title}"`;
+      if (active.nodes && active.nodes.length > 0) {
+        summary += ` | Target nodes: [${active.nodes.join(', ')}]`;
+      }
     }
     return summary;
   }

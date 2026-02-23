@@ -85,7 +85,7 @@ export class TreeReconstructor {
             if (!current) continue;
 
             // Root detection
-            if (node.parent === null || node.parent === '' || node.parent === undefined) {
+            if (node.parent === null || node.parent === '' || node.parent === undefined || node.parent === 'null') {
                 if (!rootIds.has(node.id)) {
                     roots.push(current);
                     rootIds.add(node.id);

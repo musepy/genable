@@ -3,6 +3,7 @@ import { ToolDefinition } from './types';
 export const workflowTools: ToolDefinition[] = [
   {
     name: 'new_task',
+    modes: ['PLANNING'],
     description: 'Signals the start of a clear semantic task. Triggers a new Task Card in the UI.',
     parameters: {
       type: 'object',
@@ -27,6 +28,7 @@ export const workflowTools: ToolDefinition[] = [
   },
   {
     name: 'update_todo_list',
+    modes: ['PLANNING', 'EXECUTION', 'RECOVERY'],
     description: 'Dynamically manages sub-steps (todos) within the current active task.',
     parameters: {
       type: 'object',
@@ -57,6 +59,7 @@ export const workflowTools: ToolDefinition[] = [
   },
   {
     name: 'summarize_progress',
+    modes: ['EXECUTION', 'VERIFICATION', 'RECOVERY'],
     description: 'Periodically reports high-level progress or completes a task.',
     parameters: {
       type: 'object',
@@ -81,6 +84,7 @@ export const workflowTools: ToolDefinition[] = [
   },
   {
     name: 'complete_task',
+    modes: ['EXECUTION', 'VERIFICATION', 'RECOVERY'],
     description: `[REQUIRED] Signal task completion. You MUST call this tool to end execution. Do NOT just stop responding - explicitly call this tool with a summary.`,
     parameters: {
       type: 'object',

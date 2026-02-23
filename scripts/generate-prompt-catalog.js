@@ -67,6 +67,12 @@ function main() {
   // Nest them back for the registry
   catalog.MODE_GUIDANCE = modeGuidance;
 
+  // Remove duplicated top-level MODES_* keys (only MODE_GUIDANCE is consumed)
+  delete catalog.MODES_PLANNING;
+  delete catalog.MODES_EXECUTION;
+  delete catalog.MODES_VERIFICATION;
+  delete catalog.MODES_RECOVERY;
+
   safeJsonWrite(
     path.join(OUTPUT_DIR, 'prompt-catalog.json'),
     catalog

@@ -43,8 +43,9 @@ describe('PromptComposer - Agent Mode', () => {
     };
 
     it('should include agent core prompt including schema rules', () => {
-        const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
-        expect(prompt).toContain('You are a Figma design agent');
+        // Use EXECUTION mode so execution-protocol (schema rules, naming) gets injected
+        const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider, { mode: 'EXECUTION' });
+        expect(prompt).toContain('You are a Figma plugin agent');
         expect(prompt).toContain('CORE POLICIES');
         expect(prompt).toContain('NAMING CONVENTION');
         expect(prompt).toContain('CANONICAL PROPERTY NAMES'); // From SCHEMA_RULES
@@ -54,12 +55,10 @@ describe('PromptComposer - Agent Mode', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
         
         expect(prompt).toContain('## AVAILABLE TOOLS');
-        expect(prompt).toContain('- searchDesignKnowledge: Search for design rules.');
-        expect(prompt).toContain('  - query (string): Search term.');
-        
-        expect(prompt).toContain('- createNode: Create a Figma node.');
-        expect(prompt).toContain('  - type (string): Node type.');
-        expect(prompt).toContain('  - name (string): Node name.');
+        expect(prompt).toContain('**searchDesignKnowledge**');
+        expect(prompt).toContain('Search for design rules.');
+        expect(prompt).toContain('**createNode**');
+        expect(prompt).toContain('Create a Figma node.');
         expect(prompt).toContain('PROVIDER_TOOLS_2');
     });
 

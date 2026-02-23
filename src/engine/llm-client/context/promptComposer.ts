@@ -14,7 +14,7 @@ import {
     JSON_FORMAT_RULES
 } from '../../agent/agentPrompts';
 // Direct import for SCHEMA_RULES and DESIGN_AESTHETICS
-import { SCHEMA_RULES, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
+import { SCHEMA_RULES, DESIGN_AESTHETICS, SCENE_GRAPH_MODEL } from '../../prompt/promptRegistry';
 import { estimateTokens } from '../../agent/context/tokenEstimator';
 import { skillRegistry } from '../../agent/skills/SkillRegistry';
 
@@ -420,6 +420,12 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         priority: 1,
         budgetKey: 'core',
         builder: (_deps, _tools, _budget) => buildUniversalCoreIdentity()
+    },
+    {
+        id: 'scene-graph-model',
+        priority: 1.05,
+        budgetKey: 'core',
+        builder: (_deps, _tools, budget) => truncateToBudget(SCENE_GRAPH_MODEL, budget)
     },
     {
         id: 'execution-protocol',

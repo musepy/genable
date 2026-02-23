@@ -25,9 +25,8 @@ describe('Design Agent Prompt Optimization (TDD)', () => {
     it('should include the core Figma design agent persona', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider as any);
         
-        // Use new persona definition
-        expect(prompt).toContain('You are a Figma design agent');
-        expect(prompt).toContain('accomplish tasks by calling tools');
+        expect(prompt).toContain('You are a Figma plugin agent');
+        expect(prompt).toContain('CORE POLICIES');
     });
 
     it('should use standardized headers', () => {

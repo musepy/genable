@@ -64,6 +64,12 @@ export const DESIGN_AESTHETICS = catalog.DESIGN_AESTHETICS;
 export const ICON_USAGE = catalog.CONVENTIONS_ICON_USAGE;
 
 // ============================================================
+// SCENE GRAPH — Mental model for tree structure and layout constraints
+// ============================================================
+
+export const SCENE_GRAPH_MODEL = catalog.SCENE_GRAPH_MODEL;
+
+// ============================================================
 // SCHEMA RULES — Output format constraints (replaces stale JSON_FORMAT_RULES)
 // ============================================================
 

@@ -14,3 +14,5 @@ coverage/
 .env
 .idea/
 .vscode/
+test_output.txt
+数据结构/产出日志.json

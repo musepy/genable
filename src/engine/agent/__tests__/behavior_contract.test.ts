@@ -74,6 +74,32 @@ describe('Agent Architecture Contract Tests', () => {
         const generateCall = (mockProvider.generate as Mock).mock.calls[0][0];
         // In EXECUTION mode, toolConfig.mode should be ANY
         expect(generateCall.toolConfig).toEqual({ mode: 'ANY' });
+        expect(generateCall.thinkingLevel).toBe('minimal');
+    });
+
+    it('should downgrade high thinking to low in EXECUTION mode', async () => {
+        const behaviorConfig = resolveBehavior({
+            thinkingLevel: 'high',
+            promptPolicy: { useSkillSystem: false }
+        });
+
+        const runtime = new AgentRuntime({
+            provider: mockProvider,
+            tools: [{ name: 'test_tool', description: 'Test', parameters: { type: 'object', properties: {} } }],
+            behaviorConfig,
+            planId: 'test-plan'
+        });
+
+        planState.setCurrentPlan([{ title: 'Task 1', stepId: '1' }]);
+        planState.startTask('Task 1', undefined, '1');
+
+        await runtime.run('dummy request');
+
+        const generateCall = (mockProvider.generate as Mock).mock.calls[0][0];
+        // Thinking models should avoid ANY mode and use AUTO in execution
+        expect(generateCall.toolConfig).toEqual({ mode: 'AUTO' });
+        // High is downgraded to low in EXECUTION phase
+        expect(generateCall.thinkingLevel).toBe('low');
     });
 
     it('should include mode-specific guidance in system prompt (Skill System)', async () => {

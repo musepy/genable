@@ -179,6 +179,19 @@ export class AgentRuntime {
     }
   }
 
+  /**
+   * Phase-aware thinking policy:
+   * - Keep configured level in PLANNING/VERIFICATION/RECOVERY
+   * - Force EXECUTION to low for faster, more deterministic tool emission
+   */
+  private getThinkingLevelForMode(mode: AgentMode): AgentBehaviorConfig['thinkingLevel'] {
+    if (mode === 'EXECUTION') {
+      if (this.behaviorConfig.thinkingLevel === 'minimal') return 'minimal';
+      return 'low';
+    }
+    return this.behaviorConfig.thinkingLevel;
+  }
+
 
   private sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return this.cleaner.sanitizeToolCallsForHistory(toolCalls);
@@ -576,6 +589,7 @@ export class AgentRuntime {
 
       const toolConfig = { mode: resolvedToolMode };
       const actionMaxTokens = getMaxTokensForPhase(mode, this.loopPolicy);
+      const effectiveThinkingLevel = this.getThinkingLevelForMode(mode);
 
       let currentIterationText = '';
       const allowProgressStreaming = mode === 'PLANNING';
@@ -643,7 +657,7 @@ export class AgentRuntime {
               this.lastThinkingText = thought;
             }
           },
-          thinkingLevel: this.behaviorConfig.thinkingLevel
+          thinkingLevel: effectiveThinkingLevel
         });
 
         let rawToolCalls = response.toolCalls || [];

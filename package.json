@@ -67,7 +67,7 @@
     "capabilities": [
       "inspect"
     ],
-    "id": "1583731690321161934",
+    "id": "1583731690321161935",
     "name": "Genable (Dogfood)",
     "main": "src/main.ts",
     "ui": "src/ui.tsx",

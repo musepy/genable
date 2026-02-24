@@ -1,7 +1,5 @@
 import { h } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { ShieldCheck, Sparkles } from 'lucide-preact';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './ui/Card';
 import { Button } from './Button';
 import { Input } from './Input';
 import { tokens } from '../design-system/tokens';
@@ -19,7 +17,7 @@ interface OnboardingViewProps {
 
 /**
  * OnboardingView - Welcome screen for first-time users
- * Displays a centered Card with API Key input
+ * Displays a concise form to connect an API key
  */
 export function OnboardingView({ 
   apiKey,
@@ -76,174 +74,133 @@ export function OnboardingView({
   return (
     <div style={{
       display: 'flex',
-      alignItems: 'flex-start',
-      justifyContent: 'center',
+      flexDirection: 'column',
       height: '100%',
-      padding: `${tokens.space[6]}px ${tokens.space[5]}px ${tokens.space[5]}px`,
+      padding: tokens.space[4],
       background: 'var(--color-background)',
+      boxSizing: 'border-box',
     }}>
-      <Card style={{ width: '100%', maxWidth: 404 }}>
-        <CardHeader>
-          <div style={{
-            fontSize: tokens.fontSize[1],
-            color: 'var(--gray-10)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: tokens.space[1],
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-full)',
-            border: '1px solid var(--gray-6)',
-            width: 'fit-content',
-            marginBottom: tokens.space[2],
-          }}>
-            First-time setup
-          </div>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: tokens.space[2],
-            marginBottom: tokens.space[1],
-          }}>
-            <Sparkles size={24} strokeWidth={1.5} style={{ color: 'var(--accent-9)' }} />
-            <CardTitle>Connect {providerMeta.label}</CardTitle>
-          </div>
-          <CardDescription>
-            Add your API key to start generating UI. You can switch providers now and keep using the same chat flow.
-          </CardDescription>
-        </CardHeader>
+      <div style={{ marginBottom: tokens.space[5] }}>
+        <h2 style={{ fontSize: tokens.fontSize[2], fontWeight: 500, margin: 0, color: 'var(--gray-12)' }}>
+          Setup Connection
+        </h2>
+      </div>
 
-        <CardContent>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[3] }}>
-            <div style={{ display: 'flex', gap: tokens.space[2] }}>
-              <button
-                type="button"
-                onClick={() => setProviderName('gemini')}
-                style={{
-                  flex: 1,
-                  height: 30,
-                  borderRadius: 'var(--radius-full)',
-                  border: providerName === 'gemini' ? '1px solid var(--accent-7)' : '1px solid var(--gray-6)',
-                  background: providerName === 'gemini' ? 'var(--accent-3)' : 'var(--gray-2)',
-                  color: providerName === 'gemini' ? 'var(--accent-11)' : 'var(--gray-11)',
-                  fontSize: tokens.fontSize[1],
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                Gemini
-              </button>
-              <button
-                type="button"
-                onClick={() => setProviderName('openrouter')}
-                style={{
-                  flex: 1,
-                  height: 30,
-                  borderRadius: 'var(--radius-full)',
-                  border: providerName === 'openrouter' ? '1px solid var(--accent-7)' : '1px solid var(--gray-6)',
-                  background: providerName === 'openrouter' ? 'var(--accent-3)' : 'var(--gray-2)',
-                  color: providerName === 'openrouter' ? 'var(--accent-11)' : 'var(--gray-11)',
-                  fontSize: tokens.fontSize[1],
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                OpenRouter
-              </button>
-            </div>
-
-            <div>
-              <div style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-10)', marginBottom: tokens.space[2] }}>
-                API Key
-              </div>
-              <Input
-                type={showApiKey ? 'text' : 'password'}
-                placeholder={providerMeta.placeholder}
-                value={apiKey}
-                onInput={(e) => {
-                  setApiKey((e.target as HTMLInputElement).value);
-                  if (localError) setLocalError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && canSubmit) {
-                    handleConnect();
-                  }
-                }}
-                rightElement={
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(prev => !prev)}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--gray-10)',
-                      cursor: 'pointer',
-                      fontSize: tokens.fontSize[1],
-                      padding: 0,
-                    }}
-                  >
-                    {showApiKey ? 'Hide' : 'Show'}
-                  </button>
-                }
-                style={{ 
-                  borderColor: displayError ? 'var(--error-9)' : undefined,
-                }}
-              />
-            </div>
-
-            <div style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-10)' }}>
-              Get your key from{' '}
-              <a 
-                href={providerMeta.keyUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                style={{ color: 'var(--accent-9)', textDecoration: 'underline' }}
-              >
-                {providerMeta.keyLabel}
-              </a>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.space[2],
-              fontSize: tokens.fontSize[1],
-              color: 'var(--gray-10)',
-              padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-              background: 'var(--gray-2)',
-              borderRadius: 'var(--radius-2)',
-              border: '1px solid var(--gray-5)',
-            }}>
-              <ShieldCheck size={14} />
-              Keys are stored in Figma client storage only.
-            </div>
-
-            {displayError && (
-              <div style={{
+      <div style={{ 
+        display: 'flex', 
+        gap: tokens.space[4], 
+        borderBottom: '1px solid var(--border-subtle)',
+        marginBottom: tokens.space[4],
+      }}>
+        {['gemini', 'openrouter'].map(p => {
+          const isActive = providerName === p;
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setProviderName(p as 'gemini' | 'openrouter')}
+              style={{
+                padding: `0 0 ${tokens.space[2]}px 0`,
+                border: 'none',
+                background: 'transparent',
+                color: isActive ? 'var(--gray-12)' : 'var(--gray-9)',
                 fontSize: tokens.fontSize[1],
-                color: 'var(--error-9)',
-                padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-                background: 'var(--error-3)',
-                borderRadius: 'var(--radius-2)',
-              }}>
-                {displayError}
-              </div>
-            )}
-          </div>
-        </CardContent>
+                fontWeight: 500,
+                cursor: 'pointer',
+                position: 'relative',
+              }}
+            >
+              {p === 'gemini' ? 'Gemini' : 'OpenRouter'}
+              {isActive && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: -1,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  background: 'var(--gray-12)',
+                  borderRadius: '2px 2px 0 0',
+                }} />
+              )}
+            </button>
+          )
+        })}
+      </div>
 
-        <CardFooter>
-          <Button 
-            variant="primary" 
-            size="lg" 
-            fullWidth 
-            isLoading={isLoading}
-            disabled={!canSubmit}
-            onClick={handleConnect}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: 'var(--gray-11)' }}>API Key</span>
+          <a 
+            href={providerMeta.keyUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-9)', textDecoration: 'none' }}
           >
-            Connect & Start
-          </Button>
-        </CardFooter>
-      </Card>
+            Get from {providerMeta.keyLabel}
+          </a>
+        </div>
+        
+        <Input
+          type={showApiKey ? 'text' : 'password'}
+          placeholder={providerMeta.placeholder}
+          value={apiKey}
+          onInput={(e) => {
+            setApiKey((e.target as HTMLInputElement).value);
+            if (localError) setLocalError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && canSubmit) {
+              handleConnect();
+            }
+          }}
+          rightElement={
+            <button
+              type="button"
+              onClick={() => setShowApiKey(prev => !prev)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--gray-10)',
+                cursor: 'pointer',
+                fontSize: tokens.fontSize[1],
+                padding: '0 4px',
+              }}
+            >
+              {showApiKey ? 'Hide' : 'Show'}
+            </button>
+          }
+          style={{ borderColor: displayError ? 'var(--error-9)' : undefined }}
+        />
+        
+        <div style={{ fontSize: '10px', color: 'var(--gray-9)' }}>
+          Keys are stored locally in Figma client storage.
+        </div>
+      </div>
+
+      {displayError && (
+        <div style={{
+          fontSize: tokens.fontSize[1],
+          color: 'var(--error-11)',
+          padding: `${tokens.space[2]}px`,
+          background: 'var(--error-3)',
+          borderRadius: 'var(--radius-2)',
+          border: '1px solid var(--error-6)',
+        }}>
+          {displayError}
+        </div>
+      )}
+
+      <div style={{ marginTop: 'auto', paddingTop: tokens.space[4] }}>
+        <Button 
+          variant="primary" 
+          fullWidth 
+          isLoading={isLoading}
+          disabled={!canSubmit}
+          onClick={handleConnect}
+        >
+          Connect & Start
+        </Button>
+      </div>
     </div>
   );
 }

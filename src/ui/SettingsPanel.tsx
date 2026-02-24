@@ -69,86 +69,17 @@ export function SettingsPanel({
     }
   }, [debouncedApiKey]);
 
-  const renderApiModule = (name: string, provider: 'gemini' | 'openrouter') => {
-    const isExpanded = expandedProvider === provider;
-    const isCurrent = providerName === provider;
-    
-    const ArrowIcon = ({ expanded }: { expanded: boolean }) => (
-      <svg 
-        width="10" 
-        height="10" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="currentColor" 
-        strokeWidth="2.5"
-        style={{
-          transition: 'transform 200ms ease',
-          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-          color: 'var(--gray-9)'
-        }}
-      >
-        <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    );
-
-    return (
-      <div className={`api-module-box ${isExpanded ? 'is-expanded' : ''} ${isCurrent ? 'is-selected' : ''}`}>
-        <div 
-          className="api-module-header" 
-          onClick={() => {
-            setExpandedProvider(isExpanded ? null : provider);
-            setProviderName(provider);
-          }}
-        >
-          <div className="api-module-title" style={{ fontSize: tokens.fontSize[2], fontWeight: 400 }}>
-            <span style={{ color: 'var(--gray-11)' }}>{name} API Key</span>
-          </div>
-          <ArrowIcon expanded={isExpanded} />
-        </div>
-        
-        <div className="api-module-content">
-          <div className="api-expand-inner">
-            <div style={{ marginBottom: tokens.space[4] }}>
-              <Input 
-                type="password"
-                value={isCurrent ? apiKey : ''}
-                onInput={(e: h.JSX.TargetedEvent<HTMLInputElement>) => {
-                  if (!isCurrent) setProviderName(provider);
-                  setApiKey(e.currentTarget.value);
-                }}
-                placeholder="Enter your API key"
-                fullWidth
-                style={{ 
-                  height: 32,
-                  fontSize: tokens.fontSize[1],
-                  border: 'var(--border-main)', 
-                  borderRadius: 'var(--radius-5)'
-                }}
-              />
-            </div>
-            
-            <div style={{ marginBottom: tokens.space[1] }}>
-              <label style={{ 
-                fontSize: tokens.fontSize[1],
-                color: 'var(--gray-9)', 
-                marginBottom: tokens.space[2], 
-                display: 'block',
-                fontWeight: 400
-              }}>
-                available
-              </label>
-              <ModelSelector 
-                models={isCurrent ? suggestedModels : []}
-                selectedModel={isCurrent ? modelName : ''}
-                onSelect={setModelName}
-                isLoading={isCurrent && fetchStatus === 'fetching'}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const providerMeta = providerName === 'openrouter'
+    ? {
+        label: 'OpenRouter',
+        keyUrl: 'https://openrouter.ai/keys',
+        keyLabel: 'OpenRouter Keys',
+      }
+    : {
+        label: 'Gemini',
+        keyUrl: 'https://aistudio.google.com/apikey',
+        keyLabel: 'Google AI Studio',
+      };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--color-background)' }}>
@@ -158,11 +89,100 @@ export function SettingsPanel({
         overflowY: 'auto', 
         display: 'flex',
         flexDirection: 'column',
+        padding: tokens.space[4],
       }}>
-        {/* Modular API Stack */}
-        <div className="api-stack-container">
-          {renderApiModule('Gemini', 'gemini')}
-          {renderApiModule('OpenRouter', 'openrouter')}
+        
+        {/* Unified Config Settings */}
+        <div style={{ marginBottom: tokens.space[6] }}>
+          
+          {/* Provider Toggle */}
+          <div style={{ 
+            display: 'flex', 
+            gap: tokens.space[4], 
+            borderBottom: '1px solid var(--border-subtle)',
+            marginBottom: tokens.space[4],
+          }}>
+            {['gemini', 'openrouter'].map(p => {
+              const isActive = providerName === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setProviderName(p as 'gemini' | 'openrouter')}
+                  style={{
+                    padding: `0 0 ${tokens.space[2]}px 0`,
+                    border: 'none',
+                    background: 'transparent',
+                    color: isActive ? 'var(--gray-12)' : 'var(--gray-9)',
+                    fontSize: tokens.fontSize[1],
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
+                >
+                  {p === 'gemini' ? 'Gemini' : 'OpenRouter'}
+                  {isActive && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: -1,
+                      left: 0,
+                      right: 0,
+                      height: 2,
+                      background: 'var(--gray-12)',
+                      borderRadius: '2px 2px 0 0',
+                    }} />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+            {/* Input & Link */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[1] }}>
+                <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: 'var(--gray-11)' }}>API Key</span>
+                <a 
+                  href={providerMeta.keyUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-9)', textDecoration: 'none' }}
+                >
+                  Get from {providerMeta.keyLabel}
+                </a>
+              </div>
+              <Input 
+                type="password"
+                value={apiKey}
+                onInput={(e: h.JSX.TargetedEvent<HTMLInputElement>) => {
+                  setApiKey(e.currentTarget.value);
+                }}
+                placeholder={`Enter your ${providerMeta.label} API key`}
+                fullWidth
+              />
+            </div>
+
+            {/* Model Selector */}
+            {suggestedModels.length > 0 && (
+              <div>
+                <label style={{ 
+                  fontSize: tokens.fontSize[1],
+                  color: 'var(--gray-9)', 
+                  marginBottom: tokens.space[2], 
+                  display: 'block',
+                  fontWeight: 400
+                }}>
+                  available models
+                </label>
+                <ModelSelector 
+                  models={suggestedModels}
+                  selectedModel={modelName}
+                  onSelect={setModelName}
+                  isLoading={fetchStatus === 'fetching'}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Developer Tools (Dogfood) */}

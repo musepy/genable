@@ -62,7 +62,6 @@ const SEARCH_TOOLS = new Set([
 
 const EXPLORE_TOOLS = new Set([
   'inspectDesign',
-  'getDeepHierarchy',
   'getProjectUIContext',
   'getDesignSystemTokens',
   'listProjectComponents'

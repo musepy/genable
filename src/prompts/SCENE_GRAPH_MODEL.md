@@ -26,6 +26,18 @@
 - Nest when a group needs its own padding/gap independent of siblings.
 - Every visual grouping (card, input field, nav bar) should be its own FRAME with layoutMode.
 
+### Text Sizing & Overflow
+- textAutoResize controls how text boxes adapt:
+  - WIDTH_AND_HEIGHT: box shrinks/grows to fit text (use for short labels, buttons).
+  - HEIGHT: fixed width, auto height — enables wrapping (use for paragraphs, descriptions).
+  - NONE: fixed box, text may overflow silently (avoid for dynamic content).
+  - TRUNCATE: fixed box, excess text clipped with "..." (use with textTruncation=ENDING).
+- textTruncation=ENDING + maxLines=N: show at most N lines with ellipsis.
+  - For labels in fixed-width containers: use textTruncation=ENDING, maxLines=1, textAutoResize=TRUNCATE.
+  - For body text with known width: use textAutoResize=HEIGHT (auto-wraps, auto-adjusts height).
+- Rule: Never use textAutoResize=NONE unless you intentionally want overflow.
+- Rule: FILL width + long text → set textAutoResize=HEIGHT to enable wrapping.
+
 ### Efficiency: Think in Trees, Not Nodes
 - Output the COMPLETE tree in one generateDesign call. Each additional iteration costs ~4000 tokens of overhead.
 - Plan the full hierarchy BEFORE outputting: root > sections > components > leaves.

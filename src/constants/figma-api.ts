@@ -73,6 +73,8 @@ export const PROPS = {
   letterSpacing: 'letterSpacing',
   textCase: 'textCase',
   textDecoration: 'textDecoration',
+  textTruncation: 'textTruncation',       // 'DISABLED' | 'ENDING'
+  maxLines: 'maxLines',                    // number | null
   paragraphSpacing: 'paragraphSpacing',
   paragraphIndent: 'paragraphIndent',
 
@@ -173,8 +175,15 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.letterSpacing]: { figmaKey: 'letterSpacing', type: 'scalar', min: -100, max: 1000 },
   [PROPS.textCase]: { figmaKey: 'textCase', type: 'enum', enumMap: { ORIGINAL: 'ORIGINAL', UPPER: 'UPPER', LOWER: 'LOWER', TITLE: 'TITLE', SMALL_CAPS: 'SMALL_CAPS', SMALL_CAPS_FORCED: 'SMALL_CAPS_FORCED' } },
   [PROPS.textDecoration]: { figmaKey: 'textDecoration', type: 'enum', enumMap: { NONE: 'NONE', UNDERLINE: 'UNDERLINE', STRIKETHROUGH: 'STRIKETHROUGH' } },
+  [PROPS.textTruncation]: { figmaKey: 'textTruncation', type: 'enum', enumMap: { DISABLED: 'DISABLED', ENDING: 'ENDING' }, defaultValue: 'DISABLED' },
+  [PROPS.maxLines]: { figmaKey: 'maxLines', type: 'scalar', min: 1, max: 1000 },
   [PROPS.paragraphSpacing]: { figmaKey: 'paragraphSpacing', type: 'scalar', min: 0, max: 1000 },
   [PROPS.paragraphIndent]: { figmaKey: 'paragraphIndent', type: 'scalar', min: 0, max: 1000 },
+
+  // Previously missing metadata (PROPS defined but PROP_METADATA was absent → serialization broken)
+  [PROPS.rotation]: { figmaKey: 'rotation', type: 'scalar', defaultValue: 0, min: -360, max: 360 },
+  [PROPS.strokeAlign]: { figmaKey: 'strokeAlign', type: 'enum', enumMap: { INSIDE: 'INSIDE', OUTSIDE: 'OUTSIDE', CENTER: 'CENTER' }, defaultValue: 'INSIDE' },
+  [PROPS.cornerSmoothing]: { figmaKey: 'cornerSmoothing', type: 'scalar', defaultValue: 0, min: 0, max: 1 },
 
   // Virtual
   [PROPS.semantic]: { figmaKey: 'semantic', type: 'virtual' },
@@ -231,6 +240,8 @@ export const TEXT_PROPS_SCHEMA = {
   textCase: { type: 'string', description: 'ORIGINAL | UPPER | LOWER | TITLE | SMALL_CAPS | SMALL_CAPS_FORCED' },
   textDecoration: { type: 'string', description: 'NONE | UNDERLINE | STRIKETHROUGH' },
   textAutoResize: { type: 'string', description: 'NONE | WIDTH_AND_HEIGHT | HEIGHT | TRUNCATE' },
+  textTruncation: { type: 'string', description: 'DISABLED | ENDING. Use ENDING for ellipsis ("...") truncation.' },
+  maxLines: { type: 'number', description: 'Max visible lines before truncation. Requires textTruncation=ENDING and textAutoResize=TRUNCATE.' },
   paragraphSpacing: { type: 'number', description: 'Space between paragraphs in px' },
   paragraphIndent: { type: 'number', description: 'First-line indent in px' },
 } as const;

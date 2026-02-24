@@ -69,6 +69,7 @@ export class GeminiProvider implements LLMProvider {
         const thinkingBudgetByLevel: Record<string, number> = {
           'minimal': 1024,
           'low': 4096,
+          'medium': 10240,
           'high': 16384,
         };
         const budgetTokens = thinkingBudgetByLevel[thinkingLevel] ?? 4096;

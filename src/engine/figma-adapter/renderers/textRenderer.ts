@@ -164,6 +164,18 @@ export class TextRenderer extends BaseRenderer {
         // Note: horizontal align is often handled by auto-layout, but explicit is needed for fixed text
         if (p.textAlignHorizontal) t.textAlignHorizontal = p.textAlignHorizontal;
         if (p.textAlignVertical) t.textAlignVertical = p.textAlignVertical;
+
+        // Text Truncation (ellipsis)
+        if (p.textTruncation === 'ENDING') {
+            t.textTruncation = 'ENDING';
+            if (typeof p.maxLines === 'number' && p.maxLines > 0) {
+                t.maxLines = p.maxLines;
+            }
+            // Auto-set TRUNCATE mode if not explicitly set to a compatible value
+            if (!p.textAutoResize || p.textAutoResize === 'WIDTH_AND_HEIGHT') {
+                t.textAutoResize = 'TRUNCATE';
+            }
+        }
     }
 
     // ==========================================

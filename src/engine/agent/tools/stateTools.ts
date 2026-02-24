@@ -28,6 +28,16 @@ export const COMPACT_PROPS_SCHEMA = {
   characters: { type: 'string' as const, description: 'Text content (for TEXT nodes)' },
   fontSize: { type: 'number' as const, description: 'Font size in px' },
   fontWeight: { type: 'string' as const, description: 'Bold | Medium | Regular' },
+  fontFamily: { type: 'string' as const, description: 'Font family (e.g. "Inter", "Roboto")' },
+  lineHeight: { type: 'number' as const, description: 'Line height in px' },
+  textAlignHorizontal: { type: 'string' as const, description: 'LEFT | CENTER | RIGHT | JUSTIFIED' },
+  textAutoResize: { type: 'string' as const, description: 'NONE | WIDTH_AND_HEIGHT | HEIGHT | TRUNCATE' },
+  textTruncation: { type: 'string' as const, description: 'DISABLED | ENDING (ellipsis "...")' },
+  maxLines: { type: 'number' as const, description: 'Max visible lines (requires textTruncation=ENDING)' },
+  opacity: { type: 'number' as const, description: 'Opacity 0-1' },
+  strokeWeight: { type: 'number' as const, description: 'Stroke width in px' },
+  strokes: { type: 'array' as const, items: { type: 'string' as const, description: 'Hex color string' }, description: 'Stroke colors' },
+  effects: { type: 'array' as const, items: { type: 'object' as const, description: 'Effect object (drop shadow, blur)' }, description: 'Shadow/blur effects' },
 } as const;
 
 export const FLAT_NODE_SCHEMA = {

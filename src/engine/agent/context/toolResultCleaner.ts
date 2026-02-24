@@ -91,13 +91,15 @@ export class ToolResultCleaner {
         // TIER 1: Feedback signals
         ...(r.diff && { diff: r.diff }),
         ...(r.diffInfo && { diffInfo: r.diffInfo }),
-        ...(r.error && { 
-          error: { 
-            code: r.error.code, 
+        ...(r.error && {
+          error: {
+            code: r.error.code,
             message: r.error.message,
             ...(r.error.semanticFeedback && { semanticFeedback: r.error.semanticFeedback })
-          } 
+          }
         }),
+        // Post-op anomalies (zero-cost when empty — only present if issues detected)
+        ...(r.anomalies && { anomalies: r.anomalies }),
         ...(Array.isArray(r.children) && {
           children: r.children.map((c: any) => ({
             opId: c.opId,
@@ -153,6 +155,8 @@ export class ToolResultCleaner {
     if (data.diffInfo) essentialData.diffInfo = data.diffInfo;
     if (data.visibilityWarnings) essentialData.visibilityWarnings = data.visibilityWarnings;
     if (data.visibilityAutoFixed) essentialData.visibilityAutoFixed = data.visibilityAutoFixed;
+    // Post-op anomalies (zero-cost when empty — only present if issues detected)
+    if (data.anomalies) essentialData.anomalies = data.anomalies;
 
     // Preserve idMap and layoutSnapshots
     if (data.idMap && typeof data.idMap === 'object') {

@@ -48,15 +48,14 @@ export const GEMINI_CONFIG = {
 } as const;
 
 /**
- * Model version detection patterns
+ * Model filtering patterns
  */
 export const MODEL_PATTERNS = {
-  /** Allow 1.5, 2.0, 2.5, 3.0+ and experimental versions */
-  VERSION: /(?:1[.-]5|2[.-]0|2[.-]5|3[.-]?\d*|exp-3)/i,
-  /** Allow Pro, Flash and Flash-Lite variants */
+  /** Must be Pro, Flash, or Flash-Lite variant */
   VARIANT: /(?:pro|flash|lite)/i,
+  /** Exclude non-text-generation or date-stamped models */
   EXCLUDED_KEYWORDS: [
-    'tts', 'embedding', 'nano',
+    'tts', 'embedding', 'nano', 'image',
     'sep', 'oct', 'nov', 'dec', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug'
   ],
 } as const;
@@ -64,7 +63,7 @@ export const MODEL_PATTERNS = {
 /**
  * Thinking level configuration for Gemini 3.0+ models
  */
-export type ThinkingLevel = 'minimal' | 'low' | 'high';
+export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
 
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = activePerformance.thinkingLevel;
 

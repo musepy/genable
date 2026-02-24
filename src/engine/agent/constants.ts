@@ -26,7 +26,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   DEFAULT_TOOL_TIMEOUT_MS: 30000,
 
   /** Max time (ms) for thinking without action before timeout */
-  THINKING_TIMEOUT_MS: 60000,
+  THINKING_TIMEOUT_MS: 120000,
 
   /** Max consecutive iterations with no tool calls before error */
   MAX_THINKING_ONLY_ITERATIONS: 4,

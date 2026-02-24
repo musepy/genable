@@ -11,37 +11,6 @@ import { COMPACT_PROPS_SCHEMA, FLAT_NODE_SCHEMA } from './stateTools';
  */
 
 /**
- * Tool: getDeepHierarchy
- * Returns the full DSL tree of a node and its children (deep recursion).
- * Includes absolute positions and all styling.
- */
-export const getDeepHierarchyDefinition: ToolDefinition = {
-  name: 'getDeepHierarchy',
-  category: 'read',
-  dependencies: [],
-  description: `
-[SUPER TOOL] Deeply inspect a node and all its children.
-Returns the complete tree structure in DSL format, including IDs for EVERY child.
-Use this to understand complex layouts or to find specific layers without multiple calls.
-`,
-  parameters: {
-    type: 'object',
-    properties: {
-      nodeId: { 
-        type: 'string', 
-        description: 'Root node ID to start deep inspection from' 
-      },
-      depthLimit: { 
-        type: 'number', 
-        description: 'How many levels deep to traverse (default 5, max 10)'
-      }
-    },
-    required: ['nodeId']
-  },
-  executionStrategy: 'sequential'
-};
-
-/**
  * Tool: batchOperations
  * Execute multiple Figma operations in a single ordered call.
  */

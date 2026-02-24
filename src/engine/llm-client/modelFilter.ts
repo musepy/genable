@@ -25,14 +25,6 @@ export interface LLMModel {
 }
 
 /**
- * Check if a model name/display indicates a supported version
- */
-function isAllowedVersion(name: string, displayName: string): boolean {
-  const combined = `${name} ${displayName}`.toLowerCase();
-  return MODEL_PATTERNS.VERSION.test(combined);
-}
-
-/**
  * Check if a model is Pro or Flash variant
  */
 function isAllowedVariant(name: string, displayName: string): boolean {
@@ -49,7 +41,7 @@ function hasExcludedKeyword(name: string, displayName: string): boolean {
 }
 
 /**
- * Strict model filtering: Only Gemini 2.5/3.0 Pro/Flash models
+ * Model filtering: Gemini Pro/Flash models, excluding non-generation variants.
  * 
  * @param modelName - The model name (e.g., "gemini-2.5-flash")
  * @param displayName - Optional display name
@@ -58,9 +50,6 @@ function hasExcludedKeyword(name: string, displayName: string): boolean {
 export function isAllowedModel(modelName: string, displayName?: string): boolean {
   const name = modelName.toLowerCase();
   const display = (displayName || '').toLowerCase();
-  
-  // Must be 2.5 or 3.0
-  if (!isAllowedVersion(name, display)) return false;
   
   // Must be Pro or Flash
   if (!isAllowedVariant(name, display)) return false;

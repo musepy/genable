@@ -28,6 +28,7 @@ import {
   resolveParentId as batchResolveParentId
 } from './batchExecutor';
 import { deepMerge } from '../../utils/objectUtils';
+import { validatePostOp, collectTreeAnomalies } from '../../engine/validation/postOpValidator';
 
 export interface ToolCallData {
   toolName: string;
@@ -78,21 +79,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         break;
       }
 
-      case 'getDeepHierarchy': {
-        const { nodeId, depthLimit } = parameters;
-        const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
-        if (!node) {
-          response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` } };
-          break;
-        }
-        // Use the serializer with specified depth
-        const serialized = NodeSerializer.serializeWithCompression(node, { 
-          maxDepth: depthLimit || 5,
-          pruneDefaults: false 
-        });
-        response = { success: true, data: serialized };
-        break;
-      }
+
 
       // ==========================================
       // 1.5. Planning Tool (ReAct Pattern - No Side Effects)
@@ -172,16 +159,20 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           }
         }
         
-        response = { 
-          success: !!node, 
-          data: { 
-            nodeId: node?.id, 
+        // Post-op anomaly detection (zero-cost when clean)
+        const anomalies = node ? validatePostOp(node, sanitizeFlatProps(flatProps)) : [];
+
+        response = {
+          success: !!node,
+          data: {
+            nodeId: node?.id,
             name: node?.name,
             type: node?.type,
             applied: { name, characters },
             visibilityWarnings: visibilityWarnings.length > 0 ? visibilityWarnings : undefined,
-            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined
-          } 
+            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined,
+            anomalies: anomalies.length > 0 ? anomalies : undefined
+          }
         };
         
         if (node) completeStep(parameters.stepId);
@@ -830,13 +821,17 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         };
         collectIds(rootNode, nodes);
 
+        // Post-op anomaly detection on the full tree (zero-cost when clean)
+        const treeAnomalies = collectTreeAnomalies(rootNode);
+
         response = {
           success: true,
           data: {
             rootNodeId: rootNode.id,
             totalNodes: Object.keys(idMap).length,
             idMap, // Logical ID -> Figma Node ID
-            warnings: reconWarnings.length > 0 ? reconWarnings : undefined
+            warnings: reconWarnings.length > 0 ? reconWarnings : undefined,
+            anomalies: treeAnomalies.length > 0 ? treeAnomalies : undefined
           }
         };
 
@@ -946,6 +941,9 @@ async function executeBatchAction(
         }
       }
 
+      // Post-op anomaly detection
+      const batchAnomalies = validatePostOp(node, sanitizeFlatProps(flatProps));
+
         return {
         success: true,
         nodeId: node.id,
@@ -954,7 +952,8 @@ async function executeBatchAction(
         visibilityWarnings: visResult.issues.filter(i => i.severity === 'warning').length > 0
           ? visResult.issues.filter(i => i.severity === 'warning')
           : undefined,
-        visibilityAutoFixed: visResult.autoFixed.length > 0 ? visResult.autoFixed : undefined
+        visibilityAutoFixed: visResult.autoFixed.length > 0 ? visResult.autoFixed : undefined,
+        anomalies: batchAnomalies.length > 0 ? batchAnomalies : undefined
       };
     }
 

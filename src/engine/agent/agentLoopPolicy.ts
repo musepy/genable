@@ -74,11 +74,11 @@ export const DEFAULT_AGENT_LOOP_POLICY: AgentLoopPolicy = {
   anyModeNoToolRetryLimit: 2,
   anyToAutoFailureThreshold: 2,
   planningRamblingMultiplier: 4,
-  executionMaxOutputTokens: 8192,
-  verificationMaxOutputTokens: 8192,
+  executionMaxOutputTokens: 16384,
+  verificationMaxOutputTokens: 16384,
   promptBudgetTokens: 8000,
   useSkillSystem: true,
-  verificationFixLimit: 3,
+  verificationFixLimit: 5,
   recovery: {
     enabled: true,
     entryFailureThreshold: AGENT_RUNTIME_CONSTANTS.CONSECUTIVE_FAILURE_THRESHOLD,
@@ -106,10 +106,19 @@ export function isAnyModeByPolicy(mode: AgentMode, policy: AgentLoopPolicy, cons
   return getToolModeForPhase(mode, policy, consecutiveFailures) === 'ANY';
 }
 
-export function getToolModeForPhase(mode: AgentMode, policy: AgentLoopPolicy, consecutiveFailures: number): ToolCallMode {
+export function getToolModeForPhase(
+  mode: AgentMode,
+  policy: AgentLoopPolicy,
+  consecutiveFailures: number,
+  isThinkingModel: boolean = false
+): ToolCallMode {
   if (mode === 'PLANNING') return 'AUTO';
   if (mode === 'RECOVERY') return policy.recovery.toolMode;
   if (mode === 'EXECUTION' || mode === 'VERIFICATION') {
+    // [FIX] Thinking models (Gemini 3.x) conflict with ANY + thinkingConfig,
+    // causing 400 INVALID_ARGUMENT. They follow instructions well enough
+    // that ANY is unnecessary — AUTO avoids the conflict.
+    if (isThinkingModel) return 'AUTO';
     return consecutiveFailures >= policy.anyToAutoFailureThreshold ? 'AUTO' : 'ANY';
   }
   return 'AUTO';

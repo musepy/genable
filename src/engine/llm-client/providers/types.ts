@@ -87,7 +87,7 @@ export interface LLMGenerateOptions {
   /** Constrained response schema (optional) */
   responseSchema?: Record<string, any>;
   /** Thinking level for models that support it */
-  thinkingLevel?: 'minimal' | 'low' | 'high';
+  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
   /** Configuration for tool calling behavior (optional) */
   toolConfig?: LLMToolConfig;
   /** AbortSignal for cancelling streaming requests */

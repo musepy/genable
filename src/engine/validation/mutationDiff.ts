@@ -67,6 +67,42 @@ export function diffIntendedVsActual(intended: any, actual: any): DiffResult {
     }
   }
 
+  // 4. Text auto-resize silent correction
+  if (intended.textAutoResize && actual.props?.textAutoResize &&
+      intended.textAutoResize !== actual.props.textAutoResize) {
+    if (nodeType === 'TEXT') {
+      informational.push(
+        `textAutoResize: intended '${intended.textAutoResize}', but Figma applied '${actual.props.textAutoResize}'. This may be due to sizing mode or parent layout constraints.`
+      );
+    }
+  }
+
+  // 5. Dimension mismatch for FIXED sizing
+  if (intended.width !== undefined && actual.props?.width !== undefined) {
+    const intendedW = Number(intended.width);
+    const actualW = Number(actual.props.width);
+    if (Math.abs(intendedW - actualW) > 1) {
+      const sizingH = actual.props?.layoutSizingHorizontal;
+      if (!sizingH || sizingH === 'FIXED') {
+        informational.push(
+          `width: intended ${intendedW}px, but actual is ${Math.round(actualW)}px. Figma may have adjusted due to content or constraints.`
+        );
+      }
+    }
+  }
+  if (intended.height !== undefined && actual.props?.height !== undefined) {
+    const intendedH = Number(intended.height);
+    const actualH = Number(actual.props.height);
+    if (Math.abs(intendedH - actualH) > 1) {
+      const sizingV = actual.props?.layoutSizingVertical;
+      if (!sizingV || sizingV === 'FIXED') {
+        informational.push(
+          `height: intended ${intendedH}px, but actual is ${Math.round(actualH)}px. Figma may have adjusted due to content or constraints.`
+        );
+      }
+    }
+  }
+
   const messages = [...actionable, ...informational];
 
   return {

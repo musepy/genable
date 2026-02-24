@@ -65,12 +65,15 @@ export class AgentRuntime {
   private lastProgressHeaders: string[] = [];
   private hasPendingToolErrors: boolean = false;
   private consecutiveToolFailures: number = 0;
+  private emptyResponseRetries: number = 0;
   private staleStepIterations: number = 0; // Track how long a step has been active without advancing
   private lastActiveStepId: string | null = null; // Track which step was active last iteration
   private recoveryActive: boolean = false;
   private recoveryIterations: number = 0;
   private totalRecoveryCycles: number = 0;
   private verificationFixIterations: number = 0;
+  private verificationEntryInjected: boolean = false; // Prevent duplicate verification entry messages
+  private rootNodeId: string | null = null; // Track root node for auto-inspection in VERIFICATION
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createIcon',
     'deleteNode',
@@ -420,6 +423,16 @@ export class AgentRuntime {
           mode = 'EXECUTION';
         } else if (plan.every(s => s.status === 'completed')) {
           mode = 'VERIFICATION';
+          // Inject verification instructions once on first entry
+          if (!this.verificationEntryInjected) {
+            this.verificationEntryInjected = true;
+            const rootRef = this.rootNodeId ? `, nodeId="${this.rootNodeId}"` : '';
+            this.context.addMessage({
+              id: this.generateId('verify_entry'),
+              role: 'user',
+              content: `All plan steps completed. VERIFY before completing:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) to check actual structure.\n2. Review any anomalies from previous tool results — fix TEXT_OVERFLOW, ZERO_DIM, SIZING_REVERTED issues.\n3. Call validateLayout with the returned DSL tree.\n4. Fix issues found with patchNode, THEN call complete_task.`
+            });
+          }
         } else {
           // Fallback: if there are pending steps but no active step, still allow execution tools.
           mode = 'EXECUTION';
@@ -453,11 +466,12 @@ export class AgentRuntime {
             // All steps completed (or force-completed), transition to VERIFICATION
             console.log(`[AgentRuntime] All plan steps completed. Transitioning to VERIFICATION.`);
             mode = 'VERIFICATION';
-            // Inject a message to trigger complete_task
+            // Inject verification instructions — force inspect before complete_task
+            const rootRef = this.rootNodeId ? `, nodeId="${this.rootNodeId}"` : '';
             const completionMessage: LLMMessage = {
               id: this.generateId('stale_done'),
               role: 'user',
-              content: 'All plan steps have been completed. Call complete_task now with a summary of what was built.'
+              content: `All plan steps completed. VERIFY before completing:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) to check actual structure.\n2. Review any anomalies from previous tool results — fix TEXT_OVERFLOW, ZERO_DIM, SIZING_REVERTED issues.\n3. Call validateLayout with the returned DSL tree.\n4. Fix issues found with patchNode, THEN call complete_task.`
             };
             this.context.getAllMessages().push(completionMessage);
           } else {
@@ -579,7 +593,8 @@ export class AgentRuntime {
       // - PLANNING: 4x threshold (plans need more space for analysis)
       // - EXECUTION/VERIFICATION/RECOVERY with ANY mode: NO stream abort (tool calls come AFTER text)
       // - Other modes: default threshold
-      const resolvedToolMode = getToolModeForPhase(mode, this.loopPolicy, this.consecutiveToolFailures);
+      const isThinkingModel = this.behaviorConfig.thinkingLevel !== 'minimal';
+      const resolvedToolMode = getToolModeForPhase(mode, this.loopPolicy, this.consecutiveToolFailures, isThinkingModel);
       const isAnyToolMode = resolvedToolMode === 'ANY';
       const ramblingThreshold = mode === 'PLANNING'
         ? AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * this.loopPolicy.planningRamblingMultiplier
@@ -727,10 +742,18 @@ export class AgentRuntime {
       const taskInfo = activeTask ? { taskId: activeTask.stepId, taskTitle: activeTask.title } : undefined;
       this.options.onIteration?.(iteration, response, taskInfo);
 
-      // Safety check for empty responses
+      // Safety check for empty responses — retry before giving up (Gemini 3.x Pro can intermittently return empty streams)
       if (!response.text && (!response.toolCalls || response.toolCalls.length === 0) && !response.thoughts) {
-        throw new Error('LLM Provider returned an empty response. This usually indicates a generation failure.');
+        this.emptyResponseRetries = (this.emptyResponseRetries || 0) + 1;
+        const MAX_EMPTY_RETRIES = 2;
+        if (this.emptyResponseRetries <= MAX_EMPTY_RETRIES) {
+          console.warn(`[AgentRuntime] ⚠️ Empty response detected (retry ${this.emptyResponseRetries}/${MAX_EMPTY_RETRIES}). Retrying iteration ${iteration}...`);
+          iteration--; // Retry this iteration
+          continue;
+        }
+        throw new Error('LLM Provider returned an empty response after retries. This usually indicates a generation failure.');
       }
+      this.emptyResponseRetries = 0; // Reset on successful response
 
       // Thinking-only iteration detection: catch "rambling" without action
       if (!response.toolCalls || response.toolCalls.length === 0) {
@@ -1139,6 +1162,17 @@ export class AgentRuntime {
           this.operationLog = this.operationLog.slice(-15);
         }
 
+        // Track root node ID for auto-inspection in VERIFICATION phase
+        for (const tr of toolResults) {
+          if (tr.name === 'generateDesign' && tr.response?.data?.rootNodeId) {
+            this.rootNodeId = tr.response.data.rootNodeId;
+          }
+          if (tr.name === 'batchOperations' && tr.response?.data?.idMap && !this.rootNodeId) {
+            const firstId = Object.values(tr.response.data.idMap)[0] as string | undefined;
+            if (firstId) this.rootNodeId = firstId;
+          }
+        }
+
         if (figmaToolCalls.length > 0) {
           const figmaToolNames = new Set(figmaToolCalls.map(tc => tc.name));
           const figmaResults = toolResults.filter(tr => figmaToolNames.has(tr.name));
@@ -1214,20 +1248,32 @@ export class AgentRuntime {
         // ----------------------------------------
         if (mode === 'VERIFICATION') {
           const validateResult = toolResults.find(tr => tr.name === 'validateLayout');
-          if (validateResult?.response?.data?.hasErrors) {
+          const hasLayoutErrors = validateResult?.response?.data?.hasErrors;
+
+          // Also check for anomalies from inspectDesign or any tool result
+          const hasAnomalies = toolResults.some(tr =>
+            tr.response?.data?.anomalies && tr.response.data.anomalies.length > 0
+          );
+
+          if (hasLayoutErrors || hasAnomalies) {
             this.verificationFixIterations++;
+            const issueTypes = [
+              hasLayoutErrors && 'layout constraint errors',
+              hasAnomalies && 'visual anomalies (TEXT_OVERFLOW, SIZING_REVERTED, etc.)'
+            ].filter(Boolean).join(' and ');
+
             if (this.verificationFixIterations < this.loopPolicy.verificationFixLimit) {
               this.context.addMessage({
                 id: this.generateId('vfix'),
                 role: 'user',
-                content: `Layout constraint errors detected (fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}). Use patchNode or applyDesignPatch to fix the reported errors, then call validateLayout again.`
+                content: `Verification detected ${issueTypes} (fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}). Use patchNode to fix the reported issues, then re-inspect and call validateLayout again.`
               });
               console.log(`[AgentRuntime] VERIFICATION fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}`);
             } else {
               this.context.addMessage({
                 id: this.generateId('vfix_done'),
                 role: 'user',
-                content: 'Maximum verification fix attempts reached. Call complete_task with a note about remaining constraint issues.'
+                content: 'Maximum verification fix attempts reached. Call complete_task with a note about remaining issues.'
               });
               console.warn(`[AgentRuntime] VERIFICATION fix limit reached (${this.verificationFixIterations}). Forcing completion.`);
             }

@@ -185,7 +185,7 @@ function validateSiblingConsistency(frame: FrameNode): string[] {
     if (fixedWidthChildren.length >= 2) {
       const widths = fixedWidthChildren.map(c => Math.round(c.width));
       const uniqueWidths = new Set(widths);
-      if (uniqueWidths.size > 1 && fixedWidthChildren.length >= 3) {
+      if (uniqueWidths.size > 1 && fixedWidthChildren.length >= 2) {
         anomalies.push(
           `SIBLING_WIDTH_MISMATCH: '${frame.name}' has ${fixedWidthChildren.length} child frames with inconsistent widths (${Array.from(uniqueWidths).join(', ')}px). Consider layoutSizingHorizontal=FILL for uniform width.`
         );

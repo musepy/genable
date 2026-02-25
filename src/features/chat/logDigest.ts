@@ -111,9 +111,18 @@ export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): st
   // Timeline
   lines.push('--- TIMELINE ---');
   let toolIndex = 1;
+  const MAX_TOOL_CALLS = 50;
+  let skippedTools = 0;
+
   history.forEach(msg => {
     if (msg.role === 'model' && msg.toolCalls) {
       msg.toolCalls.forEach(tool => {
+        if (toolIndex > MAX_TOOL_CALLS) {
+          skippedTools++;
+          toolIndex++;
+          return;
+        }
+
         const status = tool.status === 'error' ? 'ERR' : 'OK';
         const toolDuration = tool.endTime ? `${tool.endTime - tool.startTime}ms` : '?';
         lines.push(`#${toolIndex} [${tool.name}] ${toolDuration} ${status}`);
@@ -137,6 +146,11 @@ export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): st
       });
     }
   });
+
+  if (skippedTools > 0) {
+    lines.push(`... and ${skippedTools} more tool calls truncated for brevity ...`);
+    lines.push('');
+  }
 
   // Errors section
   if (errorTools > 0) {

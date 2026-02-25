@@ -130,6 +130,7 @@ Returns: {nodeId: "124:567"} - Use this ID as parentId for child nodes.
     required: ['type', 'name']
   },
   executionStrategy: 'sequential',
+  modes: ['RECOVERY'],
   errors: {
     'INVALID_NODE_TYPE': 'Type must be one of: FRAME, TEXT, RECTANGLE, ELLIPSE, LINE',
     'PARENT_NOT_FOUND': 'The specified parentId does not exist. Create the parent first.'
@@ -216,6 +217,7 @@ set layoutMode to VERTICAL/HORIZONTAL in the SAME setNodeLayout call.
     required: ['nodeId']
   },
   executionStrategy: 'sequential',
+  modes: ['RECOVERY'],
   errors: {
     'INVALID_LAYOUT_MODE': 'layoutMode must be one of: NONE, HORIZONTAL, VERTICAL',
     'INVALID_SIZING': 'HUG sizing requires Auto Layout context. Either set layoutMode to VERTICAL/HORIZONTAL, or ensure parent has Auto Layout.',
@@ -270,6 +272,7 @@ Use nodeId from createNode response.
     required: ['nodeId']
   },
   executionStrategy: 'sequential',
+  modes: ['RECOVERY'],
   errors: {
     'INVALID_COLOR_FORMAT': 'Colors must be in valid Hex format (e.g., #FFFFFF).',
     'NODE_NOT_FOUND': 'Node not found. Use nodeId from createNode response.'
@@ -310,6 +313,7 @@ Use nodeId from createNode response.
     required: ['nodeId', 'properties']
   },
   executionStrategy: 'sequential',
+  modes: ['RECOVERY'],
   errors: {
     'NODE_NOT_FOUND': 'Node not found. Use nodeId from createNode response.',
     'FONT_NOT_LOADED': 'Font not available. Please use a default font or ensure it is loaded.'

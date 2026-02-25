@@ -76,6 +76,7 @@ export class AgentRuntime {
   private rootNodeId: string | null = null; // Track root node for auto-inspection in VERIFICATION
   private completeTaskRejectionCount = 0; // Safety valve for agent deadlocks over over-achieving
   private hasPerformedVerificationInspect: boolean = false;
+  private noVerificationRejectionCount = 0; // Independent safety valve for NO_VERIFICATION gate
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createIcon',
     'deleteNode',
@@ -396,6 +397,7 @@ export class AgentRuntime {
     this.retryPolicy.resetAll();
     this.completeTaskRejectionCount = 0; // Reset safety valve count ON EACH RUN
     this.hasPerformedVerificationInspect = false;
+    this.noVerificationRejectionCount = 0;
 
     // ============================================
     // ITERATION LOOP
@@ -1070,8 +1072,12 @@ export class AgentRuntime {
                     thought_signature: tc.thought_signature
                   });
                 }
-              } else if (!this.hasPerformedVerificationInspect && this.completeTaskRejectionCount < 1) {
-                this.completeTaskRejectionCount++;
+              } else if (!this.hasPerformedVerificationInspect) {
+                if (this.noVerificationRejectionCount >= 1) {
+                  // Safety valve: already rejected once, let through to avoid deadlock
+                  return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
+                }
+                this.noVerificationRejectionCount++;
                 workflowResults.push({
                   name: tc.name,
                   id: tc.id,

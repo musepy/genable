@@ -29,6 +29,7 @@ import {
 } from './batchExecutor';
 import { deepMerge } from '../../utils/objectUtils';
 import { validatePostOp, collectTreeAnomalies } from '../../engine/validation/postOpValidator';
+import { logger } from '../../utils/logger';
 
 export interface ToolCallData {
   toolName: string;
@@ -60,11 +61,11 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   // Tool Name Normalization (Handle LLM Typos/Hallucinations)
   const normalizedName = toolName.replace(/-([a-z])/g, (g: string) => g[1].toUpperCase());
   if (normalizedName !== toolName) {
-    console.log(`[Agent] Normalizing tool name: ${toolName} -> ${normalizedName}`);
+    logger.info(`Normalizing tool name: ${toolName} -> ${normalizedName}`);
     toolName = normalizedName;
   }
 
-  console.log(`[Agent] Tool Call: ${toolName}`, { parameters, requestId });
+  logger.info(`Tool Call: ${toolName}`, { parameters, requestId });
 
   let response: ToolResponse;
 
@@ -98,7 +99,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         planState.setCurrentPlan(stepsWithIds);
 
-        console.log('[Agent] planDesign received:', { 
+        logger.info('planDesign received:', { 
           analysis: analysis?.substring(0, 300) + (analysis?.length > 300 ? '...' : ''), 
           stepsCount: stepsWithIds.length 
         });
@@ -723,7 +724,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           const rawNodeKeys = Object.keys(node).filter(k => k !== 'id' && k !== 'parent' && k !== 'type' && k !== 'props');
           const rawPropsKeys = Object.keys(node.props);
           if (rawNodeKeys.length > 0 || rawPropsKeys.length <= 1) {
-            console.log(`[generateDesign] 🔍 Node "${node.id}" BEFORE lifting — top-level keys: [${rawNodeKeys.join(', ')}], props keys: [${rawPropsKeys.join(', ')}]`);
+            logger.debug(`[generateDesign] 🔍 Node "${node.id}" BEFORE lifting — top-level keys: [${rawNodeKeys.join(', ')}], props keys: [${rawPropsKeys.join(', ')}]`);
           }
 
           // 1. Lift from props.layout/props.styles (Existing)
@@ -742,12 +743,12 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           const topLevelStyles = (node as any).styles || (node as any).style;
           
           if (topLevelLayout && typeof topLevelLayout === 'object') {
-            console.log(`[generateDesign] Lifting top-level layout for node: ${node.id}`);
+            logger.debug(`[generateDesign] Lifting top-level layout for node: ${node.id}`);
             Object.assign(node.props, topLevelLayout);
             delete (node as any).layout;
           }
           if (topLevelStyles && typeof topLevelStyles === 'object') {
-            console.log(`[generateDesign] Lifting top-level styles for node: ${node.id}`);
+            logger.debug(`[generateDesign] Lifting top-level styles for node: ${node.id}`);
             Object.assign(node.props, topLevelStyles);
             delete (node as any).styles;
             delete (node as any).style;
@@ -758,7 +759,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           // instead of inside the props object.
           for (const key of KNOWN_STYLE_KEYS) {
             if ((node as any)[key] !== undefined && node.props[key] === undefined) {
-              console.log(`[generateDesign] ⚠️ Safety net: lifting "${key}" from node top-level to props for "${node.id}"`);
+              logger.debug(`[generateDesign] ⚠️ Safety net: lifting "${key}" from node top-level to props for "${node.id}"`);
               node.props[key] = (node as any)[key];
               delete (node as any)[key];
             }
@@ -772,7 +773,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           // [DIAGNOSTIC] Log final props after all lifting
           const finalPropsKeys = Object.keys(node.props);
           const hasStyling = finalPropsKeys.some(k => ['layoutMode', 'fills', 'gap', 'padding', 'width', 'height', 'fontSize', 'cornerRadius'].includes(k));
-          console.log(`[generateDesign] ✅ Node "${node.id}" AFTER lifting — props keys (${finalPropsKeys.length}): [${finalPropsKeys.join(', ')}]${!hasStyling ? ' ⚠️ NO STYLING DETECTED' : ''}`);
+          logger.debug(`[generateDesign] ✅ Node "${node.id}" AFTER lifting — props keys (${finalPropsKeys.length}): [${finalPropsKeys.join(', ')}]${!hasStyling ? ' ⚠️ NO STYLING DETECTED' : ''}`);
         }
 
         // Reconstruct flat list → tree
@@ -791,11 +792,11 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         }
 
         if (reconWarnings.length > 0) {
-          console.warn('[generateDesign] Reconstruction warnings:', reconWarnings);
+          logger.warn('[generateDesign] Reconstruction warnings:', reconWarnings);
         }
 
         // [DIAGNOSTIC] Verify root props survived reconstruction
-        console.log(`[generateDesign] 🌳 Root after reconstruction — type: ${root.type}, props keys: [${Object.keys(root.props || {}).join(', ')}], children: ${root.children?.length || 0}`);
+        logger.debug(`[generateDesign] 🌳 Root after reconstruction — type: ${root.type}, props keys: [${Object.keys(root.props || {}).join(', ')}], children: ${root.children?.length || 0}`);
 
         // Render the full tree in one pass via the existing pipeline
         const rootNode = await handleUnifiedRender({

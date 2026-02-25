@@ -25,6 +25,7 @@ After `generateDesign` returns success:
 2. If additional plan steps remain -> proceed to the next step. Do NOT call `complete_task`.
 3. If all steps are done -> call `inspectDesign(mode="hierarchy", depth=2)` to verify structure. Check for anomalies.
 4. NEVER call `complete_task` in the same response as `generateDesign`.
+5. NEVER call `complete_task` in the same response as `applyDesignPatch`. Apply fixes first, then verify in the next turn.
 
 ### For EDITING existing designs:
 - Use `batchOperations` to combine multiple operations into ONE call.
@@ -39,8 +40,7 @@ After `generateDesign` returns success:
 - **DO NOT** use `generateDesign` to parallel-mount a new iteration of an existing design unless the user explicitly requests a "complete REDO" or "start from scratch".
 - **inspectDesign FIRST**: Get the hierarchy and real nodeIds before any changes.
 - **applyDesignPatch**: Change specific properties on existing nodes (fills, padding, fontSize, etc.).
-- **createNode + parentId**: Add new nodes INTO the existing tree, not a new root tree.
-- **deleteNode**: Remove nodes that are no longer needed.
+- **batchOperations**: Use to add, remove, or reposition nodes within the existing tree.
 
 ### General:
 - **EVERY response MUST contain tool calls.** No text-only responses.

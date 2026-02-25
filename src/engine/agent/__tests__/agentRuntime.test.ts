@@ -169,9 +169,14 @@ describe('AgentRuntime', () => {
         text: 'Step 2 was already done',
         toolCalls: [{ name: 'complete_step', args: { summary: 'Already done', reason: 'already_done' } }]
       })
-      // Round 4: Final verification and complete_task
+      // Round 4: complete_task — gets NO_VERIFICATION rejection (no inspectDesign was called)
       .mockResolvedValueOnce({
         text: 'All done',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'All finished' } }]
+      })
+      // Round 5: Retry complete_task — passes via noVerificationRejectionCount safety valve
+      .mockResolvedValueOnce({
+        text: 'Really done',
         toolCalls: [{ name: 'complete_task', args: { summary: 'All finished' } }]
       })
       .mockResolvedValue({
@@ -188,8 +193,6 @@ describe('AgentRuntime', () => {
         { name: 'complete_task', description: 'Complete task', parameters: { type: 'object', properties: {} } }
       ]
     });
-
-    (runtime as any).hasPerformedVerificationInspect = true;
 
     const result = await runtime.run('Overachieve test');
     expect(result).toBe('All finished');

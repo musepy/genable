@@ -28,7 +28,7 @@ export class GeminiProvider implements LLMProvider {
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig, onProgress, onThinking, abortSignal, streamTimeoutMs } = options;
 
-    console.log(`[GeminiProvider ${GeminiProvider.PROVIDER_VERSION}] generate() called, tools=${tools?.length || 0}, toolConfig=${JSON.stringify(toolConfig)}`);
+    GeminiLogger.info(`generate() called, tools=${tools?.length || 0}, toolConfig=${JSON.stringify(toolConfig)}`);
 
     const isGemini3 = isGemini3Model(this.modelName);
     const systemMessage = messages.find(m => m.role === 'system');
@@ -131,22 +131,17 @@ export class GeminiProvider implements LLMProvider {
     const contents = chatMessages.map((m) => this.mapToGenAIContent(m));
 
     // [DIAGNOSTIC] Log critical config for debugging 400 errors
-    console.log(`[GeminiProvider] 🔍 REQUEST CONFIG:`, {
+    GeminiLogger.info(`🔍 REQUEST CONFIG:`, {
       model: this.modelName,
       toolConfigMode: config.toolConfig?.functionCallingConfig?.mode || 'NONE',
       toolCount: config.tools?.[0]?.functionDeclarations?.length || 0,
-      toolNames: config.tools?.[0]?.functionDeclarations?.map((t: any) => t.name) || [],
       thinkingConfig: config.thinkingConfig,
-      maxOutputTokens: config.maxOutputTokens,
       contentsCount: contents.length,
-      contentRoles: contents.map((c: any) => c.role),
-      contentPartCounts: contents.map((c: any) => c.parts?.length || 0),
-      systemInstructionLength: (config.systemInstruction || '').length,
     });
 
     // Full dump (truncated)
     const fullRequest = { model: this.modelName, contents, config };
-    console.log(`[GeminiProvider] 🔍 FULL REQUEST DUMP:`,
+    GeminiLogger.debug(`🔍 FULL REQUEST DUMP:`,
       JSON.stringify(fullRequest, null, 2).slice(0, 80000));
 
     if (onProgress || onThinking) {
@@ -201,7 +196,7 @@ export class GeminiProvider implements LLMProvider {
         );
       } else {
         // Log what we accumulated before timeout/abort for debugging
-        console.log(`[GeminiProvider] Stream ${timedOut ? 'timed out' : 'aborted'}. Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
+        GeminiLogger.warn(`Stream ${timedOut ? 'timed out' : 'aborted'}. Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
       }
 
       return accumulator.finalize();
@@ -235,9 +230,8 @@ export class GeminiProvider implements LLMProvider {
   }
 
   formatResponse(response: LLMResponse): LLMMessage {
-    // If there are no tool calls, it's a simple text response
     if (!response.toolCalls || response.toolCalls.length === 0) {
-      console.log(`[GeminiProvider.formatResponse] No tool calls, returning text response (${(response.text || '').length} chars)`);
+      GeminiLogger.debug(`formatResponse: No tool calls, returning text response (${(response.text || '').length} chars)`);
       return {
         id: 'mdl_' + Math.random().toString(36).substring(7),
         role: 'model',
@@ -248,7 +242,7 @@ export class GeminiProvider implements LLMProvider {
     // [FIX] Protocol Transparency: Always include all original content parts.
     // This ensures Thinking models have the full context needed for signature validation.
     const fullPartsCount = response.fullParts?.length || 0;
-    console.log(`[GeminiProvider.formatResponse] Tool calls exist (${response.toolCalls.length}). Preserving all ${fullPartsCount} parts.`);
+    GeminiLogger.debug(`formatResponse: Tool calls exist (${response.toolCalls.length}). Preserving all ${fullPartsCount} parts.`);
     let content: Part[];
 
     // [DEBUG] Log what we're working with
@@ -262,7 +256,7 @@ export class GeminiProvider implements LLMProvider {
       if (p.text) return 'text';
       return 'unknown';
     }) || [];
-    console.log(`[GeminiProvider.formatResponse] Tool calls exist (${response.toolCalls.length}). Text: ${originalTextLength} chars, fullParts: ${fullPartsCount}, categories: [${partCategories.join(', ')}]`);
+    GeminiLogger.debug(`formatResponse: Tool calls exist (${response.toolCalls.length}). Text: ${originalTextLength} chars, fullParts: ${fullPartsCount}, categories: [${partCategories.join(', ')}]`);
 
     // [FIX] Protocol Transparency: Preserve all parts (thoughts, text, tool calls)
     // filtering out only empty or invalid items.
@@ -273,7 +267,7 @@ export class GeminiProvider implements LLMProvider {
 
     // [DEBUG] Final content size
     const contentJson = JSON.stringify(content);
-    console.log(`[GeminiProvider.formatResponse] ✅ Final content: ${content.length} parts, ~${contentJson.length} chars JSON`);
+    GeminiLogger.debug(`formatResponse: ✅ Final content: ${content.length} parts, ~${contentJson.length} chars JSON`);
 
     return {
       id: 'mdl_' + Math.random().toString(36).substring(7),
@@ -319,13 +313,13 @@ export class GeminiProvider implements LLMProvider {
       : undefined;
 
     if (sharedSignature) {
-      console.log(`[GeminiProvider.mapToLLMResponse] Turn-level signature detected: "${sharedSignature.slice(0, 10)}..."`);
+      GeminiLogger.debug(`mapToLLMResponse: Turn-level signature detected: "${sharedSignature.slice(0, 10)}..."`);
     }
 
     // 2. Process parts - but DO NOT collect standalone signature parts into fullParts
     for (const part of parts) {
       if ('functionCall' in part && part.functionCall) {
-        console.log(`[GeminiProvider.mapToLLMResponse] functionCall: ${part.functionCall.name}`);
+        GeminiLogger.debug(`mapToLLMResponse: functionCall: ${part.functionCall.name}`);
         const partSig = (part as any).thoughtSignature || (part as any).thought_signature;
         const sig = partSig || sharedSignature;
         

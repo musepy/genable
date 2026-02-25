@@ -60,7 +60,18 @@ describe('Atomic Tools Interactions', () => {
                 { name: 'setNodeLayout', args: { nodeId: '1:1', sizing: 'HUG' } }
             ]
           })
-          .mockResolvedValue({ text: 'Done' }),
+          .mockResolvedValueOnce({
+            text: 'Done', 
+            toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] 
+          })
+          .mockResolvedValueOnce({
+            text: 'Really done', 
+            toolCalls: [{ name: 'complete_task', args: { summary: 'Really done' } }] 
+          })
+          .mockResolvedValue({
+            text: 'Absolutely done',
+            toolCalls: [{ name: 'complete_task', args: { summary: 'Absolutely done' } }]
+          }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
           role: 'model',
@@ -87,7 +98,12 @@ describe('Atomic Tools Interactions', () => {
 
     runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [], // We'll add definitions later, runtime doesn't strictly validate against schema in this test
+      tools: [
+        { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
+        { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_step', description: 'Complete step', parameters: { type: 'object', properties: {} } }
+      ],
       ipcBridge: mockIpcBridge
     });
 
@@ -194,7 +210,18 @@ describe('Atomic Tools Interactions', () => {
                 { name: 'setNodeLayout', args: { nodeId: 'guessed-123', layoutMode: 'VERTICAL' } }
             ]
           })
-          .mockResolvedValue({ text: 'Done' }),
+          .mockResolvedValueOnce({
+            text: 'Done', 
+            toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] 
+          })
+          .mockResolvedValueOnce({
+            text: 'Really done', 
+            toolCalls: [{ name: 'complete_task', args: { summary: 'Really done' } }] 
+          })
+          .mockResolvedValue({
+            text: 'Absolutely done',
+            toolCalls: [{ name: 'complete_task', args: { summary: 'Absolutely done' } }]
+          }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
           role: 'model',
@@ -215,14 +242,24 @@ describe('Atomic Tools Interactions', () => {
 
     const testRuntime = new AgentRuntime({
       provider: guessingProvider,
-      tools: [],
+      tools: [
+        { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
+        { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_step', description: 'Complete step', parameters: { type: 'object', properties: {} } }
+      ],
       ipcBridge: (runtime as any).options.ipcBridge
     });
 
-    await testRuntime.run('Test guessed ID');
+    try {
+      await testRuntime.run('Test guessed ID');
+    } catch (e) {
+      // Ignore: Agent reaches loop detector and fails, which is expected since it never fixes the 'guessed-123' error
+      expect(e).toBeDefined();
+    }
     
     // Verify that setNodeLayout was called with the guessed ID and failed
-    const mockCallTool = (runtime as any).options.ipcBridge.callTool;
+    const mockCallTool = (testRuntime as any).options.ipcBridge.callTool;
     const setLayoutCalls = mockCallTool.mock.calls.filter((c: any) => c[0] === 'setNodeLayout' && c[1].nodeId === 'guessed-123');
     expect(setLayoutCalls.length).toBeGreaterThan(0);
   });

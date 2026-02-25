@@ -11,6 +11,7 @@
 
 import { ToolDefinition } from './types';
 import { TEXT_PROPS_SCHEMA } from '../../../constants/figma-api';
+import { COMPACT_PROPS_SCHEMA } from './stateTools';
 
 export const generateDesignDefinition: ToolDefinition = {
   name: 'generateDesign',
@@ -27,13 +28,15 @@ You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto"
 1. First node MUST have parent: null (root).
 2. Every other node references its parent by id.
 3. ALL styling (fills, cornerRadius, gap, padding, fontSize, etc.) MUST go inside 'props'.
-4. TEXT nodes MUST have characters in 'props'.
+4. TEXT nodes MUST have characters in 'props'. If the text includes formatting with newlines, you MUST output a real physical newline (i.e. \`\\n\` in JSON), NOT a literal escaped string \`\\\\n\`.
 5. Root node MUST have explicit width and height in 'props'.
 6. ICON nodes MUST have iconName in 'props' (format: "prefix:name", e.g., "lucide:home", "mdi:account").
+7. GRADIENT FILLS: In 'props.fills', use hex strings for solid colors, or objects for gradients: {"type":"GRADIENT_LINEAR","stops":[{"position":0,"color":"#C0C0C0"},{"position":1,"color":"#808080"}],"angle":135}
 `,
   parameters: {
     type: 'object',
     properties: {
+      parentId: { type: 'string', description: 'Real Figma parent ID to attach this component to. If omitted, adds to current page.' },
       nodes: {
         type: 'array',
         description: 'Flat list of all nodes with parent references',
@@ -43,60 +46,33 @@ You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto"
           properties: {
             id: { type: 'string', description: 'Semantic ID (e.g., "email-label", "submit-btn")' },
             parent: { type: 'string', description: 'Parent node ID. For root node, use "root" or empty string.' },
-            type: { type: 'string', description: 'FRAME | TEXT | RECTANGLE | ELLIPSE | LINE | ICON' },
+            type: { type: 'string', description: 'FRAME | TEXT | RECTANGLE | ELLIPSE | LINE | ICON. Do NOT use VECTOR — use RECTANGLE for shapes, ELLIPSE for circles, ICON with iconName for icons.' },
             props: {
               type: 'object',
               description: 'All visual and layout properties for the node',
               properties: {
-                name: { type: 'string', description: 'Layer name' },
-                iconName: { type: 'string', description: 'Iconify icon name for ICON nodes (e.g., "lucide:home", "mdi:account")' },
-                layoutMode: { type: 'string', description: 'HORIZONTAL | VERTICAL | NONE' },
+                ...COMPACT_PROPS_SCHEMA,
+                iconName: { type: 'string', description: 'Iconify icon name for ICON nodes (e.g., "lucide:home")' },
                 primaryAxisAlignItems: { type: 'string', description: 'MIN | CENTER | MAX | SPACE_BETWEEN' },
                 counterAxisAlignItems: { type: 'string', description: 'MIN | CENTER | MAX' },
-                gap: { type: 'number', description: 'Spacing between children' },
-                padding: { type: 'number', description: 'Uniform padding (or use paddingTop/Right/Bottom/Left)' },
                 paddingTop: { type: 'number', description: 'Top padding' },
                 paddingRight: { type: 'number', description: 'Right padding' },
                 paddingBottom: { type: 'number', description: 'Bottom padding' },
                 paddingLeft: { type: 'number', description: 'Left padding' },
-                layoutPositioning: { type: 'string', description: 'AUTO | ABSOLUTE (for child in auto-layout parent)' },
+                layoutPositioning: { type: 'string', description: 'AUTO | ABSOLUTE' },
                 constraints: {
                   type: 'object',
-                  description: 'Pin/scale behavior relative to parent',
+                  description: 'Pin/scale behavior',
                   properties: {
-                    horizontal: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | LEFT | RIGHT | LEFT_RIGHT' },
-                    vertical: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | TOP | BOTTOM | TOP_BOTTOM' }
+                    horizontal: { type: 'string', description: 'MIN|CENTER|MAX|STRETCH|SCALE' },
+                    vertical: { type: 'string', description: 'MIN|CENTER|MAX|STRETCH|SCALE' }
                   }
                 },
-                x: { type: 'number', description: 'Explicit x position. Valid for non-auto-layout parent, or ABSOLUTE child in auto-layout parent.' },
-                y: { type: 'number', description: 'Explicit y position. Valid for non-auto-layout parent, or ABSOLUTE child in auto-layout parent.' },
-                layoutGrow: { type: 'number', description: 'Auto-layout grow factor (usually 0 or 1)' },
-                layoutAlign: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | INHERIT' },
-                fills: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Background colors, e.g. ["#FFFFFF"]' },
-                strokes: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Border colors' },
-                strokeWeight: { type: 'number', description: 'Border width' },
-                cornerRadius: { type: 'number', description: 'Border radius in px' },
-                width: { type: 'number', description: 'Width in px (for FIXED sizing)' },
-                height: { type: 'number', description: 'Height in px (for FIXED sizing)' },
-                layoutSizingHorizontal: { type: 'string', description: 'FIXED | HUG | FILL' },
-                layoutSizingVertical: { type: 'string', description: 'FIXED | HUG | FILL' },
+                x: { type: 'number', description: 'Explicit x position (absolute)' },
+                y: { type: 'number', description: 'Explicit y position (absolute)' },
+                layoutGrow: { type: 'number', description: 'Auto-layout grow (0 or 1)' },
+                layoutAlign: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH' },
                 ...TEXT_PROPS_SCHEMA,
-                opacity: { type: 'number', description: '0.0 to 1.0' },
-                effects: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    description: 'Effect: {type, color, offset, blur, spread}',
-                    properties: {
-                      effectType: { type: 'string', description: 'DROP_SHADOW | INNER_SHADOW | LAYER_BLUR | BACKGROUND_BLUR' },
-                      color: { type: 'string', description: 'Hex+alpha e.g. "#0000001A" (10% black), "#4F46E533" (20% indigo)' },
-                      offset: { type: 'object', description: '{x, y} in px', properties: { x: { type: 'number', description: 'Horizontal offset' }, y: { type: 'number', description: 'Vertical offset' } } },
-                      blur: { type: 'number', description: 'Blur radius (4=subtle, 16=medium, 32=dramatic)' },
-                      spread: { type: 'number', description: 'Spread radius (usually 0)' }
-                    }
-                  },
-                  description: 'Visual effects. Example: [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":4},"blur":16,"spread":0}]'
-                }
               }
             }
           },

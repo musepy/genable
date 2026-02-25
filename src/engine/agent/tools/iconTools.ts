@@ -24,27 +24,6 @@ export const createIconDefinition: ToolDefinition = {
         pattern: '^#[0-9A-Fa-f]{6}$',
         description: 'Icon color hex' 
       },
-      layout: {
-        type: 'object',
-        description: '[INLINE OPTIMIZATION] Configure Auto Layout (padding, gap, sizing) during creation. Same schema as setNodeLayout.',
-        properties: {
-          sizing: { 
-            type: 'object', 
-            description: 'Sizing rules',
-            properties: { 
-              horizontal: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Horizontal sizing' }, 
-              vertical: { type: 'string', enum: ['FIXED', 'HUG', 'FILL'], description: 'Vertical sizing' } 
-            } 
-          }
-        }
-      },
-      styles: {
-        type: 'object',
-        description: '[DEPRECATED] Use props instead.',
-        properties: {
-          opacity: { type: 'number', description: 'Layer opacity (0-1)' }
-        }
-      },
       props: {
         type: 'object',
         description: '[PREFERRED] Unified design properties (fills, opacity, width, height, etc.)',

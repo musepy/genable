@@ -10,6 +10,19 @@ import { CONTEXT_CONSTANTS } from './constants';
 export class ToolResultCleaner {
   private toolMap: Map<string, ToolDefinition>;
 
+  /**
+   * Visual props essential for LLM to "see" the design.
+   * These are preserved in inspectDesign results instead of being stripped.
+   */
+  private static readonly INSPECT_PRESERVE_PROPS = new Set([
+    'name', 'fills', 'strokes', 'layoutMode', 'gap', 'padding',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'fontSize', 'fontWeight', 'characters', 'cornerRadius',
+    'width', 'height', 'layoutSizingHorizontal', 'layoutSizingVertical',
+    'primaryAxisAlignItems', 'counterAxisAlignItems',
+    'opacity', 'visible', 'effects', 'strokeWeight',
+  ]);
+
   constructor(tools: ToolDefinition[]) {
     this.toolMap = new Map(tools.map(tool => [tool.name, tool]));
   }
@@ -38,6 +51,12 @@ export class ToolResultCleaner {
 
     // For oversized results, attempt structural cleaning if possible
     if (dataJson.length > MAX_DATA_CHARS) {
+      // inspectDesign: use structural cleaning that preserves visual props
+      if (cleaned.name === 'inspectDesign') {
+        cleaned.data = this.cleanInspectResult(cleaned.data);
+        return cleaned;
+      }
+
       const isSpecializedTool = cleaned.name === 'applyDesignPatch' || 
                                 cleaned.name === 'generateDesign' || 
                                 cleaned.name === 'batchOperations' ||
@@ -70,7 +89,9 @@ export class ToolResultCleaner {
     }
 
     // Results within budget
-    if (cleaned.data.results && cleaned.data.idMap) {
+    if (cleaned.name === 'inspectDesign') {
+      cleaned.data = this.cleanInspectResult(cleaned.data);
+    } else if (cleaned.data.results && cleaned.data.idMap) {
       cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
     } else if (cleaned.success && typeof cleaned.data === 'object') {
       cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
@@ -139,7 +160,7 @@ export class ToolResultCleaner {
     // Keep children skeleton for inspectDesign hierarchy results
     if (Array.isArray(data.children)) {
       essentialData.childrenCount = data.children.length;
-      const MAX_CHILDREN_SKELETON = 20;
+      const MAX_CHILDREN_SKELETON = 5;
       essentialData.children = data.children
         .slice(0, MAX_CHILDREN_SKELETON)
         .map((c: any) => this.extractNodeSkeleton(c, 1))
@@ -212,11 +233,96 @@ export class ToolResultCleaner {
     return skeleton;
   }
 
+  // ================================================================
+  // inspectDesign-specific cleaning — preserves visual props for LLM
+  // ================================================================
+
+  /**
+   * Cleans inspectDesign results while preserving visual properties.
+   * Handles all three modes: selection, hierarchy, node.
+   */
+  private cleanInspectResult(data: any): any {
+    // selection mode: { count, nodes[] }
+    if (data.count !== undefined && Array.isArray(data.nodes)) {
+      return {
+        count: data.count,
+        nodes: data.nodes.slice(0, 20).map((n: any) => ({
+          id: n.id,
+          name: n.name,
+          type: n.type,
+        })),
+        ...(data.nodes.length > 20 && { _moreNodes: data.nodes.length - 20 }),
+      };
+    }
+
+    // hierarchy/node mode: NodeLayer (id, type, props, children)
+    return this.extractInspectNode(data, 0);
+  }
+
+  /**
+   * Recursively extracts a node while preserving visual props.
+   * Deeper and richer than extractNodeSkeleton — enables LLM "vision".
+   */
+  private extractInspectNode(node: any, depth: number): any {
+    const MAX_INSPECT_DEPTH = 4;
+    const MAX_INSPECT_CHILDREN = 15;
+
+    const result: any = {
+      id: node.id,
+      type: node.type,
+    };
+
+    // Preserve visual props from the props bag
+    if (node.props && typeof node.props === 'object') {
+      const kept: Record<string, any> = {};
+      for (const [key, value] of Object.entries(node.props)) {
+        if (ToolResultCleaner.INSPECT_PRESERVE_PROPS.has(key)) {
+          kept[key] = value;
+        }
+      }
+      if (Object.keys(kept).length > 0) {
+        result.props = kept;
+      }
+    }
+
+    // Recurse children with depth control
+    if (Array.isArray(node.children) && node.children.length > 0 && depth < MAX_INSPECT_DEPTH) {
+      result.children = node.children
+        .slice(0, MAX_INSPECT_CHILDREN)
+        .map((c: any) => this.extractInspectNode(c, depth + 1));
+      if (node.children.length > MAX_INSPECT_CHILDREN) {
+        result._moreChildren = node.children.length - MAX_INSPECT_CHILDREN;
+      }
+    } else if (Array.isArray(node.children)) {
+      result.childrenCount = node.children.length;
+    }
+
+    return result;
+  }
+
   /**
    * Sanitizes tool calls for history to prevent context bloat.
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
+      // Aggressive pruning for massive generation tools
+      if (tc.name === 'generateDesign' || tc.name === 'renderSubtree') {
+         const nodeCount = Array.isArray(tc.args?.nodes) ? tc.args.nodes.length : 0;
+         const originalLength = tc.args ? JSON.stringify(tc.args).length : 0;
+         if (originalLength > 1000) {
+             return {
+                 ...tc,
+                 args: {
+                     ...(tc.args?.parentId && { parentId: tc.args.parentId }),
+                     ...(tc.args?.stepId && { stepId: tc.args.stepId }),
+                     nodes: `[_truncated: ${nodeCount} nodes omitted to save context. State tracked by Figma.]`,
+                     _truncated: true,
+                     _originalSize: originalLength
+                 }
+             };
+         }
+      }
+
       const def = this.toolMap.get(tc.name);
       if (!def) return tc;
       let sanitizedArgs = this.sanitizeArgsBySchema(tc.args, def.parameters as ToolParameter);

@@ -336,15 +336,15 @@ function buildSelectionContext(deps: PromptDependencies, budget: number): string
         return '';
     }
     
-    // First serialize nodes to NodeLayer format
-    const serializedNodes = validNodes.map(node =>
-        NodeSerializer.serializeWithCompression(node, {
-            maxDepth: 2,
-            pruneDefaults: true
-        })
-    );
+    // Simply extract the skeleton to prevent context bloat.
+    // The Agent should proactively use inspectDesign to query details if needed.
+    const serializedNodes = validNodes.map(node => ({
+        id: node.id,
+        name: node.name,
+        type: node.type
+    }));
     
-    const selectionHeader = '\n## SELECTION CONTEXT\nThe following nodes are currently selected in Figma. Use this structure to understand the current design state:\n\n```json\n';
+    const selectionHeader = '\n## SELECTION CONTEXT\nThe following nodes are currently selected. If you need detailed visual properties or children, proactively call `inspectDesign(nodeId)`.\n\n```json\n';
     const selectionFooter = '\n```\n';
     
     // Account for header/footer in budget

@@ -18,7 +18,7 @@ import { isAbsolutePositioned, getFlexFallbacks } from '../../utils/LayoutValida
  * Creates component instances from mainComponentKey
  */
 export class InstanceRenderer extends BaseRenderer {
-    constructor(createPaint: (color: string) => Promise<Paint | null>) {
+    constructor(createPaint: (color: string | Record<string, any>) => Promise<Paint | null>) {
         super(createPaint);
     }
 

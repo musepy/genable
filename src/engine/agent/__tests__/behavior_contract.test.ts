@@ -117,7 +117,7 @@ describe('Agent Architecture Contract Tests', () => {
         await runtime1.run('planning request');
         const planningCall = (mockProvider.generate as Mock).mock.calls[0][0];
         const planningSys = planningCall.messages.find((m: any) => m.role === 'system')?.content;
-        expect(planningSys).toContain('CURRENT PHASE: PLANNING');
+        expect(planningSys).toContain('MODE: PLANNING');
 
         // 2. Check EXECUTION mode
         vi.clearAllMocks();
@@ -137,6 +137,6 @@ describe('Agent Architecture Contract Tests', () => {
         await runtime2.run('execution request');
         const executionCall = (mockProvider.generate as Mock).mock.calls[0][0];
         const executionSys = executionCall.messages.find((m: any) => m.role === 'system')?.content;
-        expect(executionSys).toContain('CURRENT PHASE: EXECUTION');
+        expect(executionSys).toContain('MODE: EXECUTION');
     });
 });

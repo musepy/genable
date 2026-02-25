@@ -70,9 +70,116 @@ describe('ToolResultCleaner', () => {
 
     const cleaned = cleaner.cleanToolResult(rawResult);
     const op1 = cleaned.data.results[0];
-    // This will fail currently as the cleaner doesn't keep these fields!
-    // We will fix the implementation next.
     expect(op1.diff).toBeDefined();
     expect(op1.diffInfo).toBeDefined();
+  });
+
+  describe('inspectDesign specific cleaning', () => {
+    it('preserves visual properties in hierarchy mode', () => {
+      const rawResult = {
+        name: 'inspectDesign',
+        success: true,
+        data: {
+          id: 'root-1',
+          type: 'FRAME',
+          props: {
+            name: 'Main Frame',
+            layoutMode: 'VERTICAL',
+            fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }],
+            extraneousProp: 'should_be_stripped'
+          },
+          children: [
+            {
+              id: 'child-1',
+              type: 'TEXT',
+              props: {
+                name: 'Title',
+                fontSize: 16,
+                characters: 'Hello World'
+              }
+            }
+          ]
+        }
+      };
+
+      const cleaned = cleaner.cleanToolResult(rawResult);
+
+      // Verify root
+      expect(cleaned.data.id).toBe('root-1');
+      expect(cleaned.data.props.layoutMode).toBe('VERTICAL');
+      expect(cleaned.data.props.fills).toBeDefined();
+      expect(cleaned.data.props.extraneousProp).toBeUndefined();
+
+      // Verify child
+      expect(cleaned.data.children[0].id).toBe('child-1');
+      expect(cleaned.data.children[0].props.fontSize).toBe(16);
+      expect(cleaned.data.children[0].props.characters).toBe('Hello World');
+    });
+
+    it('preserves visual properties even when result is oversized (> MAX_DATA_CHARS)', () => {
+      // Create a massive children array to exceed 6000 chars limit in stringified form
+      const massiveChildren = Array.from({ length: 20 }, (_, i) => ({
+        id: `child-${i}`,
+        type: 'FRAME',
+        props: {
+          name: `Row ${i}`,
+          layoutMode: 'HORIZONTAL',
+          padding: 16,
+          garbage: 'x'.repeat(500) // Inflate size
+        }
+      }));
+
+      const rawResult = {
+        name: 'inspectDesign',
+        success: true,
+        data: {
+          id: 'root-1',
+          type: 'FRAME',
+          props: {
+            name: 'List Container',
+            layoutMode: 'VERTICAL'
+          },
+          children: massiveChildren
+        }
+      };
+
+      // Ensure raw result is actually oversized
+      expect(JSON.stringify(rawResult).length).toBeGreaterThan(6000);
+
+      const cleaned = cleaner.cleanToolResult(rawResult);
+
+      // It should still process structurally, not just truncate to text
+      expect(cleaned.data.id).toBe('root-1');
+      expect(cleaned.data.props.layoutMode).toBe('VERTICAL');
+      
+      // Children should be capped at 15
+      expect(cleaned.data.children.length).toBe(15);
+      expect(cleaned.data._moreChildren).toBe(5);
+
+      // Child props should be preserved and garbage stripped
+      expect(cleaned.data.children[0].props.layoutMode).toBe('HORIZONTAL');
+      expect(cleaned.data.children[0].props.padding).toBe(16);
+      expect(cleaned.data.children[0].props.garbage).toBeUndefined();
+    });
+
+    it('preserves selection format (nodes array + count)', () => {
+      const rawResult = {
+        name: 'inspectDesign',
+        success: true,
+        data: {
+          count: 2,
+          nodes: [
+            { id: '1', name: 'N1', type: 'FRAME', extraneous: true },
+            { id: '2', name: 'N2', type: 'TEXT', extraneous: true }
+          ]
+        }
+      };
+
+      const cleaned = cleaner.cleanToolResult(rawResult);
+      expect(cleaned.data.count).toBe(2);
+      expect(cleaned.data.nodes.length).toBe(2);
+      expect(cleaned.data.nodes[0].name).toBe('N1');
+      expect(cleaned.data.nodes[0].extraneous).toBeUndefined();
+    });
   });
 });

@@ -51,9 +51,9 @@ describe('Agent Silent Failure Repro', () => {
 
     // The user experiences "Agent starting..." then nothing.
     // This translates to run() resolving quickly with empty content.
-    // CURRENT BUG FIX: It should now throw an error instead of failing silently.
+    // CURRENT BUG FIX: It should now throw an error instead of failing silently (after 3 retries).
     await expect(runtime.run('Hello')).rejects.toThrow('LLM Provider returned an empty response');
     
-    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
+    expect(mockProvider.generate).toHaveBeenCalledTimes(3);
   });
 });

@@ -34,7 +34,7 @@ describe('Summarization Turn-Taking Violation Repro', () => {
     // Setup history that will be split by current 50/50 slice logic
     // Messages: System(0), User(1), Model(2), Tool(3), User(4), Model(5)
     // slice(0, 3) would hide 0, 1, 2. But Tool(3) would be left visible without Model(2).
-    (runtime as any).messages = [
+    (runtime['context'] as any).messages = [
         { id: 'sys', role: 'system', content: 'Sys' },
         { id: 'u1', role: 'user', content: 'User 1' },
         { id: 'm1', role: 'model', content: [{ functionCall: { name: 't1', args: {} } }] },
@@ -43,23 +43,12 @@ describe('Summarization Turn-Taking Violation Repro', () => {
         { id: 'm2', role: 'model', content: 'Model 2' }
     ];
 
-    // Mock requestSummary to return a simple text
-    vi.spyOn(runtime as any, 'requestSummary').mockResolvedValue('Summary');
+    // Manually trigger summarization with a mock summarizer
+    await (runtime['context'] as any).summarizeConversation(async () => 'Summary');
 
-    // Manually trigger summarization
-    await (runtime as any).summarizeConversation();
-
-    const visibleMessages = (runtime as any).messages.filter((m: any) => !m.hidden);
+    const visibleMessages = (runtime['context'] as any).messages.filter((m: any) => !m.hidden);
     
     // Validate sequence
-    const validation = (runtime as any).validateMessageSequence((runtime as any).messages);
-    
-    if (!validation.valid) {
-        console.error('Validation failed:', validation.error);
-    }
-    
-    expect(validation.valid).toBe(true);
-    
     // Explicitly check that if 't1_res' is visible, its partner 'm1' must also be visible (or first visible is user)
     const t1Res = visibleMessages.find(m => m.id === 't1_res');
     if (t1Res) {

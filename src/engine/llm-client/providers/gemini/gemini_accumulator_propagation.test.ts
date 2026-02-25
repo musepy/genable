@@ -34,8 +34,8 @@ describe('GeminiResponseAccumulator Propagation', () => {
     // Tool 2 should still have it
     expect(final.toolCalls[1].thought_signature).toBe(TEST_SIG);
 
-    // Full parts should NOT be updated (to avoid 400 error in history)
+    // Full parts should get updated (history supports signatures now)
     const tool1Part = (final.fullParts as any[]).find(p => p.functionCall?.name === 'tool1');
-    expect(tool1Part.thought_signature).toBeUndefined();
+    expect(tool1Part.thought_signature).toBe(TEST_SIG);
   });
 });

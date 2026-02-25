@@ -28,7 +28,7 @@ import { ShapeRenderer } from './shapeRenderer';
 // MODULE STATE (for dependency injection)
 // ==========================================
 
-let createPaintFn: ((color: string) => Promise<Paint | null>) | null = null;
+let createPaintFn: ((color: string | Record<string, any>) => Promise<Paint | null>) | null = null;
 let availableComponents: LibraryResource[] = [];
 let isInitialized = false;
 
@@ -73,7 +73,7 @@ function getRendererForType(type: string): BaseRenderer {
  * Initialize the renderer factory with default set
  */
 export function initializeRenderers(
-    paintCreator: (color: string) => Promise<Paint | null>,
+    paintCreator: (color: string | Record<string, any>) => Promise<Paint | null>,
     components: LibraryResource[] = []
 ): void {
     createPaintFn = paintCreator;

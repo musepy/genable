@@ -12,7 +12,7 @@ import { applySurgicalBinding } from './surgicalBinding';
  * VectorRenderer - Renders VECTOR, RECTANGLE nodes, and SVG content
  */
 export class VectorRenderer extends BaseRenderer {
-    constructor(createPaintFn: (color: string) => Promise<Paint | null>) {
+    constructor(createPaintFn: (color: string | Record<string, any>) => Promise<Paint | null>) {
         super(createPaintFn);
     }
 
@@ -36,7 +36,8 @@ export class VectorRenderer extends BaseRenderer {
             }
         }
         
-        // Default to Rectangle for simple shapes
+        // Default to Rectangle for simple shapes (VECTOR type has no path support)
+        console.warn(`[VectorRenderer] VECTOR node "${props.name || 'unnamed'}" rendered as Rectangle fallback. Use ICON/RECTANGLE/ELLIPSE types instead.`);
         return figma.createRectangle();
     }
 

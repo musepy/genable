@@ -158,6 +158,8 @@ export class LoopDetector {
    * Detect exact same signature repeated >= threshold times.
    */
   private detectIdenticalLoop(currentSignature: string, threshold: number): LoopDetectionResult | null {
+    if (currentSignature.includes('complete_step')) return null;
+
     const count = this.signatureHistory.filter(sig => sig === currentSignature).length;
     if (count >= threshold) {
       return {
@@ -192,7 +194,8 @@ export class LoopDetector {
     // Only trigger for modify-only patterns (not read tools)
     const isModifyOnly = !toolNamePatterns[0].includes('inspectDesign') &&
                          !toolNamePatterns[0].includes('planDesign') &&
-                         !toolNamePatterns[0].includes('complete_task');
+                         !toolNamePatterns[0].includes('complete_task') &&
+                         !toolNamePatterns[0].includes('complete_step');
     if (!isModifyOnly) return null;
 
     const pattern = toolNamePatterns[0];

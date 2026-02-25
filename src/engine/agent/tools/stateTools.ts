@@ -25,7 +25,7 @@ export const COMPACT_PROPS_SCHEMA = {
   height: { type: 'number' as const, description: 'Height in px' },
   layoutSizingHorizontal: { type: 'string' as const, description: 'FIXED | HUG | FILL' },
   layoutSizingVertical: { type: 'string' as const, description: 'FIXED | HUG | FILL' },
-  characters: { type: 'string' as const, description: 'Text content (for TEXT nodes)' },
+  characters: { type: 'string' as const, description: 'Text content (for TEXT nodes). Note: If you want to include newlines, you MUST use actual newlines (e.g. `\\n` in JSON which evaluates to a physical newline) and NOT literal escaped string `\\\\n`.' },
   fontSize: { type: 'number' as const, description: 'Font size in px' },
   fontWeight: { type: 'string' as const, description: 'Bold | Medium | Regular' },
   fontFamily: { type: 'string' as const, description: 'Font family (e.g. "Inter", "Roboto")' },
@@ -59,7 +59,7 @@ export const FLAT_NODE_SCHEMA = {
 export const renderSubtreeDefinition: ToolDefinition = {
   name: 'renderSubtree',
   category: 'create',
-  modes: ['EXECUTION'],
+  modes: ['RECOVERY'],
   dependencies: [],
   description: `[STATE-DRIVEN] Render a complete UI subtree in one call. Use this for creating components or complex groups.
   

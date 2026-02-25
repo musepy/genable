@@ -61,9 +61,9 @@ export interface RenderContext {
  * Implements the Template Method pattern for common rendering logic.
  */
 export abstract class BaseRenderer {
-    protected createPaintFn: (color: string) => Promise<Paint | null>;
+    protected createPaintFn: (color: string | Record<string, any>) => Promise<Paint | null>;
 
-    constructor(createPaintFn: (color: string) => Promise<Paint | null>) {
+    constructor(createPaintFn: (color: string | Record<string, any>) => Promise<Paint | null>) {
         this.createPaintFn = createPaintFn;
     }
 

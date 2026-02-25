@@ -508,7 +508,15 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               maxDepth: Math.min(inspectDepth || 5, 10),
               pruneDefaults: false
             });
-            response = { success: true, data: hSerialized };
+            // Run anomaly detection on the actual Figma tree (catches issues invisible in DSL)
+            const anomalies = collectTreeAnomalies(hNode, Math.min(inspectDepth || 5, 10));
+            response = { 
+              success: true, 
+              data: {
+                ...hSerialized,
+                anomalies: anomalies.length > 0 ? anomalies : undefined
+              }
+            };
             break;
           }
           case 'node': {

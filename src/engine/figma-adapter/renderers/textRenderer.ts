@@ -18,7 +18,7 @@ import { isAbsolutePositioned, getFlexFallbacks } from '../../utils/LayoutValida
 export class TextRenderer extends BaseRenderer {
     private loadedFonts: Set<string> = new Set();
 
-    constructor(createPaintFn: (color: string) => Promise<Paint | null>) {
+    constructor(createPaintFn: (color: string | Record<string, any>) => Promise<Paint | null>) {
         super(createPaintFn);
     }
 

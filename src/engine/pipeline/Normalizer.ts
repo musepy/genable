@@ -141,13 +141,17 @@ export class Normalizer {
         });
 
         // Color Arrays - valid schema requirement
+        // Supports both hex strings and gradient objects ({type: "GRADIENT_LINEAR", stops: [...]})
         [PROPS.fills, PROPS.strokes].forEach(field => {
             if (Array.isArray(props[field])) {
                 props[field] = props[field].map((val: any) => {
                     if (typeof val === 'string') return val;
+                    // Preserve gradient objects (have type starting with GRADIENT_)
+                    if (typeof val === 'object' && val !== null && typeof val.type === 'string' && val.type.startsWith('GRADIENT_')) return val;
+                    // Legacy: extract color string from wrapper objects
                     if (typeof val === 'object' && val !== null) return val.color || val.value || val.hex;
                     return val;
-                }).filter((f: any) => typeof f === 'string' && f.length > 0);
+                }).filter((f: any) => (typeof f === 'string' && f.length > 0) || (typeof f === 'object' && f !== null && typeof f.type === 'string'));
             }
         });
 

@@ -142,4 +142,103 @@ describe('AgentRuntime', () => {
 
     await expect(runtime.run('Loop me')).rejects.toThrow('Agent stuck in planning loop');
   });
+
+  it('should auto-activate next step and allow complete_step when over-achieving', async () => {
+    // Round 1: Plan design with 2 steps
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'Planning...',
+        toolCalls: [{
+          name: 'planDesign',
+          args: {
+            analysis: 'Test',
+            steps: [
+              { title: 'Step 1', description: 'desc 1', nodes: [] },
+              { title: 'Step 2', description: 'desc 2', nodes: [] }
+            ]
+          }
+        }]
+      })
+      // Round 2: Complete step 1
+      .mockResolvedValueOnce({
+        text: 'Completed step 1',
+        toolCalls: [{ name: 'summarize_progress', args: { summary: 'Done with 1', isComplete: true } }]
+      })
+      // Round 3: Notice Step 2 is active but work is done, use complete_step
+      .mockResolvedValueOnce({
+        text: 'Step 2 was already done',
+        toolCalls: [{ name: 'complete_step', args: { summary: 'Already done', reason: 'already_done' } }]
+      })
+      // Round 4: Final verification and complete_task
+      .mockResolvedValueOnce({
+        text: 'All done',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'All finished' } }]
+      })
+      .mockResolvedValue({
+        text: 'Fallback',
+        toolCalls: []
+      });
+
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } },
+        { name: 'summarize_progress', description: 'Progress', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_step', description: 'Complete step', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete task', parameters: { type: 'object', properties: {} } }
+      ]
+    });
+
+    (runtime as any).hasPerformedVerificationInspect = true;
+
+    const result = await runtime.run('Overachieve test');
+    expect(result).toBe('All finished');
+    
+    // Check that we got the injection message for step_advance
+    const messages = runtime.getMessages();
+    const userMessages = messages.filter(m => m.role === 'user');
+    expect(userMessages.some(m => typeof m.content === 'string' && m.content.includes('call complete_step'))).toBe(true);
+  });
+
+  it('should auto-complete remaining steps if complete_task is rejected twice (safety valve)', async () => {
+    // Round 1: Plan design with 2 steps
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'Planning...',
+        toolCalls: [{
+          name: 'planDesign',
+          args: {
+            analysis: 'Test',
+            steps: [
+              { title: 'Step 1', description: 'desc 1', nodes: [] },
+              { title: 'Step 2', description: 'desc 2', nodes: [] }
+            ]
+          }
+        }]
+      })
+      // Round 2: Try to call complete_task immediately (1st rejection)
+      .mockResolvedValueOnce({
+        text: 'I am done already',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Premature finish' } }]
+      })
+      // Round 3: Try to call complete_task again (2nd rejection -> safety valve triggers -> success)
+      .mockResolvedValueOnce({
+        text: 'I said I am done',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Really finished' } }]
+      });
+
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete task', parameters: { type: 'object', properties: {} } }
+      ]
+    });
+
+    (runtime as any).hasPerformedVerificationInspect = true;
+
+    const result = await runtime.run('Safety valve test');
+    expect(result).toBe('Really finished');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(3);
+  });
 });

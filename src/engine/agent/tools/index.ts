@@ -78,6 +78,11 @@ export const agentTools = [
  * If `modes` is omitted, the tool is available in all modes.
  */
 export function getToolsForMode(mode: AgentMode, allTools: ToolDefinition[]): ToolDefinition[] {
+  // If mode is RECOVERY, strictly filter to tools that explicitly declare RECOVERY
+  if (mode === 'RECOVERY') {
+    return allTools.filter(tool => tool.modes && tool.modes.includes('RECOVERY'));
+  }
+  // Otherwise, allow tools that have no modes defined (available everywhere) or specifically include the mode.
   return allTools.filter(tool => !tool.modes || tool.modes.includes(mode));
 }
 

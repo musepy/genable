@@ -17,7 +17,6 @@ import { COMPACT_PROPS_SCHEMA, FLAT_NODE_SCHEMA } from './stateTools';
 export const batchOperationsDefinition: ToolDefinition = {
   name: 'batchOperations',
   category: 'modify',
-  modes: ['EXECUTION'],
   dependencies: [],
   description: `
 [SUPER TOOL] Execute multiple Figma operations in a single ordered call.
@@ -138,40 +137,6 @@ EXAMPLE (Hierarchical Row):
                     properties: {
                       nodeId: { type: 'string', description: 'Real Figma node ID' },
                       nodeRef: { type: 'string', description: 'Virtual ID (opId) of the node to modify' },
-                      layout: {
-                        type: 'object',
-                        description: 'Layout properties',
-                        properties: {
-                          layoutMode: { type: 'string', description: 'Auto layout mode (HORIZONTAL, VERTICAL, NONE)' },
-                          layoutAlign: { type: 'string', description: 'Align self (MIN, MAX, CENTER, STRETCH)' },
-                          primaryAxisAlignItems: { type: 'string', description: 'Primary axis alignment' },
-                          counterAxisAlignItems: { type: 'string', description: 'Counter axis alignment' },
-                          itemSpacing: { type: 'number', description: 'Spacing between children' },
-                          paddingLeft: { type: 'number', description: 'Left padding' },
-                          paddingRight: { type: 'number', description: 'Right padding' },
-                          paddingTop: { type: 'number', description: 'Top padding' },
-                          paddingBottom: { type: 'number', description: 'Bottom padding' },
-                          sizing: {
-                            type: 'object',
-                            description: 'Sizing constraints',
-                            properties: {
-                              horizontal: { type: 'string', description: 'Horizontal sizing (HUG, FILL, FIXED)' },
-                              vertical: { type: 'string', description: 'Vertical sizing (HUG, FILL, FIXED)' }
-                            }
-                          }
-                        }
-                      },
-                      styles: {
-                        type: 'object',
-                        description: 'Style properties',
-                        properties: {
-                          fills: { type: 'array', description: 'Fill properties', items: { type: 'object', description: 'Paint object' } },
-                          strokes: { type: 'array', description: 'Stroke properties', items: { type: 'object', description: 'Paint object' } },
-                          strokeWeight: { type: 'number', description: 'Stroke weight in pixels' },
-                          cornerRadius: { type: 'number', description: 'Corner radius in pixels' },
-                          opacity: { type: 'number', description: 'Layer opacity (0 to 1)' }
-                        }
-                      },
                       props: {
                         type: 'object',
                         description: 'General node properties (characters, iconName, etc.)',
@@ -261,90 +226,10 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
           description: 'A single patch targeting a node',
           properties: {
             nodeId: { type: 'string', description: 'Target node ID' },
-            layout: { 
-              type: 'object', 
-              description: 'Optional layout changes (same as setNodeLayout)',
-              properties: {
-                layoutMode: { type: 'string', enum: ['NONE', 'HORIZONTAL', 'VERTICAL'], description: 'Layout mode' },
-                gap: { type: 'number', description: 'Gap value' },
-                padding: { 
-                  type: 'object', 
-                  description: 'Padding object', 
-                  properties: { 
-                    top: { type: 'number', description: 'Top padding' }, 
-                    right: { type: 'number', description: 'Right padding' }, 
-                    bottom: { type: 'number', description: 'Bottom padding' }, 
-                    left: { type: 'number', description: 'Left padding' } 
-                  } 
-                },
-                sizing: { 
-                  type: 'object', 
-                  description: 'Sizing object', 
-                  properties: { 
-                    horizontal: { type: 'string', description: 'Horizontal sizing' }, 
-                    vertical: { type: 'string', description: 'Vertical sizing' } 
-                  } 
-                },
-                layoutPositioning: { type: 'string', enum: ['AUTO', 'ABSOLUTE'], description: 'ABSOLUTE ignores parent auto layout flow' },
-                constraints: {
-                  type: 'object',
-                  description: 'Parent pin/scale behavior',
-                  properties: {
-                    horizontal: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | LEFT | RIGHT | LEFT_RIGHT' },
-                    vertical: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | TOP | BOTTOM | TOP_BOTTOM' }
-                  }
-                },
-                x: { type: 'number', description: 'Explicit x position' },
-                y: { type: 'number', description: 'Explicit y position' },
-                layoutGrow: { type: 'number', description: 'Auto-layout grow factor' },
-                layoutAlign: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | INHERIT' }
-              }
-            },
-            styles: { 
-              type: 'object', 
-              description: 'Optional style changes (same as setNodeStyles)',
-              properties: {
-                fills: { 
-                  type: 'array', 
-                  items: { type: 'string', description: 'Hex color string' }, 
-                  description: 'Fill colors' 
-                },
-                cornerRadius: { type: 'number', description: 'Corner radius' },
-                opacity: { type: 'number', description: 'Opacity' }
-              }
-            },
-            textAndFont: {
-              type: 'object',
-              description: '[DEPRECATED] Use props instead. Previously named "properties".',
-              properties: {
-                characters: { type: 'string', description: 'Text content' },
-                fontSize: { type: 'number', description: 'Font size' }
-              }
-            },
             props: {
               type: 'object',
-              description: '[PREFERRED] Unified design properties',
-              properties: {
-                fills: { type: 'array', items: { type: 'string', description: 'Hex color' }, description: 'Colors' },
-                cornerRadius: { type: 'number', description: 'Corner radius' },
-                padding: { type: 'number', description: 'Padding' },
-                gap: { type: 'number', description: 'Gap' },
-                layoutMode: { type: 'string', enum: ['HORIZONTAL', 'VERTICAL', 'NONE'], description: 'Layout mode' },
-                layoutPositioning: { type: 'string', enum: ['AUTO', 'ABSOLUTE'], description: 'ABSOLUTE ignores parent auto layout flow' },
-                constraints: {
-                  type: 'object',
-                  description: 'Parent pin/scale behavior',
-                  properties: {
-                    horizontal: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | LEFT | RIGHT | LEFT_RIGHT' },
-                    vertical: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH | SCALE | TOP | BOTTOM | TOP_BOTTOM' }
-                  }
-                },
-                x: { type: 'number', description: 'Explicit x position' },
-                y: { type: 'number', description: 'Explicit y position' },
-                width: { type: 'number', description: 'Width' },
-                height: { type: 'number', description: 'Height' },
-                ...TEXT_PROPS_SCHEMA,
-              }
+              description: 'Unified design properties',
+              properties: { ...COMPACT_PROPS_SCHEMA }
             }
           },
           required: ['nodeId']

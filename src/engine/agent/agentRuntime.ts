@@ -74,11 +74,12 @@ export class AgentRuntime {
   private verificationFixIterations: number = 0;
   private verificationEntryInjected: boolean = false; // Prevent duplicate verification entry messages
   private rootNodeId: string | null = null; // Track root node for auto-inspection in VERIFICATION
+  private completeTaskRejectionCount = 0; // Safety valve for agent deadlocks over over-achieving
+  private hasPerformedVerificationInspect: boolean = false;
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createIcon',
     'deleteNode',
     'applyDesignPatch',
-    'renderSubtree',
     'patchNode'
   ]);
   systemPrompt?: string;
@@ -311,7 +312,38 @@ export class AgentRuntime {
    * Delegates context management to ContextManager.
    */
   private async manageContext(): Promise<void> {
-    await this.context.manageContext();
+    const summarizer = async (messages: LLMMessage[]): Promise<string> => {
+      // Strip massive payloads before summarizing to save budget on the summarizer itself
+      const strippedMessages = messages.map(m => {
+          let contentStr = '';
+          if (typeof m.content === 'string') {
+              contentStr = m.content.substring(0, 500) + (m.content.length > 500 ? '...' : '');
+          } else if (Array.isArray(m.content)) {
+              contentStr = m.content.map(part => {
+                  if (part.functionCall) return `[Call: ${part.functionCall.name}]`;
+                  if (part.functionResponse) return `[Result: ${part.functionResponse.name}]`;
+                  return '[Part]';
+              }).join(' ');
+          }
+          return `${m.role.toUpperCase()}: ${contentStr}`;
+      });
+
+      const summaryPrompt = `Please summarize the following Figma plugin design steps briefly in 1-2 sentences. Focus on what was built or changed. Example: "Created the layout structure and added a submit button."\n\nHistory:\n${strippedMessages.join('\n')}`;
+      
+      try {
+        const response = await this.options.provider.generate({
+          messages: [{ id: `sum_req_${Date.now()}`, role: 'user', content: summaryPrompt }],
+          maxTokens: 150,
+          thinkingLevel: 'minimal'
+        });
+        return response.text || "Conversation summarized.";
+      } catch (error) {
+        console.warn("[AgentRuntime] Summarizer failed, using fallback summary.", error);
+        return "Several design steps completed.";
+      }
+    };
+
+    await this.context.manageContext(summarizer);
   }
 
   /**
@@ -362,6 +394,8 @@ export class AgentRuntime {
     this.verificationFixIterations = 0;
     this.idCounter = 0; // Better to reset idCounter at start of run if not already reset
     this.retryPolicy.resetAll();
+    this.completeTaskRejectionCount = 0; // Reset safety valve count ON EACH RUN
+    this.hasPerformedVerificationInspect = false;
 
     // ============================================
     // ITERATION LOOP
@@ -412,9 +446,19 @@ export class AgentRuntime {
       // Without an active step, the agent stays in PLANNING and cannot call execution tools.
       if (plan.length > 0 && !activeStep) {
         const nextPending = plan.find(s => s.status === 'pending');
+        const hasCompletedSteps = plan.some(s => s.status === 'completed');
         if (nextPending) {
           planState.startTask(nextPending.title, nextPending.description, nextPending.stepId);
           activeStep = planState.getActiveStep();
+          
+          // Guide agent when advancing to a new step after prior completion
+          if (hasCompletedSteps) {
+            this.context.addMessage({
+              id: this.generateId('step_advance'),
+              role: 'user',
+              content: `Now working on: "${nextPending.title}". If this step's objectives were already accomplished during a previous step, call complete_step(summary="Already completed in previous step", reason="already_done") to advance immediately. Do NOT repeat work that is already visible on the canvas.`
+            });
+          }
         }
       }
       
@@ -430,7 +474,7 @@ export class AgentRuntime {
             this.context.addMessage({
               id: this.generateId('verify_entry'),
               role: 'user',
-              content: `All plan steps completed. VERIFY before completing:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) to check actual structure.\n2. Review any anomalies from previous tool results — fix TEXT_OVERFLOW, ZERO_DIM, SIZING_REVERTED issues.\n3. Call validateLayout with the returned DSL tree.\n4. Fix issues found with patchNode, THEN call complete_task.`
+              content: `All plan steps completed. MANDATORY VERIFICATION before complete_task:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) — check the "anomalies" field in the response.\n2. Fix any anomalies found: ZERO_DIM, TEXT_OVERFLOW, SIZING_REVERTED, CHILDREN_OVERFLOW, SIBLING_WIDTH_MISMATCH, MISSING_AUTO_LAYOUT.\n3. Check: all row frames in VERTICAL containers use layoutSizingHorizontal=FILL (not FIXED). Root frame has explicit width/height.\n4. Use applyDesignPatch to fix issues, then re-inspect to confirm.\n5. Only call complete_task after a clean inspection with zero anomalies.`
             });
           }
         } else {
@@ -471,7 +515,7 @@ export class AgentRuntime {
             const completionMessage: LLMMessage = {
               id: this.generateId('stale_done'),
               role: 'user',
-              content: `All plan steps completed. VERIFY before completing:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) to check actual structure.\n2. Review any anomalies from previous tool results — fix TEXT_OVERFLOW, ZERO_DIM, SIZING_REVERTED issues.\n3. Call validateLayout with the returned DSL tree.\n4. Fix issues found with patchNode, THEN call complete_task.`
+              content: `All plan steps completed. MANDATORY VERIFICATION before complete_task:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) — check the "anomalies" field in the response.\n2. Fix any anomalies found: ZERO_DIM, TEXT_OVERFLOW, SIZING_REVERTED, CHILDREN_OVERFLOW, SIBLING_WIDTH_MISMATCH, MISSING_AUTO_LAYOUT.\n3. Check: all row frames in VERTICAL containers use layoutSizingHorizontal=FILL (not FIXED). Root frame has explicit width/height.\n4. Use applyDesignPatch to fix issues, then re-inspect to confirm.\n5. Only call complete_task after a clean inspection with zero anomalies.`
             };
             this.context.getAllMessages().push(completionMessage);
           } else {
@@ -716,7 +760,7 @@ export class AgentRuntime {
             const recoveryHint: LLMMessage = {
               id: this.generateId('mf_hint'),
               role: 'user',
-              content: 'Your previous tool call had invalid syntax. Please emit a simpler, single tool call with valid JSON arguments. Use createNode, applyDesignPatch, or batchOperations.'
+              content: 'Your previous tool call had invalid syntax. Please emit a simpler, single tool call with valid JSON arguments. Use createNode, applyDesignPatch, or generateDesign.'
             };
             this.context.getAllMessages().push(recoveryHint);
           }
@@ -902,7 +946,7 @@ export class AgentRuntime {
                     action: s.action,
                     nodes: s.nodes || []
                   })),
-                  message: 'Plan received. Each step is a COMPONENT CHUNK — use batchOperations to create ALL nodes listed in each step in ONE call. Do NOT use one tool call per step.'
+                  message: 'Plan received. Each step is a COMPONENT CHUNK — use generateDesign to create ALL nodes listed in each step in ONE call. Do NOT use one tool call per step.'
                 }
               },
               thought_signature: tc.thought_signature
@@ -961,8 +1005,26 @@ export class AgentRuntime {
 
             if (tc.args.isComplete) {
               planState.completeTask(undefined, tc.args.summary);
+              this.completeTaskRejectionCount = 0; // Reset safety valve on step completion
             }
             workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
+          } else if (tc.name === 'complete_step') {
+            const activeStep = planState.getActiveStep();
+            if (activeStep) {
+              planState.completeTask(activeStep.stepId, tc.args.summary || 'Step completed');
+              this.completeTaskRejectionCount = 0; // Reset safety valve on step completion
+              workflowResults.push({
+                name: tc.name, id: tc.id,
+                response: { success: true, message: `Step "${activeStep.title}" completed. Advancing to next step.` },
+                thought_signature: tc.thought_signature
+              });
+            } else {
+              workflowResults.push({
+                name: tc.name, id: tc.id,
+                response: { success: false, error: { code: 'NO_ACTIVE_STEP', message: 'No active step to complete.' } },
+                thought_signature: tc.thought_signature
+              });
+            }
           } else if (tc.name === 'complete_task') {
             if (this.hasPendingToolErrors) {
               workflowResults.push({
@@ -978,8 +1040,54 @@ export class AgentRuntime {
                 thought_signature: tc.thought_signature
               });
             } else {
-              // Agent signals completion - return summary and exit
-              return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
+              // Guard: reject complete_task if plan steps remain incomplete
+              const incompletePlanSteps = planState.getPlan().filter(
+                s => s.status === 'pending' || s.status === 'in_progress'
+              );
+              if (incompletePlanSteps.length > 0) {
+                this.completeTaskRejectionCount++;
+                if (this.completeTaskRejectionCount >= 2) {
+                  // Safety valve: agent insists it's done — trust it and auto-complete remaining steps
+                  console.warn(`[AgentRuntime] complete_task rejected ${this.completeTaskRejectionCount}x. Auto-completing ${incompletePlanSteps.length} remaining step(s).`);
+                  for (const step of incompletePlanSteps) {
+                    planState.completeTask(step.stepId, 'Auto-completed: agent signaled overall completion');
+                  }
+                  // Fall through to the success path below
+                  return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
+                } else {
+                  // First rejection: tell agent about complete_step tool
+                  console.warn(`[AgentRuntime] complete_task rejected: ${incompletePlanSteps.length} plan steps remain. Advised complete_step.`);
+                  workflowResults.push({
+                    name: tc.name,
+                    id: tc.id,
+                    response: {
+                      success: false,
+                      error: {
+                        code: 'INCOMPLETE_PLAN',
+                        message: `Cannot complete: ${incompletePlanSteps.length} plan step(s) remain (${incompletePlanSteps.map(s => s.title).join(', ')}). If the work was already done in a previous step, call complete_step to advance. Otherwise, execute remaining steps first.`
+                      }
+                    },
+                    thought_signature: tc.thought_signature
+                  });
+                }
+              } else if (!this.hasPerformedVerificationInspect && this.completeTaskRejectionCount < 1) {
+                this.completeTaskRejectionCount++;
+                workflowResults.push({
+                  name: tc.name,
+                  id: tc.id,
+                  response: {
+                    success: false,
+                    error: {
+                      code: 'NO_VERIFICATION',
+                      message: 'Cannot complete without verification. Call inspectDesign(mode="hierarchy", depth=3) first to check for anomalies, then call complete_task again.'
+                    }
+                  },
+                  thought_signature: tc.thought_signature
+                });
+              } else {
+                // Agent signals completion - return summary and exit
+                return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
+              }
             }
           } else {
             figmaToolCalls.push(tc);
@@ -1070,7 +1178,7 @@ export class AgentRuntime {
               return {
                 name: tc.name,
                 id: tc.id,
-                response: this.cleanToolResult(result),
+                response: this.cleanToolResult(result, tc.name),
                 thought_signature: tc.thought_signature
               };
             }));
@@ -1170,6 +1278,9 @@ export class AgentRuntime {
           if (tr.name === 'batchOperations' && tr.response?.data?.idMap && !this.rootNodeId) {
             const firstId = Object.values(tr.response.data.idMap)[0] as string | undefined;
             if (firstId) this.rootNodeId = firstId;
+          }
+          if (mode === 'VERIFICATION' && tr.name === 'inspectDesign') {
+            this.hasPerformedVerificationInspect = true;
           }
         }
 
@@ -1301,7 +1412,7 @@ export class AgentRuntime {
           const batchHint: LLMMessage = {
             id: this.generateId('batch_hint'),
             role: 'user',
-            content: `⚠️ You used only 1 tool call this turn. BATCH RULE: use batchOperations to combine 3-5+ operations per call. Create ALL remaining nodes for the current step in ONE batchOperations call.`
+            content: `⚠️ You used only 1 tool call this turn. BATCH RULE: emit multiple tool calls at once (e.g. 5+ createNode calls in the same turn), or use generateDesign to create the whole component.`
           };
           this.context.addMessage(batchHint);
           console.log(`[AgentRuntime] ⚠️ Single-tool hint injected (was: ${allToolCalls[0].name})`);

@@ -15,7 +15,7 @@ export class FrameRenderer extends BaseRenderer {
     private childRendererFn?: (dsl: NodeLayer, context: RenderContext) => Promise<SceneNode | null>;
     private readonly MAX_DEPTH = 15;
 
-    constructor(createPaintFn: (color: string) => Promise<Paint | null>) {
+    constructor(createPaintFn: (color: string | Record<string, any>) => Promise<Paint | null>) {
         super(createPaintFn);
     }
 

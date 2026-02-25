@@ -8,7 +8,6 @@ import { TEXT_PROPS_SCHEMA } from '../../../../constants/figma-api';
 export const createNodeDefinition: ToolDefinition = {
   name: 'createNode',
   category: 'create',
-  modes: ['RECOVERY'],
   dependencies: [],
   description: `
 [ATOMIC] Create FRAME, TEXT, RECTANGLE, ELLIPSE, or LINE.
@@ -144,7 +143,6 @@ Returns: {nodeId: "124:567"} - Use this ID as parentId for child nodes.
 export const setNodeLayoutDefinition: ToolDefinition = {
   name: 'setNodeLayout',
   category: 'modify',
-  modes: ['RECOVERY'],
   dependencies: ['createNode'],
   description: `
 Configure Auto Layout for a Frame.
@@ -232,7 +230,6 @@ set layoutMode to VERTICAL/HORIZONTAL in the SAME setNodeLayout call.
 export const setNodeStylesDefinition: ToolDefinition = {
   name: 'setNodeStyles',
   category: 'modify',
-  modes: ['RECOVERY'],
   dependencies: ['createNode'],
   description: `
 Update visual styling (Fills, Strokes, Effects).
@@ -286,7 +283,6 @@ Use nodeId from createNode response.
 export const updateNodePropertiesDefinition: ToolDefinition = {
   name: 'updateNodeProperties',
   category: 'modify',
-  modes: ['RECOVERY'],
   dependencies: ['createNode'],
   description: `
 Update TEXT (fontSize, fontFamily, fontWeight, align) or general properties (visible, name).

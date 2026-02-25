@@ -71,7 +71,7 @@ describe('ToolResultCleaner Repro', () => {
 
     it('repro: preserves visibilityWarnings and diff in regular successful results', () => {
         const rawResult = {
-            name: 'inspectDesign',
+            name: 'setNodeLayout', // Changed from inspectDesign since inspectDesign has a specialized structural path now
             success: true,
             data: {
                 nodeId: 'node-1',

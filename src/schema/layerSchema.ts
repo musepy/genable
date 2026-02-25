@@ -83,6 +83,28 @@ export const PaddingSchema = v.union([
 ]);
 
 /**
+ * Gradient color stop
+ */
+export const GradientStopSchema = v.object({
+    position: v.number(),  // 0.0 to 1.0
+    color: v.string()      // hex color, e.g. "#FF0000" or "#FF000080"
+});
+
+/**
+ * Gradient fill definition (linear, radial, angular, diamond)
+ */
+export const GradientFillSchema = v.object({
+    type: v.picklist(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
+    stops: v.array(GradientStopSchema),
+    angle: v.optional(v.number())  // degrees: 0=left→right, 90=top→bottom, 180=right→left
+});
+
+/**
+ * A fill item: either a hex color string or a gradient object
+ */
+export const FillItemSchema = v.union([v.string(), GradientFillSchema]);
+
+/**
  * Effect schema (shadows, blurs)
  */
 export const EffectSchema = v.object({
@@ -136,7 +158,7 @@ export const NodeLayerPropsSchema = v.looseObject({
     [PROPS.counterAxisAlignItems]: v.optional(AxisAlignSchema),
     
     // Appearance
-    [PROPS.fills]: v.optional(v.array(v.string())),
+    [PROPS.fills]: v.optional(v.array(FillItemSchema)),
     [PROPS.strokes]: v.optional(v.array(v.string())),
     [PROPS.strokeWeight]: v.optional(v.union([v.number(), v.string()])),
     [PROPS.strokeAlign]: v.optional(StrokeAlignSchema),

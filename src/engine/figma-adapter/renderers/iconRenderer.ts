@@ -17,7 +17,7 @@ import { applySurgicalBinding, applyStrokeWeight } from './surgicalBinding';
  * IconRenderer - Creates icons from Iconify SVG API
  */
 export class IconRenderer extends BaseRenderer {
-  constructor(createPaintFn: (color: string) => Promise<Paint | null>) {
+  constructor(createPaintFn: (color: string | Record<string, any>) => Promise<Paint | null>) {
     super(createPaintFn);
   }
 

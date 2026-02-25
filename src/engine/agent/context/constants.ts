@@ -25,15 +25,15 @@ export const CONTEXT_CONSTANTS = {
   /** Minimum number of messages before redundant error cleanup is allowed */
   REDUNDANT_ERROR_DROP_THRESHOLD: 10,
 
-  /** Maximum chars for standard tool result data before truncation (~1500 tokens) */
-  TOOL_RESULT_MAX_DATA_CHARS: 6000,
+  /** Maximum chars for standard tool result data before truncation (~750 tokens) */
+  TOOL_RESULT_MAX_DATA_CHARS: 3000,
 
-  /** Maximum chars for batch operation results including idMap + results (~2500 tokens) */
-  TOOL_RESULT_BATCH_BUDGET: 10000,
+  /** Maximum chars for batch operation results including idMap + results (~1250 tokens) */
+  TOOL_RESULT_BATCH_BUDGET: 5000,
 
   /** 
    * Max chars for a single tool call's args when stored in history.
-   * ~750 tokens. Prevents batchOperations with deep children from bloating context.
+   * ~375 tokens. Prevents batchOperations with deep children from bloating context.
    */
-  MAX_HISTORY_ARGS_CHARS: 3000,
+  MAX_HISTORY_ARGS_CHARS: 1500,
 } as const;

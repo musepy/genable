@@ -59,6 +59,8 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): stri
   // 4. Frame children overflow
   if (node.type === 'FRAME' || node.type === 'COMPONENT') {
     anomalies.push(...validateFrameOverflow(node as FrameNode));
+    anomalies.push(...validateSiblingConsistency(node as FrameNode));  // NEW
+    anomalies.push(...validateMissingAutoLayout(node as FrameNode));   // NEW
   }
 
   // 5. Sizing reverted (FILL → FIXED because parent lacks auto-layout)
@@ -107,7 +109,7 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): string[] {
 }
 
 // ──────────────────────────────────────────────
-// Frame children overflow
+// Frame children overflow & Layout anomalies
 // ──────────────────────────────────────────────
 
 function validateFrameOverflow(frame: FrameNode): string[] {
@@ -154,6 +156,68 @@ function validateFrameOverflow(frame: FrameNode): string[] {
     }
   }
 
+  return anomalies;
+}
+
+/**
+ * Detect children with inconsistent widths in a VERTICAL layout frame.
+ * Common issue: table rows or list items with different explicit widths.
+ */
+function validateSiblingConsistency(frame: FrameNode): string[] {
+  const anomalies: string[] = [];
+  
+  if (!frame.layoutMode || frame.layoutMode === 'NONE') return anomalies;
+  if (!frame.children || frame.children.length < 2) return anomalies;
+  // Only check VERTICAL layouts (rows should have consistent widths)
+  if (frame.layoutMode === 'VERTICAL') {
+    const childFrames = frame.children.filter(
+      c => c.type === 'FRAME' && 'width' in c
+    ) as FrameNode[];
+    
+    if (childFrames.length < 2) return anomalies;
+    
+    // Check if children that should be uniform (FILL) are instead FIXED with different widths
+    const fixedWidthChildren = childFrames.filter(c => {
+      const hSizing = (c as any).layoutSizingHorizontal;
+      return !hSizing || hSizing === 'FIXED';
+    });
+    
+    if (fixedWidthChildren.length >= 2) {
+      const widths = fixedWidthChildren.map(c => Math.round(c.width));
+      const uniqueWidths = new Set(widths);
+      if (uniqueWidths.size > 1 && fixedWidthChildren.length >= 3) {
+        anomalies.push(
+          `SIBLING_WIDTH_MISMATCH: '${frame.name}' has ${fixedWidthChildren.length} child frames with inconsistent widths (${Array.from(uniqueWidths).join(', ')}px). Consider layoutSizingHorizontal=FILL for uniform width.`
+        );
+      }
+    }
+  }
+  
+  return anomalies;
+}
+
+/**
+ * Detect frames with multiple children but no auto-layout.
+ * Without layout mode, children stack at (0,0).
+ */
+function validateMissingAutoLayout(frame: FrameNode): string[] {
+  const anomalies: string[] = [];
+  
+  if (frame.layoutMode && frame.layoutMode !== 'NONE') return anomalies;
+  if (!frame.children || frame.children.length < 2) return anomalies;
+  
+  // Check if multiple children are at the same position (overlapping)
+  const positions = frame.children
+    .filter(c => 'x' in c && 'y' in c)
+    .map(c => `${Math.round((c as any).x)},${Math.round((c as any).y)}`);
+  
+  const uniquePositions = new Set(positions);
+  if (positions.length >= 2 && uniquePositions.size === 1) {
+    anomalies.push(
+      `MISSING_AUTO_LAYOUT: '${frame.name}' has ${frame.children.length} children but no Auto Layout — they overlap at the same position. Add layoutMode=VERTICAL or HORIZONTAL.`
+    );
+  }
+  
   return anomalies;
 }
 

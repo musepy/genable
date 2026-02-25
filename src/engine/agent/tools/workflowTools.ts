@@ -102,5 +102,27 @@ export const workflowTools: ToolDefinition[] = [
     },
     executionStrategy: 'sequential',
     category: 'control'
+  },
+  {
+    name: 'complete_step',
+    modes: ['EXECUTION', 'RECOVERY'],
+    description: 'Mark the current plan step as complete and advance to the next step. Use this when the current step\'s work was already accomplished in a previous step, or when you have finished executing the current step.',
+    parameters: {
+      type: 'object',
+      properties: {
+        summary: {
+          type: 'string',
+          description: 'Brief summary of what was accomplished (or "Already completed in previous step").'
+        },
+        reason: {
+          type: 'string',
+          enum: ['completed', 'already_done', 'merged_with_previous'],
+          description: 'Why this step is being completed.'
+        }
+      },
+      required: ['summary']
+    },
+    executionStrategy: 'sequential',
+    category: 'plan'
   }
 ];

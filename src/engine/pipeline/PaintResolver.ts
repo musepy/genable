@@ -10,14 +10,20 @@ import { SendLogHandler } from '../../types';
  */
 export class PaintResolver {
     /**
-     * Resolve a string input into a Figma Paint object.
+     * Resolve a string or gradient object into a Figma Paint object.
      * Supports:
-     * 1. Explicit Variables (variable:NAME)
-     * 2. Implicit Variable/Style lookup (TOKEN_NAME)
-     * 3. Literal Color Fallback (Hex, RGBA)
+     * 1. Gradient objects ({type: "GRADIENT_LINEAR", stops: [...], angle?: number})
+     * 2. Explicit Variables (variable:NAME)
+     * 3. Implicit Variable/Style lookup (TOKEN_NAME)
+     * 4. Literal Color Fallback (Hex, RGBA)
      */
     public static async resolve(input: any): Promise<Paint | null> {
         if (!input) return null;
+
+        // Handle gradient objects
+        if (typeof input === 'object' && input !== null && typeof input.type === 'string' && input.type.startsWith('GRADIENT_')) {
+            return this.resolveGradient(input);
+        }
 
         if (typeof input === 'string') {
             const normalized = input.trim().toLowerCase();
@@ -67,6 +73,49 @@ export class PaintResolver {
             const c = parseColor(input);
             return { type: 'SOLID', color: { r: c.r, g: c.g, b: c.b }, opacity: c.a };
         } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Resolve a gradient object into a Figma GradientPaint.
+     * Accepts: { type: "GRADIENT_LINEAR"|"GRADIENT_RADIAL"|..., stops: [{position, color}], angle?: number }
+     * Converts angle (degrees) to Figma's gradientTransform matrix.
+     */
+    private static resolveGradient(input: { type: string; stops?: Array<{ position: number; color: string }>; angle?: number }): Paint | null {
+        if (!input.stops || input.stops.length < 2) {
+            console.warn(`[PaintResolver] Gradient rejected: need at least 2 stops, got ${input.stops?.length ?? 0}`);
+            return null;
+        }
+
+        try {
+            const gradientStops: ColorStop[] = input.stops.map(stop => {
+                const c = parseColor(stop.color);
+                return {
+                    position: Math.max(0, Math.min(1, stop.position)),
+                    color: { r: c.r, g: c.g, b: c.b, a: c.a }
+                };
+            });
+
+            // Convert angle (degrees) to gradientTransform matrix
+            // Figma gradientTransform maps from gradient space [0,1]x[0,1] to node space
+            // Default angle 180 = top-to-bottom (common CSS default)
+            const angleDeg = input.angle ?? 180;
+            const angleRad = angleDeg * (Math.PI / 180);
+            const cos = Math.cos(angleRad);
+            const sin = Math.sin(angleRad);
+            const gradientTransform: Transform = [
+                [cos, sin, 0.5 - cos * 0.5 - sin * 0.5],
+                [-sin, cos, 0.5 + sin * 0.5 - cos * 0.5]
+            ];
+
+            return {
+                type: input.type,
+                gradientTransform,
+                gradientStops
+            } as GradientPaint;
+        } catch (e) {
+            console.warn(`[PaintResolver] Gradient resolution failed:`, e);
             return null;
         }
     }

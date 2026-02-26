@@ -139,7 +139,10 @@ class SkillRegistryImpl implements ISkillRegistry {
       if (shouldActivate) {
         // Mark context as active
         const state = this.states.get(skill.id);
-        if (state) state.contextActive = true;
+        if (state) {
+          state.contextActive = true;
+          state.stickyActive = true; // Once activated, make it sticky
+        }
 
         // Add system prompt section if defined
         if (skill.context.systemPromptSection) {
@@ -189,6 +192,12 @@ class SkillRegistryImpl implements ISkillRegistry {
     deps: SkillContextDependencies
   ): boolean {
     const { injectionType, triggerPatterns } = skill.context;
+
+    // Sticky skills are always active once triggered
+    const state = this.states.get(skill.id);
+    if (state?.stickyActive) {
+      return true;
+    }
 
     // System injection is always active
     if (injectionType === 'system') {
@@ -253,6 +262,7 @@ class SkillRegistryImpl implements ISkillRegistry {
         id: skill.id,
         enabled: skill.enabledByDefault ?? true,
         contextActive: false,
+        stickyActive: false,
       });
     }
     console.log(`[SkillRegistry] Reset all skill states`);

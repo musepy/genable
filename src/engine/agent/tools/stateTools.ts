@@ -17,27 +17,12 @@ import { ToolDefinition } from './types';
 export const COMPACT_PROPS_SCHEMA = {
   name: { type: 'string' as const, description: 'Layer name' },
   layoutMode: { type: 'string' as const, description: 'HORIZONTAL | VERTICAL | NONE' },
-  gap: { type: 'number' as const, description: 'Spacing between children' },
-  padding: { type: 'number' as const, description: 'Uniform padding' },
-  fills: { type: 'array' as const, items: { type: 'string' as const, description: 'Hex color string' }, description: 'Background colors (e.g. ["#FFFFFF"])' },
-  cornerRadius: { type: 'number' as const, description: 'Border radius in px' },
   width: { type: 'number' as const, description: 'Width in px' },
   height: { type: 'number' as const, description: 'Height in px' },
-  layoutSizingHorizontal: { type: 'string' as const, description: 'FIXED | HUG | FILL' },
-  layoutSizingVertical: { type: 'string' as const, description: 'FIXED | HUG | FILL' },
-  characters: { type: 'string' as const, description: 'Text content (for TEXT nodes). Note: If you want to include newlines, you MUST use actual newlines (e.g. `\\n` in JSON which evaluates to a physical newline) and NOT literal escaped string `\\\\n`.' },
-  fontSize: { type: 'number' as const, description: 'Font size in px' },
-  fontWeight: { type: 'string' as const, description: 'Bold | Medium | Regular' },
-  fontFamily: { type: 'string' as const, description: 'Font family (e.g. "Inter", "Roboto")' },
-  lineHeight: { type: 'number' as const, description: 'Line height in px' },
-  textAlignHorizontal: { type: 'string' as const, description: 'LEFT | CENTER | RIGHT | JUSTIFIED' },
-  textAutoResize: { type: 'string' as const, description: 'NONE | WIDTH_AND_HEIGHT | HEIGHT | TRUNCATE' },
-  textTruncation: { type: 'string' as const, description: 'DISABLED | ENDING (ellipsis "...")' },
-  maxLines: { type: 'number' as const, description: 'Max visible lines (requires textTruncation=ENDING)' },
-  opacity: { type: 'number' as const, description: 'Opacity 0-1' },
-  strokeWeight: { type: 'number' as const, description: 'Stroke width in px' },
-  strokes: { type: 'array' as const, items: { type: 'string' as const, description: 'Hex color string' }, description: 'Stroke colors' },
-  effects: { type: 'array' as const, items: { type: 'object' as const, description: 'Effect object (drop shadow, blur)' }, description: 'Shadow/blur effects' },
+  characters: { type: 'string' as const, description: 'Text content (for TEXT nodes)' },
+  fills: { type: 'array' as const, items: { type: 'string' as const, description: 'Hex color string' }, description: 'Background colors (e.g. ["#FFFFFF"])' },
+  // Let the LLM output any other Figma properties dynamically without strict JSON Schema validation throwing errors
+  // properties like gap, padding, fontSize, cornerRadius, etc. works automatically because the actual Node SDK consumes them blindly.
 } as const;
 
 export const FLAT_NODE_SCHEMA = {

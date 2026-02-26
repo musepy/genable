@@ -83,68 +83,15 @@ EXAMPLE (Hierarchical Row):
                 parentRef: { type: 'string', description: 'Virtual ID (opId) of the parent created in this batch' },
                 nodeId: { type: 'string', description: 'Real Figma node ID' },
                 nodeRef: { type: 'string', description: 'Virtual ID (opId) of the node to modify' },
-                // recursive creation support
-                children: {
-                  type: 'array',
-                  description: 'Recursive child operations (createNode only).',
-                  items: { 
-                    type: 'object', 
-                    description: 'Child createNode operation',
-                    properties: {
-                      opId: { type: 'string', description: 'Unique ID' },
-                      action: { type: 'string', description: 'Must be createNode' },
-                      params: { 
-                        type: 'object', 
-                        description: 'Parameters for child creation',
-                        properties: { 
-                          type: { type: 'string', description: 'Node type (FRAME | TEXT | ICON | etc.)' }, 
-                          props: { 
-                            type: 'object',
-                            description: 'Visual properties',
-                            properties: {
-                              ...COMPACT_PROPS_SCHEMA
-                            }
-                          } 
-                        } 
-                      }
-                    }
-                  }
-                },
-                // State-Driven Tool Support
-                /* 
-                // PAUSED: renderSubtree support in batch
-                nodes: {
-                  type: 'array',
-                  description: 'For renderSubtree: Flat list of nodes.',
-                  items: FLAT_NODE_SCHEMA
-                },
-                */
+                
+                // Allow free-form object for state driven tool updates and patches
+                // The tool handler runtime reads this blindly.
                 props: {
                   type: 'object',
-                  description: 'For patchNode: Properties to update.',
-                  properties: COMPACT_PROPS_SCHEMA
+                  description: 'Any valid Figma properties (fills, padding, gap, characters, etc.)'
                 },
+                
                 stepId: { type: 'string', description: 'Optional step ID pass-through' },
-                // -------------------------------------------------------------
-                // Explicit array requirements
-                // -------------------------------------------------------------
-                patches: {
-                  type: 'array',
-                  description: 'For applyDesignPatch: Array of patch definitions. MUST be used for applyDesignPatch.',
-                  items: {
-                    type: 'object',
-                    description: 'A single patch operation',
-                    properties: {
-                      nodeId: { type: 'string', description: 'Real Figma node ID' },
-                      nodeRef: { type: 'string', description: 'Virtual ID (opId) of the node to modify' },
-                      props: {
-                        type: 'object',
-                        description: 'General node properties (characters, iconName, etc.)',
-                        properties: { ...COMPACT_PROPS_SCHEMA }
-                      }
-                    }
-                  }
-                },
                 // Top-level params for "flat" support
                 ...COMPACT_PROPS_SCHEMA,
                 iconName: { type: 'string', description: 'For ICON nodes' },
@@ -228,8 +175,7 @@ Extremely efficient for refining a whole component (e.g., changing colors and sp
             nodeId: { type: 'string', description: 'Target node ID' },
             props: {
               type: 'object',
-              description: 'Unified design properties',
-              properties: { ...COMPACT_PROPS_SCHEMA }
+              description: 'Unified design properties to apply'
             }
           },
           required: ['nodeId']

@@ -9,7 +9,7 @@ import { IpcBridge } from './ipcBridge';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { RetryPolicy, AgentErrorCategory } from './retryPolicy';
 import { planState } from './planState';
-import { composeAgentSystemPrompt } from '../llm-client/context/promptComposer';
+import { composeAgentSystemPrompt, composeAgentDynamicContext } from '../llm-client/context/promptComposer';
 import { mapToSemanticError, formatSemanticError } from '../utils/errorUtils';
 import { AgentBehaviorConfig, DEFAULT_BEHAVIOR, resolveBehavior } from './agentBehaviorConfig';
 import { estimateTokens } from './context/tokenEstimator';
@@ -57,6 +57,7 @@ export class AgentRuntime {
   private loopDetector = new LoopDetector();
   private thinkingOnlyIterations: number = 0;
   private anyModeRetryCount: number = 0;
+  private textOnlyCompletionRetries: number = 0;
   private lastNotificationTime: number = 0;
   private readonly THROTTLE_MS = 100;
   private lastProgressSummary: string = '';
@@ -602,6 +603,40 @@ export class AgentRuntime {
       console.log(`[AgentRuntime] 🔄 System prompt hot-swapped for mode: ${this.currentMode}`);
 
       // ----------------------------------------
+      // PHASE 3: DYNAMIC CONTEXT INJECTION
+      // ----------------------------------------
+      // [Prefix Cache Optimization] 
+      // Inject dynamic parts as a USER message to keep SYSTEM prompt static.
+      // This allows Gemini/Claude to cache the heavy System Prompt.
+      const dynamicContext = composeAgentDynamicContext({
+        ragResults: { prioritizedComponents: [], goldenTemplates: [] },
+        designSystemContext: { skillName: this.designSystemId || 'default' },
+        intent: {
+          originalRequest: this.originalUserRequest,
+          requiresLayoutKnowledge: true
+        },
+        selectionContext: this.options.selectionContext,
+        behaviorConfig: this.behaviorConfig,
+        operationLog: this.operationLog,
+        activeStep: planState.getActiveStep(),
+        planSummary: planState.getSummary()
+      });
+
+      if (dynamicContext) {
+        // [FIX] Clean up previous iteration's dynamic prompt to prevent buildup
+        const messages = this.context.getAllMessages();
+        const prevIdx = messages.findIndex(m => m.id?.startsWith('dyn_ctx'));
+        if (prevIdx !== -1) messages.splice(prevIdx, 1);
+
+        this.context.addMessage({
+          id: this.generateId('dyn_ctx'),
+          role: 'user',
+          content: dynamicContext,
+          hidden: true // Keep context lean for long-term memory
+        });
+      }
+
+      // ----------------------------------------
       // PHASE 3: PREPARE LLM CALL
       // ----------------------------------------
       // System prompt is already in context (unshifted above)
@@ -846,6 +881,7 @@ export class AgentRuntime {
         // Has tool calls = making progress, reset counters
         this.thinkingOnlyIterations = 0;
         this.anyModeRetryCount = 0;
+        this.textOnlyCompletionRetries = 0;
       }
 
       // Add model's response to history
@@ -1046,35 +1082,21 @@ export class AgentRuntime {
               const incompletePlanSteps = planState.getPlan().filter(
                 s => s.status === 'pending' || s.status === 'in_progress'
               );
+              
               if (incompletePlanSteps.length > 0) {
-                this.completeTaskRejectionCount++;
-                if (this.completeTaskRejectionCount >= 2) {
-                  // Safety valve: agent insists it's done — trust it and auto-complete remaining steps
-                  console.warn(`[AgentRuntime] complete_task rejected ${this.completeTaskRejectionCount}x. Auto-completing ${incompletePlanSteps.length} remaining step(s).`);
-                  for (const step of incompletePlanSteps) {
-                    planState.completeTask(step.stepId, 'Auto-completed: agent signaled overall completion');
-                  }
-                  // Fall through to the success path below
-                  return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
-                } else {
-                  // First rejection: tell agent about complete_step tool
-                  console.warn(`[AgentRuntime] complete_task rejected: ${incompletePlanSteps.length} plan steps remain. Advised complete_step.`);
-                  workflowResults.push({
-                    name: tc.name,
-                    id: tc.id,
-                    response: {
-                      success: false,
-                      error: {
-                        code: 'INCOMPLETE_PLAN',
-                        message: `Cannot complete: ${incompletePlanSteps.length} plan step(s) remain (${incompletePlanSteps.map(s => s.title).join(', ')}). If the work was already done in a previous step, call complete_step to advance. Otherwise, execute remaining steps first.`
-                      }
-                    },
-                    thought_signature: tc.thought_signature
-                  });
+                // TRUE AGENT: Never block complete_task. If the agent thinks it's done, trust it.
+                console.warn(`[AgentRuntime] 🚀 Agent called complete_task but ${incompletePlanSteps.length} plan steps remain. Trusting agent and auto-completing remaining steps.`);
+                for (const step of incompletePlanSteps) {
+                  planState.completeTask(step.stepId, 'Auto-completed: agent signaled overall completion');
                 }
-              } else if (!this.hasPerformedVerificationInspect) {
+              }
+              
+              // Proceed to next checks (like VERIFICATION)
+
+              if (!this.hasPerformedVerificationInspect && this.options.loopPolicy?.useSkillSystem !== false) {
                 if (this.noVerificationRejectionCount >= 1) {
                   // Safety valve: already rejected once, let through to avoid deadlock
+                  this.options.onToolCall?.(tc);
                   return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
                 }
                 this.noVerificationRejectionCount++;
@@ -1091,7 +1113,8 @@ export class AgentRuntime {
                   thought_signature: tc.thought_signature
                 });
               } else {
-                // Agent signals completion - return summary and exit
+                // Agent signals completion - notify and return summary
+                this.options.onToolCall?.(tc);
                 return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
               }
             }
@@ -1383,7 +1406,7 @@ export class AgentRuntime {
               this.context.addMessage({
                 id: this.generateId('vfix'),
                 role: 'user',
-                content: `Verification detected ${issueTypes} (fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}). Use patchNode to fix the reported issues, then re-inspect and call validateLayout again.`
+                content: `Verification detected ${issueTypes} (fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}). Evaluate if these are critical design flaws. If they are critical, use patchNode to fix them. If you decide the current design is acceptable or the anomalies are false positives, you can ignore them and call complete_task.`
               });
               console.log(`[AgentRuntime] VERIFICATION fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}`);
             } else {
@@ -1433,9 +1456,10 @@ export class AgentRuntime {
         iteration++;
         continue;
       } else {
-        // No tool calls - pure text response (final summary or completion)
-        // Short text: accept as final response
-        // Long text: warn but still accept (don't crash)
+        // No tool calls - pure text response
+        // The agent should use complete_task to signal completion, not just emit text.
+
+        // (1) Block if there are pending tool errors
         if (this.hasPendingToolErrors) {
           const recoveryMessage: LLMMessage = {
             id: this.generateId('usr'),
@@ -1447,9 +1471,23 @@ export class AgentRuntime {
           iteration--;
           continue;
         }
-        if (response.text && response.text.length > 500) {
-          console.warn('[AgentRuntime] Long response without tool calls. Consider using complete_task.');
+
+        // (2) Nudge agent to call complete_task instead of just emitting text
+        if (this.textOnlyCompletionRetries < AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES) {
+          this.textOnlyCompletionRetries++;
+          const nudgeMessage: LLMMessage = {
+            id: this.generateId('complete_nudge'),
+            role: 'user',
+            content: `You responded with text but did NOT call complete_task. Do NOT summarize in plain text. You MUST call the complete_task tool with a summary to properly signal completion. Call complete_task now.`
+          };
+          this.context.addMessage(nudgeMessage);
+          console.warn(`[AgentRuntime] ⚠️ Text-only completion blocked (attempt ${this.textOnlyCompletionRetries}/${AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES}). Nudging agent to call complete_task.`);
+          iteration--;
+          continue;
         }
+
+        // (3) After retries exhausted, accept the text response as a fallback
+        console.warn(`[AgentRuntime] Agent did not call complete_task after ${AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES} nudges. Accepting text-only completion as fallback.`);
         return response.text;
       }
     }

@@ -167,6 +167,8 @@ export interface SkillState {
 
   /** Whether skill's context is currently active */
   contextActive: boolean;
+  /** Whether the skill has been activated and should remain active for the rest of the session. */
+  stickyActive?: boolean;
 
   /** Custom runtime data */
   data?: Record<string, any>;

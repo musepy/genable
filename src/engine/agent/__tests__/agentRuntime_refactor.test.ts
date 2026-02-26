@@ -46,7 +46,7 @@ describe('AgentRuntime Refactor Verification', () => {
           { name: 'p3', args: {} }
         ]
       })
-      .mockResolvedValueOnce({ text: 'Done' });
+      .mockResolvedValueOnce({ text: 'Done', toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] });
 
     const executionOrder: string[] = [];
     const toolExecutors = {
@@ -57,6 +57,7 @@ describe('AgentRuntime Refactor Verification', () => {
     };
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: [
         { name: 'p1', executionStrategy: 'parallel', parameters: { type: 'object', properties: {} }, description: '' },
@@ -81,7 +82,7 @@ describe('AgentRuntime Refactor Verification', () => {
       .mockResolvedValueOnce({
         toolCalls: [{ name: 'slow_tool', args: {} }]
       })
-      .mockResolvedValueOnce({ text: 'Failed as expected' });
+      .mockResolvedValueOnce({ text: 'Failed as expected', toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] });
 
     const toolExecutors = {
       slow_tool: () => new Promise(resolve => setTimeout(() => resolve({ success: true }), 100))
@@ -104,16 +105,17 @@ describe('AgentRuntime Refactor Verification', () => {
         (err as any).type = 'OVERLOADED';
         throw err;
       }
-      return Promise.resolve({ text: 'Success after retry' });
+      return Promise.resolve({ text: 'Success after retry', toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] });
     });
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: []
     });
 
     const result = await runtime.run('test retry');
-    expect(result).toBe('Success after retry');
+    expect(result).toBe('Done');
     expect(callCount).toBe(2);
   });
 

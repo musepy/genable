@@ -40,10 +40,15 @@ describe('AgentRuntime Rambling Mitigation', () => {
       })
       .mockResolvedValueOnce({
         text: 'Done',
-        toolCalls: []
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }]
+      })
+      .mockResolvedValue({
+        text: 'Fallback',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Fallback' } }]
       });
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: [{ name: 'createNode', description: 'Create', parameters: { type: 'object', properties: {} } }],
       ipcBridge: { callTool: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1' } }), dispose: vi.fn() } as any,
@@ -85,6 +90,7 @@ describe('AgentRuntime Rambling Mitigation', () => {
       });
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: [{ name: 'noop', description: 'Noop', parameters: { type: 'object', properties: {} } }],
       ipcBridge: { callTool: vi.fn().mockResolvedValue({ success: true }), dispose: vi.fn() } as any,

@@ -49,31 +49,7 @@ You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto"
             type: { type: 'string', description: 'FRAME | TEXT | RECTANGLE | ELLIPSE | LINE | ICON. Do NOT use VECTOR — use RECTANGLE for shapes, ELLIPSE for circles, ICON with iconName for icons.' },
             props: {
               type: 'object',
-              description: 'All visual and layout properties for the node',
-              properties: {
-                ...COMPACT_PROPS_SCHEMA,
-                iconName: { type: 'string', description: 'Iconify icon name for ICON nodes (e.g., "lucide:home")' },
-                primaryAxisAlignItems: { type: 'string', description: 'MIN | CENTER | MAX | SPACE_BETWEEN' },
-                counterAxisAlignItems: { type: 'string', description: 'MIN | CENTER | MAX' },
-                paddingTop: { type: 'number', description: 'Top padding' },
-                paddingRight: { type: 'number', description: 'Right padding' },
-                paddingBottom: { type: 'number', description: 'Bottom padding' },
-                paddingLeft: { type: 'number', description: 'Left padding' },
-                layoutPositioning: { type: 'string', description: 'AUTO | ABSOLUTE' },
-                constraints: {
-                  type: 'object',
-                  description: 'Pin/scale behavior',
-                  properties: {
-                    horizontal: { type: 'string', description: 'MIN|CENTER|MAX|STRETCH|SCALE' },
-                    vertical: { type: 'string', description: 'MIN|CENTER|MAX|STRETCH|SCALE' }
-                  }
-                },
-                x: { type: 'number', description: 'Explicit x position (absolute)' },
-                y: { type: 'number', description: 'Explicit y position (absolute)' },
-                layoutGrow: { type: 'number', description: 'Auto-layout grow (0 or 1)' },
-                layoutAlign: { type: 'string', description: 'MIN | CENTER | MAX | STRETCH' },
-                ...TEXT_PROPS_SCHEMA,
-              }
+              description: 'All visual and layout properties for the node (width, height, fills, padding, characters, layoutMode, constraints, iconName, etc).',
             }
           },
           required: ['id', 'type', 'props']

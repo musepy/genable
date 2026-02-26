@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composeAgentSystemPrompt } from '../promptComposer';
+import { composeAgentSystemPrompt, composeAgentDynamicContext } from '../promptComposer';
 import { PromptDependencies } from '../../../../types/context';
 import { ToolDefinition } from '../../../agent/tools/types';
 import { PROMPT_HEADERS } from '../../../../constants/prompts';
@@ -94,7 +94,7 @@ describe('PromptComposer - Agent Mode', () => {
                 serializedDSL: '[]'
             }
         };
-        const prompt = composeAgentSystemPrompt(depsWithSelection, mockTools, mockProvider);
+        const prompt = composeAgentDynamicContext(depsWithSelection);
         expect(prompt).toContain('## SELECTION CONTEXT');
         expect(prompt).toContain('"type": "FRAME"');
         expect(prompt).toContain('"name": "Header"');
@@ -116,7 +116,7 @@ describe('PromptComposer - Agent Mode', () => {
                 serializedDSL: '[]'
             }
         };
-        const prompt = composeAgentSystemPrompt(depsWithInvalidSelection, mockTools, mockProvider);
+        const prompt = composeAgentDynamicContext(depsWithInvalidSelection);
         // It should not crash, and should only serialize the valid node
         expect(prompt).toContain('"name": "Valid"');
     });

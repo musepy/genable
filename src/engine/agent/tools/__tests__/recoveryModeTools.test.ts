@@ -10,7 +10,7 @@ describe('Tool mode filtering: RECOVERY', () => {
     expect(names).toContain('validateLayout');
     expect(names).toContain('summarize_progress');
     expect(names).toContain('complete_task');
-    expect(names).not.toContain('createNode');
+    expect(names).toContain('createNode');
     expect(names).not.toContain('applyDesignPatch');
     expect(names).not.toContain('batchOperations');
   });

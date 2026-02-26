@@ -60,7 +60,7 @@ describe('Gemini Signature Repro', () => {
       })
       .mockResolvedValueOnce({
         text: 'Done!',
-        toolCalls: [],
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }],
         fullParts: [
           { text: 'Closing thought...' },
           { text: 'Done!' }
@@ -74,6 +74,7 @@ describe('Gemini Signature Repro', () => {
     } as any;
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: [
         { name: 'task_1', description: 'd', parameters: { type: 'object', properties: {} } },

@@ -32,20 +32,21 @@ describe('AgentRuntime', () => {
   it('should complete in one iteration if no tool calls', async () => {
     (mockProvider.generate as any).mockResolvedValue({
       text: 'Final result',
-      toolCalls: []
+      toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }]
     });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [],
-      systemPrompt: 'System'
+      tools: [{ name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } }],
+      systemPrompt: 'System',
+      loopPolicy: { useSkillSystem: false } as any
     });
 
     const result = await runtime.run('User prompt');
 
-    expect(result).toBe('Final result');
+    expect(result).toBe('Done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
-    expect(runtime.getMessages()).toHaveLength(3); // system, user, model
+    expect(runtime.getMessages()).toHaveLength(4); // system, user, model(call), tool(result)
   });
 
   it('should execute tool calls and loop', async () => {
@@ -55,10 +56,10 @@ describe('AgentRuntime', () => {
         text: 'Thinking...',
         toolCalls: [{ name: 'get_info', args: { query: 'test' } }]
       })
-      // Round 2: Model gives final answer
+      // Round 2: Model gives final answer and signal completion
       .mockResolvedValueOnce({
         text: 'Final answer based on info',
-        toolCalls: []
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Task done' } }]
       });
 
     // Mock IPC Bridge
@@ -71,18 +72,22 @@ describe('AgentRuntime', () => {
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [{ name: 'get_info', description: 'Get info', parameters: { type: 'object', properties: {} } }],
-      ipcBridge: mockIpcBridge
+      tools: [
+        { name: 'get_info', description: 'Get info', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } }
+      ],
+      ipcBridge: mockIpcBridge,
+      loopPolicy: { useSkillSystem: false } as any
     });
 
     const result = await runtime.run('Tell me something');
 
-    expect(result).toBe('Final answer based on info');
+    expect(result).toBe('Task done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(2);
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
     
     const messages = runtime.getMessages();
-    expect(messages).toHaveLength(5); // system, user, model(thought+call), tool(result), model(final)
+    expect(messages).toHaveLength(6); // system, user, model(thought+call), tool(result), model(complete), tool(complete)
     expect(messages[3].role).toBe('tool');
   });
 
@@ -108,7 +113,7 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any).mockImplementation(({ onProgress: cbP, onThinking: cbT }: any) => {
       cbP?.('Part 1');
       cbT?.('Thinking...');
-      return Promise.resolve({ text: 'Final', toolCalls: [] });
+      return Promise.resolve({ text: 'Final', toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] });
     });
 
     const runtime = new AgentRuntime({
@@ -203,7 +208,7 @@ describe('AgentRuntime', () => {
     expect(userMessages.some(m => typeof m.content === 'string' && m.content.includes('call complete_step'))).toBe(true);
   });
 
-  it('should auto-complete remaining steps if complete_task is rejected twice (safety valve)', async () => {
+  it('should allow complete_task and auto-complete remaining steps immediately (True Agent)', async () => {
     // Round 1: Plan design with 2 steps
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
@@ -219,15 +224,10 @@ describe('AgentRuntime', () => {
           }
         }]
       })
-      // Round 2: Try to call complete_task immediately (1st rejection)
+      // Round 2: Try to call complete_task immediately
       .mockResolvedValueOnce({
         text: 'I am done already',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Premature finish' } }]
-      })
-      // Round 3: Try to call complete_task again (2nd rejection -> safety valve triggers -> success)
-      .mockResolvedValueOnce({
-        text: 'I said I am done',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Really finished' } }]
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Finished early' } }]
       });
 
     const runtime = new AgentRuntime({
@@ -235,13 +235,14 @@ describe('AgentRuntime', () => {
       tools: [
         { name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } },
         { name: 'complete_task', description: 'Complete task', parameters: { type: 'object', properties: {} } }
-      ]
+      ],
+      loopPolicy: { useSkillSystem: false } as any
     });
 
     (runtime as any).hasPerformedVerificationInspect = true;
 
-    const result = await runtime.run('Safety valve test');
-    expect(result).toBe('Really finished');
-    expect(mockProvider.generate).toHaveBeenCalledTimes(3);
+    const result = await runtime.run('True Agent test');
+    expect(result).toBe('Finished early');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(2); // Should not need 3 iterations anymore
   });
 });

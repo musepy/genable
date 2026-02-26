@@ -108,7 +108,7 @@ export class LoopDetector {
         fingerprint = `|icon:${tc.args.iconName}${contextSample}`;
       } else if (tc.name === 'applyDesignPatch' && tc.args?.patches?.length > 0) {
         const patchHash = this.hashString(JSON.stringify(
-          tc.args.patches.map((p: any) => ({ n: p.nodeId || p.nodeRef, l: !!p.layout, s: !!p.styles }))
+          tc.args.patches.map((p: any) => ({ n: p.nodeId || p.nodeRef, props: p.props }))
         ));
         fingerprint = `|patch:${tc.args.patches.length}|hash:${patchHash}`;
       } else if (tc.name === 'batchOperations' && Array.isArray(tc.args?.operations)) {

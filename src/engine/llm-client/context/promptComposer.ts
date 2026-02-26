@@ -410,12 +410,6 @@ function buildIterationStateSummary(deps: PromptDependencies): string {
  */
 const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
     {
-        id: 'iteration-state',
-        priority: 0.1, // Appear at the very top
-        budgetKey: 'core',
-        builder: (deps) => buildIterationStateSummary(deps)
-    },
-    {
         id: 'agent-identity',
         priority: 1,
         budgetKey: 'core',
@@ -428,6 +422,12 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         builder: (_deps, _tools, budget) => truncateToBudget(SCENE_GRAPH_MODEL, budget)
     },
     {
+        id: 'tool-examples',
+        priority: 1.1,
+        budgetKey: 'examples',
+        builder: (_deps, _tools, budget) => buildToolExamples(budget)
+    },
+    {
         id: 'execution-protocol',
         priority: 1.2,
         budgetKey: 'core',
@@ -436,12 +436,6 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
             if (mode !== 'EXECUTION' && mode !== 'RECOVERY') return '';
             return buildExecutionProtocol();
         }
-    },
-    {
-        id: 'tool-examples',
-        priority: 1.1,
-        budgetKey: 'examples',
-        builder: (_deps, _tools, budget) => buildToolExamples(budget)
     },
     {
         // Actionable visual quality guidance: shadows, colors, typography, checklist.
@@ -481,12 +475,6 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         priority: 2.1,
         budgetKey: 'tools',
         builder: (_deps, tools, budget) => buildToolFormat(tools, budget)
-    },
-    {
-        id: 'selection-context',
-        priority: 5,
-        budgetKey: 'selection',
-        builder: (deps, _tools, budget) => buildSelectionContext(deps, budget)
     },
     {
         id: 'skill-context',
@@ -667,10 +655,31 @@ export function composeSystemPrompt(
 }
 
 /**
+ * Composes dynamic context information that changes every iteration.
+ * This should be injected as a USER message to keep the SYSTEM prompt static for Prefix Caching.
+ */
+export function composeAgentDynamicContext(
+    deps: PromptDependencies,
+    options: { selectionBudget?: number } = {}
+): string {
+    const parts: string[] = [];
+    
+    // 1. Iteration State (History, Active Task)
+    const iterationState = buildIterationStateSummary(deps);
+    if (iterationState) parts.push(iterationState);
+    
+    // 2. Selection Context (Selected nodes)
+    const selection = buildSelectionContext(deps, options.selectionBudget || 2000);
+    if (selection) parts.push(selection);
+    
+    return parts.join('\n\n');
+}
+
+/**
  * Type guard to ensure a node from SelectionContext has the minimum required structure
  * to be treated as a SceneNode by the Serializer.
  */
-function isValidSceneNode(node: any): node is SceneNode {
+function isValidSceneNode(node: any): node is any {
     return (
         node !== null &&
         typeof node === 'object' &&

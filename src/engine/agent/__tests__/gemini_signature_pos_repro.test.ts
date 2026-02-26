@@ -57,7 +57,7 @@ describe('Gemini Signature Position Repro', () => {
       })
       .mockResolvedValueOnce({
         text: 'It is sunny!',
-        toolCalls: []
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }]
       });
 
     // Mock IPC Bridge
@@ -69,6 +69,7 @@ describe('Gemini Signature Position Repro', () => {
     mockIpcBridge.callTool.mockResolvedValue({ status: 'success' });
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       systemPrompt: 'You are helpful',
       tools: [{ name: 'get_weather', description: 'desc', parameters: { type: 'object', properties: {} } }],

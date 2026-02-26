@@ -58,10 +58,13 @@ export class GeminiProvider implements LLMProvider {
     // Enable thinking for models that support it
     if (thinkingLevel) {
       if (isGemini3) {
-        // [FIX] Gemini 3 'thinkingLevel' is now safely supported because 
-        // thought_signatures are preserved in history.
+        // [FIX] Gemini 3 'thinkingLevel' expects 'LOW', 'MEDIUM', 'HIGH'.
+        // Map our internal 'minimal' to 'LOW'.
+        let apiLevel = thinkingLevel.toUpperCase();
+        if (apiLevel === 'MINIMAL') apiLevel = 'LOW';
+        
         config.thinkingConfig = { 
-          thinkingLevel: thinkingLevel.toUpperCase() // API expects uppercase 'LOW', 'MEDIUM', 'HIGH'
+          thinkingLevel: apiLevel
         };
       } else {
         // Gemini 2.5 uses thinkingBudget (token count).

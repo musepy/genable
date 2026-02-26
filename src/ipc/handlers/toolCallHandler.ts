@@ -8,6 +8,7 @@
 
 import { ToolResultHandler } from '../../types';
 import { nodeLayoutService } from '../../engine/services';
+import { agentToolService } from '../../engine/services';
 import { ToolResponse, ToolContext } from '../../engine/agent/tools/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
@@ -74,109 +75,11 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
       // 1. Selection & Query Tools
       // ==========================================
-      case 'getSelection': {
-        const selection = nodeLayoutService.getSelection();
-        response = { success: true, data: selection };
-        break;
-      }
-
-
-
-      // ==========================================
-      // 1.5. Planning Tool (ReAct Pattern - No Side Effects)
-      // ==========================================
-      case 'planDesign': {
-        // planDesign is a pure planning tool - it structures the LLM's thinking
-        // but doesn't actually modify Figma. We track it in planState.
-        const { analysis, steps, contentPlan, layoutStrategy } = parameters;
-        
-        // Generate unique step IDs and store in runtime state
-        const stepsWithIds = (steps || []).map((step: any, idx: number) => ({
-          ...step,
-          stepId: `step_${Date.now()}_${idx}`,
-          status: 'pending'
-        }));
-
-        planState.setCurrentPlan(stepsWithIds);
-
-        logger.info('planDesign received:', { 
-          analysis: analysis?.substring(0, 300) + (analysis?.length > 300 ? '...' : ''), 
-          stepsCount: stepsWithIds.length 
-        });
-
-        response = { 
-          success: true, 
-          data: { 
-            acknowledged: true, 
-            planId: `plan_${Date.now()}`,
-            steps: stepsWithIds.map((s: any) => ({ 
-              stepId: s.stepId, 
-              stepNumber: s.stepNumber,
-              action: s.action 
-            })),
-            message: 'Plan received. Execute steps by referencing stepId.' 
-          } 
-        };
-        break;
-      }
-
       // ==========================================
       // 2. Atomic Creation
       // ==========================================
       case 'createNode': {
-        const { type, name, parentId, characters, props: flatProps } = parameters;
-        const explicitParent = await nodeLayoutService.resolveParent(parentId);
-        
-        const node = await handleUnifiedRender({
-          type,
-          props: { 
-            name: name || 'unnamed', 
-            characters: characters || '',
-            ...sanitizeFlatProps(flatProps)
-          },
-          designSystemId: context?.designSystemId || 'vanilla',
-          streamSessionId: 'agent-' + Date.now(),
-          meta: { traceId: 'agent-atomic-tool' }
-        }, false, explicitParent);
-        
-        let visibilityWarnings: any[] = [];
-        let autoFixed: string[] = [];
-        
-        if (node) {
-          // 🟢 P3: Inline Layout/Styles support
-          if (parameters.layout) {
-            await nodeLayoutService.applyLayout(node.id, parameters.layout);
-          }
-          if (parameters.styles) {
-            await nodeLayoutService.applyStyles(node.id, parameters.styles);
-          }
-          
-          const visResult = validateVisibility(node);
-          if (!visResult.valid) {
-            // Apply auto-fixes for errors
-            visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
-            visibilityWarnings = visResult.issues.filter(i => i.severity === 'warning');
-            autoFixed = visResult.autoFixed;
-          }
-        }
-        
-        // Post-op anomaly detection (zero-cost when clean)
-        const anomalies = node ? validatePostOp(node, sanitizeFlatProps(flatProps)) : [];
-
-        response = {
-          success: !!node,
-          data: {
-            nodeId: node?.id,
-            name: node?.name,
-            type: node?.type,
-            applied: { name, characters },
-            visibilityWarnings: visibilityWarnings.length > 0 ? visibilityWarnings : undefined,
-            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined,
-            anomalies: anomalies.length > 0 ? anomalies : undefined
-          }
-        };
-        
-        if (node) completeStep(parameters.stepId);
+        response = await agentToolService.createNode(parameters, context?.designSystemId);
         break;
       }
 
@@ -218,49 +121,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // 5. Updates & Properties
       // ==========================================
       case 'updateNodeProperties': {
-        const { nodeId, properties } = parameters;
-
-        const propsSkip = shouldSkipIdempotent(nodeId, 'properties', properties, parameters.stepId);
-        if (propsSkip.skip) { response = propsSkip.response; break; }
-
-        const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
-        
-        if (!node) {
-          response = { 
-            success: false, 
-            error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` } 
-          };
-          break;
-        }
-        
-        const serialized = NodeSerializer.serialize(node);
-        const updatedDSL = {
-          ...serialized,
-          props: { ...(serialized.props || {}), ...properties }
-        };
-        
-        const result = await handleUnifiedRender({
-          ...updatedDSL,
-          __modifyMode: 'UPDATE',
-          __modifyTargetId: nodeId,
-          designSystemId: context?.designSystemId || 'vanilla',
-          streamSessionId: 'agent-update-' + Date.now(),
-          meta: { traceId: 'agent-tool' }
-        }, false, node.parent as any);
-        
-        // FIX: Return original nodeId to prevent LLM confusion about ID changes
-        // The internal renderer may create a replacement node, but the LLM should
-        // continue referencing the logical node by its original ID
-        response = { 
-          success: !!result, 
-          data: { 
-            nodeId: nodeId,  // Use original ID, not result.id
-            modified: true,
-            note: 'Properties updated successfully. Continue using the same nodeId.' 
-          } 
-        };
-
-        if (response.success) completeStep(parameters.stepId);
+        response = await agentToolService.updateNodeProperties(parameters, context?.designSystemId);
         break;
       }
 
@@ -268,129 +129,12 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // 5.5. State-Driven / High-Level Tools
       // ==========================================
       case 'renderSubtree': {
-        const { nodes, parentId, stepId } = parameters;
-
-        if (!Array.isArray(nodes) || nodes.length === 0) {
-          response = {
-            success: false,
-            error: { code: 'INVALID_INPUT', message: 'renderSubtree requires a non-empty nodes array' }
-          };
-          break;
-        }
-
-        // Reconstruct flat list -> tree
-        const reconstructor = new TreeReconstructor();
-        const { root, errors, warnings } = reconstructor.reconstruct(nodes);
-
-        if (!root) {
-          response = {
-            success: false,
-            error: { code: 'RECONSTRUCTION_FAILED', message: errors.join('; ') || 'Failed to reconstruct subtree' }
-          };
-          break;
-        }
-
-        const explicitParent = await nodeLayoutService.resolveParent(parentId);
-
-        const node = await handleUnifiedRender({
-          ...root,
-          designSystemId: context?.designSystemId || 'vanilla',
-          streamSessionId: 'agent-subtree-' + Date.now(),
-          meta: { traceId: 'agent-tool' }
-        }, false, explicitParent);
-
-        let visibilityWarnings: any[] = [];
-        let autoFixed: string[] = [];
-
-        if (node) {
-          // Validate strict visibility
-          const visResult = validateVisibility(node);
-          if (!visResult.valid) {
-            visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
-            visibilityWarnings = visResult.issues.filter(i => i.severity === 'warning');
-            autoFixed = visResult.autoFixed;
-          }
-        }
-
-        response = {
-          success: !!node,
-          data: {
-            nodeId: node?.id,
-            name: node?.name,
-            type: node?.type,
-            reconstructionWarnings: warnings.length > 0 ? warnings : undefined,
-            visibilityWarnings: visibilityWarnings.length > 0 ? visibilityWarnings : undefined,
-            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined
-          }
-        };
-
-        if (node) completeStep(stepId);
+        response = await agentToolService.renderSubtree(parameters, context?.designSystemId);
         break;
       }
 
       case 'patchNode': {
-        const { nodeId, props, stepId } = parameters;
-
-        if (!nodeId || !props || Object.keys(props).length === 0) {
-          response = {
-            success: false,
-            error: { code: 'INVALID_INPUT', message: 'patchNode requires nodeId and non-empty props.' }
-          };
-          break;
-        }
-
-        const skipCheck = shouldSkipIdempotent(nodeId, 'properties', props, stepId);
-        if (skipCheck.skip) {
-          response = skipCheck.response;
-          break;
-        }
-
-        const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
-        if (!node) {
-          response = {
-            success: false,
-            error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` }
-          };
-          break;
-        }
-
-        const currentDSL = NodeSerializer.serialize(node);
-        const mergedProps = deepMerge(currentDSL.props || {}, props);
-
-        const result = await handleUnifiedRender({
-          ...currentDSL,
-          props: mergedProps,
-          __modifyMode: 'UPDATE',
-          __modifyTargetId: nodeId,
-          designSystemId: context?.designSystemId || 'vanilla',
-          streamSessionId: 'agent-patch-node-' + Date.now(),
-          meta: { traceId: 'agent-tool' }
-        }, false, node.parent as any);
-
-        let visibilityWarnings: any[] = [];
-        let autoFixed: string[] = [];
-
-        if (result) {
-          const visResult = validateVisibility(result);
-          if (!visResult.valid) {
-            visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
-            visibilityWarnings = visResult.issues.filter(i => i.severity === 'warning');
-            autoFixed = visResult.autoFixed;
-          }
-        }
-
-        response = {
-          success: !!result,
-          data: {
-            nodeId: nodeId,
-            modified: true,
-            propsUpdated: Object.keys(props),
-            visibilityWarnings: visibilityWarnings.length > 0 ? visibilityWarnings : undefined,
-            visibilityAutoFixed: autoFixed.length > 0 ? autoFixed : undefined
-          }
-        };
-
-        if (response.success) completeStep(stepId);
+        response = await agentToolService.patchNode(parameters, context?.designSystemId);
         break;
       }
 
@@ -398,40 +142,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // 6. Special Creation Tools
       // ==========================================
       case 'createIcon': {
-        const { iconName, size, color, parentId, props: flatProps } = parameters;
-        const explicitParent = await nodeLayoutService.resolveParent(parentId);
-        
-        const sanitized = sanitizeFlatProps(flatProps);
-        // Icon size is controlled by 'size' parameter, don't let flatProps override width/height
-        delete sanitized.width;
-        delete sanitized.height;
-
-        const node = await handleUnifiedRender({
-          type: 'ICON',
-          props: { 
-            iconName, 
-            width: size, 
-            height: size, 
-            fills: color ? [color] : undefined,
-            ...sanitized
-          },
-          designSystemId: context?.designSystemId || 'vanilla',
-          streamSessionId: 'agent-' + Date.now(),
-          meta: { traceId: 'agent-tool' }
-        }, false, explicitParent);
-        
-        if (node) {
-          // 🟢 P3: Inline Layout/Styles support
-          if (parameters.layout) {
-            await nodeLayoutService.applyLayout(node.id, parameters.layout);
-          }
-          if (parameters.styles) {
-            await nodeLayoutService.applyStyles(node.id, parameters.styles);
-          }
-        }
-        
-        response = { success: !!node, data: { nodeId: node?.id } };
-        if (node) completeStep(parameters.stepId);
+        response = await agentToolService.createIcon(parameters, context?.designSystemId);
         break;
       }
 
@@ -440,46 +151,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
       case 'deleteNode': {
         response = await nodeLayoutService.deleteNode(parameters.nodeId);
-        break;
-      }
-
-      // ==========================================
-      // 8. Read & Inspection Tools
-      // ==========================================
-      case 'getVariables': {
-        try {
-          await figmaVariableCache.warmup();
-          const names = Array.from((figmaVariableCache as any).variableMap.keys());
-          response = { success: true, data: { variables: names } };
-        } catch (e: any) {
-          response = { success: false, error: { code: 'SYNC_ERROR', message: e.message } };
-        }
-        break;
-      }
-
-      case 'getStyles': {
-        try {
-          await figmaVariableCache.warmup();
-          const names = Array.from((figmaVariableCache as any).styleMap.keys());
-          response = { success: true, data: { styles: names } };
-        } catch (e: any) {
-          response = { success: false, error: { code: 'SYNC_ERROR', message: e.message } };
-        }
-        break;
-      }
-
-      case 'getNodeDSL': {
-        try {
-          const node = await figma.getNodeByIdAsync(parameters.nodeId) as SceneNode;
-          if (!node) {
-            response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${parameters.nodeId} not found.` } };
-            break;
-          }
-          const serialized = NodeSerializer.serialize(node);
-          response = { success: true, data: serialized };
-        } catch (e: any) {
-          response = { success: false, error: { code: 'SERIALIZATION_ERROR', message: e.message } };
-        }
         break;
       }
 
@@ -669,184 +340,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         break;
       }
 
-      // ==========================================
-      // 9. Project UI Context Tools (Pure JS - No Figma API)
-      // ==========================================
-      case 'getProjectUIContext': {
-        response = await projectUITools.executors.getProjectUIContext(parameters);
-        break;
-      }
-
-      case 'getDesignSystemTokens': {
-        response = await projectUITools.executors.getDesignSystemTokens(parameters);
-        break;
-      }
-
-      case 'listProjectComponents': {
-        response = await projectUITools.executors.listProjectComponents(parameters);
-        break;
-      }
-
-      // ==========================================
-      // 10. One-Shot Design Generation
-      // ==========================================
       case 'generateDesign': {
-        const { nodes } = parameters;
-
-        if (!Array.isArray(nodes) || nodes.length === 0) {
-          response = {
-            success: false,
-            error: { code: 'INVALID_INPUT', message: 'generateDesign requires a non-empty nodes array.' }
-          };
-          break;
-        }
-
-        // Known style/layout properties that belong inside props.
-        // Used as a safety net to catch LLM outputs that place these on the node object directly.
-        const KNOWN_STYLE_KEYS = [
-          'layoutMode', 'gap', 'padding', 'fills', 'strokes',
-          'cornerRadius', 'width', 'height', 'fontSize', 'fontWeight',
-          'characters', 'layoutSizingHorizontal', 'layoutSizingVertical',
-          'primaryAxisAlignItems', 'counterAxisAlignItems',
-          'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-          'opacity', 'visible', 'rotation', 'strokeWeight', 'effects',
-          'cornerSmoothing', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
-          'layoutGrow', 'layoutAlign', 'layoutPositioning', 'constraints', 'x', 'y', 'itemSpacing',
-          'iconName'
-        ];
-
-        // Pre-process: Lift nested layout/styles into props for consistency
-        // LLM may output either flat props or nested layout/styles objects at top level
-        for (const node of nodes) {
-          if (!node.props) node.props = {};
-
-          // [DIAGNOSTIC] Log raw node structure before any lifting
-          const rawNodeKeys = Object.keys(node).filter(k => k !== 'id' && k !== 'parent' && k !== 'type' && k !== 'props');
-          const rawPropsKeys = Object.keys(node.props);
-          if (rawNodeKeys.length > 0 || rawPropsKeys.length <= 1) {
-            logger.debug(`[generateDesign] 🔍 Node "${node.id}" BEFORE lifting — top-level keys: [${rawNodeKeys.join(', ')}], props keys: [${rawPropsKeys.join(', ')}]`);
-          }
-
-          // 1. Lift from props.layout/props.styles (Existing)
-          if (node.props.layout && typeof node.props.layout === 'object') {
-            Object.assign(node.props, node.props.layout);
-            delete node.props.layout;
-          }
-          if (node.props.styles && typeof node.props.styles === 'object') {
-            Object.assign(node.props, node.props.styles);
-            delete node.props.styles;
-          }
-
-          // 2. Lift from top-level node.layout/node.styles/node.style
-          // catches LLM structure mismatch where it puts these keys alongside 'props'
-          const topLevelLayout = (node as any).layout;
-          const topLevelStyles = (node as any).styles || (node as any).style;
-          
-          if (topLevelLayout && typeof topLevelLayout === 'object') {
-            logger.debug(`[generateDesign] Lifting top-level layout for node: ${node.id}`);
-            Object.assign(node.props, topLevelLayout);
-            delete (node as any).layout;
-          }
-          if (topLevelStyles && typeof topLevelStyles === 'object') {
-            logger.debug(`[generateDesign] Lifting top-level styles for node: ${node.id}`);
-            Object.assign(node.props, topLevelStyles);
-            delete (node as any).styles;
-            delete (node as any).style;
-          }
-
-          // 3. Safety Net: Lift any known style properties found on the node top-level into props
-          // This catches cases where LLM places e.g. layoutMode, fills, gap directly on the node
-          // instead of inside the props object.
-          for (const key of KNOWN_STYLE_KEYS) {
-            if ((node as any)[key] !== undefined && node.props[key] === undefined) {
-              logger.debug(`[generateDesign] ⚠️ Safety net: lifting "${key}" from node top-level to props for "${node.id}"`);
-              node.props[key] = (node as any)[key];
-              delete (node as any)[key];
-            }
-          }
-
-          // Ensure name fallback to id
-          if (!node.props.name && node.id) {
-            node.props.name = node.id;
-          }
-
-          // [DIAGNOSTIC] Log final props after all lifting
-          const finalPropsKeys = Object.keys(node.props);
-          const hasStyling = finalPropsKeys.some(k => ['layoutMode', 'fills', 'gap', 'padding', 'width', 'height', 'fontSize', 'cornerRadius'].includes(k));
-          logger.debug(`[generateDesign] ✅ Node "${node.id}" AFTER lifting — props keys (${finalPropsKeys.length}): [${finalPropsKeys.join(', ')}]${!hasStyling ? ' ⚠️ NO STYLING DETECTED' : ''}`);
-        }
-
-        // Reconstruct flat list → tree
-        const reconstructor = new TreeReconstructor();
-        const { root, errors: reconErrors, warnings: reconWarnings } = reconstructor.reconstruct(nodes);
-
-        if (!root) {
-          response = {
-            success: false,
-            error: {
-              code: 'RECONSTRUCTION_FAILED',
-              message: reconErrors.join('; ') || 'Failed to reconstruct node tree.'
-            }
-          };
-          break;
-        }
-
-        if (reconWarnings.length > 0) {
-          logger.warn('[generateDesign] Reconstruction warnings:', reconWarnings);
-        }
-
-        // [DIAGNOSTIC] Verify root props survived reconstruction
-        logger.debug(`[generateDesign] 🌳 Root after reconstruction — type: ${root.type}, props keys: [${Object.keys(root.props || {}).join(', ')}], children: ${root.children?.length || 0}`);
-
-        // Render the full tree in one pass via the existing pipeline
-        const rootNode = await handleUnifiedRender({
-          ...root, // type, props, children — this is a valid NodeLayer
-          designSystemId: context?.designSystemId || 'vanilla',
-          streamSessionId: `generate-design-${Date.now()}`,
-          meta: { traceId: `generate-design-${Date.now()}` }
-        }, false);
-
-        if (!rootNode) {
-          response = {
-            success: false,
-            error: { code: 'RENDER_FAILED', message: 'Tree reconstructed but rendering failed.' }
-          };
-          break;
-        }
-
-        // Collect created node IDs for agent context - Concise version
-        const idMap: Record<string, string> = {};
-        const collectIds = (node: SceneNode, flatNodes: typeof nodes) => {
-          // Identify which flat node this Figma node belongs to by checking name match
-          const match = flatNodes.find(f => (f.props?.name || f.id) === node.name);
-          if (match && !idMap[match.id]) {
-            idMap[match.id] = node.id;
-          }
-          if ('children' in node) {
-            for (const child of (node as FrameNode).children) {
-              collectIds(child, flatNodes);
-            }
-          }
-        };
-        collectIds(rootNode, nodes);
-
-        // Post-op anomaly detection on the full tree (zero-cost when clean)
-        const treeAnomalies = collectTreeAnomalies(rootNode);
-
-        response = {
-          success: true,
-          data: {
-            rootNodeId: rootNode.id,
-            totalNodes: Object.keys(idMap).length,
-            idMap, // Logical ID -> Figma Node ID
-            warnings: reconWarnings.length > 0 ? reconWarnings : undefined,
-            anomalies: treeAnomalies.length > 0 ? treeAnomalies : undefined
-          }
-        };
-
-        if (response.success && parameters.stepId) {
-          planState.completeTask(parameters.stepId);
-        }
+        response = await agentToolService.generateDesign(parameters, context?.designSystemId);
         break;
       }
 

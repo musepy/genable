@@ -11,6 +11,7 @@ import { ChatMessage, ToolCallRecord, IterationRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
 import { searchDesignKnowledge, getComponentAnatomy, getFigmaLayoutRules } from '../../engine/agent/tools/knowledgeTools'
 import { validateLayout } from '../../engine/agent/tools/validationTools'
+import { projectUITools } from '../../engine/agent/tools/projectUITools'
 
 interface UseChatProps {
   apiKey: string
@@ -290,7 +291,13 @@ export function useChat({
     });
 
     try {
-      const localExecutors = { searchDesignKnowledge, getComponentAnatomy, getFigmaLayoutRules, validateLayout };
+      const localExecutors = { 
+        searchDesignKnowledge, 
+        getComponentAnatomy, 
+        getFigmaLayoutRules, 
+        validateLayout,
+        ...projectUITools.executors
+      };
 
       await orchestrator.generate(currentPrompt, { ...pluginData, toolExecutors: localExecutors }, history);
     } catch (e: any) {

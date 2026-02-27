@@ -24,6 +24,27 @@ vi.mock('../../engine/agent/agentRuntime', () => ({
   })
 }));
 
+// Mock SettingsService
+vi.mock('../../engine/services/SettingsService', () => ({
+  settingsService: {
+    loadSettings: vi.fn().mockResolvedValue({
+      apiKey: 'test-key',
+      apiKeys: {},
+      modelName: 'gemini-pro',
+      providerName: 'gemini',
+      telemetryEndpoint: 'http://test.loc/telemetry'
+    })
+  }
+}));
+
+// Mock TelemetryService
+vi.mock('../../engine/services/TelemetryService', () => ({
+  TelemetryService: {
+    configure: vi.fn(),
+    logLLMCall: vi.fn()
+  }
+}));
+
 // Mock GeminiProvider
 vi.mock('../../engine/llm-client/providers/gemini', () => ({
   GeminiProvider: vi.fn().mockImplementation(function() {

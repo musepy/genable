@@ -44,7 +44,6 @@ export const FLAT_NODE_SCHEMA = {
 export const renderSubtreeDefinition: ToolDefinition = {
   name: 'renderSubtree',
   category: 'create',
-  modes: ['RECOVERY'],
   dependencies: [],
   description: `[STATE-DRIVEN] Render a complete UI subtree in one call. Use this for creating components or complex groups.
   
@@ -71,7 +70,6 @@ export const renderSubtreeDefinition: ToolDefinition = {
 export const patchNodeDefinition: ToolDefinition = {
   name: 'patchNode',
   category: 'modify',
-  modes: ['EXECUTION', 'VERIFICATION'],
   dependencies: [],
   description: `[STATE-DRIVEN] Update a single node's PROPERTIES (state).
   

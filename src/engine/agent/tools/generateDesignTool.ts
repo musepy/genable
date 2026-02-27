@@ -37,6 +37,10 @@ You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto"
     type: 'object',
     properties: {
       parentId: { type: 'string', description: 'Real Figma parent ID to attach this component to. If omitted, adds to current page.' },
+      prompt: {
+        type: 'string',
+        description: 'A descriptive prompt explaining the design intent for this component. This helps the system understand the context and improves self-correction.'
+      },
       nodes: {
         type: 'array',
         description: 'Flat list of all nodes with parent references',
@@ -60,8 +64,7 @@ You can freely specify fontFamily for TEXT nodes (any Google Font, e.g. "Roboto"
         description: 'Plan step ID. MANDATORY if this call executes a task from your plan. Ensures progress is automatically marked as completed.'
       }
     },
-    required: ['nodes']
+    required: ['nodes', 'prompt']
   },
   executionStrategy: 'sequential',
-  modes: ['EXECUTION']
 };

@@ -25,7 +25,6 @@ import {
 export const getProjectUIContextDefinition: ToolDefinition = {
   name: 'getProjectUIContext',
   category: 'knowledge',
-  modes: ['PLANNING'],
   dependencies: [],
   description: 'Retrieve a REFERENCE technical specification for project UI components. Use ONLY when user explicitly requests project-specific implementations. For free design or generic systems (iOS, shadcn), rely on your own knowledge.',
   parameters: {
@@ -157,7 +156,6 @@ function formatComponentForLLM(comp: UIComponentMeta): any {
 export const getDesignSystemTokensDefinition: ToolDefinition = {
   name: 'getDesignSystemTokens',
   category: 'knowledge',
-  modes: ['PLANNING'],
   dependencies: [],
   description: 'Retrieve the project\'s design tokens (colors, spacing, typography, radius). Use these values to ensure generated designs match the project\'s visual language.',
   parameters: {
@@ -215,7 +213,6 @@ export const getDesignSystemTokens: ToolExecutor<GetDesignSystemTokensParams> = 
 export const listProjectComponentsDefinition: ToolDefinition = {
   name: 'listProjectComponents',
   category: 'knowledge',
-  modes: ['PLANNING'],
   dependencies: [],
   description: 'List all available UI components in the project with brief descriptions. Use this to discover what components exist before creating designs.',
   parameters: {

@@ -4,8 +4,6 @@
  * Defines the structure for tool registration and execution results.
  */
 
-export type AgentMode = 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION';
-
 /**
  * Metadata for a tool, used for registration and prompt generation.
  */
@@ -39,11 +37,7 @@ export interface ToolDefinition {
    * Example: setNodeLayout typically follows createNode.
    */
   dependencies?: string[];
-  /**
-   * Agent modes where this tool is available.
-   * If omitted, tool is available in all modes (backward compatible).
-   */
-  modes?: AgentMode[];
+
 }
 
 export interface ToolParameter {

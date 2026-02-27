@@ -17,5 +17,4 @@ export const deleteNodeDefinition: ToolDefinition = {
     required: ['nodeId']
   },
   executionStrategy: 'sequential',
-  modes: ['EXECUTION']
 };

@@ -156,7 +156,6 @@ EXAMPLE (Hierarchical Row):
 export const applyDesignPatchDefinition: ToolDefinition = {
   name: 'applyDesignPatch',
   category: 'modify',
-  modes: ['EXECUTION', 'VERIFICATION'],
   dependencies: [],
   description: `
 [SUPER TOOL] Apply multiple changes to multiple nodes in a single atomic operation.

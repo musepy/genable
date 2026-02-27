@@ -14,7 +14,6 @@ import { ToolDefinition, ToolExecutor } from './types';
 export const validateLayoutDefinition: ToolDefinition = {
   name: 'validateLayout',
   category: 'validate',
-  modes: ['VERIFICATION', 'RECOVERY'],
   dependencies: ['createNode', 'setNodeLayout'],
   description: 'Apply formal Figma layout constraints (Auto Layout rules, sizing mutual exclusion) to a node tree and return detailed lint feedback.',
   parameters: {

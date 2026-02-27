@@ -42,7 +42,6 @@ export const createIconDefinition: ToolDefinition = {
     required: ['iconName']
   },
   executionStrategy: 'sequential',
-  modes: ['EXECUTION'],
   errors: {
     'ICON_NOT_FOUND': 'The icon name provided could not be found in the Iconify library.',
     'PARENT_NOT_FOUND': 'Parent node not found.'

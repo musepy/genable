@@ -3,7 +3,6 @@ import { ToolDefinition } from './types';
 export const workflowTools: ToolDefinition[] = [
   {
     name: 'new_task',
-    modes: ['PLANNING'],
     description: 'Signals the start of a clear semantic task. Triggers a new Task Card in the UI.',
     parameters: {
       type: 'object',
@@ -28,7 +27,6 @@ export const workflowTools: ToolDefinition[] = [
   },
   {
     name: 'update_todo_list',
-    modes: ['PLANNING', 'EXECUTION', 'RECOVERY'],
     description: 'Dynamically manages sub-steps (todos) within the current active task.',
     parameters: {
       type: 'object',
@@ -59,7 +57,6 @@ export const workflowTools: ToolDefinition[] = [
   },
   {
     name: 'summarize_progress',
-    modes: ['EXECUTION', 'VERIFICATION', 'RECOVERY'],
     description: 'Periodically reports high-level progress or completes a task.',
     parameters: {
       type: 'object',
@@ -84,7 +81,6 @@ export const workflowTools: ToolDefinition[] = [
   },
   {
     name: 'complete_task',
-    modes: ['EXECUTION', 'VERIFICATION', 'RECOVERY'],
     description: `[REQUIRED] Signal task completion. You MUST call this tool to end execution. Do NOT just stop responding - explicitly call this tool with a summary.`,
     parameters: {
       type: 'object',
@@ -101,28 +97,5 @@ export const workflowTools: ToolDefinition[] = [
       required: ['summary']
     },
     executionStrategy: 'sequential',
-    category: 'control'
   },
-  {
-    name: 'complete_step',
-    modes: ['EXECUTION', 'RECOVERY'],
-    description: 'Mark the current plan step as complete and advance to the next step. Use this when the current step\'s work was already accomplished in a previous step, or when you have finished executing the current step.',
-    parameters: {
-      type: 'object',
-      properties: {
-        summary: {
-          type: 'string',
-          description: 'Brief summary of what was accomplished (or "Already completed in previous step").'
-        },
-        reason: {
-          type: 'string',
-          enum: ['completed', 'already_done', 'merged_with_previous'],
-          description: 'Why this step is being completed.'
-        }
-      },
-      required: ['summary']
-    },
-    executionStrategy: 'sequential',
-    category: 'plan'
-  }
 ];

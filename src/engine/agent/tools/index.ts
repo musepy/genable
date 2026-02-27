@@ -1,19 +1,21 @@
 /**
  * @file index.ts
  * @description Consolidated entry point for all Agentic Tools.
+ * 
+ * [ARCHITECTURE] Two tool sets are exported:
+ * - `agentTools` (default): 7 unified primitives — used by the LLM.
+ * - `legacyAgentTools`: Original 21 tools — kept for backward compatibility in routing.
  */
 
+// ── Unified Tools (7 primitives) ──
+import { unifiedTools } from './unified';
+
+// ── Legacy Tools (for backward compat routing) ──
 import {
-  searchDesignKnowledgeDefinition,
-  getComponentAnatomyDefinition,
-  getFigmaLayoutRulesDefinition
+  searchDesignKnowledgeDefinition
 } from './knowledgeTools';
 
 import { projectUITools } from './projectUITools';
-
-import { 
-  planDesignDefinition 
-} from './planningTools';
 
 import {
   createIconDefinition
@@ -44,47 +46,39 @@ import {
 } from './stateTools';
 
 import { workflowTools } from './workflowTools';
-import { ToolDefinition, AgentMode } from './types';
+import { ToolValidator } from './toolValidator';
+import { ToolDefinition } from './types';
 
 /**
- * All tool definitions for LLM function calling.
- * TOTAL: ~13 tools (reduced from 17+).
+ * Primary tool set for LLM function calling.
+ * 7 unified primitives: read_node, create_node, patch_node, delete_node, query_knowledge, validate_design, signal.
  */
-export const agentTools = [
-  ...workflowTools,             // new_task, update_todo_list, summarize_progress, complete_task
+export const agentTools: ToolDefinition[] = unifiedTools;
+
+/**
+ * Legacy tool definitions — kept for backward compatibility.
+ * The toolCallHandler still routes old tool names to their implementations.
+ */
+export const legacyAgentTools: ToolDefinition[] = [
+  ...workflowTools,
   ...projectUITools.definitions,
-  inspectDesignDefinition,      // [NEW] Replaces getSelection, getDeepHierarchy, getNodeDSL
-  generateDesignDefinition,     // One-shot full component tree
-  renderSubtreeDefinition,      // [NEW] High-level state-driven render (Flat List)
-  patchNodeDefinition,          // [NEW] High-level state-driven patch (Props-Only)
-  batchOperationsDefinition,    // Batch create/modify
-  applyDesignPatchDefinition,   // Batch modify
-  planDesignDefinition,         // Planning
+  inspectDesignDefinition,
+  generateDesignDefinition,
+  renderSubtreeDefinition,
+  patchNodeDefinition,
+  batchOperationsDefinition,
+  applyDesignPatchDefinition,
   searchDesignKnowledgeDefinition,
-  getComponentAnatomyDefinition,
-  getFigmaLayoutRulesDefinition,
-  createNodeDefinition,         // Create (Legacy)
-  setNodeLayoutDefinition,      // Layout (Legacy)
-  setNodeStylesDefinition,      // Styles (Legacy)
-  createIconDefinition,         // Icons
-  updateNodePropertiesDefinition, // (Legacy)
+  createNodeDefinition,
+  setNodeLayoutDefinition,
+  setNodeStylesDefinition,
+  createIconDefinition,
+  updateNodePropertiesDefinition,
   deleteNodeDefinition,
   validateLayoutDefinition
 ];
 
-/**
- * Filter tools based on agent mode.
- * Each tool declares its own `modes` in its ToolDefinition.
- * If `modes` is omitted, the tool is available in all modes.
- */
-export function getToolsForMode(mode: AgentMode, allTools: ToolDefinition[]): ToolDefinition[] {
-  // If mode is RECOVERY, strictly filter to tools that explicitly declare RECOVERY
-  if (mode === 'RECOVERY') {
-    return allTools.filter(tool => tool.modes && tool.modes.includes('RECOVERY'));
-  }
-  // Otherwise, allow tools that have no modes defined (available everywhere) or specifically include the mode.
-  return allTools.filter(tool => !tool.modes || tool.modes.includes(mode));
-}
-
-// Re-export types
+// Re-export types and utilities
 export * from './types';
+export { ToolValidator } from './toolValidator';
+export { unifiedTools } from './unified';

@@ -1,6 +1,6 @@
 import { h, Fragment } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
-import { Sparkles, ChevronDown, AlertCircle } from 'lucide-preact' // Added AlertCircle
+import { Sparkles, AlertCircle } from 'lucide-preact'
 import { tokens } from '../../ui/design-system/tokens'
 import {
   derivePluginState,
@@ -13,10 +13,10 @@ import { ToolExecutionPanel } from '../../ui/components/ToolExecutionPanel'
 import { RawOutputPanel } from '../../ui/components/RawOutputPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { Button } from '../../ui/components/Button'
-import { Copy, Code, FileText } from 'lucide-preact'
+import { FileText } from 'lucide-preact'
 import { generateLogDigest } from './logDigest'
 import { on, emit } from '@create-figma-plugin/utilities'
-import { SendSerializedSelectionHandler, SerializeSelectionHandler, SelectNodeHandler } from '../../types'
+import { SendSerializedSelectionHandler, SerializeSelectionHandler } from '../../types'
 import { useClipboard } from '../../ui/hooks/useClipboard'
 import type { PluginState } from '../../ui/index'
 
@@ -53,9 +53,10 @@ const messageBubbleModelStyle = {
 };
 
 const messageBubbleResultStyle = {
-  background: tokens.colors.accentAlpha[2],
+  background: 'transparent',
+  border: 'none',
   borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  padding: 0,
   width: '100%',
 };
 
@@ -81,6 +82,7 @@ function ErrorBanner({ error, errorActions }: {
   error: string | null; 
   errorActions: Record<ErrorActionType, () => void> 
 }) {
+  const [showDetails, setShowDetails] = useState(false)
   if (!error) return null;
   const config = getErrorConfig(error);
   const content = t.errors[config.i18nKey];
@@ -92,42 +94,75 @@ function ErrorBanner({ error, errorActions }: {
       border: `1px solid ${tokens.colors.errorBorder}`,
       borderRadius: 'var(--radius-3)',
       padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-      margin: `0 ${tokens.space[4]}px`,
       marginBottom: tokens.space[2],
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: tokens.space[3],
+      flexDirection: 'column',
+      gap: tokens.space[1],
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], minWidth: 0 }}>
         <AlertCircle size={14} color={tokens.colors.error} style={{ flexShrink: 0 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], overflow: 'hidden' }}>
-          <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: tokens.colors.error, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {content.title}
-          </span>
-          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {content.message}
-          </span>
+        <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: tokens.colors.error, minWidth: 0 }}>
+          {content.title}
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: tokens.space[2] }}>
+          <button
+            onClick={() => setShowDetails(v => !v)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: tokens.colors.textSecondary,
+              fontSize: 11,
+              cursor: 'pointer',
+            }}
+          >
+            {showDetails ? 'Hide details' : 'Details'}
+          </button>
+          <button
+            onClick={errorActions[config.handler]}
+            style={{ background: 'none', border: 'none', padding: 0, color: tokens.colors.error, fontSize: tokens.fontSize[1], fontWeight: 500, cursor: 'pointer' }}
+          >
+            {content.action}
+          </button>
         </div>
       </div>
-      <button
-        onClick={errorActions[config.handler]}
-        style={{ background: 'none', border: 'none', padding: 0, color: tokens.colors.error, fontSize: tokens.fontSize[1], fontWeight: 500, cursor: 'pointer', flexShrink: 0 }}
-      >
-        {content.action}
-      </button>
+      <div style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, lineHeight: '16px', whiteSpace: 'normal' }}>
+        {content.message}
+      </div>
+      {showDetails && (
+        <pre style={{
+          margin: 0,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          maxHeight: 120,
+          overflow: 'auto',
+          fontSize: 11,
+          lineHeight: '15px',
+          color: tokens.colors.textSecondary,
+          background: tokens.colors.alpha[1],
+          borderRadius: 'var(--radius-2)',
+          padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+        }}>
+          {error}
+        </pre>
+      )}
     </div>
   );
 }
 
-function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, iterations, loading, loadingStatus, anchorRef }: {
+function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, queuedCount, onStop, onContinue, anchorRef }: {
   history: any[];
   expandedRawIds: Set<number>;
   toggleRaw: (id: number) => void;
-  currentToolCalls: any[];
-  iterations: any[];
   loading: boolean;
   loadingStatus?: string;
+  runtimePhase: any;
+  runtimeProgress: { iteration: number; maxIterations: number } | null;
+  runtimeContextUsage: any;
+  runtimeState: 'idle' | 'running' | 'completed' | 'canceled' | 'error';
+  queuedCount: number;
+  onStop: () => void;
+  onContinue: () => void;
   anchorRef: any;
 }) {
   const isEmpty = history.length === 0 && !loading;
@@ -161,12 +196,10 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
         const safeText = typeof msg.text === 'string' ? msg.text : String(msg.text ?? '');
 
         const lastIteration = msg.iterations?.[msg.iterations.length - 1];
-        const thinkingDetail = lastIteration?.thinking?.trim();
         const thinkingStatus = msg.streaming ? (loadingStatus || 'Thinking...') : undefined;
 
         const shouldShowToolGroup = !isUserMessage && (
           (msg.toolCalls && msg.toolCalls.length > 0) ||
-          !!thinkingDetail ||
           !!thinkingStatus
         );
 
@@ -183,12 +216,14 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
                     <ToolExecutionPanel
                       toolCalls={msg.toolCalls}
                       thinkingStatus={thinkingStatus}
-                      thinkingDetail={thinkingDetail}
                       currentTaskTitle={lastIteration?.taskTitle}
-                      onSelectNode={(nodeId) => {
-                        const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-                        emit<SelectNodeHandler>('SELECT_NODE', { nodeId, smooth: !reduce, durationMs: 250 });
-                      }}
+                      phase={msg.streaming ? runtimePhase : undefined}
+                      progress={msg.streaming ? runtimeProgress : null}
+                      contextUsage={msg.streaming ? runtimeContextUsage : null}
+                      runState={msg.streaming ? runtimeState : undefined}
+                      queuedCount={msg.streaming ? queuedCount : 0}
+                      onStop={onStop}
+                      onContinue={onContinue}
                     />
                   </div>
                 )}
@@ -228,19 +263,21 @@ export function ChatFeature(props: UseChatProps) {
     error,
     setError,
     thinkingText,
-    isThinkingStreaming,
     generate,
-    setHistory,
+    stopGeneration,
+    continueGeneration,
+    queuedCount,
     modelName,
     setModelName,
     apiKey,
     setApiKey,
     suggestedModels,
     onOpenSettings,
-    providerName, // [NEW]
-    tokenUsage, // [NEW]
-    currentToolCalls, // [NEW]
-    iterations // [NEW]
+    providerName,
+    runtimeState,
+    runtimePhase,
+    runtimeProgress,
+    runtimeContextUsage,
   } = useChat(props)
 
   const { copy } = useClipboard()
@@ -253,14 +290,10 @@ export function ChatFeature(props: UseChatProps) {
     });
   }, [copy, setPrompt]);
 
-  const messagesEndRef = { current: null as HTMLDivElement | null };
-
   const {
     shouldAutoScroll,
     containerRef,
     anchorRef,
-    showNewMessagesIndicator,
-    scrollToBottom,
   } = useSmartScroll(history, { threshold: 100 });
 
   const [expandedRawIds, setExpandedRawIds] = useState<Set<number>>(new Set())
@@ -288,15 +321,9 @@ export function ChatFeature(props: UseChatProps) {
   });
 
   const chipsState = getElementState('promptChips', pluginState);
-  const submitState = getElementState('submitButton', pluginState);
-  const textareaState = getElementState('textarea', pluginState);
 
   const isEmpty = pluginState === 'EMPTY' || pluginState === 'TYPING';
-  const canSubmit = submitState.enabled && !!prompt.trim();
-
-  // Resolve Error Config
-  const errorConfig = error ? getErrorConfig(error) : null;
-  const errorContent = errorConfig ? t.errors[errorConfig.i18nKey] : null;
+  const canSubmit = !!prompt.trim();
 
   // Action Handlers
   const errorActions: Record<ErrorActionType, () => void> = {
@@ -332,10 +359,15 @@ export function ChatFeature(props: UseChatProps) {
             else next.add(id);
             return next;
           })}
-          currentToolCalls={currentToolCalls}
-          iterations={iterations}
           loading={loading}
           loadingStatus={loadingStatus}
+          runtimePhase={runtimePhase}
+          runtimeProgress={runtimeProgress}
+          runtimeContextUsage={runtimeContextUsage}
+          runtimeState={runtimeState}
+          queuedCount={queuedCount}
+          onStop={stopGeneration}
+          onContinue={continueGeneration}
           anchorRef={anchorRef}
         />
 
@@ -361,14 +393,6 @@ export function ChatFeature(props: UseChatProps) {
         zIndex: 10,
         position: 'relative',
       }}>
-        {tokenUsage && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.space[2], padding: `0 ${tokens.space[2]}px`, gap: tokens.space[3], fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-            <span>Input: {tokenUsage.promptTokens}</span>
-            <span>Output: {tokenUsage.completionTokens}</span>
-            <span>Total: {tokenUsage.totalTokens}</span>
-          </div>
-        )}
-
         <ErrorBanner error={error} errorActions={errorActions} />
         
         {history.length > 0 && !loading && (
@@ -393,7 +417,7 @@ export function ChatFeature(props: UseChatProps) {
           onChange={(v) => setPrompt(v)}
           onSubmit={generate}
           loading={loading}
-          disabled={!textareaState.enabled}
+          disabled={false}
           placeholder={t.placeholder}
           canSubmit={canSubmit}
           leftElement={
@@ -411,6 +435,13 @@ export function ChatFeature(props: UseChatProps) {
             />
           }
           onPlusClick={() => emit<SerializeSelectionHandler>('SERIALIZE_SELECTION')}
+          onSkillSelect={(skillId) => {
+            const skillToken = `@${skillId}`
+            if (prompt.includes(skillToken)) return
+            const current = prompt.trim()
+            const next = current ? `${current} ${skillToken} ` : `${skillToken} `
+            setPrompt(next)
+          }}
         />
       </div>
     </div>

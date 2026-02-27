@@ -19,6 +19,9 @@ function triggerHandler(eventName: string, data: any) {
   }
 }
 
+// Preview feature flag used by UI hooks to inject simulation harness
+;(window as any).__GENABLE_PREVIEW__ = true
+
 // Mock @create-figma-plugin/utilities - set up on window FIRST
 ;(window as any).__FIGMA_MOCK__ = {
   emit: (eventName: string, ...args: any[]) => {
@@ -128,5 +131,22 @@ console.log('[Preview] Figma mocks initialized, now loading UI...')
 
 // The ui.tsx will call render() which finds #app container
 import '../src/ui.tsx'
+
+function withPreviewHarness(action: (harness: any) => void) {
+  const harness = (window as any).__GENABLE_PREVIEW_HARNESS__
+  if (harness) {
+    action(harness)
+    return
+  }
+
+  setTimeout(() => {
+    const retryHarness = (window as any).__GENABLE_PREVIEW_HARNESS__
+    if (retryHarness) action(retryHarness)
+  }, 300)
+}
+
+;(window as any).runFlowSimulation = () => withPreviewHarness((h) => h.runFlowSimulation())
+;(window as any).runErrorSimulation = () => withPreviewHarness((h) => h.runErrorSimulation())
+;(window as any).resetFlowSimulation = () => withPreviewHarness((h) => h.resetPreview())
 
 console.log('[Preview] UI module imported')

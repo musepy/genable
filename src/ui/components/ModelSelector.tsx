@@ -20,18 +20,20 @@ interface ModelItem {
   displayName: string;
 }
 
-interface ModelSelectorProps {
+export interface ModelSelectorProps {
   models: ModelItem[];
   selectedModel: string;
   onSelect: (modelName: string) => void;
   isLoading?: boolean;
+  showFreeOnly?: boolean;
 }
 
 export function ModelSelector({
   models,
   selectedModel,
   onSelect,
-  isLoading
+  isLoading,
+  showFreeOnly = false
 }: ModelSelectorProps) {
   const [hoveredModel, setHoveredModel] = useState<number | null>(null);
   
@@ -81,6 +83,7 @@ export function ModelSelector({
 
   // Sort: selected first, then by version
   const sortedModels = sortModels(models, selectedModel);
+  const filteredModels = showFreeOnly ? sortedModels.filter(m => (m as any).isFree) : sortedModels;
 
   return (
     <div 
@@ -92,10 +95,10 @@ export function ModelSelector({
         gap: tokens.space[1],
       }}
     >
-      {sortedModels.map((model, index) => {
+      {filteredModels.map((model, index) => {
         const normalize = (name: string) => name.toLowerCase().replace(/models\//, '').replace(/[^a-z0-9]/g, '');
         const isSelected = normalize(selectedModel) === normalize(model.name);
-        const shouldHighlight = isSelected || (index === 0 && !sortedModels.some(m => normalize(selectedModel) === normalize(m.name)));
+        const shouldHighlight = isSelected || (index === 0 && !filteredModels.some(m => normalize(selectedModel) === normalize(m.name)));
         
         return (
           <div

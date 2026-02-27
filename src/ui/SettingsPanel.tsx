@@ -60,6 +60,7 @@ export function SettingsPanel({
   
   const [expandedProvider, setExpandedProvider] = useState<'gemini' | 'openrouter' | null>(providerName);
   const [showDeveloper, setShowDeveloper] = useState(false);
+  const [showFreeOnly, setShowFreeOnly] = useState(false);
   
   const debouncedApiKey = useDebounce(apiKey, 800);
   
@@ -165,20 +166,39 @@ export function SettingsPanel({
             {/* Model Selector */}
             {suggestedModels.length > 0 && (
               <div>
-                <label style={{ 
-                  fontSize: tokens.fontSize[1],
-                  color: 'var(--gray-9)', 
-                  marginBottom: tokens.space[2], 
-                  display: 'block',
-                  fontWeight: 400
-                }}>
-                  available models
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[2] }}>
+                  <label style={{ 
+                    fontSize: tokens.fontSize[1],
+                    color: 'var(--gray-9)', 
+                    display: 'block',
+                    fontWeight: 400
+                  }}>
+                    available models
+                  </label>
+                  {providerName === 'openrouter' && (
+                    <label style={{ 
+                      fontSize: tokens.fontSize[1], 
+                      color: 'var(--gray-11)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.space[1],
+                      cursor: 'pointer'
+                    }}>
+                      <input 
+                        type="checkbox" 
+                        checked={showFreeOnly}
+                        onChange={(e) => setShowFreeOnly((e.target as HTMLInputElement).checked)}
+                      />
+                      Show free models only
+                    </label>
+                  )}
+                </div>
                 <ModelSelector 
                   models={suggestedModels}
                   selectedModel={modelName}
                   onSelect={setModelName}
                   isLoading={fetchStatus === 'fetching'}
+                  showFreeOnly={showFreeOnly}
                 />
               </div>
             )}

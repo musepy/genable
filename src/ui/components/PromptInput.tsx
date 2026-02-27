@@ -16,7 +16,6 @@
 
 import { h, ComponentChildren } from 'preact';
 import { useRef, useLayoutEffect } from 'preact/hooks';
-import { Plus, ArrowUp } from 'lucide-preact';
 import { ActionPopover } from './ActionPopover';
 import { tokens, componentStyles } from '../design-system/tokens';
 import { t } from '../i18n';
@@ -36,6 +35,8 @@ export interface PromptInputProps {
   leftElement?: ComponentChildren;
   /** Callback for the plus (+) button */
   onPlusClick?: () => void;
+  /** Callback when a skill is selected from action popover */
+  onSkillSelect?: (skillId: string) => void;
 }
 
 export function PromptInput({
@@ -49,6 +50,7 @@ export function PromptInput({
   contextTags,
   leftElement,
   onPlusClick,
+  onSkillSelect,
 }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -121,6 +123,7 @@ export function PromptInput({
         {/* Left: Action Popover (+) */}
         <ActionPopover 
           onSerializeSelection={onPlusClick || (() => {})} 
+          onInsertSkill={onSkillSelect}
           disabled={disabled}
         />
 

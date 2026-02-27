@@ -4,18 +4,19 @@
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall, Part } from '../llm-client/providers/types';
-import { ToolDefinition, ToolParameter, getToolsForMode, AgentMode } from './tools';
+import { ToolDefinition, ToolParameter, getToolsForMode, AgentMode, ToolValidator } from './tools';
 import { IpcBridge } from './ipcBridge';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { RetryPolicy, AgentErrorCategory } from './retryPolicy';
 import { planState } from './planState';
-import { composeAgentSystemPrompt, composeAgentDynamicContext } from '../llm-client/context/promptComposer';
 import { mapToSemanticError, formatSemanticError } from '../utils/errorUtils';
 import { AgentBehaviorConfig, DEFAULT_BEHAVIOR, resolveBehavior } from './agentBehaviorConfig';
 import { estimateTokens } from './context/tokenEstimator';
 import { CONTEXT_CONSTANTS } from './context/constants';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { ContextManager } from './context/contextManager';
+import { PromptAssembler } from './context/promptAssembler';
+import { AgentStateMachine } from './agentStateMachine';
 import {
   AgentLoopPolicy,
   resolveAgentLoopPolicy,
@@ -50,6 +51,8 @@ export class AgentRuntime {
   private maxIterations: number;
   private maxContextTokens: number;
   private context: ContextManager;
+  private stateMachine: AgentStateMachine;
+  private promptAssembler: PromptAssembler;
   private retryPolicy: RetryPolicy;
   private cleaner: ToolResultCleaner;
   private idCounter: number = 0;
@@ -65,18 +68,8 @@ export class AgentRuntime {
   private progressCallCount: number = 0;
   private lastProgressHeaders: string[] = [];
   private hasPendingToolErrors: boolean = false;
-  private consecutiveToolFailures: number = 0;
   private emptyResponseRetries: number = 0;
-  private staleStepIterations: number = 0; // Track how long a step has been active without advancing
-  private lastActiveStepId: string | null = null; // Track which step was active last iteration
-  private recoveryActive: boolean = false;
-  private recoveryIterations: number = 0;
-  private totalRecoveryCycles: number = 0;
-  private verificationFixIterations: number = 0;
-  private verificationEntryInjected: boolean = false; // Prevent duplicate verification entry messages
-  private rootNodeId: string | null = null; // Track root node for auto-inspection in VERIFICATION
   private completeTaskRejectionCount = 0; // Safety valve for agent deadlocks over over-achieving
-  private hasPerformedVerificationInspect: boolean = false;
   private noVerificationRejectionCount = 0; // Independent safety valve for NO_VERIFICATION gate
   private readonly AUTO_BATCH_TOOL_NAMES = new Set([
     'createIcon',
@@ -110,6 +103,16 @@ export class AgentRuntime {
     this.designSystemId = options.designSystemId; // Initialize designSystemId
     this.cleaner = new ToolResultCleaner(options.tools);
     this.context = new ContextManager(this.maxContextTokens, options.messages);
+    this.stateMachine = new AgentStateMachine(this.loopPolicy, (prefix) => this.generateId(prefix));
+    this.promptAssembler = new PromptAssembler({
+      provider: options.provider,
+      tools: options.tools,
+      maxContextTokens: this.maxContextTokens,
+      behaviorConfig: this.behaviorConfig,
+      designSystemId: this.designSystemId,
+      selectionContext: options.selectionContext,
+      generateId: (prefix) => this.generateId(prefix)
+    });
 
     // Disable throttling in tests
     if (process.env.NODE_ENV === 'test') {
@@ -388,16 +391,10 @@ export class AgentRuntime {
     this.lastThinkingText = '';
     this.thinkingOnlyIterations = 0;
     this.progressCallCount = 0;
-    this.staleStepIterations = 0;
-    this.lastActiveStepId = null;
-    this.recoveryActive = false;
-    this.recoveryIterations = 0;
-    this.totalRecoveryCycles = 0;
-    this.verificationFixIterations = 0;
+    this.stateMachine.reset();
     this.idCounter = 0; // Better to reset idCounter at start of run if not already reset
     this.retryPolicy.resetAll();
     this.completeTaskRejectionCount = 0; // Reset safety valve count ON EACH RUN
-    this.hasPerformedVerificationInspect = false;
     this.noVerificationRejectionCount = 0;
 
     // ============================================
@@ -440,201 +437,28 @@ export class AgentRuntime {
       // ----------------------------------------
       // PHASE 1: MODE DETERMINATION
       // ----------------------------------------
-      // 0. Determine Mode based on plan state
-      let mode: AgentMode = 'PLANNING';
-      let activeStep = planState.getActiveStep();
-      const plan = planState.getPlan();
-
-      // [FIX] Auto-activate the next pending step after planDesign.
-      // Without an active step, the agent stays in PLANNING and cannot call execution tools.
-      if (plan.length > 0 && !activeStep) {
-        const nextPending = plan.find(s => s.status === 'pending');
-        const hasCompletedSteps = plan.some(s => s.status === 'completed');
-        if (nextPending) {
-          planState.startTask(nextPending.title, nextPending.description, nextPending.stepId);
-          activeStep = planState.getActiveStep();
-          
-          // Guide agent when advancing to a new step after prior completion
-          if (hasCompletedSteps) {
-            this.context.addMessage({
-              id: this.generateId('step_advance'),
-              role: 'user',
-              content: `Now working on: "${nextPending.title}". If this step's objectives were already accomplished during a previous step, call complete_step(summary="Already completed in previous step", reason="already_done") to advance immediately. Do NOT repeat work that is already visible on the canvas.`
-            });
-          }
-        }
-      }
-      
-      if (plan.length > 0) {
-        if (activeStep) {
-          mode = 'EXECUTION';
-        } else if (plan.every(s => s.status === 'completed')) {
-          mode = 'VERIFICATION';
-          // Inject verification instructions once on first entry
-          if (!this.verificationEntryInjected) {
-            this.verificationEntryInjected = true;
-            const rootRef = this.rootNodeId ? `, nodeId="${this.rootNodeId}"` : '';
-            this.context.addMessage({
-              id: this.generateId('verify_entry'),
-              role: 'user',
-              content: `All plan steps completed. MANDATORY VERIFICATION before complete_task:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) — check the "anomalies" field in the response.\n2. Fix any anomalies found: ZERO_DIM, TEXT_OVERFLOW, SIZING_REVERTED, CHILDREN_OVERFLOW, SIBLING_WIDTH_MISMATCH, MISSING_AUTO_LAYOUT.\n3. Check: all row frames in VERTICAL containers use layoutSizingHorizontal=FILL (not FIXED). Root frame has explicit width/height.\n4. Use applyDesignPatch to fix issues, then re-inspect to confirm.\n5. Only call complete_task after a clean inspection with zero anomalies.`
-            });
-          }
-        } else {
-          // Fallback: if there are pending steps but no active step, still allow execution tools.
-          mode = 'EXECUTION';
-        }
-      }
-
-      // ----------------------------------------
-      // STALE STEP DETECTION
-      // ----------------------------------------
-      // [FIX] Track how long the same step has been active. If a step stays active
-      // for too many iterations without completing, force-complete it and advance.
-      // This prevents the infinite applyDesignPatch loop where the model keeps
-      // "polishing" the same step without ever calling complete_task or summarize_progress.
-      if (activeStep) {
-        if (activeStep.stepId === this.lastActiveStepId) {
-          this.staleStepIterations++;
-        } else {
-          this.staleStepIterations = 0;
-          this.lastActiveStepId = activeStep.stepId;
-        }
-
-        if (this.staleStepIterations >= this.loopPolicy.staleStepThreshold) {
-          console.warn(`[AgentRuntime] ⚠️ STALE STEP: "${activeStep.title}" (${activeStep.stepId}) has been active for ${this.staleStepIterations} iterations. Force-completing.`);
-          planState.completeTask(activeStep.stepId, `Auto-completed after ${this.staleStepIterations} iterations`);
-          this.staleStepIterations = 0;
-          this.lastActiveStepId = null;
-
-          // Check if there are more steps or if we're done
-          const remainingSteps = planState.getPlan().filter(s => s.status === 'pending');
-          if (remainingSteps.length === 0) {
-            // All steps completed (or force-completed), transition to VERIFICATION
-            console.log(`[AgentRuntime] All plan steps completed. Transitioning to VERIFICATION.`);
-            mode = 'VERIFICATION';
-            // Inject verification instructions — force inspect before complete_task
-            const rootRef = this.rootNodeId ? `, nodeId="${this.rootNodeId}"` : '';
-            const completionMessage: LLMMessage = {
-              id: this.generateId('stale_done'),
-              role: 'user',
-              content: `All plan steps completed. MANDATORY VERIFICATION before complete_task:\n1. Call inspectDesign(mode="hierarchy"${rootRef}, depth=3) — check the "anomalies" field in the response.\n2. Fix any anomalies found: ZERO_DIM, TEXT_OVERFLOW, SIZING_REVERTED, CHILDREN_OVERFLOW, SIBLING_WIDTH_MISMATCH, MISSING_AUTO_LAYOUT.\n3. Check: all row frames in VERTICAL containers use layoutSizingHorizontal=FILL (not FIXED). Root frame has explicit width/height.\n4. Use applyDesignPatch to fix issues, then re-inspect to confirm.\n5. Only call complete_task after a clean inspection with zero anomalies.`
-            };
-            this.context.getAllMessages().push(completionMessage);
-          } else {
-            // Activate next step
-            const nextStep = remainingSteps[0];
-            planState.startTask(nextStep.title, nextStep.description, nextStep.stepId);
-            activeStep = planState.getActiveStep();
-            console.log(`[AgentRuntime] Advanced to next step: "${nextStep.title}" (${nextStep.stepId})`);
-          }
-        }
-      }
-
-      // ----------------------------------------
-      // RECOVERY MODE OVERRIDE
-      // ----------------------------------------
-      if (this.loopPolicy.recovery.enabled && mode === 'EXECUTION') {
-        // After first recovery cycle, raise the entry threshold to make re-entry harder
-        const effectiveThreshold = this.totalRecoveryCycles > 0
-          ? this.loopPolicy.recovery.escalatedFailureThreshold
-          : this.loopPolicy.recovery.entryFailureThreshold;
-
-        const shouldEnterRecovery = this.recoveryActive ||
-          this.consecutiveToolFailures >= effectiveThreshold;
-
-        if (shouldEnterRecovery) {
-          if (!this.recoveryActive) {
-            // Check if we've exhausted recovery cycles
-            if (this.totalRecoveryCycles >= this.loopPolicy.recovery.maxTotalCycles) {
-              // Force completion instead of entering recovery again
-              this.context.addMessage({
-                id: this.generateId('recovery_cap'),
-                role: 'user',
-                content: `Recovery cycle limit reached (${this.totalRecoveryCycles} cycles). The design may be incomplete. Call complete_task NOW with a summary of what was built and what failed.`
-              });
-              console.warn(`[AgentRuntime] Recovery cycle cap reached (${this.totalRecoveryCycles}/${this.loopPolicy.recovery.maxTotalCycles}). Forcing completion.`);
-              // Stay in EXECUTION with completion hint, do NOT enter recovery
-            } else {
-              this.recoveryActive = true;
-              this.recoveryIterations = 0;
-              this.totalRecoveryCycles++;
-              const stepContext = activeStep
-                ? ` Current step: "${activeStep.title}".${activeStep.nodes?.length ? ` Target nodes: [${activeStep.nodes.join(', ')}].` : ''}`
-                : '';
-              this.context.addMessage({
-                id: this.generateId('recovery_enter'),
-                role: 'user',
-                content: `RECOVERY MODE (cycle ${this.totalRecoveryCycles}/${this.loopPolicy.recovery.maxTotalCycles}): ${this.consecutiveToolFailures} consecutive all-failure iterations detected.${stepContext} Diagnose with inspectDesign/validateLayout first, then resume with a changed strategy.`
-              });
-              console.warn(`[AgentRuntime] Entering RECOVERY mode (cycle ${this.totalRecoveryCycles}/${this.loopPolicy.recovery.maxTotalCycles}) due to repeated failures.`);
-              mode = 'RECOVERY';
-            }
-          } else {
-            mode = 'RECOVERY';
-          }
-        }
-      }
-
-      this.currentMode = mode; // Update currentMode for prompt composition
+      const mode = this.stateMachine.determineNextMode(this.context);
+      this.currentMode = mode; // Keep legacy sync for now
       const filteredTools = getToolsForMode(mode, this.options.tools);
 
       // ----------------------------------------
       // PHASE 2: SYSTEM PROMPT HOT-SWAP
       // ----------------------------------------
-      const systemPrompt = await this.composeSystemPrompt();
-
-      // Ensure system prompt is at index 0 and updated
-      const existingSysIndices = this.context.getAllMessages()
-        .map((m, i) => m.role === 'system' ? i : -1)
-        .filter(i => i !== -1);
-      
-      if (existingSysIndices.length > 0) {
-        for (let i = existingSysIndices.length - 1; i >= 0; i--) {
-          this.context.getAllMessages().splice(existingSysIndices[i], 1);
-        }
-      }
-
-      this.context.getAllMessages().unshift({
-        id: this.generateId('sys'),
-        role: 'system',
-        content: systemPrompt
-      });
-      console.log(`[AgentRuntime] 🔄 System prompt hot-swapped for mode: ${this.currentMode}`);
+      await this.promptAssembler.hotSwapSystemPrompt(
+        this.context.getAllMessages(),
+        mode,
+        this.originalUserRequest,
+        this.operationLog
+      );
 
       // ----------------------------------------
       // PHASE 3: DYNAMIC CONTEXT INJECTION
       // ----------------------------------------
-      // [Prefix Cache Optimization] 
-      // Inject dynamic parts as a USER message to keep SYSTEM prompt static.
-      // This allows Gemini/Claude to cache the heavy System Prompt.
-      const dynamicContext = composeAgentDynamicContext({
-        ragResults: { prioritizedComponents: [], goldenTemplates: [] },
-        designSystemContext: { skillName: this.designSystemId || 'default' },
-        intent: {
-          originalRequest: this.originalUserRequest,
-          requiresLayoutKnowledge: true
-        },
-        selectionContext: this.options.selectionContext,
-        behaviorConfig: this.behaviorConfig,
-        operationLog: this.operationLog,
-        activeStep: planState.getActiveStep(),
-        planSummary: planState.getSummary()
-      });
-
-      if (dynamicContext) {
-        // [FIX] Clean up previous iteration's dynamic prompt to prevent buildup
-        const messages = this.context.getAllMessages();
-        const prevIdx = messages.findIndex(m => m.id?.startsWith('dyn_ctx'));
-        if (prevIdx !== -1) messages.splice(prevIdx, 1);
-
-        this.context.addMessage({
-          id: this.generateId('dyn_ctx'),
-          role: 'user',
-          content: dynamicContext,
-          hidden: true // Keep context lean for long-term memory
-        });
-      }
+      this.promptAssembler.injectDynamicContext(
+        this.context.getAllMessages(),
+        this.originalUserRequest,
+        this.operationLog
+      );
 
       // ----------------------------------------
       // PHASE 3: PREPARE LLM CALL
@@ -675,7 +499,7 @@ export class AgentRuntime {
       // - EXECUTION/VERIFICATION/RECOVERY with ANY mode: NO stream abort (tool calls come AFTER text)
       // - Other modes: default threshold
       const isThinkingModel = this.behaviorConfig.thinkingLevel !== 'minimal';
-      const resolvedToolMode = getToolModeForPhase(mode, this.loopPolicy, this.consecutiveToolFailures, isThinkingModel);
+      const resolvedToolMode = getToolModeForPhase(mode, this.loopPolicy, this.stateMachine.state.consecutiveToolFailures, isThinkingModel);
       const isAnyToolMode = resolvedToolMode === 'ANY';
       const ramblingThreshold = mode === 'PLANNING'
         ? AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD * this.loopPolicy.planningRamblingMultiplier
@@ -803,7 +627,7 @@ export class AgentRuntime {
           }
 
           await new Promise(resolve => setTimeout(resolve, delay));
-          iteration--; // Retry this iteration
+          iteration = Math.max(0, iteration - 1); // BUG-4 fix: prevent negative iteration
           continue;
         }
 
@@ -819,22 +643,24 @@ export class AgentRuntime {
         notifyIterationStartOnce();
       }
 
-      const activeTask = planState.getActiveStep();
-      const taskInfo = activeTask ? { taskId: activeTask.stepId, taskTitle: activeTask.title } : undefined;
-      this.options.onIteration?.(iteration, response, taskInfo);
-
       // Safety check for empty responses — retry before giving up (Gemini 3.x Pro can intermittently return empty streams)
       if (!response.text && (!response.toolCalls || response.toolCalls.length === 0) && !response.thoughts) {
         this.emptyResponseRetries = (this.emptyResponseRetries || 0) + 1;
         const MAX_EMPTY_RETRIES = 2;
         if (this.emptyResponseRetries <= MAX_EMPTY_RETRIES) {
           console.warn(`[AgentRuntime] ⚠️ Empty response detected (retry ${this.emptyResponseRetries}/${MAX_EMPTY_RETRIES}). Retrying iteration ${iteration}...`);
-          iteration--; // Retry this iteration
+          iteration = Math.max(0, iteration - 1); // BUG-4 fix: prevent negative iteration
           continue;
         }
         throw new Error('LLM Provider returned an empty response after retries. This usually indicates a generation failure.');
       }
       this.emptyResponseRetries = 0; // Reset on successful response
+
+      // BUG-2 fix: Fire onIteration AFTER empty-response check to avoid
+      // recording duplicate token entries for retried iterations.
+      const activeTask = planState.getActiveStep();
+      const taskInfo = activeTask ? { taskId: activeTask.stepId, taskTitle: activeTask.title } : undefined;
+      this.options.onIteration?.(iteration, response, taskInfo);
 
       // Thinking-only iteration detection: catch "rambling" without action
       if (!response.toolCalls || response.toolCalls.length === 0) {
@@ -857,7 +683,7 @@ export class AgentRuntime {
             };
             this.context.getAllMessages().push(forceToolMessage);
             console.warn(`[AgentRuntime] 🔄 Retrying iteration ${iteration} with forced tool call message`);
-            iteration--; // Retry this iteration
+            iteration = Math.max(0, iteration - 1); // BUG-4 fix: prevent negative iteration
             continue;
           }
           // After 2 retries, fall through to normal handling
@@ -940,587 +766,116 @@ export class AgentRuntime {
       
       this.context.addMessage(modelMessage);
       
-      // [DEBUG] Track token growth per message
-      const contentJson = typeof modelMessage.content === 'string'
-        ? modelMessage.content
-        : JSON.stringify(modelMessage.content);
       console.log(`[AgentRuntime] 📊 Model message added. Total visible: ${this.context.getApproximateTokens()} tokens`);
 
       // ----------------------------------------
       // PHASE 5: TOOL EXECUTION
       // ----------------------------------------
       if (toolCallsForExecution.length > 0) {
-        // Handle Workflow Tools Internally
         const workflowResults: import('../llm-client/providers/types').LLMToolResult[] = [];
         const figmaToolCalls: LLMToolCall[] = [];
 
         for (const tc of toolCallsForExecution) {
           if (tc.name === 'planDesign') {
-            const { analysis, steps } = tc.args || {};
-            const stepsWithIds = (steps || []).map((step: any, idx: number) => ({
+            const stepsWithIds = (tc.args.steps || []).map((step: any, idx: number) => ({
               ...step,
               stepId: step.stepId || `step_${Date.now()}_${idx}`,
               status: 'pending'
             }));
-
             planState.setCurrentPlan(stepsWithIds);
-
-            console.log('[AgentRuntime] planDesign received:', {
-              analysis: analysis?.substring(0, 300) + (analysis?.length > 300 ? '...' : ''),
-              stepsCount: stepsWithIds.length
-            });
-
             workflowResults.push({
-              name: tc.name,
-              id: tc.id,
-              response: {
-                success: true,
-                data: {
-                  acknowledged: true,
-                  planId: `plan_${Date.now()}`,
-                  steps: stepsWithIds.map((s: any) => ({
-                    stepId: s.stepId,
-                    stepNumber: s.stepNumber,
-                    action: s.action,
-                    nodes: s.nodes || []
-                  })),
-                  message: 'Plan received. Each step is a COMPONENT CHUNK — use generateDesign to create ALL nodes listed in each step in ONE call. Do NOT use one tool call per step.'
-                }
-              },
+              name: tc.name, id: tc.id, response: { success: true, data: { acknowledged: true, steps: stepsWithIds } },
               thought_signature: tc.thought_signature
             });
-          } else if (tc.name === 'new_task') {
-            planState.startTask(tc.args.title, tc.args.description, tc.args.stepId);
-            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
-          } else if (tc.name === 'update_todo_list') {
-            planState.updateTodos(tc.args.items);
-            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
-          } else if (tc.name === 'summarize_progress') {
-            if (progressCallsThisIteration >= 1) {
-              workflowResults.push({
-                name: tc.name,
-                id: tc.id,
-                response: {
-                  success: false,
-                  error: {
-                    code: 'PROGRESS_THROTTLED',
-                    message: 'summarize_progress may be called at most once per iteration.'
-                  }
-                },
-                thought_signature: tc.thought_signature
-              });
-              continue;
-            }
-
-            progressCallsThisIteration++;
-            const summary = tc.args.summary;
-            this.progressCallCount++;
-
-            if (summary === this.lastProgressSummary) {
-              this.identicalSummaryCount++;
-            }
-
-            // Two termination conditions: identical 3x, OR total calls exceed threshold+2
-            if (this.identicalSummaryCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD ||
-                this.progressCallCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD + 2) {
-              const reason = this.identicalSummaryCount >= AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD
-                ? `Repeating same progress summary: "${summary}"`
-                : `summarize_progress called ${this.progressCallCount} times without completing task`;
-              const semanticError = mapToSemanticError('LOOP_DETECTED', reason);
-              workflowResults.push({
-                name: tc.name,
-                id: tc.id,
-                response: { success: false, error: { code: 'LOOP_DETECTION', message: formatSemanticError(semanticError) } },
-                thought_signature: tc.thought_signature
-              });
-              continue;
-            }
-
-            if (summary !== this.lastProgressSummary) {
-              this.identicalSummaryCount = 0;
-            }
-            this.lastProgressSummary = summary;
-
-            if (tc.args.isComplete) {
-              planState.completeTask(undefined, tc.args.summary);
-              this.completeTaskRejectionCount = 0; // Reset safety valve on step completion
-            }
-            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
           } else if (tc.name === 'complete_step') {
             const activeStep = planState.getActiveStep();
             if (activeStep) {
               planState.completeTask(activeStep.stepId, tc.args.summary || 'Step completed');
-              this.completeTaskRejectionCount = 0; // Reset safety valve on step completion
               workflowResults.push({
-                name: tc.name, id: tc.id,
-                response: { success: true, message: `Step "${activeStep.title}" completed. Advancing to next step.` },
+                name: tc.name, id: tc.id, response: { success: true, message: `Step "${activeStep.title}" completed.` },
                 thought_signature: tc.thought_signature
               });
             } else {
-              workflowResults.push({
-                name: tc.name, id: tc.id,
-                response: { success: false, error: { code: 'NO_ACTIVE_STEP', message: 'No active step to complete.' } },
-                thought_signature: tc.thought_signature
-              });
+              workflowResults.push({ name: tc.name, id: tc.id, response: { success: false, error: { code: 'NO_ACTIVE_STEP' } }, thought_signature: tc.thought_signature });
             }
           } else if (tc.name === 'complete_task') {
             if (this.hasPendingToolErrors) {
+              workflowResults.push({ name: tc.name, id: tc.id, response: { success: false, error: { code: 'PENDING_TOOL_ERRORS' } }, thought_signature: tc.thought_signature });
+            } else if (!this.stateMachine.state.hasPerformedVerificationInspect && this.options.loopPolicy?.useSkillSystem !== false) {
+              if (this.noVerificationRejectionCount >= 1) {
+                this.options.onToolCall?.(tc);
+                return tc.args.summary;
+              }
+              this.noVerificationRejectionCount++;
               workflowResults.push({
-                name: tc.name,
-                id: tc.id,
-                response: {
-                  success: false,
-                  error: {
-                    code: 'PENDING_TOOL_ERRORS',
-                    message: 'Cannot complete task while previous tool calls have errors. Fix the errors first.'
-                  }
-                },
+                name: tc.name, id: tc.id, response: { success: false, error: { code: 'NO_VERIFICATION', message: 'Call inspectDesign first.' } },
                 thought_signature: tc.thought_signature
               });
             } else {
-              // Guard: reject complete_task if plan steps remain incomplete
-              const incompletePlanSteps = planState.getPlan().filter(
-                s => s.status === 'pending' || s.status === 'in_progress'
-              );
-              
-              if (incompletePlanSteps.length > 0) {
-                // TRUE AGENT: Never block complete_task. If the agent thinks it's done, trust it.
-                console.warn(`[AgentRuntime] 🚀 Agent called complete_task but ${incompletePlanSteps.length} plan steps remain. Trusting agent and auto-completing remaining steps.`);
-                for (const step of incompletePlanSteps) {
-                  planState.completeTask(step.stepId, 'Auto-completed: agent signaled overall completion');
-                }
-              }
-              
-              // Proceed to next checks (like VERIFICATION)
-
-              if (!this.hasPerformedVerificationInspect && this.options.loopPolicy?.useSkillSystem !== false) {
-                if (this.noVerificationRejectionCount >= 1) {
-                  // Safety valve: already rejected once, let through to avoid deadlock
-                  this.options.onToolCall?.(tc);
-                  return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
-                }
-                this.noVerificationRejectionCount++;
-                workflowResults.push({
-                  name: tc.name,
-                  id: tc.id,
-                  response: {
-                    success: false,
-                    error: {
-                      code: 'NO_VERIFICATION',
-                      message: 'Cannot complete without verification. Call inspectDesign(mode="hierarchy", depth=3) first to check for anomalies, then call complete_task again.'
-                    }
-                  },
-                  thought_signature: tc.thought_signature
-                });
-              } else {
-                // Agent signals completion - notify and return summary
-                this.options.onToolCall?.(tc);
-                return tc.args.summary + (tc.args.verification ? `\n\nVerification: ${tc.args.verification}` : '');
-              }
+              this.options.onToolCall?.(tc);
+              return tc.args.summary;
             }
+          } else if (['new_task', 'update_todo_list', 'summarize_progress'].includes(tc.name)) {
+            workflowResults.push({ name: tc.name, id: tc.id, response: { success: true }, thought_signature: tc.thought_signature });
           } else {
             figmaToolCalls.push(tc);
           }
         }
 
-        // If we ONLY had workflow tools, and no actual work, we might not want to continue this iteration in UI?
-        // But LLM usually calls them along with other tools or precedes them.
-
-        // If we ONLY had workflow tools, and no actual work, we still need to record the results
         const toolResults: import('../llm-client/providers/types').LLMToolResult[] = [...workflowResults];
-
-        // ----------------------------------------
-        // PHASE 6: LOOP DETECTION (moved BEFORE figmaToolCalls check)
-        // ----------------------------------------
-        // Use RAW (pre-batch) tool calls for stable fingerprinting.
-        const allToolCalls = toolCallsForExecution || [];
         const loopDetectionCalls = rawToolCallsForLoopDetection.length > 0
           ? rawToolCallsForLoopDetection
-          : allToolCalls;
-
+          : toolCallsForExecution;
         const loopResult = this.loopDetector.detect(loopDetectionCalls, {
           identical: AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD,
-          monotone: this.loopPolicy.monotoneLoopThreshold,
+          monotone: this.loopPolicy.monotoneLoopThreshold
         });
-
         if (loopResult) {
           if (loopResult.fatal) {
             throw new Error(loopResult.message);
           }
-          // Non-fatal loop: inject completion hint
           this.context.addMessage({
             id: this.generateId('mono_loop'),
             role: 'user',
-            content: loopResult.hint || loopResult.message,
+            content: loopResult.hint || loopResult.message
           });
         }
 
-        // Early exit if only workflow tools (no figma tools to execute)
-        if (figmaToolCalls.length === 0) {
-           if (mode === 'RECOVERY') {
-             this.recoveryIterations++;
-             this.context.addMessage({
-               id: this.generateId('recovery_workflow_only'),
-               role: 'user',
-               content: `RECOVERY requires at least one diagnostic tool call (${this.loopPolicy.recovery.preferredTools.join(', ')}). Workflow-only calls are insufficient.`
-             });
-
-             if (this.recoveryIterations >= this.loopPolicy.recovery.maxIterations) {
-               this.recoveryActive = false;
-               this.recoveryIterations = 0;
-               this.consecutiveToolFailures = 0;
-             }
-           }
-
-           const workflowResultsMessage = this.options.provider.formatToolResults(workflowResults);
-           workflowResultsMessage.id = this.generateId('tol');
-           this.context.addMessage(workflowResultsMessage);
-           console.log(`[AgentRuntime] 📊 Workflow results added. Total: ${this.context.getApproximateTokens()} tokens`);
-           iteration++;
-          continue;
-        }
-
-        // Group tool calls by strategy for figmaToolCalls
-        const groups: { strategy: 'parallel' | 'sequential', calls: LLMToolCall[] }[] = [];
-        for (const tc of figmaToolCalls) {
-          const toolDef = this.options.tools.find(t => t.name === tc.name);
-          const strategy = toolDef?.executionStrategy || 'sequential'; // Default to sequential for safety
-          
-          if (groups.length > 0 && groups[groups.length - 1].strategy === strategy) {
-            groups[groups.length - 1].calls.push(tc);
-          } else {
-            groups.push({ strategy, calls: [tc] });
-          }
-        }
-
-        // Track failed nodeIds to skip only dependent operations
-        const failedNodeIds = new Set<string>();
-        const failureReasons = new Map<string, string>();
-
-        for (const group of groups) {
-          if (group.strategy === 'parallel') {
-            console.log(`[AgentRuntime] Executing parallel group of ${group.calls.length} tools`);
-            const results = await Promise.all(group.calls.map(async (tc) => {
-              this.options.onToolCall?.(tc);
-              const result = await this.executeToolWithTimeout(tc);
-              this.options.onToolResult?.(tc, result);
-              return {
-                name: tc.name,
-                id: tc.id,
-                response: this.cleanToolResult(result, tc.name),
-                thought_signature: tc.thought_signature
-              };
-            }));
-            toolResults.push(...results);
-          } else {
-            console.log(`[AgentRuntime] Executing sequential group of ${group.calls.length} tools`);
-            for (const tc of group.calls) {
-              this.options.onToolCall?.(tc);
-              
-              // NEW: Extract nodeId and parentId from tool args for dependency tracking
-              const targetNodeId = tc.args?.nodeId || tc.args?.parentId;
-              
-              let result: any;
-              
-              // NEW: Only skip if this tool operates on a previously failed nodeId
-              if (targetNodeId && failedNodeIds.has(targetNodeId)) {
-                const reason = failureReasons.get(targetNodeId) || 'Previous operation failed';
-                result = { 
-                  success: false, 
-                  error: { 
-                    code: 'DEPENDENCY_SKIP', 
-                    message: `Skipped: node ${targetNodeId} had a previous error: ${reason}` 
-                  } 
-                };
-                console.log(`[AgentRuntime] Skipping ${tc.name} due to dependency on failed node ${targetNodeId}`);
-              } else {
-                result = await this.executeToolWithTimeout(tc);
-                
-                // NEW: Track failed nodeIds for smarter skipping
-                if (result?.success === false && targetNodeId) {
-                  failedNodeIds.add(targetNodeId);
-                  failureReasons.set(targetNodeId, result.error?.message || 'Unknown error');
-                }
-              }
-
-              this.options.onToolResult?.(tc, result);
-              const toolResult = this.cleanToolResult(result, tc.name); // Pass tool name
-
-              // NEW: Add semantic feedback to tool results
-              if (!toolResult.success && toolResult.error) {
-                const semanticError = mapToSemanticError(toolResult.error.code, toolResult.error.message);
-                toolResult.error.semanticFeedback = formatSemanticError(semanticError);
-              }
-
-              toolResults.push({
-                name: tc.name,
-                id: tc.id,
-                response: toolResult,
-                thought_signature: tc.thought_signature
-              });
-            }
-          }
-        }
-
-        // [INCREMENTAL] Update Operation Log
-        for (const tr of toolResults) {
-          const tc = toolCallsForExecution.find(c => c.name === tr.name); // Simple match, enough for log
-          const success = tr.response?.success !== false;
-          
-          if (tr.name === 'batchOperations' && tr.response?.data?.results) {
-            // Unpack batch results into the log
-            const ops = (tc?.args as any)?.operations || [];
-            const results = tr.response.data.results;
-            results.forEach((res: any, idx: number) => {
-              const op = ops[idx];
-              this.operationLog.push({
-                opId: res.opId,
-                action: res.action,
-                reason: op?.reason,
-                success: res.success,
-                timestamp: Date.now(),
-                error: res.error?.message,
-                diffInfo: res.diffInfo
-              });
-            });
-          } else {
-            this.operationLog.push({
-              action: tr.name,
-              reason: (tc?.args as any)?.reason,
-              success: success,
-              timestamp: Date.now(),
-              error: tr.response?.error?.message,
-              diffInfo: tr.response?.data?.diffInfo
-            });
-          }
-        }
-        // Keep last 15 operations
-        if (this.operationLog.length > 15) {
-          this.operationLog = this.operationLog.slice(-15);
-        }
-
-        // Track root node ID for auto-inspection in VERIFICATION phase
-        for (const tr of toolResults) {
-          if (tr.name === 'generateDesign' && tr.response?.data?.rootNodeId) {
-            this.rootNodeId = tr.response.data.rootNodeId;
-          }
-          if (tr.name === 'batchOperations' && tr.response?.data?.idMap && !this.rootNodeId) {
-            const firstId = Object.values(tr.response.data.idMap)[0] as string | undefined;
-            if (firstId) this.rootNodeId = firstId;
-          }
-          if (mode === 'VERIFICATION' && tr.name === 'inspectDesign') {
-            this.hasPerformedVerificationInspect = true;
-          }
-        }
-
         if (figmaToolCalls.length > 0) {
-          const figmaToolNames = new Set(figmaToolCalls.map(tc => tc.name));
-          const figmaResults = toolResults.filter(tr => figmaToolNames.has(tr.name));
-          const figmaSuccessCount = figmaResults.filter(tr => tr.response?.success !== false).length;
-          const figmaFailCount = figmaResults.filter(tr => tr.response?.success === false).length;
-          const hadErrors = figmaFailCount > 0;
-          this.hasPendingToolErrors = hadErrors;
-          const preferredRecoveryToolUsed = figmaToolCalls.some(tc =>
-            this.loopPolicy.recovery.preferredTools.includes(tc.name)
+          const results = await this.executeFigmaTools(figmaToolCalls);
+          toolResults.push(...results);
+          
+          this.hasPendingToolErrors = this.stateMachine.handleFigmaToolResults(
+            figmaToolCalls, results, this.context.getAllMessages()
           );
-
-          if (mode === 'RECOVERY') {
-            this.recoveryIterations++;
-
-            if (preferredRecoveryToolUsed && figmaSuccessCount > 0) {
-              this.recoveryActive = false;
-              this.recoveryIterations = 0;
-              // Decay instead of full reset — prevents immediate re-entry into recovery
-              this.consecutiveToolFailures = Math.max(0, this.consecutiveToolFailures - 1);
-              this.context.addMessage({
-                id: this.generateId('recovery_exit'),
-                role: 'user',
-                content: 'Recovery evidence collected successfully. Resume EXECUTION with a different strategy and avoid repeating failed operations.'
-              });
-              console.log('[AgentRuntime] RECOVERY complete. Resuming normal execution.');
-            } else if (!preferredRecoveryToolUsed) {
-              this.context.addMessage({
-                id: this.generateId('recovery_enforce'),
-                role: 'user',
-                content: `RECOVERY requires diagnosis tools first. Call one of: ${this.loopPolicy.recovery.preferredTools.join(', ')}.`
-              });
-            } else if (this.recoveryIterations >= this.loopPolicy.recovery.maxIterations) {
-              this.recoveryActive = false;
-              this.recoveryIterations = 0;
-              // Decay instead of full reset — prevents immediate re-entry into recovery
-              this.consecutiveToolFailures = Math.max(0, this.consecutiveToolFailures - 1);
-              this.context.addMessage({
-                id: this.generateId('recovery_timeout'),
-                role: 'user',
-                content: 'Recovery attempts reached the limit. If the current design is acceptable, call complete_task. Otherwise resume EXECUTION with a clearly different approach.'
-              });
-              console.warn('[AgentRuntime] RECOVERY max iterations reached. Releasing recovery lock.');
-            }
-          } else {
-            // Track consecutive iterations where ALL figma tools failed.
-            if (figmaFailCount > 0 && figmaSuccessCount === 0) {
-              this.consecutiveToolFailures++;
-              console.warn(`[AgentRuntime] ⚠️ All figma tools failed this iteration. Consecutive failures: ${this.consecutiveToolFailures}/${this.loopPolicy.recovery.entryFailureThreshold}`);
-            } else if (figmaSuccessCount > 0) {
-              this.consecutiveToolFailures = 0;
-              this.recoveryActive = false;
-              this.recoveryIterations = 0;
-            }
-
-            // Escalate to explicit RECOVERY mode instead of repeatedly injecting soft hints.
-            if (this.loopPolicy.recovery.enabled &&
-                this.consecutiveToolFailures >= this.loopPolicy.recovery.entryFailureThreshold &&
-                !this.recoveryActive) {
-              this.recoveryActive = true;
-              this.recoveryIterations = 0;
-              this.context.addMessage({
-                id: this.generateId('fail_fb'),
-                role: 'user',
-                content: `🛑 TOOL FAILURE PATTERN: ${this.consecutiveToolFailures} consecutive iterations where ALL tool calls failed. Next turn is RECOVERY mode. Diagnose with ${this.loopPolicy.recovery.preferredTools.join('/')} before any write actions.`
-              });
-              console.error('[AgentRuntime] Consecutive failure threshold reached. Scheduled RECOVERY mode.');
-            }
-          }
+          
+          this.stateMachine.updateStateFromToolResults(results);
+          this.stateMachine.handleVerificationFixLoop(results, this.context.getAllMessages());
         }
 
-        // ----------------------------------------
-        // VERIFICATION FIX LOOP
-        // ----------------------------------------
-        if (mode === 'VERIFICATION') {
-          const validateResult = toolResults.find(tr => tr.name === 'validateLayout');
-          const hasLayoutErrors = validateResult?.response?.data?.hasErrors;
-
-          // Also check for anomalies from inspectDesign or any tool result
-          const hasAnomalies = toolResults.some(tr =>
-            tr.response?.data?.anomalies && tr.response.data.anomalies.length > 0
-          );
-
-          if (hasLayoutErrors || hasAnomalies) {
-            this.verificationFixIterations++;
-            const issueTypes = [
-              hasLayoutErrors && 'layout constraint errors',
-              hasAnomalies && 'visual anomalies (TEXT_OVERFLOW, SIZING_REVERTED, etc.)'
-            ].filter(Boolean).join(' and ');
-
-            if (this.verificationFixIterations < this.loopPolicy.verificationFixLimit) {
-              this.context.addMessage({
-                id: this.generateId('vfix'),
-                role: 'user',
-                content: `Verification detected ${issueTypes} (fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}). Evaluate if these are critical design flaws. If they are critical, use patchNode to fix them. If you decide the current design is acceptable or the anomalies are false positives, you can ignore them and call complete_task.`
-              });
-              console.log(`[AgentRuntime] VERIFICATION fix attempt ${this.verificationFixIterations}/${this.loopPolicy.verificationFixLimit}`);
-            } else {
-              this.context.addMessage({
-                id: this.generateId('vfix_done'),
-                role: 'user',
-                content: 'Maximum verification fix attempts reached. Call complete_task with a note about remaining issues.'
-              });
-              console.warn(`[AgentRuntime] VERIFICATION fix limit reached (${this.verificationFixIterations}). Forcing completion.`);
-            }
-          }
-        }
-
-        // Add tool results to history using provider-specific formatting
         const toolResultsMessage = this.options.provider.formatToolResults(toolResults);
         toolResultsMessage.id = this.generateId('tol');
         this.context.addMessage(toolResultsMessage);
 
-        // [DEBUG] Track token growth from tool results
-        const toolResultsTokens = estimateTokens(toolResultsMessage.content);
-        const toolResultsJson = JSON.stringify(toolResultsMessage.content);
-        console.log(`[AgentRuntime] 📊 Tool results added: ${toolResultsTokens} tokens (~${toolResultsJson.length} chars). Total: ${this.context.getApproximateTokens()} tokens`);
-
-        // [FIX] Single-tool-call feedback: when model emits only 1 tool in EXECUTION mode,
-        // inject a hint to batch more operations next iteration. This is much cheaper than
-        // the old "collection" approach (which made a full extra LLM call).
-        if (mode === 'EXECUTION' && allToolCalls.length === 1 &&
-            allToolCalls[0].name !== 'complete_task' && 
-            allToolCalls[0].name !== 'summarize_progress' &&
-            allToolCalls[0].name !== 'generateDesign' &&
-            allToolCalls[0].name !== 'batchOperations') {
-          const batchHint: LLMMessage = {
-            id: this.generateId('batch_hint'),
-            role: 'user',
-            content: `⚠️ You used only 1 tool call this turn. BATCH RULE: emit multiple tool calls at once (e.g. 5+ createNode calls in the same turn), or use generateDesign to create the whole component.`
-          };
-          this.context.addMessage(batchHint);
-          console.log(`[AgentRuntime] ⚠️ Single-tool hint injected (was: ${allToolCalls[0].name})`);
-        }
-
-        // Proactive compression after tool results added
-        if (this.context.getApproximateTokens() > this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
-          await this.manageContext();
-        }
-
-        // Continue the loop
         iteration++;
         continue;
       } else {
-        // No tool calls - pure text response
-        // The agent should use complete_task to signal completion, not just emit text.
-
-        // (1) Block if there are pending tool errors
-        if (this.hasPendingToolErrors) {
-          const recoveryMessage: LLMMessage = {
-            id: this.generateId('usr'),
-            role: 'user',
-            content: 'There are unresolved tool errors from the last actions. Fix the errors using tools before completing the task.'
-          };
-          this.context.addMessage(recoveryMessage);
-          console.warn('[AgentRuntime] Blocking text-only completion due to pending tool errors. Retrying with recovery message.');
-          iteration--;
-          continue;
-        }
-
-        // (2) Nudge agent to call complete_task instead of just emitting text
         if (this.textOnlyCompletionRetries < AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES) {
           this.textOnlyCompletionRetries++;
-          const nudgeMessage: LLMMessage = {
-            id: this.generateId('complete_nudge'),
-            role: 'user',
-            content: `You responded with text but did NOT call complete_task. Do NOT summarize in plain text. You MUST call the complete_task tool with a summary to properly signal completion. Call complete_task now.`
-          };
-          this.context.addMessage(nudgeMessage);
-          console.warn(`[AgentRuntime] ⚠️ Text-only completion blocked (attempt ${this.textOnlyCompletionRetries}/${AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES}). Nudging agent to call complete_task.`);
-          iteration--;
+          this.context.addMessage({
+            id: this.generateId('nudge'), role: 'user', content: 'Call complete_task to signal completion.'
+          });
+          iteration = Math.max(0, iteration - 1); // BUG-4 fix: prevent negative iteration
           continue;
         }
-
-        // (3) After retries exhausted, accept the text response as a fallback
-        console.warn(`[AgentRuntime] Agent did not call complete_task after ${AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES} nudges. Accepting text-only completion as fallback.`);
         return response.text;
       }
     }
 
-    throw new Error(`Agent reached maximum iterations (${this.maxIterations})`);
+    throw new Error(`Maximum iterations (${this.maxIterations}) reached.`);
   }
 
-  private async composeSystemPrompt(): Promise<string> {
-    const deps: import('../../types/context').PromptDependencies = {
-      ragResults: { prioritizedComponents: [], goldenTemplates: [] },
-      designSystemContext: { skillName: this.designSystemId || 'default' },
-      intent: {
-        originalRequest: this.originalUserRequest,
-        requiresLayoutKnowledge: true
-      },
-      selectionContext: this.options.selectionContext,
-      behaviorConfig: this.behaviorConfig,
-      // [INCREMENTAL] Provide operation log for prompt composition
-      operationLog: this.operationLog,
-      activeStep: planState.getActiveStep(),
-      planSummary: planState.getSummary()
-    };
 
-    return composeAgentSystemPrompt(
-      deps,
-      this.options.tools,
-      this.options.provider,
-      {
-        totalBudget: this.maxContextTokens,
-        mode: this.currentMode
-      }
-    );
-  }
 
   private async executeToolWithTimeout(tc: LLMToolCall): Promise<any> {
     const timeout = AGENT_RUNTIME_CONSTANTS.DEFAULT_TOOL_TIMEOUT_MS;
@@ -1546,6 +901,9 @@ export class AgentRuntime {
     const toolExec = this.options.toolExecutors?.[tc.name];
     
     try {
+      // Fast-fail validation for empty props or missing required arguments
+      ToolValidator.validate(tc);
+
       if (toolExec) {
         return await toolExec(tc.args);
       } else if (this.options.ipcBridge) {
@@ -1554,10 +912,11 @@ export class AgentRuntime {
         return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `No executor found for tool '${tc.name}'` } };
       }
     } catch (e: any) {
+      const isValidationError = e?.message?.includes('Validation Error');
       return { 
         success: false, 
         error: { 
-          code: 'TOOL_EXEC_EXCEPTION', 
+          code: isValidationError ? 'TOOL_VALIDATION_ERROR' : 'TOOL_EXEC_EXCEPTION', 
           message: e.message 
         } 
       };
@@ -1574,6 +933,55 @@ export class AgentRuntime {
 
   public getMessages(): LLMMessage[] {
     return this.context.getAllMessages();
+  }
+
+  /**
+   * Executes a list of Figma tools sequentially or in parallel based on strategy.
+   */
+  private async executeFigmaTools(calls: LLMToolCall[]): Promise<import('../llm-client/providers/types').LLMToolResult[]> {
+    const results: import('../llm-client/providers/types').LLMToolResult[] = [];
+    
+    // Group tool calls by strategy
+    const groups: { strategy: 'parallel' | 'sequential', calls: LLMToolCall[] }[] = [];
+    for (const tc of calls) {
+      const toolDef = this.options.tools.find(t => t.name === tc.name);
+      const strategy = toolDef?.executionStrategy || 'sequential';
+      if (groups.length > 0 && groups[groups.length - 1].strategy === strategy) {
+        groups[groups.length - 1].calls.push(tc);
+      } else {
+        groups.push({ strategy, calls: [tc] });
+      }
+    }
+
+    for (const group of groups) {
+      if (group.strategy === 'parallel') {
+        const parallelResults = await Promise.all(group.calls.map(async (tc) => {
+          this.options.onToolCall?.(tc);
+          const res = await this.executeToolWithTimeout(tc);
+          this.options.onToolResult?.(tc, res);
+          return {
+            name: tc.name,
+            id: tc.id,
+            response: this.cleanToolResult(res, tc.name),
+            thought_signature: tc.thought_signature
+          };
+        }));
+        results.push(...parallelResults);
+      } else {
+        for (const tc of group.calls) {
+          this.options.onToolCall?.(tc);
+          const res = await this.executeToolWithTimeout(tc);
+          this.options.onToolResult?.(tc, res);
+          results.push({
+            name: tc.name,
+            id: tc.id,
+            response: this.cleanToolResult(res, tc.name),
+            thought_signature: tc.thought_signature
+          });
+        }
+      }
+    }
+    return results;
   }
 }
 

@@ -14,6 +14,8 @@ import { ChatMessage } from '../../types/chat';
 import { ThinkingLevel } from '../llm-client/types';
 import { SelectionStyles } from '../../types';
 import { emit } from '@create-figma-plugin/utilities';
+import { TelemetryService } from './TelemetryService';
+import { settingsService } from './SettingsService';
 
 import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
@@ -82,7 +84,31 @@ export class AgentOrchestrator {
 
       // 2. Run Agentic Loop
       this.options.onStatusChange('Agent starting...');
+      try {
+        const settings = await settingsService.loadSettings();
+        if (settings.telemetryEndpoint) {
+          TelemetryService.configure(settings.telemetryEndpoint, settings.telemetryApiKey);
+        }
+      } catch (telemetryError) {
+        console.warn('[AgentOrchestrator] Telemetry setup skipped:', telemetryError);
+      }
+      
+      const startTime = Date.now();
       const finalResponse = await agent.run(prompt);
+      const latencyMs = Date.now() - startTime;
+
+      // Log Telemetry (if usage data available from runtime)
+      // NOTE: agent.run() returns a string summary. Usage data is tracked
+      // per-iteration inside AgentRuntime via TokenRecorder (dev tool).
+      // Production telemetry here is a placeholder for future integration.
+      TelemetryService.logLLMCall({
+        provider: this.options.providerName || 'gemini',
+        modelName: this.options.modelName,
+        promptTokens: 0,
+        completionTokens: 0,
+        latencyMs,
+        promptText: prompt
+      });
 
       // 3. Finalize
       this.options.onComplete({}, finalResponse);

@@ -10,6 +10,8 @@
  *   GEMINI_API_KEY=xxx GEMINI_MODEL=gemini-2.5-flash npx vitest run src/engine/agent/__tests__/agent_realapi_harness.test.ts
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { describe, it, expect, vi } from 'vitest';
 
 // Must mock before any imports that touch ipcBridge
@@ -20,12 +22,25 @@ import { GeminiProvider } from '../../llm-client/providers/gemini';
 import { agentTools } from '../tools';
 import { ToolExecutor } from '../tools/types';
 import { LLMResponse, LLMToolCall } from '../../llm-client/providers/types';
+import { TokenRecorder } from '../../dev/TokenRecorder';
 
 // ---------------------------------------------------------------------------
-// Config
+// OAuth helper
 // ---------------------------------------------------------------------------
-const API_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+function loadGeminiOAuthToken(): string | undefined {
+  const oauthPath = path.join(process.env.HOME || '~', '.gemini', 'oauth_creds.json');
+  try {
+    if (!fs.existsSync(oauthPath)) return undefined;
+    const data = JSON.parse(fs.readFileSync(oauthPath, 'utf-8'));
+    return data.access_token;
+  } catch {
+    return undefined;
+  }
+}
+
+const API_KEY = (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'oauth-mode') ? process.env.GEMINI_API_KEY : '';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+const OAUTH_TOKEN = (process.env.GEMINI_API_KEY === 'oauth-mode') ? loadGeminiOAuthToken() : undefined;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -371,7 +386,17 @@ describe('Agent Real API Harness', () => {
   function createHarness(prompt: string, maxIterations = 30) {
     const state = new MockFigmaState();
     const executors = createMockExecutors(state);
-    const provider = new GeminiProvider(API_KEY, MODEL_NAME);
+
+    // Initialize token recorder for this harness run
+    TokenRecorder.init(undefined, `harness_${Date.now().toString(36)}`);
+
+    const provider = new GeminiProvider(API_KEY, MODEL_NAME, 
+      OAUTH_TOKEN ? { 
+        accessToken: OAUTH_TOKEN, 
+        vertexProject: 'gen-lang-client-0675319305', 
+        vertexLocation: 'us-central1' 
+      } : undefined
+    );
 
     // Patch: getToolSystemInstruction uses require() which fails in vitest
     (provider as any).getToolSystemInstruction = (_tools: any[]) => {
@@ -435,6 +460,20 @@ describe('Agent Real API Harness', () => {
           report.totalTokens.completion += response.usage.completionTokens;
           report.totalTokens.total += response.usage.totalTokens;
         }
+
+        // Record to JSONL for cross-run analysis
+        TokenRecorder.record({
+          source: `harness:${prompt.slice(0, 40).replace(/[^a-zA-Z0-9 ]/g, '')}`,
+          model: MODEL_NAME,
+          provider: 'gemini',
+          iteration,
+          phase: inferPhase(currentToolCalls),
+          promptTokens: response.usage?.promptTokens || 0,
+          completionTokens: response.usage?.completionTokens || 0,
+          totalTokens: response.usage?.totalTokens || 0,
+          latencyMs: Date.now() - iterationStartMs,
+          toolsCalled: currentToolCalls.map(tc => tc.name),
+        });
       },
 
       onToolCall: (toolCall: LLMToolCall) => {
@@ -509,18 +548,26 @@ describe('Agent Real API Harness', () => {
       rep.phaseBreakdown[phase].tokens += response?.usage?.totalTokens || 0;
     }
 
-    return { runtime, report, state };
+    function saveReport(rep: HarnessReport, name: string) {
+      const runsDir = path.join(process.cwd(), '.agent-runs');
+      if (!fs.existsSync(runsDir)) fs.mkdirSync(runsDir);
+      const filename = path.join(runsDir, `harness-${name}-${rep.modelName}.json`);
+      fs.writeFileSync(filename, JSON.stringify(rep, null, 2));
+      console.log(`\n[Harness] Report saved to: ${filename}\n`);
+    }
+
+    return { runtime, report, state, saveReport };
   }
 
   // =========================================================================
   // Test 1: Login Form — full diagnostic trace
   // =========================================================================
-  it.skipIf(!API_KEY)(
+  it.skipIf(!API_KEY && !OAUTH_TOKEN)(
     'diagnostic: login form — full trace',
-    { timeout: 300_000 },
+    { timeout: 600_000 },
     async () => {
       const prompt = 'Create a modern login form with email input, password input, and a submit button. Use a clean, minimal design with proper spacing.';
-      const { runtime, report } = createHarness(prompt, 30);
+      const { runtime, report, saveReport } = createHarness(prompt, 30);
 
       const startTime = Date.now();
       const result = await runtime.run(prompt);
@@ -528,6 +575,7 @@ describe('Agent Real API Harness', () => {
       report.totalIterations = report.iterations.length;
 
       printReport(report);
+      saveReport(report, 'login-form');
 
       // Sanity checks
       expect(result).toBeDefined();
@@ -544,14 +592,138 @@ describe('Agent Real API Harness', () => {
   );
 
   // =========================================================================
+  // Test 3: Gemini 3.0 Pro — Baseline comparison
+  // =========================================================================
+  it.skipIf(!API_KEY && !OAUTH_TOKEN)(
+    'diagnostic: login form — Gemini 3.0 Pro',
+    { timeout: 600_000 },
+    async () => {
+      // Temporarily override model for this test if not provided via env
+      const model = process.env.GEMINI_MODEL_3 || 'gemini-3-pro-preview';
+      const prompt = 'Create a modern login form with email input, password input, and a submit button.';
+      
+      // Initialize token recorder for Gemini 3.0 Pro run
+      TokenRecorder.init(undefined, `harness_3pro_${Date.now().toString(36)}`);
+
+      // Re-create harness with 3.0 model
+      const state = new MockFigmaState();
+      const executors = createMockExecutors(state);
+      const provider = new GeminiProvider(API_KEY, model, 
+        OAUTH_TOKEN ? { 
+          accessToken: OAUTH_TOKEN, 
+          vertexProject: 'gen-lang-client-0675319305', 
+          vertexLocation: 'us-central1' 
+        } : undefined
+      );
+
+      // Same mock for vitest
+      (provider as any).getToolSystemInstruction = (_tools: any[]) => {
+        return 'Tool Calling Rules:\n- Always provide all required parameters.\n- Use generateDesign for one-shot creation.\n- Use inspectDesign for verification.\n- Call complete_task when done.';
+      };
+
+      // Hook up variables for reports
+      let iterationStartMs = Date.now();
+      let currentIteration = 0;
+      let currentToolCalls: any[] = [];
+
+      const { runtime, report, saveReport } = { 
+        // We'll use a local version of createHarness logic but forcing the model
+        runtime: new AgentRuntime({
+          provider,
+          tools: agentTools,
+          toolExecutors: executors as any,
+          maxIterations: 30,
+          behaviorConfig: { designStrategy: 'create', visualQuality: 'rich', thinkingLevel: 'minimal' },
+          onIterationStart: (iter) => {
+            iterationStartMs = Date.now();
+            currentIteration = iter;
+            currentToolCalls = [];
+          },
+          onToolResult: (tc, result) => {
+            currentToolCalls.push({
+              name: tc.name,
+              argsPreview: JSON.stringify(tc.args).substring(0, 150),
+              resultSuccess: result.success,
+              resultPreview: JSON.stringify(result).substring(0, 200),
+              durationMs: 0 // Mocked
+            });
+            if (tc.name === 'generateDesign' && result.success) {
+              report.generateDesignIteration = currentIteration;
+            }
+          },
+          onIteration: (iteration, response) => {
+            const iterData = {
+              iteration,
+              phase: inferPhase(currentToolCalls),
+              durationMs: Date.now() - iterationStartMs,
+              toolCalls: [...currentToolCalls],
+              tokenUsage: response.usage ? {
+                promptTokens: response.usage.promptTokens,
+                completionTokens: response.usage.completionTokens,
+                totalTokens: response.usage.totalTokens
+              } : { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+              responseTextLength: (response.text || '').length,
+              hasThinking: !!response.thoughts
+            };
+            report.iterations.push(iterData);
+            report.totalTokens.prompt += iterData.tokenUsage.promptTokens;
+            report.totalTokens.completion += iterData.tokenUsage.completionTokens;
+            report.totalTokens.total += iterData.tokenUsage.totalTokens;
+
+            // Record to JSONL for cross-run analysis
+            TokenRecorder.record({
+              source: `harness:${prompt.slice(0, 40).replace(/[^a-zA-Z0-9 ]/g, '')}`,
+              model,
+              provider: 'gemini',
+              iteration,
+              phase: iterData.phase,
+              promptTokens: iterData.tokenUsage.promptTokens,
+              completionTokens: iterData.tokenUsage.completionTokens,
+              totalTokens: iterData.tokenUsage.totalTokens,
+              latencyMs: iterData.durationMs,
+              toolsCalled: currentToolCalls.map(tc => tc.name),
+            });
+          }
+        }),
+        report: {
+          prompt,
+          modelName: model,
+          totalIterations: 0,
+          totalDurationMs: 0,
+          totalTokens: { prompt: 0, completion: 0, total: 0 },
+          phaseBreakdown: {},
+          iterations: [],
+          generateDesignIteration: null,
+          verificationEntryIteration: null,
+          anomaliesDetected: [],
+          fixAttempts: 0,
+        },
+        saveReport: (rep: any, name: string) => {
+          const filename = path.join(process.cwd(), '.agent-runs', `harness-${name}-${rep.modelName}.json`);
+          fs.writeFileSync(filename, JSON.stringify(rep, null, 2));
+        }
+      };
+
+
+      const startTime = Date.now();
+      await runtime.run(prompt);
+      report.totalDurationMs = Date.now() - startTime;
+      report.totalIterations = report.iterations.length;
+
+      printReport(report as any);
+      saveReport(report, 'login-form-3.0');
+    }
+  );
+
+  // =========================================================================
   // Test 2: Simple rectangle — baseline comparison
   // =========================================================================
-  it.skipIf(!API_KEY)(
+  it.skipIf(!API_KEY && !OAUTH_TOKEN)(
     'diagnostic: simple rectangle — baseline',
-    { timeout: 120_000 },
+    { timeout: 300_000 },
     async () => {
       const prompt = 'Create a blue rectangle with rounded corners and the text "Hello World" centered inside it.';
-      const { runtime, report } = createHarness(prompt, 20);
+      const { runtime, report, saveReport } = createHarness(prompt, 20);
 
       const startTime = Date.now();
       const result = await runtime.run(prompt);
@@ -559,6 +731,7 @@ describe('Agent Real API Harness', () => {
       report.totalIterations = report.iterations.length;
 
       printReport(report);
+      saveReport(report, 'simple-rectangle');
 
       expect(result).toBeDefined();
       expect(report.totalIterations).toBeGreaterThan(0);

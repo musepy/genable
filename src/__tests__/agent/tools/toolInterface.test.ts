@@ -1,4 +1,4 @@
-import { searchDesignKnowledge, getComponentAnatomy } from '../../../engine/agent/tools/knowledgeTools';
+import { searchDesignKnowledge } from '../../../engine/agent/tools/knowledgeTools';
 import { validateLayout } from '../../../engine/agent/tools/validationTools';
 
 describe('Agent Tool Interface Layer', () => {
@@ -13,16 +13,6 @@ describe('Agent Tool Interface Layer', () => {
       const result = await searchDesignKnowledge({ domain: 'invalid' as any, query: 'test' });
       expect(result.success).toBe(false);
       expect(result.error?.code).toBe('INVALID_DOMAIN');
-    });
-  });
-
-  describe('getComponentAnatomy', () => {
-    it('should return a result for a known component', async () => {
-      const result = await getComponentAnatomy({ componentName: 'button' });
-      expect(result.success).toBe(true);
-      // In test environment, the registry might be empty, so found might be false.
-      // But success should be true.
-      expect(result.data).toBeDefined();
     });
   });
 

@@ -103,7 +103,7 @@ describe('AgentRuntime', () => {
       maxIterations: 2
     });
 
-    await expect(runtime.run('Loop me')).rejects.toThrow('Agent reached maximum iterations (2)');
+    await expect(runtime.run('Loop me')).rejects.toThrow('Maximum iterations (2) reached.');
   });
 
   it('should propagate streaming callbacks to provider', async () => {

@@ -1,9 +1,10 @@
 import { composeAgentSystemPrompt, composeAgentDynamicContext } from '../../llm-client/context/promptComposer';
 import { AgentBehaviorConfig } from '../agentBehaviorConfig';
-import { AgentMode, ToolDefinition } from '../tools';
+import { ToolDefinition } from '../tools';
+import { AgentMode } from '../../../shared/protocol/agentRuntimeEvents';
 import { LLMProvider, LLMMessage } from '../../llm-client/providers/types';
 import { PromptDependencies } from '../../../types/context';
-import { planState } from '../planState';
+
 import { skillRegistry } from '../skills/SkillRegistry';
 
 export interface PromptAssemblerOptions {
@@ -98,9 +99,7 @@ export class PromptAssembler {
       behaviorConfig: this.options.behaviorConfig,
       // operationLog is passed to satisfy the type but the section builders
       // that use it (iterationStateSummary) run inside injectDynamicContext, not here.
-      operationLog,
-      activeStep: planState.getActiveStep(),
-      planSummary: planState.getSummary()
+      operationLog
     };
 
     const systemPrompt = await composeAgentSystemPrompt(
@@ -150,9 +149,7 @@ export class PromptAssembler {
       },
       selectionContext: this.options.selectionContext,
       behaviorConfig: this.options.behaviorConfig,
-      operationLog,
-      activeStep: planState.getActiveStep(),
-      planSummary: planState.getSummary()
+      operationLog
     });
 
     if (dynamicContext) {

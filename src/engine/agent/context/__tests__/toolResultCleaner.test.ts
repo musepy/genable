@@ -116,6 +116,46 @@ describe('ToolResultCleaner', () => {
       expect(cleaned.data.children[0].props.characters).toBe('Hello World');
     });
 
+    it('preserves structured anomalies in inspectDesign hierarchy mode', () => {
+      const rawResult = {
+        name: 'inspectDesign',
+        success: true,
+        data: {
+          id: 'root-1',
+          type: 'FRAME',
+          props: { name: 'Root', layoutMode: 'VERTICAL' },
+          anomalies: [
+            {
+              code: 'SIZING_REVERTED',
+              message: 'Child reverted from FILL to FIXED',
+              nodeId: 'child-1',
+              nodeName: 'Card Row',
+              context: {
+                'parent.layoutMode': 'NONE',
+                intended: 'FILL',
+                actual: 'FIXED',
+                veryLong: 'x'.repeat(300),
+              },
+              hints: [
+                'Set parent layoutMode first',
+                'Reapply FILL',
+              ],
+            }
+          ],
+          children: []
+        }
+      };
+
+      const cleaned = cleaner.cleanToolResult(rawResult);
+
+      expect(Array.isArray(cleaned.data.anomalies)).toBe(true);
+      expect(cleaned.data.anomalies[0].code).toBe('SIZING_REVERTED');
+      expect(cleaned.data.anomalies[0].nodeId).toBe('child-1');
+      expect(cleaned.data.anomalies[0].hints.length).toBeGreaterThan(0);
+      expect(typeof cleaned.data.anomalies[0].context.veryLong).toBe('string');
+      expect(cleaned.data.anomalies[0].context.veryLong.length).toBeLessThanOrEqual(121);
+    });
+
     it('preserves visual properties even when result is oversized (> MAX_DATA_CHARS)', () => {
       // Create a massive children array to exceed 6000 chars limit in stringified form
       const massiveChildren = Array.from({ length: 20 }, (_, i) => ({

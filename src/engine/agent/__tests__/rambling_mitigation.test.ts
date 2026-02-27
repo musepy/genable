@@ -32,54 +32,6 @@ describe('AgentRuntime Rambling Mitigation', () => {
     } as any;
   });
 
-  it('should strip narration text in EXECUTION mode when tools are present', async () => {
-    (mockProvider.generate as any)
-      .mockResolvedValueOnce({
-        text: 'Progress: **Creating Card**\nI will now create the card.',
-        toolCalls: [{ name: 'createNode', args: { type: 'FRAME', name: 'Card' } }]
-      })
-      .mockResolvedValueOnce({
-        text: 'Done',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }]
-      })
-      .mockResolvedValue({
-        text: 'Fallback',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Fallback' } }]
-      });
-
-    const runtime = new AgentRuntime({
-      loopPolicy: { useSkillSystem: false } as any,
-      provider: mockProvider,
-      tools: [{ name: 'createNode', description: 'Create', parameters: { type: 'object', properties: {} } }],
-      ipcBridge: { callTool: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1' } }), dispose: vi.fn() } as any,
-      planId: 'test-plan'
-    });
-
-    // We need to simulate being in EXECUTION mode. 
-    // AgentRuntime determines mode based on planState.
-    // Let's mock planState or just use a user prompt that triggers execution 
-    // actually, let's just mock the mode check if possible, or trigger it naturally.
-    
-    // Easier way: mock planState
-    const { planState } = await import('../planState');
-    planState.reset();
-    planState.updateTodos([{ id: '1', title: 'Task 1', status: 'todo' }]);
-    planState.startTask('Task 1', 'Desc', '1');
-
-    await runtime.run('Build it');
-
-    const messages = runtime.getMessages();
-    const modelMsg = messages.find(m => m.role === 'model');
-    expect(modelMsg).toBeDefined();
-    
-    // Verify that the text part was stripped
-    const content = modelMsg!.content as any[];
-    const textParts = content.filter(p => p.text);
-    expect(textParts).toHaveLength(0);
-    
-    const toolParts = content.filter(p => p.functionCall);
-    expect(toolParts).toHaveLength(1);
-  });
 
   it('should detect repeated progress headers and increase loop suspicion', async () => {
     // Round 1, 2, 3 all have same Progress header
@@ -98,10 +50,6 @@ describe('AgentRuntime Rambling Mitigation', () => {
       planId: 'test-plan'
     });
 
-    const { planState } = await import('../planState');
-    planState.reset();
-    planState.updateTodos([{ id: '1', title: 'Task 1', status: 'todo' }]);
-    planState.startTask('Task 1', 'Desc', '1');
 
     // It should throw because thinkingOnlyIterations will hit the limit 
     // (since we count repeated headers as thinkingOnlyIterations increments)

@@ -46,7 +46,7 @@ describe('AgentRuntime', () => {
 
     expect(result).toBe('Done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
-    expect(runtime.getMessages()).toHaveLength(4); // system, user, model(call), tool(result)
+    expect(runtime.getMessages()).toHaveLength(3); // system, user, model(call)
   });
 
   it('should execute tool calls and loop', async () => {
@@ -87,7 +87,7 @@ describe('AgentRuntime', () => {
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
     
     const messages = runtime.getMessages();
-    expect(messages).toHaveLength(6); // system, user, model(thought+call), tool(result), model(complete), tool(complete)
+    expect(messages).toHaveLength(5); // system, user, model(thought+call), tool(result), model(complete)
     expect(messages[3].role).toBe('tool');
   });
 
@@ -129,120 +129,116 @@ describe('AgentRuntime', () => {
     expect(onThinking).toHaveBeenCalledWith('Thinking...');
   });
 
-  it('should throw error if stuck in planning loop (3+ planDesign calls)', async () => {
-    let callCount = 0;
-    (mockProvider.generate as any).mockImplementation(() => {
-      callCount++;
-      return Promise.resolve({
-        text: 'Planning...',
-        toolCalls: [{ name: 'planDesign', args: { analysis: `test ${callCount}`, steps: [] } }]
-      });
+  it('should detect generic tool call loops (safety guardrail)', async () => {
+    // Same tool with same args called repeatedly → loop detector should fire
+    (mockProvider.generate as any).mockResolvedValue({
+      text: 'Doing same thing...',
+      toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
     });
+
+    const mockIpcBridge = {
+      callTool: vi.fn().mockResolvedValue({ success: true, data: {} }),
+      dispose: vi.fn()
+    } as any;
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [{ name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } }],
-      maxIterations: 10
+      tools: [
+        { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } }
+      ],
+      ipcBridge: mockIpcBridge,
+      maxIterations: 15
     });
 
-    await expect(runtime.run('Loop me')).rejects.toThrow('Agent stuck in planning loop');
+    await expect(runtime.run('Loop me')).rejects.toThrow();
   });
 
-  it('should auto-activate next step and allow complete_step when over-achieving', async () => {
-    // Round 1: Plan design with 2 steps
+  it('should accept complete_task immediately in autonomous mode (no plan guard)', async () => {
+    // In autonomous mode, complete_task is NEVER blocked — LLM decides when it's done
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
-        text: 'Planning...',
-        toolCalls: [{
-          name: 'planDesign',
-          args: {
-            analysis: 'Test',
-            steps: [
-              { title: 'Step 1', description: 'desc 1', nodes: [] },
-              { title: 'Step 2', description: 'desc 2', nodes: [] }
-            ]
-          }
-        }]
-      })
-      // Round 2: Complete step 1
-      .mockResolvedValueOnce({
-        text: 'Completed step 1',
-        toolCalls: [{ name: 'summarize_progress', args: { summary: 'Done with 1', isComplete: true } }]
-      })
-      // Round 3: Notice Step 2 is active but work is done, use complete_step
-      .mockResolvedValueOnce({
-        text: 'Step 2 was already done',
-        toolCalls: [{ name: 'complete_step', args: { summary: 'Already done', reason: 'already_done' } }]
-      })
-      // Round 4: complete_task — gets NO_VERIFICATION rejection (no inspectDesign was called)
-      .mockResolvedValueOnce({
-        text: 'All done',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'All finished' } }]
-      })
-      // Round 5: Retry complete_task — passes via noVerificationRejectionCount safety valve
-      .mockResolvedValueOnce({
-        text: 'Really done',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'All finished' } }]
-      })
-      .mockResolvedValue({
-        text: 'Fallback',
-        toolCalls: []
+        text: 'I am done',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Finished immediately' } }]
       });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } },
-        { name: 'summarize_progress', description: 'Progress', parameters: { type: 'object', properties: {} } },
-        { name: 'complete_step', description: 'Complete step', parameters: { type: 'object', properties: {} } },
         { name: 'complete_task', description: 'Complete task', parameters: { type: 'object', properties: {} } }
       ]
     });
 
-    const result = await runtime.run('Overachieve test');
-    expect(result).toBe('All finished');
-    
-    // Check that we got the injection message for step_advance
-    const messages = runtime.getMessages();
-    const userMessages = messages.filter(m => m.role === 'user');
-    expect(userMessages.some(m => typeof m.content === 'string' && m.content.includes('call complete_step'))).toBe(true);
+    const result = await runtime.run('Quick task');
+    expect(result).toBe('Finished immediately');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
   });
 
-  it('should allow complete_task and auto-complete remaining steps immediately (True Agent)', async () => {
-    // Round 1: Plan design with 2 steps
+  it('should accept complete_task even after mutation without forced inspect (autonomous)', async () => {
+    // In autonomous mode, Runtime does not force inspect after mutation
+    const toolExecutors = {
+      patchNode: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1', modified: true } }),
+    };
+
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
-        text: 'Planning...',
-        toolCalls: [{
-          name: 'planDesign',
-          args: {
-            analysis: 'Test',
-            steps: [
-              { title: 'Step 1', description: 'desc 1', nodes: [] },
-              { title: 'Step 2', description: 'desc 2', nodes: [] }
-            ]
-          }
-        }]
+        text: 'Mutate design',
+        toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
       })
-      // Round 2: Try to call complete_task immediately
       .mockResolvedValueOnce({
-        text: 'I am done already',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Finished early' } }]
+        text: 'Done without inspect',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Mutated and done' } }]
       });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } },
-        { name: 'complete_task', description: 'Complete task', parameters: { type: 'object', properties: {} } }
+        { name: 'patchNode', description: 'Patch', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } }
       ],
-      loopPolicy: { useSkillSystem: false } as any
+      toolExecutors: toolExecutors as any
     });
 
-    (runtime as any).hasPerformedVerificationInspect = true;
+    const result = await runtime.run('Mutation without inspect');
+    expect(result).toBe('Mutated and done');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(2);
+  });
 
-    const result = await runtime.run('True Agent test');
-    expect(result).toBe('Finished early');
-    expect(mockProvider.generate).toHaveBeenCalledTimes(2); // Should not need 3 iterations anymore
+  it('should allow LLM to self-inspect before completing (autonomous choice)', async () => {
+    // LLM autonomously decides to inspect, then complete — not forced by Runtime
+    const toolExecutors = {
+      patchNode: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1', modified: true } }),
+      inspectDesign: vi.fn().mockResolvedValue({ success: true, data: { id: '1:1', type: 'FRAME' } }),
+    };
+
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'Mutate',
+        toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
+      })
+      .mockResolvedValueOnce({
+        text: 'Let me verify',
+        toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
+      })
+      .mockResolvedValueOnce({
+        text: 'Looks good',
+        toolCalls: [{ name: 'complete_task', args: { summary: 'Verified and done' } }]
+      });
+
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'patchNode', description: 'Patch', parameters: { type: 'object', properties: {} } },
+        { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
+        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } }
+      ],
+      toolExecutors: toolExecutors as any
+    });
+
+    const result = await runtime.run('Autonomous inspect');
+    expect(result).toBe('Verified and done');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(3);
+    expect(toolExecutors.inspectDesign).toHaveBeenCalled();
   });
 });
+

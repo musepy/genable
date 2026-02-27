@@ -21,7 +21,8 @@ vi.mock('../../engine/agent/agentRuntime', () => ({
     return {
       run: vi.fn().mockResolvedValue('Design complete.')
     };
-  })
+  }),
+  AgentRuntimeCanceledError: class AgentRuntimeCanceledError extends Error {}
 }));
 
 // Mock SettingsService

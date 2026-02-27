@@ -120,7 +120,9 @@ export class ToolResultCleaner {
           }
         }),
         // Post-op anomalies (zero-cost when empty — only present if issues detected)
-        ...(r.anomalies && { anomalies: r.anomalies }),
+        ...(Array.isArray(r.anomalies) && r.anomalies.length > 0 && {
+          anomalies: this.cleanAnomalies(r.anomalies, 5)
+        }),
         ...(Array.isArray(r.children) && {
           children: r.children.map((c: any) => ({
             opId: c.opId,
@@ -177,7 +179,9 @@ export class ToolResultCleaner {
     if (data.visibilityWarnings) essentialData.visibilityWarnings = data.visibilityWarnings;
     if (data.visibilityAutoFixed) essentialData.visibilityAutoFixed = data.visibilityAutoFixed;
     // Post-op anomalies (zero-cost when empty — only present if issues detected)
-    if (data.anomalies) essentialData.anomalies = data.anomalies;
+    if (Array.isArray(data.anomalies) && data.anomalies.length > 0) {
+      essentialData.anomalies = this.cleanAnomalies(data.anomalies);
+    }
 
     // Preserve idMap and layoutSnapshots
     if (data.idMap && typeof data.idMap === 'object') {
@@ -256,7 +260,61 @@ export class ToolResultCleaner {
     }
 
     // hierarchy/node mode: NodeLayer (id, type, props, children)
-    return this.extractInspectNode(data, 0);
+    const cleanedNode = this.extractInspectNode(data, 0);
+    if (Array.isArray(data?.anomalies) && data.anomalies.length > 0) {
+      cleanedNode.anomalies = this.cleanAnomalies(data.anomalies);
+    }
+    return cleanedNode;
+  }
+
+  private cleanAnomalies(anomalies: any[], maxAnomalies: number = 12): any[] {
+    return anomalies.slice(0, maxAnomalies).map((a: any) => {
+      const code = typeof a?.code === 'string'
+        ? a.code
+        : (typeof a?.type === 'string' ? a.type : 'UNKNOWN_ANOMALY');
+      const hints = Array.isArray(a?.hints)
+        ? a.hints.slice(0, 5).map((h: any) => this.sanitizeString(h, 200))
+        : [];
+      return {
+        code,
+        message: this.sanitizeString(a?.message || '', 300),
+        ...(a?.nodeId && { nodeId: a.nodeId }),
+        ...(a?.nodeName && { nodeName: this.sanitizeString(a.nodeName, 80) }),
+        ...(a?.context && { context: this.cleanAnomalyContext(a.context) }),
+        ...(hints.length > 0 && { hints }),
+      };
+    });
+  }
+
+  private cleanAnomalyContext(context: any): any {
+    if (!context || typeof context !== 'object') return context;
+    const entries = Object.entries(context).slice(0, 12);
+    const out: Record<string, any> = {};
+    for (const [key, value] of entries) {
+      if (value === null || value === undefined) {
+        out[key] = value;
+        continue;
+      }
+      if (typeof value === 'string') {
+        out[key] = this.sanitizeString(value, 120);
+        continue;
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        out[key] = value;
+        continue;
+      }
+      if (Array.isArray(value)) {
+        out[key] = value.slice(0, 6).map((item: any) => {
+          if (item === null || item === undefined) return item;
+          if (typeof item === 'string') return this.sanitizeString(item, 80);
+          if (typeof item === 'number' || typeof item === 'boolean') return item;
+          return '{…}';
+        });
+        continue;
+      }
+      out[key] = '{…}';
+    }
+    return out;
   }
 
   /**

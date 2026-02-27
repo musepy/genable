@@ -4,7 +4,7 @@
  * Uses AgentRuntime to perform multi-step, tool-using generations.
  */
 
-import { AgentRuntime } from '../agent/agentRuntime';
+import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
 import { GeminiProvider, OpenRouterProvider } from '../llm-client';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
@@ -19,6 +19,13 @@ import { settingsService } from './SettingsService';
 
 import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
+import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
+
+type RuntimeEventPayload = AgentRuntimeEvent extends infer E
+  ? E extends any
+    ? Omit<E, 'runId' | 'sequence' | 'timestamp'>
+    : never
+  : never;
 
 export interface AgentPluginData {
   selectionStyles?: SelectionStyles | null;
@@ -34,16 +41,16 @@ export interface OrchestratorOptions {
   designSystemId?: string; // Optional: default to 'vanilla'
   tools?: ToolDefinition[]; // Optional: default to agentTools
   thinkingLevel: ThinkingLevel;
-  onStatusChange: (status: string) => void;
-  onThinkingUpdate: (thought: string) => void;
-  onUsageUpdate?: (usage: any) => void;
-  onComplete: (data: any, rawText?: string) => void;
-  onError: (msg: string) => void;
+  onStatusChange?: (status: string) => void;
+  onThinkingUpdate?: (thought: string) => void;
+  onComplete?: (data: any, rawText?: string) => void;
+  onError?: (msg: string) => void;
   onToolCall?: (toolCall: any) => void;
   onToolResult?: (id: string, result: any) => void;
   onIteration?: (iteration: number, response: any, taskInfo?: { taskId: string, taskTitle: string }) => void;
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string, taskTitle: string }) => void;
   loopPolicy?: Partial<AgentLoopPolicy>;
+  onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
 }
 
 import { composeAgentSystemPrompt, calculateBudget } from '../llm-client/context/promptComposer';
@@ -54,6 +61,8 @@ import { IpcBridge } from '../agent/ipcBridge';
 
 export class AgentOrchestrator {
   private static initializationPromise: Promise<void> | null = null;
+  private activeAgent: AgentRuntime | null = null;
+  private fallbackEventSequence = 0;
 
   constructor(private options: OrchestratorOptions) {}
 
@@ -65,6 +74,21 @@ export class AgentOrchestrator {
     }
     
     return AgentOrchestrator.initializationPromise;
+  }
+
+  private emitFallbackRuntimeEvent(event: RuntimeEventPayload): void {
+    if (!this.options.onRuntimeEvent) return;
+    this.fallbackEventSequence += 1;
+    this.options.onRuntimeEvent({
+      ...event,
+      runId: 'orchestrator_fallback',
+      sequence: this.fallbackEventSequence,
+      timestamp: Date.now(),
+    } as AgentRuntimeEvent);
+  }
+
+  public cancel(reason: string = 'Canceled by user'): void {
+    this.activeAgent?.cancel(reason);
   }
 
   async generate(prompt: string, pluginData: AgentPluginData, history: ChatMessage[]) {
@@ -81,9 +105,10 @@ export class AgentOrchestrator {
     try {
       // 1. Initialize Agent
       const agent = this.createAgent(pluginData, ipcBridge, prompt, loopPolicy);
+      this.activeAgent = agent;
 
       // 2. Run Agentic Loop
-      this.options.onStatusChange('Agent starting...');
+      this.options.onStatusChange?.('Agent starting...');
       try {
         const settings = await settingsService.loadSettings();
         if (settings.telemetryEndpoint) {
@@ -111,13 +136,27 @@ export class AgentOrchestrator {
       });
 
       // 3. Finalize
-      this.options.onComplete({}, finalResponse);
+      this.options.onComplete?.({}, finalResponse);
 
     } catch (error: any) {
       console.error('[AgentOrchestrator] Failed:', error);
-      this.options.onError(error.message || 'Unknown agent error');
+      if (error instanceof AgentRuntimeCanceledError) {
+        this.emitFallbackRuntimeEvent({
+          type: 'canceled',
+          phase: 'idle',
+          reason: error.message || 'Canceled by user',
+        });
+        return;
+      }
+      this.emitFallbackRuntimeEvent({
+        type: 'error',
+        phase: 'idle',
+        message: error?.message || 'Unknown agent error',
+      });
+      this.options.onError?.(error.message || 'Unknown agent error');
     } finally {
         // [Cleanup] ALWAYS dispose the bridge to clear listeners and pending timers
+        this.activeAgent = null;
         ipcBridge.dispose();
     }
   }
@@ -195,7 +234,8 @@ export class AgentOrchestrator {
       onThinking: this.handleThinking.bind(this),
       onToolCall: this.handleToolCall.bind(this),
       onToolResult: this.handleToolResult.bind(this),
-      onIterationStart: (iteration: number, taskInfo?: any) => this.options.onIterationStart?.(iteration, taskInfo)
+      onIterationStart: (iteration: number, taskInfo?: any) => this.options.onIterationStart?.(iteration, taskInfo),
+      onRuntimeEvent: (event) => this.options.onRuntimeEvent?.(event),
     });
   }
 
@@ -209,11 +249,11 @@ export class AgentOrchestrator {
   }
 
   private handleThinking(thought: string) {
-    this.options.onThinkingUpdate(thought);
+    this.options.onThinkingUpdate?.(thought);
   }
 
   private handleToolCall(tc: any) {
-    this.options.onStatusChange(`Executing tool: ${tc.name}...`);
+    this.options.onStatusChange?.(`Executing tool: ${tc.name}...`);
     this.options.onToolCall?.(tc);
   }
 

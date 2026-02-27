@@ -30,12 +30,7 @@ vi.mock('../../../engine/figma-adapter/nodeSerializer', () => ({
   },
 }));
 
-vi.mock('../../../engine/agent/planState', () => ({
-  planState: {
-    completeTask: vi.fn(),
-    setCurrentPlan: vi.fn()
-  }
-}));
+
 
 vi.mock('../../../engine/validation/patchCache', () => ({
   patchCache: {
@@ -60,151 +55,9 @@ describe('State-Driven Tools', () => {
         (nodeLayoutService.resolveParent as any).mockImplementation(async (id: string) => id || null);
     });
 
-    describe('renderSubtree', () => {
-        it('should render a complete subtree from flat list', async () => {
-            const mockNode = { id: 'root:1', name: 'Root', type: 'FRAME' };
-            (handleUnifiedRender as any).mockResolvedValue(mockNode);
-
-            const nodes = [
-                { id: 'root', parent: null, type: 'FRAME', props: { name: 'Root', fills: ['#FFFFFF'] } },
-                { id: 'child1', parent: 'root', type: 'TEXT', props: { name: 'label', characters: 'Hello' } }
-            ];
-
-            const parameters = {
-                nodes,
-                parentId: 'parent-123'
-            };
-
-            await handleToolCall({
-                toolName: 'renderSubtree',
-                parameters,
-                requestId: 'req-1'
-            });
-
-            expect(handleUnifiedRender).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    type: 'FRAME',
-                    props: expect.objectContaining({ name: 'Root' }),
-                    children: expect.arrayContaining([
-                        expect.objectContaining({ type: 'TEXT', props: expect.objectContaining({ characters: 'Hello' }) })
-                    ])
-                }),
-                false,
-                'parent-123'
-            );
-
-            expect(emit).toHaveBeenCalledWith('TOOL_RESULT', expect.objectContaining({
-                requestId: 'req-1',
-                response: expect.objectContaining({
-                    success: true,
-                    data: expect.objectContaining({ nodeId: 'root:1' })
-                })
-            }));
-        });
-
-        it('should fail if nodes array is empty', async () => {
-            const parameters = {
-                nodes: []
-            };
-
-            await handleToolCall({
-                toolName: 'renderSubtree',
-                parameters,
-                requestId: 'req-2'
-            });
-
-            expect(handleUnifiedRender).not.toHaveBeenCalled();
-            expect(emit).toHaveBeenCalledWith('TOOL_RESULT', expect.objectContaining({
-                response: expect.objectContaining({
-                    success: false,
-                    error: expect.objectContaining({ code: 'INVALID_INPUT' })
-                })
-            }));
-        });
-    });
-
-    describe('patchNode', () => {
-        it('should merge props into current state', async () => {
-            const nodeId = '2:2';
-            const mockNode = { 
-                id: nodeId, 
-                name: 'Button', 
-                type: 'FRAME',
-                parent: { id: 'parent-456' }
-            };
-            (mockFigma.getNodeByIdAsync as any).mockResolvedValue(mockNode);
-            (handleUnifiedRender as any).mockResolvedValue(mockNode);
-            (NodeSerializer.serialize as any).mockReturnValue({
-                id: nodeId,
-                type: 'FRAME',
-                props: { name: 'Button', fills: ['#000000'] }
-            });
-
-            const parameters = {
-                nodeId,
-                props: { fills: ['#FF0000'], padding: 12 }
-            };
-
-            await handleToolCall({
-                toolName: 'patchNode',
-                parameters,
-                requestId: 'req-3'
-            });
-
-            expect(handleUnifiedRender).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    __modifyMode: 'UPDATE',
-                    __modifyTargetId: nodeId,
-                    props: expect.objectContaining({
-                        fills: ['#FF0000'],
-                        padding: 12,
-                        name: 'Button'
-                    })
-                }),
-                false,
-                mockNode.parent
-            );
-
-            expect(emit).toHaveBeenCalledWith('TOOL_RESULT', expect.objectContaining({
-                requestId: 'req-3',
-                response: expect.objectContaining({ success: true })
-            }));
-        });
-
-        it('should deep merge nested objects like constraints', async () => {
-            const nodeId = 'deep-1';
-            const mockNode = { id: nodeId, name: 'Frame', type: 'FRAME', parent: null };
-            (mockFigma.getNodeByIdAsync as any).mockResolvedValue(mockNode);
-            (handleUnifiedRender as any).mockResolvedValue(mockNode);
-            (NodeSerializer.serialize as any).mockReturnValue({
-                id: nodeId,
-                type: 'FRAME',
-                props: { 
-                    name: 'Frame', 
-                    constraints: { horizontal: 'MIN', vertical: 'MIN' } 
-                }
-            });
-
-            await handleToolCall({
-                toolName: 'patchNode',
-                parameters: {
-                    nodeId,
-                    props: { constraints: { horizontal: 'CENTER' } }
-                },
-                requestId: 'req-deep'
-            });
-
-            expect(handleUnifiedRender).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    props: expect.objectContaining({
-                        constraints: { horizontal: 'CENTER', vertical: 'MIN' } // Deep merge preserved vertical
-                    })
-                }),
-                false,
-                null
-            );
-        });
-    });
+    // NOTE: Direct renderSubtree and patchNode routes were removed from toolCallHandler.ts
+    // (replaced by unified tools: create_node, patch_node). These actions still work
+    // as batch operations via executeBatchAction — see tests below.
 
     describe('batchOperations support', () => {
         it('should support renderSubtree in batch', async () => {

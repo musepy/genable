@@ -8,7 +8,6 @@
  */
 
 import { patchCache, PatchFingerprint } from '../../engine/validation/patchCache';
-import { planState } from '../../engine/agent/planState';
 
 /**
  * Check if an operation should be skipped due to idempotency.
@@ -21,7 +20,6 @@ export function shouldSkipIdempotent(
   stepId?: string
 ): { skip: true; response: { success: true; data: { nodeId: string } } } | { skip: false } {
   if (!patchCache.shouldApply(nodeId, category, data)) {
-    if (stepId) planState.completeTask(stepId);
     return { skip: true, response: { success: true, data: { nodeId } } };
   }
   return { skip: false };
@@ -29,8 +27,8 @@ export function shouldSkipIdempotent(
 
 /**
  * Complete a plan step if stepId is provided.
- * Call after a successful tool execution.
+ * @deprecated - Autonomous agents do not use plans anymore. Function kept for API signature compatibility.
  */
 export function completeStep(stepId?: string): void {
-  if (stepId) planState.completeTask(stepId);
+  // No-op
 }

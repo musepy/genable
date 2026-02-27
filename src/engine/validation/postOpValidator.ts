@@ -3,12 +3,12 @@
  * @description Lightweight post-operation anomaly detector.
  *
  * Runs on the **main thread** immediately after a node is created/modified.
- * Returns compact anomaly strings ONLY when something is wrong.
+ * Returns structured anomaly objects with context and actionable hints.
  * Empty array = all good = zero extra tokens in the tool result.
  *
  * Design principles:
  * - Cheap: heuristic checks, no heavy computation
- * - Compact: each anomaly is one short string the LLM can act on
+ * - Structured: each anomaly is a typed object with context + hints for Agent debugging
  * - Anomaly-only: no feedback when things are fine
  */
 
@@ -25,6 +25,32 @@ export interface PostOpIntended {
   [key: string]: any;
 }
 
+/**
+ * Structured anomaly object returned by the validator.
+ * Replaces the old `string[]` format to give Agent actionable context.
+ */
+export interface ValidationAnomaly {
+  /** Machine-readable anomaly type, e.g. "SIZING_REVERTED" */
+  code: string;
+  /** Human-readable description of the anomaly */
+  message: string;
+  /** Figma node ID of the problematic node */
+  nodeId: string;
+  /** Figma node name */
+  nodeName: string;
+  /**
+   * Key properties of the node (and its parent) that explain WHY this anomaly occurred.
+   * Agent can read this to identify the root cause without extra inspectDesign calls.
+   */
+  context: Record<string, any>;
+  /**
+   * Actionable fix suggestions. Each hint is a concrete action the Agent can take,
+   * phrased as a tool-call-ready instruction (not a tutorial).
+   * Typically 1-3 mutually exclusive options.
+   */
+  hints: string[];
+}
+
 // ──────────────────────────────────────────────
 // Main validator
 // ──────────────────────────────────────────────
@@ -33,21 +59,49 @@ export interface PostOpIntended {
  * Validate a single node after creation/modification.
  * @param node  The actual Figma SceneNode
  * @param intended  Optional: what the LLM intended (for delta checks)
- * @returns Array of compact anomaly strings. Empty = no issues.
+ * @returns Array of structured anomaly objects. Empty = no issues.
  */
-export function validatePostOp(node: SceneNode, intended?: PostOpIntended): string[] {
-  const anomalies: string[] = [];
+export function validatePostOp(node: SceneNode, intended?: PostOpIntended): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
 
   // 1. Zero dimensions
   if ('width' in node && 'height' in node) {
     if (node.width === 0 || node.height === 0) {
-      anomalies.push(`ZERO_DIM: '${node.name}' has ${node.width === 0 ? 'width' : 'height'}=0`);
+      const zeroDim = node.width === 0 ? 'width' : 'height';
+      anomalies.push({
+        code: 'ZERO_DIM',
+        message: `'${node.name}' has ${zeroDim}=0`,
+        nodeId: node.id,
+        nodeName: node.name,
+        context: {
+          width: node.width,
+          height: node.height,
+          type: node.type,
+        },
+        hints: [
+          `Set ${zeroDim} to a positive value (e.g. patchNode nodeId="${node.id}" props={${zeroDim}: 100})`,
+          `Or set layoutSizing${zeroDim === 'width' ? 'Horizontal' : 'Vertical'} to "FILL" or "HUG" to auto-size`,
+        ],
+      });
     }
   }
 
   // 2. Invisible (opacity = 0)
   if ('opacity' in node && node.opacity === 0) {
-    anomalies.push(`INVISIBLE: '${node.name}' has opacity=0`);
+    anomalies.push({
+      code: 'INVISIBLE',
+      message: `'${node.name}' has opacity=0`,
+      nodeId: node.id,
+      nodeName: node.name,
+      context: {
+        opacity: 0,
+        visible: 'visible' in node ? node.visible : undefined,
+      },
+      hints: [
+        `Set opacity to 1 (patchNode nodeId="${node.id}" props={opacity: 1})`,
+        `Or delete the node if it was unintentional`,
+      ],
+    });
   }
 
   // 3. Text-specific checks
@@ -59,8 +113,8 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): stri
   // 4. Frame children overflow
   if (node.type === 'FRAME' || node.type === 'COMPONENT') {
     anomalies.push(...validateFrameOverflow(node as FrameNode));
-    anomalies.push(...validateSiblingConsistency(node as FrameNode));  // NEW
-    anomalies.push(...validateMissingAutoLayout(node as FrameNode));   // NEW
+    anomalies.push(...validateSiblingConsistency(node as FrameNode));
+    anomalies.push(...validateMissingAutoLayout(node as FrameNode));
   }
 
   // 5. Sizing reverted (FILL → FIXED because parent lacks auto-layout)
@@ -75,8 +129,8 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): stri
 // Text checks
 // ──────────────────────────────────────────────
 
-function validateTextNode(t: TextNode, intended?: PostOpIntended): string[] {
-  const anomalies: string[] = [];
+function validateTextNode(t: TextNode, intended?: PostOpIntended): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
   const content = t.characters || '';
   if (!content) return anomalies;
 
@@ -86,9 +140,25 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): string[] {
     const estimatedHeight = estimatedLines * getFontSize(t) * 1.3; // ~1.3x line spacing
     if (estimatedHeight > t.height * 1.1) { // 10% tolerance
       const preview = content.length > 20 ? content.slice(0, 20) + '…' : content;
-      anomalies.push(
-        `TEXT_OVERFLOW: '${t.name}' text "${preview}" overflows (est ${Math.round(estimatedHeight)}px > box ${Math.round(t.height)}px). Consider textAutoResize=HEIGHT or TRUNCATE.`
-      );
+      anomalies.push({
+        code: 'TEXT_OVERFLOW',
+        message: `'${t.name}' text "${preview}" overflows (est ${Math.round(estimatedHeight)}px > box ${Math.round(t.height)}px)`,
+        nodeId: t.id,
+        nodeName: t.name,
+        context: {
+          textAutoResize: t.textAutoResize,
+          containerWidth: Math.round(t.width),
+          containerHeight: Math.round(t.height),
+          estimatedContentHeight: Math.round(estimatedHeight),
+          fontSize: getFontSize(t),
+          contentLength: content.length,
+        },
+        hints: [
+          `Set textAutoResize to "HEIGHT" to auto-expand vertically (patchNode nodeId="${t.id}" props={textAutoResize: "HEIGHT"})`,
+          `Or increase container height to ${Math.round(estimatedHeight + 10)}px`,
+          `Or set textAutoResize to "TRUNCATE" to clip overflow`,
+        ],
+      });
     }
   }
 
@@ -99,9 +169,20 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): string[] {
     const isLongContent = content.length > 60 || content.includes('\n');
 
     if (isLikelyFill && isLongContent) {
-      anomalies.push(
-        `TEXT_WRAP_MISSING: '${t.name}' has FILL width + long text but textAutoResize=WIDTH_AND_HEIGHT (no wrapping). Set textAutoResize=HEIGHT to enable wrapping.`
-      );
+      anomalies.push({
+        code: 'TEXT_WRAP_MISSING',
+        message: `'${t.name}' has FILL width + long text but textAutoResize=WIDTH_AND_HEIGHT (no wrapping)`,
+        nodeId: t.id,
+        nodeName: t.name,
+        context: {
+          textAutoResize: t.textAutoResize,
+          layoutSizingHorizontal: (t as any).layoutSizingHorizontal,
+          contentLength: content.length,
+        },
+        hints: [
+          `Set textAutoResize to "HEIGHT" to enable text wrapping (patchNode nodeId="${t.id}" props={textAutoResize: "HEIGHT"})`,
+        ],
+      });
     }
   }
 
@@ -112,8 +193,8 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): string[] {
 // Frame children overflow & Layout anomalies
 // ──────────────────────────────────────────────
 
-function validateFrameOverflow(frame: FrameNode): string[] {
-  const anomalies: string[] = [];
+function validateFrameOverflow(frame: FrameNode): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
 
   // Only check for FIXED sizing (HUG/FILL adjust automatically)
   const hSizing = (frame as any).layoutSizingHorizontal;
@@ -150,9 +231,27 @@ function validateFrameOverflow(frame: FrameNode): string[] {
     const isFixedAxis = isHorizontal ? isFixedH : isFixedV;
 
     if (isFixedAxis && totalRequired > frameExtent * 1.05) { // 5% tolerance
-      anomalies.push(
-        `CHILDREN_OVERFLOW: '${frame.name}' children need ~${Math.round(totalRequired)}px but frame is ${Math.round(frameExtent)}px (${frame.layoutMode}). Consider larger frame or FILL/HUG sizing.`
-      );
+      const axis = isHorizontal ? 'width' : 'height';
+      anomalies.push({
+        code: 'CHILDREN_OVERFLOW',
+        message: `'${frame.name}' children need ~${Math.round(totalRequired)}px but frame is ${Math.round(frameExtent)}px (${frame.layoutMode})`,
+        nodeId: frame.id,
+        nodeName: frame.name,
+        context: {
+          layoutMode: frame.layoutMode,
+          [`frame.${axis}`]: Math.round(frameExtent),
+          childrenExtent: Math.round(childrenExtent),
+          totalRequired: Math.round(totalRequired),
+          itemSpacing: gap,
+          childCount: frame.children.length,
+          [`layoutSizing${isHorizontal ? 'Horizontal' : 'Vertical'}`]: isHorizontal ? hSizing : vSizing,
+        },
+        hints: [
+          `Increase frame ${axis} to at least ${Math.round(totalRequired + 10)}px`,
+          `Or set layoutSizing${isHorizontal ? 'Horizontal' : 'Vertical'} to "HUG" to auto-fit children`,
+          `Or reduce number of children / their sizes`,
+        ],
+      });
     }
   }
 
@@ -163,8 +262,8 @@ function validateFrameOverflow(frame: FrameNode): string[] {
  * Detect children with inconsistent widths in a VERTICAL layout frame.
  * Common issue: table rows or list items with different explicit widths.
  */
-function validateSiblingConsistency(frame: FrameNode): string[] {
-  const anomalies: string[] = [];
+function validateSiblingConsistency(frame: FrameNode): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
   
   if (!frame.layoutMode || frame.layoutMode === 'NONE') return anomalies;
   if (!frame.children || frame.children.length < 2) return anomalies;
@@ -186,9 +285,23 @@ function validateSiblingConsistency(frame: FrameNode): string[] {
       const widths = fixedWidthChildren.map(c => Math.round(c.width));
       const uniqueWidths = new Set(widths);
       if (uniqueWidths.size > 1 && fixedWidthChildren.length >= 2) {
-        anomalies.push(
-          `SIBLING_WIDTH_MISMATCH: '${frame.name}' has ${fixedWidthChildren.length} child frames with inconsistent widths (${Array.from(uniqueWidths).join(', ')}px). Consider layoutSizingHorizontal=FILL for uniform width.`
-        );
+        const childNames = fixedWidthChildren.slice(0, 3).map(c => c.name).join(', ');
+        anomalies.push({
+          code: 'SIBLING_WIDTH_MISMATCH',
+          message: `'${frame.name}' has ${fixedWidthChildren.length} child frames with inconsistent widths (${Array.from(uniqueWidths).join(', ')}px)`,
+          nodeId: frame.id,
+          nodeName: frame.name,
+          context: {
+            layoutMode: frame.layoutMode,
+            childWidths: widths,
+            affectedChildren: childNames,
+            parentWidth: Math.round(frame.width),
+          },
+          hints: [
+            `Set layoutSizingHorizontal to "FILL" on all child frames for uniform width`,
+            `Use applyDesignPatch to batch-update: patches=[${fixedWidthChildren.slice(0, 3).map(c => `{nodeId: "${c.id}", layout: {layoutSizingHorizontal: "FILL"}}`).join(', ')}]`,
+          ],
+        });
       }
     }
   }
@@ -200,8 +313,8 @@ function validateSiblingConsistency(frame: FrameNode): string[] {
  * Detect frames with multiple children but no auto-layout.
  * Without layout mode, children stack at (0,0).
  */
-function validateMissingAutoLayout(frame: FrameNode): string[] {
-  const anomalies: string[] = [];
+function validateMissingAutoLayout(frame: FrameNode): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
   
   if (frame.layoutMode && frame.layoutMode !== 'NONE') return anomalies;
   if (!frame.children || frame.children.length < 2) return anomalies;
@@ -213,9 +326,23 @@ function validateMissingAutoLayout(frame: FrameNode): string[] {
   
   const uniquePositions = new Set(positions);
   if (positions.length >= 2 && uniquePositions.size === 1) {
-    anomalies.push(
-      `MISSING_AUTO_LAYOUT: '${frame.name}' has ${frame.children.length} children but no Auto Layout — they overlap at the same position. Add layoutMode=VERTICAL or HORIZONTAL.`
-    );
+    const childNames = frame.children.slice(0, 3).map(c => c.name).join(', ');
+    anomalies.push({
+      code: 'MISSING_AUTO_LAYOUT',
+      message: `'${frame.name}' has ${frame.children.length} children but no Auto Layout — they overlap at the same position`,
+      nodeId: frame.id,
+      nodeName: frame.name,
+      context: {
+        layoutMode: frame.layoutMode || 'NONE',
+        childCount: frame.children.length,
+        overlappingPosition: positions[0],
+        affectedChildren: childNames,
+      },
+      hints: [
+        `Set layoutMode to "VERTICAL" for stacked layout (patchNode nodeId="${frame.id}" props={layoutMode: "VERTICAL", itemSpacing: 8})`,
+        `Or set layoutMode to "HORIZONTAL" for side-by-side layout (patchNode nodeId="${frame.id}" props={layoutMode: "HORIZONTAL", itemSpacing: 8})`,
+      ],
+    });
   }
   
   return anomalies;
@@ -225,24 +352,72 @@ function validateMissingAutoLayout(frame: FrameNode): string[] {
 // Sizing revert detection
 // ──────────────────────────────────────────────
 
-function validateSizingRevert(node: SceneNode, intended: PostOpIntended): string[] {
-  const anomalies: string[] = [];
+function validateSizingRevert(node: SceneNode, intended: PostOpIntended): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
 
   if (!('layoutSizingHorizontal' in node)) return anomalies;
 
   const actualH = (node as any).layoutSizingHorizontal;
   const actualV = (node as any).layoutSizingVertical;
 
+  // Gather parent context (the key insight for Agent debugging)
+  const parent = node.parent;
+  const parentContext: Record<string, any> = {};
+  if (parent && 'layoutMode' in parent) {
+    parentContext['parent.id'] = parent.id;
+    parentContext['parent.name'] = parent.name;
+    parentContext['parent.layoutMode'] = (parent as any).layoutMode || 'NONE';
+    parentContext['parent.type'] = parent.type;
+  }
+
   if (intended.layoutSizingHorizontal === 'FILL' && actualH !== 'FILL') {
-    anomalies.push(
-      `SIZING_REVERTED: '${node.name}' horizontal sizing intended FILL but actual is ${actualH || 'FIXED'}. Parent may lack auto-layout.`
-    );
+    anomalies.push({
+      code: 'SIZING_REVERTED',
+      message: `'${node.name}' horizontal sizing intended FILL but actual is ${actualH || 'FIXED'}. Parent may lack auto-layout.`,
+      nodeId: node.id,
+      nodeName: node.name,
+      context: {
+        axis: 'horizontal',
+        intended: 'FILL',
+        actual: actualH || 'FIXED',
+        ...parentContext,
+      },
+      hints: parentContext['parent.layoutMode'] === 'NONE' || !parentContext['parent.layoutMode']
+        ? [
+            `Set parent '${parentContext['parent.name'] || 'unknown'}' layoutMode to "VERTICAL" or "HORIZONTAL" first (patchNode nodeId="${parentContext['parent.id']}" props={layoutMode: "VERTICAL"})`,
+            `Then re-apply FILL on this node`,
+            `Or use a fixed numeric width instead of FILL`,
+          ]
+        : [
+            `Re-apply layoutSizingHorizontal="FILL" on this node (patchNode nodeId="${node.id}" props={layoutSizingHorizontal: "FILL"})`,
+            `Or use a fixed numeric width instead`,
+          ],
+    });
   }
 
   if (intended.layoutSizingVertical === 'FILL' && actualV !== 'FILL') {
-    anomalies.push(
-      `SIZING_REVERTED: '${node.name}' vertical sizing intended FILL but actual is ${actualV || 'FIXED'}. Parent may lack auto-layout.`
-    );
+    anomalies.push({
+      code: 'SIZING_REVERTED',
+      message: `'${node.name}' vertical sizing intended FILL but actual is ${actualV || 'FIXED'}. Parent may lack auto-layout.`,
+      nodeId: node.id,
+      nodeName: node.name,
+      context: {
+        axis: 'vertical',
+        intended: 'FILL',
+        actual: actualV || 'FIXED',
+        ...parentContext,
+      },
+      hints: parentContext['parent.layoutMode'] === 'NONE' || !parentContext['parent.layoutMode']
+        ? [
+            `Set parent '${parentContext['parent.name'] || 'unknown'}' layoutMode to "VERTICAL" or "HORIZONTAL" first (patchNode nodeId="${parentContext['parent.id']}" props={layoutMode: "VERTICAL"})`,
+            `Then re-apply FILL on this node`,
+            `Or use a fixed numeric height instead of FILL`,
+          ]
+        : [
+            `Re-apply layoutSizingVertical="FILL" on this node (patchNode nodeId="${node.id}" props={layoutSizingVertical: "FILL"})`,
+            `Or use a fixed numeric height instead`,
+          ],
+    });
   }
 
   return anomalies;
@@ -254,14 +429,14 @@ function validateSizingRevert(node: SceneNode, intended: PostOpIntended): string
 
 /**
  * Walk a node tree and collect anomalies from all nodes.
- * Returns prefixed anomalies for context: "path/to/node: ANOMALY_TYPE: ..."
+ * Returns structured ValidationAnomaly objects.
  */
 export function collectTreeAnomalies(
   root: SceneNode,
   maxDepth: number = 5,
   maxAnomalies: number = 10
-): string[] {
-  const anomalies: string[] = [];
+): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
   walkTree(root, 0, maxDepth, anomalies, maxAnomalies);
   return anomalies;
 }
@@ -270,7 +445,7 @@ function walkTree(
   node: SceneNode,
   depth: number,
   maxDepth: number,
-  anomalies: string[],
+  anomalies: ValidationAnomaly[],
   maxAnomalies: number
 ): void {
   if (depth > maxDepth || anomalies.length >= maxAnomalies) return;

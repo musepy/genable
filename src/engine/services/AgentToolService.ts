@@ -2,7 +2,6 @@ import { ToolResponse } from '../../engine/agent/tools/types';
 import { nodeLayoutService } from './NodeLayoutService';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { handleUnifiedRender } from '../../ipc/helpers/renderHelper';
-import { planState } from '../../engine/agent/planState';
 import { validateVisibility } from '../../engine/validation/visibilityValidator';
 import { TreeReconstructor } from '../../engine/figma-adapter/treeReconstructor';
 import { validatePostOp, collectTreeAnomalies } from '../../engine/validation/postOpValidator';
@@ -393,9 +392,6 @@ class AgentToolService {
       }
     };
 
-    if (response.success && stepId) {
-      planState.completeTask(stepId);
-    }
     return response;
   }
 }

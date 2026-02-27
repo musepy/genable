@@ -13,14 +13,12 @@ import { ToolResponse, ToolContext } from '../../engine/agent/tools/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { handleUnifiedRender } from '../helpers/renderHelper';
-import { planState } from '../../engine/agent/planState';
-import { projectUITools } from '../../engine/agent/tools/projectUITools';
-import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
+
 import { validateVisibility } from '../../engine/validation/visibilityValidator';
 import { patchCache } from '../../engine/validation/patchCache';
 import { TreeReconstructor } from '../../engine/figma-adapter/treeReconstructor';
 import { diffIntendedVsActual } from '../../engine/validation/mutationDiff';
-import { shouldSkipIdempotent, completeStep } from '../helpers/idempotentApply';
+
 import {
   BatchExecutor,
   BatchOpResult,
@@ -73,146 +71,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   try {
     switch (toolName) {
       // ==========================================
-      // 1. Selection & Query Tools
-      // ==========================================
-      // ==========================================
-      // 2. Atomic Creation
-      // ==========================================
-      case 'createNode': {
-        response = await agentToolService.createNode(parameters, context?.designSystemId);
-        break;
-      }
-
-      // ==========================================
-      // 3. Atomic Layout
-      // ==========================================
-      case 'setNodeLayout': {
-        const { nodeId, stepId: _stepId, ...layoutData } = parameters;
-        const layoutSkip = shouldSkipIdempotent(nodeId, 'layout', layoutData, parameters.stepId);
-        if (layoutSkip.skip) { response = layoutSkip.response; break; }
-
-        response = await nodeLayoutService.applyLayout(nodeId, layoutData);
-        if (response.success) {
-          response.data = { ...response.data, applied: layoutData };
-          completeStep(parameters.stepId);
-        }
-        break;
-      }
-
-      // ==========================================
-      // 4. Atomic Styling
-      // ==========================================
-      case 'setNodeStyles': {
-        const { nodeId, fills, strokes, strokeWeight, cornerRadius, opacity } = parameters;
-
-        const stylesData = { fills, strokes, strokeWeight, cornerRadius, opacity };
-        const stylesSkip = shouldSkipIdempotent(nodeId, 'styles', stylesData, parameters.stepId);
-        if (stylesSkip.skip) { response = stylesSkip.response; break; }
-
-        response = await nodeLayoutService.applyStyles(nodeId, stylesData);
-        if (response.success) {
-          response.data = { ...response.data, applied: stylesData };
-          completeStep(parameters.stepId);
-        }
-        break;
-      }
-
-      // ==========================================
-      // 5. Updates & Properties
-      // ==========================================
-      case 'updateNodeProperties': {
-        response = await agentToolService.updateNodeProperties(parameters, context?.designSystemId);
-        break;
-      }
-
-      // ==========================================
-      // 5.5. State-Driven / High-Level Tools
-      // ==========================================
-      case 'renderSubtree': {
-        response = await agentToolService.renderSubtree(parameters, context?.designSystemId);
-        break;
-      }
-
-      case 'patchNode': {
-        response = await agentToolService.patchNode(parameters, context?.designSystemId);
-        break;
-      }
-
-      // ==========================================
-      // 6. Special Creation Tools
-      // ==========================================
-      case 'createIcon': {
-        response = await agentToolService.createIcon(parameters, context?.designSystemId);
-        break;
-      }
-
-      // ==========================================
-      // 7. Deletion
-      // ==========================================
-      case 'deleteNode': {
-        response = await nodeLayoutService.deleteNode(parameters.nodeId);
-        break;
-      }
-
-      // ==========================================
-      // 8.5. Unified Inspection (replaces getSelection/getDeepHierarchy/getNodeDSL)
-      // ==========================================
-      case 'inspectDesign': {
-        const { mode: inspectMode, nodeId: inspectNodeId, depth: inspectDepth } = parameters;
-
-        switch (inspectMode) {
-          case 'selection': {
-            const selection = nodeLayoutService.getSelection();
-            response = { success: true, data: selection };
-            break;
-          }
-          case 'hierarchy': {
-            if (!inspectNodeId) {
-              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for hierarchy mode.' } };
-              break;
-            }
-            const hNode = await figma.getNodeByIdAsync(inspectNodeId) as SceneNode;
-            if (!hNode) {
-              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${inspectNodeId} not found.` } };
-              break;
-            }
-            const hSerialized = NodeSerializer.serializeWithCompression(hNode, {
-              maxDepth: Math.min(inspectDepth || 5, 10),
-              pruneDefaults: false
-            });
-            // Run anomaly detection on the actual Figma tree (catches issues invisible in DSL)
-            const anomalies = collectTreeAnomalies(hNode, Math.min(inspectDepth || 5, 10));
-            response = { 
-              success: true, 
-              data: {
-                ...hSerialized,
-                anomalies: anomalies.length > 0 ? anomalies : undefined
-              }
-            };
-            break;
-          }
-          case 'node': {
-            if (!inspectNodeId) {
-              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for node mode.' } };
-              break;
-            }
-            const nNode = await figma.getNodeByIdAsync(inspectNodeId) as SceneNode;
-            if (!nNode) {
-              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${inspectNodeId} not found.` } };
-              break;
-            }
-            const nSerialized = NodeSerializer.serialize(nNode);
-            response = { success: true, data: nSerialized };
-            break;
-          }
-          default:
-            response = { success: false, error: { code: 'INVALID_MODE', message: `inspectDesign mode '${inspectMode}' is not valid. Use 'selection', 'hierarchy', or 'node'.` } };
-        }
-        break;
-      }
-
-      // ==========================================
-      // 8.6. Design Super Tools
+      // BATCH OPERATIONS — Used by agentRuntime.autoBatchToolCalls()
       // ==========================================
       case 'batchOperations': {
         const { operations, onError = 'skip-dependents' } = parameters || {};
@@ -262,91 +121,205 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         break;
       }
 
-      case 'applyDesignPatch': {
-        // Validate preconditions for all patches before executing any
-        const patchValidation = await validatePreconditions('applyDesignPatch', parameters);
-        if (!patchValidation.valid) {
-          response = { success: false, error: { code: 'PRECONDITION_FAILED', message: patchValidation.error || 'Precondition check failed.' } };
-          break;
-        }
+      // ==========================================
+      // UNIFIED TOOLS — New 7-primitive API
+      // These delegate to existing implementations.
+      // ==========================================
 
-        const { patches } = parameters;
-        const results = [];
-        let totalSkipped = 0;
+      case 'read_node': {
+        const { mode: readMode, nodeId: readNodeId, depth: readDepth } = parameters;
 
-        for (const patch of patches) {
-          const { nodeId, layout, styles, properties: legacyProperties, textAndFont } = patch;
-          const properties = textAndFont || legacyProperties;
-          
-          const patchSummary: any = { nodeId, applied: {} };
-          let nodeSkipped = true;
-          
-          if (layout) {
-             if (patchCache.shouldApply(nodeId, 'layout', layout)) {
-               nodeSkipped = false;
-               await nodeLayoutService.applyLayout(nodeId, layout);
-               patchSummary.applied.layout = layout;
-             }
+        switch (readMode) {
+          case 'selection': {
+            const selection = nodeLayoutService.getSelection();
+            response = { success: true, data: selection };
+            break;
           }
-          if (styles) {
-             if (patchCache.shouldApply(nodeId, 'styles', styles)) {
-               nodeSkipped = false;
-               await nodeLayoutService.applyStyles(nodeId, styles);
-               patchSummary.applied.styles = styles;
-             }
-          }
-          if (properties) {
-            if (patchCache.shouldApply(nodeId, 'properties', properties)) {
-              nodeSkipped = false;
-              const node = await figma.getNodeByIdAsync(nodeId) as SceneNode;
-              if (node) {
-                const serialized = NodeSerializer.serialize(node);
-                await handleUnifiedRender({
-                  ...serialized,
-                  props: deepMerge(serialized.props || {}, sanitizeFlatProps(properties)),
-                  __modifyMode: 'UPDATE',
-                  __modifyTargetId: nodeId,
-                }, false, node.parent as any);
-                patchSummary.applied.properties = properties;
+          case 'hierarchy': {
+            if (!readNodeId) {
+              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for hierarchy mode.' } };
+              break;
+            }
+            const hNode = await figma.getNodeByIdAsync(readNodeId) as SceneNode;
+            if (!hNode) {
+              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${readNodeId} not found.` } };
+              break;
+            }
+            const hSerialized = NodeSerializer.serializeWithCompression(hNode, {
+              maxDepth: Math.min(readDepth || 5, 10),
+              pruneDefaults: false
+            });
+            const anomalies = collectTreeAnomalies(hNode, Math.min(readDepth || 5, 10));
+            response = {
+              success: true,
+              data: {
+                ...hSerialized,
+                anomalies: anomalies.length > 0 ? anomalies : undefined
               }
-            }
+            };
+            break;
           }
-          
-          if (nodeSkipped && (layout || styles || properties)) {
-            totalSkipped++;
-            patchSummary.success = true;
-            // Removed patchSummary.skipped = true to avoid Agent confusion
-          } else {
-            patchSummary.success = true;
-          }
-          results.push(patchSummary);
-        }
-
-        response = { 
-          success: true, 
-          data: { 
-            results,
-            summary: {
-              total: results.length,
-              applied: results.length - totalSkipped,
-              skipped: totalSkipped
+          case 'node': {
+            if (!readNodeId) {
+              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for node mode.' } };
+              break;
             }
-          } 
-        };
-
-        if (response.success && parameters.stepId) {
-          planState.completeTask(parameters.stepId);
+            const nNode = await figma.getNodeByIdAsync(readNodeId) as SceneNode;
+            if (!nNode) {
+              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${readNodeId} not found.` } };
+              break;
+            }
+            const nSerialized = NodeSerializer.serialize(nNode);
+            response = { success: true, data: nSerialized };
+            break;
+          }
+          case 'variables': {
+            // Use Figma API to get local variables
+            const localVars = typeof figma !== 'undefined' && figma.variables
+              ? await figma.variables.getLocalVariablesAsync()
+              : [];
+            const varsSerialized = localVars.map((v: any) => ({
+              id: v.id,
+              name: v.name,
+              resolvedType: v.resolvedType,
+            }));
+            response = { success: true, data: varsSerialized };
+            break;
+          }
+          case 'styles': {
+            const localStyles = await figma.getLocalPaintStylesAsync();
+            const stylesSerialized = localStyles.map(s => ({
+              id: s.id,
+              name: s.name,
+              paints: s.paints
+            }));
+            response = { success: true, data: stylesSerialized };
+            break;
+          }
+          default:
+            response = { success: false, error: { code: 'INVALID_MODE', message: `read_node mode '${readMode}' is not valid. Use 'selection', 'hierarchy', 'node', 'variables', or 'styles'.` } };
         }
         break;
       }
 
-      case 'generateDesign': {
-        response = await agentToolService.generateDesign(parameters, context?.designSystemId);
+      case 'create_node': {
+        // Delegate to generateDesign — it handles flat node lists
+        const createParams = {
+          prompt: parameters.prompt || 'create_node',
+          nodes: parameters.nodes || [],
+          parentId: parameters.parentId,
+          stepId: parameters.stepId
+        };
+        response = await agentToolService.generateDesign(createParams, context?.designSystemId);
+        break;
+      }
+
+      case 'patch_node': {
+        // Delegate to applyDesignPatch-style logic
+        const { patches, stepId: _patchStepId } = parameters;
+
+        if (!Array.isArray(patches) || patches.length === 0) {
+          response = { success: false, error: { code: 'INVALID_INPUT', message: 'patch_node requires a non-empty patches array.' } };
+          break;
+        }
+
+        // Validate preconditions
+        const patchPrecondition = await validatePreconditions('applyDesignPatch', { patches });
+        if (!patchPrecondition.valid) {
+          response = { success: false, error: { code: 'PRECONDITION_FAILED', message: patchPrecondition.error || 'Precondition check failed.' } };
+          break;
+        }
+
+        const patchResults = [];
+        let patchSkipped = 0;
+
+        for (const patch of patches) {
+          const { nodeId: patchNodeId, props } = patch;
+          if (!patchNodeId || !props) {
+            patchResults.push({ nodeId: patchNodeId, success: false, error: 'Missing nodeId or props' });
+            continue;
+          }
+
+          if (patchCache && !patchCache.shouldApply(patchNodeId, 'properties', props)) {
+            patchSkipped++;
+            patchResults.push({ nodeId: patchNodeId, success: true });
+            continue;
+          }
+
+          const node = await figma.getNodeByIdAsync(patchNodeId) as SceneNode;
+          if (!node) {
+            patchResults.push({ nodeId: patchNodeId, success: false, error: 'NODE_NOT_FOUND' });
+            continue;
+          }
+
+          const currentDSL = NodeSerializer.serialize(node);
+          const mergedProps = deepMerge(currentDSL.props || {}, sanitizeFlatProps(props));
+
+          try {
+            const result = await handleUnifiedRender({
+              ...currentDSL,
+              props: mergedProps,
+              __modifyMode: 'UPDATE',
+              __modifyTargetId: patchNodeId,
+              designSystemId: context?.designSystemId || 'vanilla',
+              streamSessionId: `unified-patch-${Date.now()}`,
+              meta: { traceId: 'unified-patch' }
+            }, false, node.parent as any);
+
+            if (result) {
+              const visResult = validateVisibility(result);
+              if (!visResult.valid) {
+                visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
+              }
+            }
+
+            patchResults.push({ nodeId: patchNodeId, success: true, propsUpdated: Object.keys(props) });
+          } catch (e: any) {
+            patchResults.push({ nodeId: patchNodeId, success: false, error: e.message });
+          }
+        }
+
+        response = {
+          success: true,
+          data: {
+            results: patchResults,
+            summary: { total: patches.length, applied: patches.length - patchSkipped, skipped: patchSkipped }
+          }
+        };
+        break;
+      }
+
+      case 'delete_node': {
+        response = await nodeLayoutService.deleteNode(parameters.nodeId);
+        break;
+      }
+
+      case 'validate_design': {
+        const valNodeId = parameters.nodeId;
+        if (!valNodeId) {
+          response = { success: false, error: { code: 'MISSING_PARAM', message: 'validate_design requires nodeId.' } };
+          break;
+        }
+        const valNode = await figma.getNodeByIdAsync(valNodeId) as SceneNode;
+        if (!valNode) {
+          response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${valNodeId} not found.` } };
+          break;
+        }
+        const valResult = validatePostOp(valNode, {});
+        const anomalyResult = collectTreeAnomalies(valNode, 5);
+        response = {
+          success: true,
+          data: {
+            valid: valResult.length === 0 && anomalyResult.length === 0,
+            issues: valResult.length > 0 ? valResult : undefined,
+            anomalies: anomalyResult.length > 0 ? anomalyResult : undefined
+          }
+        };
         break;
       }
 
       // ==========================================
-      // 11. Unknown Tool
+      // DEFAULT — Unknown Tool
       // ==========================================
       default:
         response = {
@@ -622,7 +595,6 @@ async function executeBatchAction(
       const { nodeId: _nodeId, nodeRef: _nodeRef, stepId: _stepId, ...layoutData } = params;
 
       if (!patchCache.shouldApply(resolved.nodeId!, 'layout', layoutData)) {
-        if (params?.stepId) planState.completeTask(params.stepId);
         return { success: true, nodeId: resolved.nodeId };
       }
 
@@ -642,7 +614,6 @@ async function executeBatchAction(
       const stylesData = { fills, strokes, strokeWeight, cornerRadius, opacity };
 
       if (!patchCache.shouldApply(resolved.nodeId!, 'styles', stylesData)) {
-        if (params?.stepId) planState.completeTask(params.stepId);
         return { success: true, nodeId: resolved.nodeId };
       }
 
@@ -664,7 +635,6 @@ async function executeBatchAction(
       }
 
       if (!patchCache.shouldApply(resolved.nodeId!, 'properties', properties)) {
-        if (params?.stepId) planState.completeTask(params.stepId);
         return { success: true, nodeId: resolved.nodeId };
       }
 

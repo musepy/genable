@@ -22,6 +22,7 @@ export interface RawGeminiModel {
 export interface LLMModel {
   name: string;
   displayName: string;
+  isFree?: boolean;
 }
 
 /**
@@ -97,10 +98,14 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<LLMModel[]>
   // For OpenRouter, we might want to filter for specific high-quality models 
   // or just return all of them. For now, let's return all but prioritize 
   // ones used in our constants.
-  return data.data.map((m: any) => ({
-    name: m.id,
-    displayName: m.name || m.id
-  }));
+  return data.data.map((m: any) => {
+    const isFree = m.pricing && m.pricing.prompt === "0" && m.pricing.completion === "0";
+    return {
+      name: m.id,
+      displayName: m.name || m.id,
+      isFree
+    };
+  });
 }
 
 /**

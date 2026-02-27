@@ -14,6 +14,7 @@
 import { GoogleGenAI } from '@google/genai';
 import * as v from 'valibot';
 import { NodeSchema, NodeLayer } from '../src/schema/layerSchema';
+import { TokenRecorder } from '../src/engine/dev/TokenRecorder';
 
 // ==========================================
 // Types
@@ -176,6 +177,10 @@ export async function runPromptTest(
   const results: TestResult[] = [];
   const ai = new GoogleGenAI({ apiKey });
 
+  // Initialize token recorder for this test run
+  TokenRecorder.init(undefined, `promptTest_${variant}_${Date.now().toString(36)}`);
+
+
   for (let i = 0; i < iterations; i++) {
     const startTime = Date.now();
 
@@ -188,6 +193,20 @@ export async function runPromptTest(
       let text = (response.text || '').replace(/```json/g, '').replace(/```/g, '').trim();
 
       const generationTime = Date.now() - startTime;
+
+      // Record token usage
+      const usage = (response as any).usageMetadata;
+      TokenRecorder.record({
+        source: `promptTest:${variant}`,
+        model: modelName,
+        provider: 'gemini',
+        iteration: i + 1,
+        promptTokens: usage?.promptTokenCount || 0,
+        completionTokens: usage?.candidatesTokenCount || 0,
+        totalTokens: usage?.totalTokenCount || 0,
+        latencyMs: generationTime,
+        config: { promptStrategy: variant },
+      });
 
       // Parse and validate
       const json = JSON.parse(text);

@@ -1,7 +1,8 @@
 import { PromptDependencies } from '../../../types/context';
 import { PROMPT_SECTION_REGISTRY } from './sectionRegistry';
 import { configManager } from '../../../config/configManager';
-import { ToolDefinition, AgentMode } from '../../agent/tools/types';
+import { ToolDefinition } from '../../agent/tools/types';
+import { AgentMode } from '../../../shared/protocol/agentRuntimeEvents';
 import { NodeSerializer } from '../../figma-adapter/nodeSerializer';
 import {
     AGENT_IDENTITY,
@@ -13,11 +14,10 @@ import {
     AGENT_DESIGN_FREEDOM,
     JSON_FORMAT_RULES
 } from '../../agent/agentPrompts';
-// Direct import for SCHEMA_RULES and DESIGN_AESTHETICS
-import { SCHEMA_RULES, DESIGN_AESTHETICS, SCENE_GRAPH_MODEL } from '../../prompt/promptRegistry';
+// Direct imports from centralized prompt registry
+import { SCHEMA_RULES, SCENE_GRAPH_MODEL, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
 import { estimateTokens } from '../../agent/context/tokenEstimator';
 import { skillRegistry } from '../../agent/skills/SkillRegistry';
-
 
 // ==========================================
 // Agent Mode Section Registry
@@ -272,7 +272,7 @@ function buildExecutionProtocol(): string {
  * Build Mode-based Guidance section (Priority 1.2)
  */
 function buildModeGuidance(mode: AgentMode): string {
-    return DYNAMIC_GUIDANCE[mode] || DYNAMIC_GUIDANCE.PLANNING;
+    return (DYNAMIC_GUIDANCE as Record<string, string>)[mode] || DYNAMIC_GUIDANCE.EXECUTION || '';
 }
 
 /**
@@ -416,12 +416,6 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         builder: (_deps, _tools, _budget) => buildUniversalCoreIdentity()
     },
     {
-        id: 'scene-graph-model',
-        priority: 1.05,
-        budgetKey: 'core',
-        builder: (_deps, _tools, budget) => truncateToBudget(SCENE_GRAPH_MODEL, budget)
-    },
-    {
         id: 'tool-examples',
         priority: 1.1,
         budgetKey: 'examples',
@@ -438,15 +432,23 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         }
     },
     {
-        // Actionable visual quality guidance: shadows, colors, typography, checklist.
-        // Only injected in EXECUTION mode when enableAestheticsGuidance is true.
-        id: 'design-aesthetics',
-        priority: 1.5,
+        // Inline critical design knowledge directly (replaces broken lazy-loading KNOWLEDGE_INDEX).
+        // SCENE_GRAPH_MODEL: tree structure, layout constraints, sizing rules (~778 tokens)
+        // DESIGN_AESTHETICS: shadows, colors, typography, spacing (~355 tokens)
+        id: 'design-knowledge-core',
+        priority: 1.3,
         budgetKey: 'core',
         builder: (deps, _tools, _budget, mode) => {
-            if (mode !== 'EXECUTION') return '';
-            if (deps.behaviorConfig && !deps.behaviorConfig.enableAestheticsGuidance) return '';
-            return DESIGN_AESTHETICS.trim();
+            // Skip in VERIFICATION/RECOVERY to save tokens
+            if (mode === 'VERIFICATION' || mode === 'RECOVERY') return '';
+            const parts: string[] = [SCENE_GRAPH_MODEL.trim()];
+            if (mode === 'EXECUTION') {
+                // Aesthetics only needed during actual design generation
+                if (!deps.behaviorConfig || deps.behaviorConfig.enableAestheticsGuidance !== false) {
+                    parts.push(DESIGN_AESTHETICS.trim());
+                }
+            }
+            return parts.join('\n\n');
         }
     },
     {

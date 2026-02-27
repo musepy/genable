@@ -25,7 +25,8 @@ export class GeminiError extends Error {
     public type: GeminiErrorType,
     message: string,
     public details?: Record<string, any>,
-    public rawError?: any
+    public rawError?: any,
+    public statusCode?: number
   ) {
     super(message);
     this.name = 'GeminiError';

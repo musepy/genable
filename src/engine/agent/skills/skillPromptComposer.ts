@@ -10,7 +10,8 @@
 
 import { skillRegistry } from './SkillRegistry';
 import { SkillContextDependencies, SkillPromptSection } from './types';
-import { ToolDefinition, AgentMode } from '../tools/types';
+import { ToolDefinition } from '../tools/types';
+import { AgentMode } from '../../../shared/protocol/agentRuntimeEvents';
 import { IDENTITY as BASE_IDENTITY, ERROR_RECOVERY } from '../../prompt/promptRegistry';
 import { estimateTokens } from '../context/tokenEstimator';
 

@@ -17,6 +17,8 @@ export interface SettingsResult {
   };
   modelName: string;
   providerName: 'gemini' | 'openrouter';
+  telemetryEndpoint: string;
+  telemetryApiKey: string;
 }
 
 export interface SaveSettingsInput {
@@ -27,6 +29,8 @@ export interface SaveSettingsInput {
   };
   modelName?: string;
   providerName?: 'gemini' | 'openrouter';
+  telemetryEndpoint?: string;
+  telemetryApiKey?: string;
 }
 
 /**
@@ -47,7 +51,9 @@ export class SettingsService {
         openrouter: data.apiKeys?.openrouter || ''
       },
       modelName: data.modelName || DEFAULT_MODEL,
-      providerName: data.providerName || 'gemini'
+      providerName: data.providerName || 'gemini',
+      telemetryEndpoint: data.telemetryEndpoint || '',
+      telemetryApiKey: data.telemetryApiKey || ''
     };
   }
 
@@ -59,7 +65,9 @@ export class SettingsService {
       apiKey: settings.apiKey,
       apiKeys: settings.apiKeys,
       modelName: settings.modelName,
-      providerName: settings.providerName
+      providerName: settings.providerName,
+      telemetryEndpoint: settings.telemetryEndpoint,
+      telemetryApiKey: settings.telemetryApiKey
     });
   }
 

@@ -14,6 +14,8 @@ export interface SettingsData {
   };
   modelName?: string;
   providerName?: 'gemini' | 'openrouter';
+  telemetryEndpoint?: string;
+  telemetryApiKey?: string;
 }
 
 export class StorageRepository {
@@ -22,6 +24,8 @@ export class StorageRepository {
   private readonly OPENROUTER_KEY = 'GEMINI_API_KEY_OPENROUTER';
   private readonly MODEL_NAME_KEY = 'GEMINI_MODEL_NAME';
   private readonly PROVIDER_NAME_KEY = 'GEMINI_PROVIDER_NAME';
+  private readonly TELEMETRY_ENDPOINT_KEY = 'GEMINI_TELEMETRY_ENDPOINT';
+  private readonly TELEMETRY_API_KEY = 'GEMINI_TELEMETRY_API_KEY';
 
   /**
    * Load settings from client storage
@@ -34,6 +38,9 @@ export class StorageRepository {
     const modelName = await figma.clientStorage.getAsync(this.MODEL_NAME_KEY) || defaultModel;
     const providerName = await figma.clientStorage.getAsync(this.PROVIDER_NAME_KEY) || 'gemini';
     
+    const telemetryEndpoint = await figma.clientStorage.getAsync(this.TELEMETRY_ENDPOINT_KEY) || '';
+    const telemetryApiKey = await figma.clientStorage.getAsync(this.TELEMETRY_API_KEY) || '';
+    
     // Choose active key based on current provider with strict isolation
     const apiKey = providerName === 'openrouter' ? openrouterKey : geminiKey;
 
@@ -44,7 +51,9 @@ export class StorageRepository {
         openrouter: openrouterKey
       },
       modelName,
-      providerName: providerName as 'gemini' | 'openrouter'
+      providerName: providerName as 'gemini' | 'openrouter',
+      telemetryEndpoint,
+      telemetryApiKey
     };
   }
 
@@ -76,6 +85,12 @@ export class StorageRepository {
     if (settings.providerName) {
       await figma.clientStorage.setAsync(this.PROVIDER_NAME_KEY, settings.providerName);
     }
+    if (settings.telemetryEndpoint !== undefined) {
+      await figma.clientStorage.setAsync(this.TELEMETRY_ENDPOINT_KEY, settings.telemetryEndpoint);
+    }
+    if (settings.telemetryApiKey !== undefined) {
+      await figma.clientStorage.setAsync(this.TELEMETRY_API_KEY, settings.telemetryApiKey);
+    }
   }
 
   /**
@@ -87,7 +102,9 @@ export class StorageRepository {
       figma.clientStorage.deleteAsync(this.GEMINI_KEY),
       figma.clientStorage.deleteAsync(this.OPENROUTER_KEY),
       figma.clientStorage.deleteAsync(this.MODEL_NAME_KEY),
-      figma.clientStorage.deleteAsync(this.PROVIDER_NAME_KEY)
+      figma.clientStorage.deleteAsync(this.PROVIDER_NAME_KEY),
+      figma.clientStorage.deleteAsync(this.TELEMETRY_ENDPOINT_KEY),
+      figma.clientStorage.deleteAsync(this.TELEMETRY_API_KEY)
     ]);
   }
 

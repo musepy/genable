@@ -18,6 +18,9 @@ export class FontBus {
     private static instance: FontBus;
     private loadedFonts: Set<string> = new Set();
     private loadingQueues: Map<string, Promise<void>> = new Map();
+    private failureCooldownUntil: Map<string, number> = new Map();
+    private failureLogCooldownUntil: Map<string, number> = new Map();
+    private readonly FAILURE_COOLDOWN_MS = 30_000;
 
     private readonly STATIC_FONTS: FontRecord[] = [
         { family: 'Inter', style: 'Regular' },
@@ -54,6 +57,7 @@ export class FontBus {
         const key = this.getFontKey(family, normalizedStyle);
         
         if (this.loadedFonts.has(key)) return true;
+        if (this.isInFailureCooldown(key)) return false;
 
         // If currently loading, wait for it
         if (this.loadingQueues.has(key)) {
@@ -62,13 +66,8 @@ export class FontBus {
         }
 
         // Trigger dynamic on-demand load
-        try {
-            await this.loadFontAsync({ family, style: normalizedStyle });
-            return true;
-        } catch (e) {
-            console.warn(`[FontBus] Dynamic load failed for ${key}, falling back to Inter Regular`);
-            return false;
-        }
+        await this.loadFontAsync({ family, style: normalizedStyle });
+        return this.loadedFonts.has(key);
     }
 
     /**
@@ -108,18 +107,31 @@ export class FontBus {
     }
 
     /**
+     * Basic health summary for diagnostics.
+     */
+    public getHealth(): { degraded: boolean; loadedCount: number; failedCount: number } {
+        return {
+            degraded: this.failureCooldownUntil.size > 0,
+            loadedCount: this.loadedFonts.size,
+            failedCount: this.failureCooldownUntil.size,
+        };
+    }
+
+    /**
      * Private: Actual Figma API call with queue management
      */
     private async loadFontAsync(font: FontRecord): Promise<void> {
         const key = this.getFontKey(font.family, font.style);
         if (this.loadedFonts.has(key)) return;
+        if (this.isInFailureCooldown(key)) return;
 
         const loadPromise = (async () => {
             try {
                 await figma.loadFontAsync(font);
                 this.loadedFonts.add(key);
+                this.failureCooldownUntil.delete(key);
             } catch (e) {
-                console.warn(`[FontBus] Failed to load font: ${key}`, e);
+                this.markFailure(key, e);
                 // Attempt fallback to Regular if specific style fails
                 if (font.style !== 'Regular') {
                     await this.loadFontAsync({ family: font.family, style: 'Regular' });
@@ -135,6 +147,24 @@ export class FontBus {
 
     private getFontKey(family: string, style: string): string {
         return `${family}:${style}`;
+    }
+
+    private isInFailureCooldown(key: string): boolean {
+        const until = this.failureCooldownUntil.get(key);
+        if (!until) return false;
+        if (Date.now() < until) return true;
+        this.failureCooldownUntil.delete(key);
+        return false;
+    }
+
+    private markFailure(key: string, error: unknown): void {
+        const now = Date.now();
+        this.failureCooldownUntil.set(key, now + this.FAILURE_COOLDOWN_MS);
+        const logCooldown = this.failureLogCooldownUntil.get(key) ?? 0;
+        if (now >= logCooldown) {
+            this.failureLogCooldownUntil.set(key, now + this.FAILURE_COOLDOWN_MS);
+            console.warn(`[FontBus] Failed to load font: ${key}`, error);
+        }
     }
 }
 

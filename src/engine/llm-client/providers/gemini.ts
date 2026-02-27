@@ -16,8 +16,20 @@ export class GeminiProvider implements LLMProvider {
   public readonly name = 'gemini';
   private client: any;
 
-  constructor(private apiKey: string, private modelName: string) {
-    this.client = new GoogleGenAI({ apiKey });
+  constructor(private apiKey: string, private modelName: string, options?: { accessToken?: string; vertexProject?: string; vertexLocation?: string }) {
+    if (options?.accessToken && options?.vertexProject) {
+      // Vertex AI OAuth mode: use GCP project + access token
+      this.client = new GoogleGenAI({
+        vertexai: true,
+        project: options.vertexProject,
+        location: options.vertexLocation || 'us-central1',
+        httpOptions: {
+          headers: { 'Authorization': `Bearer ${options.accessToken}` },
+        },
+      });
+    } else {
+      this.client = new GoogleGenAI({ apiKey });
+    }
   }
 
   /** Default stream timeout: 30 seconds */

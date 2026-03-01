@@ -40,6 +40,8 @@ import { applyDesignPatchDefinition, batchOperationsDefinition } from './designS
 
 import { generateDesignDefinition } from './generateDesignTool';
 
+import { buildDesignDefinition } from './buildDesignTool';
+
 import { 
   renderSubtreeDefinition, 
   patchNodeDefinition 
@@ -61,6 +63,7 @@ export const legacyAgentTools: ToolDefinition[] = [
   ...projectUITools.definitions,
   inspectDesignDefinition,
   generateDesignDefinition,
+  buildDesignDefinition,
   renderSubtreeDefinition,
   patchNodeDefinition,
   batchOperationsDefinition,

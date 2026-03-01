@@ -165,6 +165,8 @@ export function useChat({
           ...msg,
           text: event.summary || msg.text || 'Completed',
           streaming: false,
+          runState: 'completed',
+          endTime: Date.now(),
         }))
         break
       }
@@ -177,6 +179,8 @@ export function useChat({
           ...msg,
           text: msg.text || event.reason || 'Canceled by user',
           streaming: false,
+          runState: 'canceled',
+          endTime: Date.now(),
         }))
         break
       }
@@ -188,6 +192,9 @@ export function useChat({
         updateStreamingMessage(msg => ({
           ...msg,
           streaming: false,
+          runState: 'error',
+          runError: event.message,
+          endTime: Date.now(),
         }))
         break
       }
@@ -243,6 +250,8 @@ export function useChat({
         iterations: [],
         toolCalls: [],
         id: modelMsgId,
+        startTime: Date.now(),
+        runState: 'running',
       })
       return next
     })

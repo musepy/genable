@@ -52,7 +52,7 @@ export interface OrchestratorOptions {
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
 }
 
-import { composeAgentSystemPrompt, calculateBudget } from '../llm-client/context/promptComposer';
+import { buildStaticSystemPrompt } from '../llm-client/context/system';
 import { getActiveEngineConfig } from '../engineConfig';
 import { configManager } from '../../config/configManager';
 
@@ -195,11 +195,7 @@ export class AgentOrchestrator {
       emit('SEND_LOG', { message: `Using Gemini: ${modelName}`, type: 'ai' });
     }
 
-    // Calculate total layout generation budget
     const resolvedLoopPolicy = loopPolicy || resolveAgentLoopPolicy(this.options.loopPolicy);
-    const totalBudget = calculateBudget({
-      totalTokens: resolvedLoopPolicy.promptBudgetTokens
-    });
 
     // Unified behavior resolution (single entry point)
     const hasSelection = !!pluginData.selectionStyles;
@@ -213,13 +209,17 @@ export class AgentOrchestrator {
 
     console.log(`[AgentOrchestrator] Behavior resolved: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}, thinking=${behaviorConfig.thinkingLevel}`);
 
-    // Return configured runtime
-    // Note: skill system's getActiveAgentTools() resolves to the same agentTools definitions,
-    // so we use `tools` directly. Tool filtering by mode happens inside AgentRuntime.
+    // Build static system prompt (set once, never changes — enables KV cache)
+    const skillBodies = skillRegistry.getEnabled()
+      .filter(s => s.context.injectionType === 'system')
+      .map(s => s.context.systemPromptSection || '')
+      .filter(Boolean);
+    const systemPrompt = buildStaticSystemPrompt(tools, provider, skillBodies);
+
     return new AgentRuntime({
       provider,
       tools,
-      // systemPrompt is now lazily composed inside AgentRuntime.run() based on behaviorConfig
+      systemPrompt,
       ipcBridge,
       toolExecutors: pluginData.toolExecutors,
       behaviorConfig,

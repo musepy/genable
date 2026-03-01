@@ -1,0 +1,148 @@
+# Figma AI Generator vs Gemini CLI：Agent 架构对比
+
+## 一、核心循环对比
+
+两个系统都采用 ReAct（Reasoning + Acting）循环，但实现策略有根本性差异。
+
+### Gemini CLI
+
+```
+CodingAgentOrchestrator → LLM → ToolController → Tool → 结果回传 → Orchestrator
+```
+
+- **Orchestrator 是纯调度器**。职责仅限于接收 LLM 输出、分发工具调用、返回结果。不参与模式判断或策略决策。
+- **工具控制权在 LLM 侧**。LLM 自行决定调用什么工具、何时结束任务。Orchestrator 不干预。
+- **无显式阶段（Phase）机制**。循环的每次迭代是等价的，不区分 Planning、Execution、Verification。
+
+### 本项目
+
+```
+AgentRuntime.run() → [StateMachine.determineNextMode] → [PromptAssembler.hotSwap] → LLM → [autoBatch] → ToolExecution → [PostOpValidator] → [LoopDetector] → ContextManager → 下一次迭代
+```
+
+- **Runtime 是强控制中枢**。[agentRuntime.ts](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentRuntime.ts)（1406行）同时承担调度、策略、上下文管理、异常恢复、循环检测等职责。
+- **显式的四阶段状态机**。[AgentStateMachine](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentStateMachine.ts#39-466) 维护 PLANNING → EXECUTION → VERIFICATION → RECOVERY 的状态流转，每个阶段有不同的系统提示词、工具集、token 预算和 tool calling 模式。
+- **工具控制权在 Runtime 侧**。Runtime 通过 `getToolsForMode()` 过滤工具、通过 `toolConfig.mode`（AUTO/ANY）控制工具调用方式、通过 [autoBatchToolCalls](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentRuntime.ts#384-412) 合并操作。
+
+### 关键差异
+
+| 维度 | Gemini CLI | Figma AI Generator |
+|---|---|---|
+| 控制模型 | LLM 自治 | Runtime 强控制 |
+| 阶段管理 | 无 | 四阶段状态机 |
+| 工具过滤 | 无 | 按模式动态过滤 |
+| Token 预算 | 全局统一 | 按阶段差异化 |
+| 循环检测 | 无专用机制 | `LoopDetector` + 多层防护 |
+
+**分析**：Gemini CLI 的简洁性来自信任——它信任 LLM 能自主完成开放式编码任务。本项目的复杂性来自约束——Figma 的结构化 DSL 输出对准确性要求极高，LLM 自治容易陷入无效循环或产出不合规的节点结构。两者的设计选择都合理。
+
+---
+
+## 二、扩展与工具体系对比
+
+### Gemini CLI
+
+- **开放式扩展架构**。通过 MCP 协议、contextProvider、Extension 机制接入外部工具。
+- **工具数量理论上不受限**。任何 MCP Server 都可以动态注册。
+- **工具粒度粗**。面向文件系统操作（读写文件、执行命令、搜索代码）。
+
+### 本项目
+
+- **封闭式工具集**。15 个专用工具文件，覆盖节点创建、样式应用、布局设置、设计系统查询、校验等领域。
+- **工具粒度细**。单个工具对应 Figma API 的特定操作（如 `createNode`、`setNodeStyles`、`inspectDesign`）。
+- **工具分组策略**。`getToolsForMode()` 根据阶段暴露不同子集：
+  - PLANNING：规划工具 + 知识查询
+  - EXECUTION：节点操作工具
+  - VERIFICATION：只读检查工具
+  - RECOVERY：诊断工具
+
+### 关键差异
+
+| 维度 | Gemini CLI | Figma AI Generator |
+|---|---|---|
+| 工具注册 | 动态（MCP 协议） | 静态（编译期） |
+| 工具粒度 | 粗（文件级） | 细（API 操作级） |
+| 工具可见性 | 全量暴露 | 按阶段过滤 |
+| 批量操作 | 无 | [autoBatchToolCalls](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentRuntime.ts#384-412) 自动合并 |
+
+**分析**：Gemini CLI 的工具体系是为通用编程设计的，不需要细粒度控制。本项目面对的是 Figma 的结构化 API，单次操作的正确性直接影响最终设计输出，因此需要更精细的工具管理。[autoBatchToolCalls](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentRuntime.ts#384-412) 是一个务实的优化——合并多个同类操作可减少往返延迟。
+
+---
+
+## 三、可靠性机制对比
+
+### Gemini CLI
+
+- **Hook 系统**。事件驱动的管道（HookRegistry → HookPlanner → HookRunner），在关键节点插入校验或自定义逻辑。
+- **无内置验证层**。正确性依赖 LLM 自身判断和外部工具（如编译器、测试套件）的反馈。
+
+### 本项目
+
+- **多层防御机制**：
+  1. `PostOpValidator`：每次工具执行后立即检查节点状态（溢出、缺失布局、尺寸回退等）
+  2. `ConstraintValidator`：设计约束校验
+  3. `LoopDetector`：检测重复操作序列
+  4. `RetryPolicy`：分类错误并差异化重试（瞬态错误、格式错误、输入错误）
+  5. `AgentStateMachine.handleVerificationFixLoop`：按节点粒度跟踪修复尝试，超限后放弃
+  6. Rambling 检测：流式生成中检测 LLM 的无效输出
+  7. Context 压缩：token 预算超限自动摘要
+- **RECOVERY 模式**。不是简单重试，而是切换到诊断模式，使用只读工具重新审视当前状态。
+
+### 关键差异
+
+| 维度 | Gemini CLI | Figma AI Generator |
+|---|---|---|
+| 验证时机 | 事后（依赖外部工具） | 实时（操作后立即校验） |
+| 循环防护 | 无 | 多层检测 + 节点级放弃策略 |
+| 错误恢复 | 简单重试 | 分类重试 + RECOVERY 模式切换 |
+| 上下文管理 | 简单截断 | 摘要压缩 + pinned 消息 + hidden 消息 |
+
+**分析**：这是两个系统的最大差异。Gemini CLI 运行在"编码"域——代码可以编译、运行、测试，反馈闭环由外部工具链提供。本项目运行在"设计"域——Figma 节点没有编译器可以验证正确性，必须自建校验体系。`postOpValidator` 充当了"设计编译器"的角色。
+
+---
+
+## 四、上下文管理对比
+
+### Gemini CLI
+
+- 依赖 LLM 的原生 context window。
+- 无可见的主动压缩策略。长对话由平台或 LLM 自身处理。
+
+### 本项目
+
+- `ContextManager` 主动管理，实现了：
+  - **Token 水位监控**：120% 硬限自动终止
+  - **主动压缩**：超过阈值时调用 LLM 做摘要
+  - **Pinned 消息**：原始用户请求不会被压缩丢弃
+  - **Hidden 消息**：对 LLM 不可见但保留审计
+  - **Narration 剥离**：EXECUTION 模式下自动移除 model 的文本输出，只保留 tool call 和 thought
+
+**分析**：本项目的上下文管理显著更成熟。在 Agent 多轮迭代场景下（PLANNING → EXECUTION → VERIFICATION 可能需要 15+ 轮），不做压缩会迅速耗尽 context window。Narration 剥离是一个精准的优化——EXECUTION 模式下 model 的分析文本对后续迭代的干扰大于帮助。
+
+---
+
+## 五、可借鉴的设计
+
+### 从 Gemini CLI 借鉴
+
+1. **Hook 系统的解耦思想**。当前 [agentRuntime.ts](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentRuntime.ts) 1406 行，校验、批量、恢复逻辑全部内联。可以引入类似 Hook 的事件管道，让 PostOpValidator、LoopDetector 等以订阅者身份接入，而不是硬编码在主循环中。
+2. **Extension / MCP 扩展性**。当前工具集是编译期固定的。如果未来需要支持更多设计系统或第三方集成，可以考虑动态工具注册。
+3. **Orchestrator 的关注点分离**。Gemini CLI 的 Orchestrator 只做调度，策略由独立模块提供。本项目的 [AgentRuntime](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentRuntime.ts#67-1393) 承担了过多职责。
+
+### 本项目已有的优势
+
+1. **阶段化状态机**。对 LLM 的行为有精确控制，避免了通用 Agent 常见的"目标漂移"问题。
+2. **实时校验层**。`PostOpValidator` 是行业内少见的同步校验机制，保证每次操作后的状态一致性。
+3. **节点级修复跟踪**。[PerNodeFixTracker](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/src/engine/agent/agentStateMachine.ts#12-20) 避免对单个顽固问题的无限投入，这在通用 Agent 框架中很少看到。
+4. **差异化 token 策略**。按阶段调整 thinking level 和 output 预算，是对 LLM 行为的精细化调控。
+
+---
+
+## 六、总结
+
+两个系统代表了 Agent 设计的两种取向：
+
+- **Gemini CLI**：信任 LLM，给予最大自主权，用简洁的 Orchestrator + 开放的工具生态解决通用编程问题。
+- **Figma AI Generator**：约束 LLM，通过状态机、校验器、策略配置精确控制每一步行为，换取结构化输出的可靠性。
+
+两者没有优劣之分。选择取决于领域特性：通用编码任务的纠错成本低（编译器/测试会告诉你错了），而设计生成的纠错成本高（视觉问题难以自动化检测）。本项目的复杂性正是为了弥补这个纠错成本的差距。

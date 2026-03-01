@@ -62,6 +62,14 @@ export interface ChatMessage {
     iterations?: IterationRecord[];
     /** Whether the message is currently being streamed/generated */
     streaming?: boolean;
+    /** When this message generation started */
+    startTime?: number;
+    /** When this message generation finished */
+    endTime?: number;
+    /** Terminal state for historical display */
+    runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting';
+    /** Error message, if any */
+    runError?: string;
     /** Stable identifier for DOM reconciliation */
     id: string;
 }

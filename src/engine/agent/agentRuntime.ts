@@ -5,21 +5,21 @@
  * hooks via the HookRegistry → HookRunner pipeline.
  */
 
-import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, LLMToolCall, Part } from '../llm-client/providers/types';
+import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
 import { ToolDefinition, ToolParameter } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { ContextManager } from './context/contextManager';
-import { PromptAssembler } from './context/promptAssembler';
-import { classifyError, isRetryableError, AgentErrorCategory, categoryToErrorCode, RETRY_STRATEGIES } from './retryPolicy';
-import { retryWithBackoff } from './retry';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { CONTEXT_CONSTANTS } from './context/constants';
-import { AgentRuntimeEvent, AgentRuntimePhase, AgentRuntimeRetryEvent } from '../../shared/protocol/agentRuntimeEvents';
+import { AgentRuntimeEvent, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
+import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
+import { ToolDispatcher } from './toolDispatcher';
+import { DYNAMIC_CONTEXT_MSG_ID, buildDynamicContextContent } from '../llm-client/context/dynamicContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,15 +75,14 @@ export class AgentRuntime {
   private maxIterations: number;
   private maxContextTokens: number;
   private context: ContextManager;
-  private promptAssembler: PromptAssembler;
 
   private cleaner: ToolResultCleaner;
   private toolExecutionCoordinator = new ToolExecutionCoordinator();
+  private llmCoordinator: LLMGenerationCoordinator;
+  private toolDispatcher: ToolDispatcher;
   private allowedExecutionToolNames: Set<string>;
   private idCounter: number = 0;
-  private lastThinkingText: string = '';
   private textOnlyCompletionRetries: number = 0;
-  private lastNotificationTime: number = 0;
   private readonly THROTTLE_MS = 100;
   private hookRegistry: HookRegistry;
   private hookRunner: HookRunner;
@@ -108,17 +107,55 @@ export class AgentRuntime {
     this.maxContextTokens = options.maxContextTokens || AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS;
     this.designSystemId = options.designSystemId;
     this.cleaner = new ToolResultCleaner(options.tools);
+    this.llmCoordinator = new LLMGenerationCoordinator(
+      options.provider,
+      this.cleaner,
+      {
+        ramblingThreshold: AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD,
+        thinkingTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
+        throttleMs: this.THROTTLE_MS,
+        generateId: (prefix) => this.generateId(prefix),
+        normalizeToolCallId: (tc, fallbackPrefix) => this.normalizeToolCallId(tc, fallbackPrefix),
+        emitRuntimeEvent: (event) => this.emitRuntimeEvent(event as RuntimeEventPayload),
+        throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
+      },
+    );
     this.allowedExecutionToolNames = new Set(options.tools.map((tool) => tool.name));
-    this.context = new ContextManager(this.maxContextTokens, options.messages);
-    this.promptAssembler = new PromptAssembler({
-      provider: options.provider,
-      tools: options.tools,
-      maxContextTokens: this.maxContextTokens,
-      behaviorConfig: this.behaviorConfig,
-      designSystemId: this.designSystemId,
-      selectionContext: options.selectionContext,
-      generateId: (prefix) => this.generateId(prefix)
-    });
+    this.toolDispatcher = new ToolDispatcher(
+      options.toolExecutors || {},
+      options.ipcBridge,
+      this.toolExecutionCoordinator,
+      this.cleaner,
+      this.allowedExecutionToolNames,
+      {
+        toolTimeoutMs: AGENT_RUNTIME_CONSTANTS.DEFAULT_TOOL_TIMEOUT_MS,
+        generateId: (prefix) => this.generateId(prefix),
+        normalizeToolCallId: (tc, fallbackPrefix) => this.normalizeToolCallId(tc, fallbackPrefix),
+        emitRuntimeEvent: (event) => this.emitRuntimeEvent(event as RuntimeEventPayload),
+        throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
+        onToolCall: options.onToolCall,
+        onToolResult: options.onToolResult,
+        formatToolResults: (results) => options.provider.formatToolResults(results),
+      },
+    );
+    // Seed messages: static system prompt at index 0, dynamic context at index 1
+    const seedMessages: LLMMessage[] = [];
+    if (options.systemPrompt) {
+      seedMessages.push({
+        id: 'sys_static',
+        role: 'system',
+        content: options.systemPrompt,
+      });
+      seedMessages.push({
+        id: DYNAMIC_CONTEXT_MSG_ID,
+        role: 'system',
+        content: buildDynamicContextContent('AUTONOMOUS'),
+      });
+    }
+    if (options.messages) {
+      seedMessages.push(...options.messages);
+    }
+    this.context = new ContextManager(this.maxContextTokens, seedMessages.length > 0 ? seedMessages : undefined);
 
     // Hook system — builtin hooks by default, custom hooks override
     this.hookRegistry = new HookRegistry();
@@ -244,10 +281,6 @@ export class AgentRuntime {
     }
   }
 
-  private sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
-    return this.cleaner.sanitizeToolCallsForHistory(toolCalls);
-  }
-
   // ─── Context management ──────────────────────────────────────
 
   private async manageContext(): Promise<void> {
@@ -320,7 +353,7 @@ export class AgentRuntime {
 
     let iteration = 0;
     this.resetBuiltinState?.();
-    this.lastThinkingText = '';
+    this.llmCoordinator.reset();
     this.idCounter = 0;
 
     this.textOnlyCompletionRetries = 0;
@@ -383,19 +416,13 @@ export class AgentRuntime {
         phase: 'execution' as AgentRuntimePhase,
       });
 
-      // ──── SYSTEM PROMPT ────
-      await this.promptAssembler.hotSwapSystemPrompt(
-        this.context.getAllMessages(),
-        'EXECUTION' as any, // backward compat for promptComposer
-        this.originalUserRequest,
-        [] // no operation log in autonomous mode
-      );
-
-      this.promptAssembler.injectDynamicContext(
-        this.context.getAllMessages(),
-        this.originalUserRequest,
-        []
-      );
+      // ──── DYNAMIC CONTEXT (KV-cache friendly) ────
+      // System prompt at index 0 is NEVER touched after construction.
+      // Only update the tiny dynamic context message in-place.
+      const dynMsg = this.context.getAllMessages().find(m => m.id === DYNAMIC_CONTEXT_MSG_ID);
+      if (dynMsg) {
+        dynMsg.content = buildDynamicContextContent('AUTONOMOUS');
+      }
 
       // ──── LLM GENERATION ────
       const abortController = new AbortController();
@@ -407,107 +434,27 @@ export class AgentRuntime {
 
       console.log(`[AgentRuntime] Tools available: ${this.options.tools.length} (all)`);
 
-      const ramblingThreshold = AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD; // still used for stream abort
-      let currentIterationText = '';
       let toolCallsForExecution: LLMToolCall[] = [];
       let rawToolCallsForLoopDetection: LLMToolCall[] = [];
       let response: LLMResponse;
-      const providerCapabilities = this.options.provider.getCapabilities?.() || DEFAULT_PROVIDER_CAPABILITIES;
 
       try {
-        this.throwIfCanceled(iteration + 1);
-        response = await retryWithBackoff(
-          () => this.options.provider.generate({
+        this.llmCoordinator.config.notifyIterationStart = notifyIterationStartOnce;
+        const genResult = await this.llmCoordinator.generate(
+          {
             messages: this.context.getMessages(),
             tools: this.options.tools,
             toolConfig: { mode: 'AUTO' as ToolCallMode },
-            maxTokens: this.loopPolicy.maxOutputTokens,
-            abortSignal: abortController.signal,
-            streamTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
-            onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
-              notifyIterationStartOnce();
-              currentIterationText += chunk;
-              if (currentIterationText.length > ramblingThreshold) {
-                console.warn(`[AgentRuntime] RAMBLING DETECTED: ${currentIterationText.length} chars. Aborting stream.`);
-                abortController.abort();
-              }
-            } : undefined,
-            onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
-              if (thought && thought !== this.lastThinkingText) {
-                notifyIterationStartOnce();
-                const now = Date.now();
-                if (now - this.lastNotificationTime >= this.THROTTLE_MS) {
-                  this.emitRuntimeEvent({
-                    type: 'status',
-                    phase: 'execution' as AgentRuntimePhase,
-                    mode: 'AUTONOMOUS',
-                    iteration: iteration + 1,
-                    maxIterations: this.maxIterations,
-                    message: 'Working...',
-                  });
-                  this.emitRuntimeEvent({
-                    type: 'reasoning_delta',
-                    phase: 'execution' as AgentRuntimePhase,
-                    mode: 'AUTONOMOUS',
-                    iteration: iteration + 1,
-                    text: thought,
-                  });
-                  this.lastNotificationTime = now;
-                }
-                this.lastThinkingText = thought;
-              }
-            } : undefined,
-            thinkingLevel: this.behaviorConfig.thinkingLevel
-          }),
-          {
-            maxAttempts: 4,
-            initialDelayMs: 2000,
-            maxDelayMs: 15000,
-            jitterFactor: 0.3,
-            backoffMultiplier: 2,
-            shouldRetry: (err) => isRetryableError(err),
-            signal: abortController.signal,
-            onBeforeRetry: (attempt, err) => {
-              const category = classifyError(err);
-              if (category === AgentErrorCategory.RETRYABLE_MALFORMED) {
-                this.context.getAllMessages().push({
-                  id: this.generateId('mf_hint'),
-                  role: 'user',
-                  content: 'Your previous tool call had invalid syntax. Please emit a simpler, single tool call with valid JSON arguments.'
-                });
-              }
-            },
-            onRetry: (attempt, err, delayMs) => {
-              const category = classifyError(err);
-              const errorMessage = err instanceof Error ? err.message : String(err);
-              console.warn(`[AgentRuntime] ${category} error (attempt ${attempt}). Retrying after ${delayMs}ms...`);
-              this.emitRuntimeEvent({
-                type: 'retry',
-                phase: 'execution' as AgentRuntimePhase,
-                iteration: iteration + 1,
-                attempt,
-                maxAttempts: 4,
-                delayMs,
-                errorCategory: category,
-                errorMessage,
-              });
-            },
-          }
+            maxOutputTokens: this.loopPolicy.maxOutputTokens,
+            thinkingLevel: this.behaviorConfig.thinkingLevel,
+            iteration,
+            maxIterations: this.maxIterations,
+          },
+          abortController,
         );
-
-        if (!response) {
-          response = { text: '', toolCalls: [] };
-        }
-        let rawToolCalls = response.toolCalls || [];
-        rawToolCallsForLoopDetection = [...rawToolCalls];
-
-        for (const tc of rawToolCalls) {
-          tc.id = this.normalizeToolCallId(tc, 'call');
-        }
-
-        toolCallsForExecution = rawToolCalls;
-        const historyToolCalls = this.sanitizeToolCallsForHistory(rawToolCalls);
-        response.toolCalls = historyToolCalls;
+        response = genResult.response;
+        toolCallsForExecution = genResult.toolCallsForExecution;
+        rawToolCallsForLoopDetection = genResult.rawToolCallsForLoopDetection;
       } catch (error: any) {
         if (this.canceled || abortController.signal.aborted) {
           this.throwIfCanceled(iteration + 1);
@@ -563,82 +510,11 @@ export class AgentRuntime {
 
       // ──── TOOL EXECUTION ────
       if (toolCallsForExecution.length > 0) {
-        const toolResults: import('../llm-client/providers/types').LLMToolResult[] = [];
-
-        // ── Execute each tool call ──
-        for (const tc of toolCallsForExecution) {
-          this.throwIfCanceled(iteration + 1);
-          tc.id = this.normalizeToolCallId(tc, 'call');
-          const startedAt = Date.now();
-
-          // ── Terminal action: signal(type=complete) ──
-          if (tc.name === 'signal' && tc.args?.type === 'complete') {
-            this.options.onToolCall?.(tc);
-            this.emitRuntimeEvent({
-              type: 'tool_call',
-              iteration: iteration + 1,
-              mode: 'AUTONOMOUS',
-              phase: 'execution' as AgentRuntimePhase,
-              toolCall: { id: tc.id, name: tc.name, args: tc.args },
-            });
-            const completionSummary = tc.args.summary || tc.args.title || 'Completed';
-            const workflowResponse = { success: true, summary: completionSummary };
-            this.options.onToolResult?.(tc, workflowResponse);
-            this.emitRuntimeEvent({
-              type: 'tool_result',
-              iteration: iteration + 1,
-              mode: 'AUTONOMOUS',
-              phase: 'execution' as AgentRuntimePhase,
-              toolResult: { id: tc.id, name: tc.name, success: true, durationMs: Date.now() - startedAt, raw: workflowResponse },
-            });
-            this.emitRuntimeEvent({
-              type: 'completed',
-              phase: 'execution' as AgentRuntimePhase,
-              iteration: iteration + 1,
-              totalIterations: iteration + 1,
-              summary: completionSummary,
-            });
-            return completionSummary;
-          }
-
-          // ── Regular tool: dispatch to executor ──
-          this.emitRuntimeEvent({
-            type: 'tool_call',
-            iteration: iteration + 1,
-            mode: 'AUTONOMOUS',
-            phase: 'execution' as AgentRuntimePhase,
-            toolCall: { id: tc.id, name: tc.name, args: tc.args },
-          });
-          this.options.onToolCall?.(tc);
-          const result = await this.executeToolWithTimeout(tc);
-          this.options.onToolResult?.(tc, result);
-          this.emitRuntimeEvent({
-            type: 'tool_result',
-            iteration: iteration + 1,
-            mode: 'AUTONOMOUS',
-            phase: 'execution' as AgentRuntimePhase,
-            toolResult: {
-              id: tc.id,
-              name: tc.name,
-              success: result?.success !== false,
-              durationMs: Date.now() - startedAt,
-              error: result?.success === false ? (result?.error?.message || result?.error?.code || 'Tool execution failed') : undefined,
-              raw: result,
-            },
-          });
-          toolResults.push({
-            name: tc.name,
-            id: tc.id,
-            response: this.cleanToolResult(result, tc.name),
-            thought_signature: tc.thought_signature
-          });
+        const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
+        if (dispatchResult.type === 'completed') {
+          return dispatchResult.completionSummary!;
         }
-
-        // Add tool results to history
-        const toolResultsMessage = this.options.provider.formatToolResults(toolResults);
-        toolResultsMessage.id = this.generateId('tol');
-        this.context.addMessage(toolResultsMessage);
-
+        this.context.addMessage(dispatchResult.toolResultsMessage!);
         iteration++;
         continue;
       } else {
@@ -665,71 +541,6 @@ export class AgentRuntime {
     }
 
     throw new Error(`Maximum iterations (${this.maxIterations}) reached.`);
-  }
-
-  // ─── Tool execution ──────────────────────────────────────────
-
-  private async executeToolWithTimeout(tc: LLMToolCall): Promise<any> {
-    const timeout = AGENT_RUNTIME_CONSTANTS.DEFAULT_TOOL_TIMEOUT_MS;
-    
-    return Promise.race([
-      this.executeTool(tc),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Tool execution timed out after ${timeout}ms: ${tc.name}`)), timeout);
-      })
-    ]).catch(e => {
-      if (e instanceof AgentRuntimeCanceledError) {
-        throw e;
-      }
-      console.error(`[AgentRuntime] Tool execution failed: ${tc.name}`, e);
-      return { 
-        success: false, 
-        error: { 
-          code: categoryToErrorCode(classifyError(e)), 
-          message: e.message 
-        } 
-      };
-    });
-  }
-
-  private async executeTool(tc: LLMToolCall): Promise<any> {
-    this.throwIfCanceled();
-    const toolExec = this.options.toolExecutors?.[tc.name];
-    
-    const validation = this.toolExecutionCoordinator.validateToolCall(
-      tc.name,
-      tc.args,
-      'EXECUTION',
-      this.allowedExecutionToolNames
-    );
-    if (!validation.ok) {
-      return {
-        success: false,
-        error: validation.error,
-      };
-    }
-
-    try {
-      if (toolExec) {
-        return await toolExec(tc.args);
-      } else if (this.options.ipcBridge) {
-        return await this.options.ipcBridge.callTool(tc.name, tc.args);
-      } else {
-        return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `No executor found for tool '${tc.name}'` } };
-      }
-    } catch (e: any) {
-      return { 
-        success: false, 
-        error: { 
-          code: 'TOOL_EXEC_EXCEPTION',
-          message: e.message 
-        } 
-      };
-    }
-  }
-
-  private cleanToolResult(result: any, toolName?: string): any {
-    return this.cleaner.cleanToolResult({ ...result, ...(toolName && { name: toolName }) });
   }
 
   public getMessages(): LLMMessage[] {

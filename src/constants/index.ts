@@ -7,7 +7,6 @@
 export * from './featureFlags';
 export * from './figma-api';
 export * from './layoutRules';
-export * from './prompts';
 export * from './terms/providers';
 export * from './terms/ui';
 

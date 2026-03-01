@@ -224,7 +224,10 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                       phase={msg.streaming ? runtimePhase : undefined}
                       progress={msg.streaming ? runtimeProgress : null}
                       contextUsage={msg.streaming ? runtimeContextUsage : null}
-                      runState={msg.streaming ? runtimeState : undefined}
+                      runState={msg.streaming ? runtimeState : (msg.runState as any)}
+                      runError={msg.runError}
+                      taskStartTime={msg.startTime}
+                      taskEndTime={msg.endTime}
                       queuedCount={msg.streaming ? queuedCount : 0}
                       onStop={onStop}
                       onContinue={onContinue}

@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-02-28T02:20:22.207Z",
+  "model": "mistral-nemo:12b",
+  "files": {
+    "toolCallPath": "src/ipc/handlers/toolCallHandler.ts",
+    "serializerPath": "src/engine/figma-adapter/nodeSerializer.ts",
+    "cleanerPath": "src/engine/agent/context/toolResultCleaner.ts",
+    "validatorPath": "src/engine/validation/postOpValidator.ts",
+    "constantsPath": "src/engine/agent/context/constants.ts"
+  },
+  "metrics": {
+    "readNodeLoc": 75,
+    "hierarchyLoc": 24,
+    "branchCount": 13,
+    "awaitCount": 4,
+    "readNodeChars": 3088,
+    "hierarchyChars": 1007,
+    "readNodeEstimatedTokens": 772,
+    "hierarchyEstimatedTokens": 252,
+    "usesDepthCap": true,
+    "usesChildrenCap": false,
+    "usesTotalNodeCap": false,
+    "pruneDefaultsFalse": true,
+    "callsTreeAnomalies": true,
+    "anomaliesShareDepth": true,
+    "nodeModeIsUncompressed": true,
+    "hasSerializerBudgetFeatures": true,
+    "maxInspectDepth": 4,
+    "maxInspectChildren": 15,
+    "sampleWorstVisibleNodes": 54241,
+    "toolResultMaxChars": 3000,
+    "maxHistoryArgsChars": 1500,
+    "treeAnomalyMaxDepthDefault": 5,
+    "treeAnomalyMaxAnomaliesDefault": 10,
+    "riskScore": 92,
+    "riskFlags": [
+      "hierarchy path does not set maxChildrenPerLevel",
+      "hierarchy path does not set maxTotalNodes",
+      "hierarchy path keeps default props (higher payload)",
+      "hierarchy path performs second tree traversal for anomalies",
+      "node mode uses uncompressed serialization"
+    ]
+  },
+  "reviewError": null
+}

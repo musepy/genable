@@ -50,7 +50,7 @@ describe('AgentRuntime', () => {
 
     expect(result).toBe('Done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
-    expect(runtime.getMessages()).toHaveLength(3); // system, user, model(call)
+    expect(runtime.getMessages()).toHaveLength(4); // system, dynamic-ctx, user, model(call)
   });
 
   it('should execute tool calls and loop', async () => {
@@ -81,6 +81,7 @@ describe('AgentRuntime', () => {
         { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
       ],
       ipcBridge: mockIpcBridge,
+      systemPrompt: 'System',
       loopPolicy: { useSkillSystem: false } as any
     });
 
@@ -89,10 +90,10 @@ describe('AgentRuntime', () => {
     expect(result).toBe('Task done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(2);
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
-    
+
     const messages = runtime.getMessages();
-    expect(messages).toHaveLength(5); // system, user, model(thought+call), tool(result), model(complete)
-    expect(messages[3].role).toBe('tool');
+    expect(messages).toHaveLength(6); // system, dynamic-ctx, user, model(thought+call), tool(result), model(complete)
+    expect(messages[4].role).toBe('tool');
   });
 
   it('should short-circuit unified validation errors and keep actionable details in tool result history', async () => {

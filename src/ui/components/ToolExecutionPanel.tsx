@@ -1,5 +1,6 @@
 import { h } from 'preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useElapsedTime } from '../hooks/useElapsedTime'
 import { AlertCircle, CheckCircle2, ChevronDown, Loader2, PauseCircle, Terminal } from 'lucide-preact'
 import { tokens } from '../design-system/tokens'
 import { ToolCallRecord } from '../../types/chat'
@@ -13,7 +14,12 @@ interface ToolExecutionPanelProps {
   phase?: AgentRuntimePhase
   progress?: { iteration: number; maxIterations: number } | null
   contextUsage?: AgentRuntimeContextUsage | null
-  runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error'
+  runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting'
+  reconnectCount?: number
+  maxReconnects?: number
+  taskStartTime?: number
+  taskEndTime?: number
+  runError?: string
   onStop?: () => void
   onContinue?: () => void
   queuedCount?: number
@@ -34,16 +40,20 @@ function getPhaseLabel(phase?: AgentRuntimePhase): string {
   }
 }
 
-function getRunStateLabel(state?: ToolExecutionPanelProps['runState']): string {
+function getRunStateLabel(state?: ToolExecutionPanelProps['runState'], reconnectCount?: number, maxReconnects?: number, errorReason?: string): string {
   switch (state) {
     case 'running':
       return 'Working'
+    case 'reconnecting':
+      return typeof reconnectCount === 'number' && typeof maxReconnects === 'number'
+        ? `Reconnecting ${reconnectCount}/${maxReconnects}`
+        : 'Reconnecting'
     case 'completed':
       return 'Completed'
     case 'canceled':
       return 'Stopped'
     case 'error':
-      return 'Needs attention'
+      return errorReason || 'Failed'
     default:
       return 'Waiting'
   }
@@ -67,7 +77,8 @@ function RunStateIcon({ runState }: { runState: ToolExecutionPanelProps['runStat
   if (runState === 'error') return <AlertCircle size={14} color={tokens.colors.error} />
   if (runState === 'completed') return <CheckCircle2 size={14} color={tokens.colors.success} />
   if (runState === 'canceled') return <PauseCircle size={14} color={tokens.colors.warning} />
-  if (runState === 'running') return <Loader2 size={14} color={tokens.colors.textSecondary} />
+  if (runState === 'reconnecting') return <Loader2 size={14} color={tokens.colors.warning} className="spin" />
+  if (runState === 'running') return <Loader2 size={14} color={tokens.colors.textSecondary} className="spin" />
   return <Terminal size={14} color={tokens.colors.textSecondary} />
 }
 
@@ -104,6 +115,11 @@ export function ToolExecutionPanel({
   progress,
   contextUsage,
   runState,
+  reconnectCount,
+  maxReconnects,
+  taskStartTime,
+  taskEndTime,
+  runError,
   onStop,
   onContinue,
   queuedCount = 0,
@@ -112,6 +128,22 @@ export function ToolExecutionPanel({
   const [expanded, setExpanded] = useState(false)
   const dots = useRunningDots(runState === 'running')
   const reasoningSnippet = reasoningPreview ? reasoningPreview.slice(-240) : ''
+
+  const isRunning = runState === 'running' || runState === 'reconnecting'
+  const elapsedText = useElapsedTime(taskStartTime, isRunning, taskEndTime)
+
+  // Escape key handler
+  useEffect(() => {
+    if (isRunning && onStop) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onStop()
+        }
+      }
+      window.addEventListener('keydown', handleKeyDown)
+      return () => window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isRunning, onStop])
 
   useEffect(() => {
     if (runState === 'error') setExpanded(true)
@@ -159,20 +191,80 @@ export function ToolExecutionPanel({
             minWidth: 0,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
             gap: tokens.space[2],
             border: 'none',
             background: 'transparent',
             padding: 0,
             cursor: 'pointer',
+            height: 24,
             color: tokens.colors.textPrimary,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[1] }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[1], minWidth: 0 }}>
             <RunStateIcon runState={runState} />
-            <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500 }}>
-              {getRunStateLabel(runState)}
-            </span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space[1],
+              fontSize: tokens.fontSize[1],
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+            }}>
+              <span style={{ 
+                fontWeight: 500, 
+                color: runState === 'error' ? tokens.colors.error : 
+                       runState === 'reconnecting' ? tokens.colors.warning : 
+                       tokens.colors.textPrimary 
+              }}>
+                {getRunStateLabel(runState, reconnectCount, maxReconnects, runError)}
+              </span>
+              {(elapsedText || isRunning || runState === 'canceled') && (
+                <span style={{ 
+                  color: tokens.colors.textSecondary, 
+                  fontVariantNumeric: 'tabular-nums', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: tokens.space[1] 
+                }}>
+                  <span style={{ color: tokens.colors.alpha[4] }}>(</span>
+                  {elapsedText && <span>{elapsedText}</span>}
+                  {elapsedText && (isRunning || runState === 'canceled') && <span style={{ color: tokens.colors.alpha[4] }}>•</span>}
+                  
+                  {isRunning && onStop && (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); onStop(); }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary; e.currentTarget.style.background = tokens.colors.surfaceHover; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = tokens.colors.textSecondary; e.currentTarget.style.background = 'transparent'; }}
+                      style={{ 
+                        cursor: 'pointer',
+                        padding: '0 4px',
+                        borderRadius: 'var(--radius-2)',
+                        transition: 'color 150ms ease, background 150ms ease'
+                      }}
+                    >
+                      esc to interrupt
+                    </span>
+                  )}
+
+                  {runState === 'canceled' && onContinue && (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); onContinue(); }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary; e.currentTarget.style.background = tokens.colors.surfaceHover; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = tokens.colors.textSecondary; e.currentTarget.style.background = 'transparent'; }}
+                      style={{ 
+                        cursor: 'pointer',
+                        padding: '0 4px',
+                        borderRadius: 'var(--radius-2)',
+                        transition: 'color 150ms ease, background 150ms ease'
+                      }}
+                    >
+                      continue
+                    </span>
+                  )}
+                  <span style={{ color: tokens.colors.alpha[4] }}>)</span>
+                </span>
+              )}
+            </div>
           </div>
           <ChevronDown
             size={14}
@@ -180,56 +272,24 @@ export function ToolExecutionPanel({
             style={{
               transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
               transition: 'transform 150ms ease',
+              flexShrink: 0,
+              marginLeft: 'auto'
             }}
           />
         </button>
-
-        {runState === 'running' && onStop && (
-          <button
-            onClick={onStop}
-            style={{
-              height: 24,
-              border: `1px solid ${tokens.colors.alpha[4]}`,
-              borderRadius: 999,
-              background: 'transparent',
-              color: tokens.colors.textSecondary,
-              fontSize: 11,
-              padding: '0 10px',
-              cursor: 'pointer',
-            }}
-          >
-            Stop
-          </button>
-        )}
-
-        {runState === 'canceled' && onContinue && (
-          <button
-            onClick={onContinue}
-            style={{
-              height: 24,
-              border: `1px solid ${tokens.colors.alpha[4]}`,
-              borderRadius: 999,
-              background: 'transparent',
-              color: tokens.colors.textSecondary,
-              fontSize: 11,
-              padding: '0 10px',
-              cursor: 'pointer',
-            }}
-          >
-            Continue
-          </button>
-        )}
       </div>
 
-      <div style={{
-        marginTop: 4,
-        fontSize: tokens.fontSize[1],
-        color: tokens.colors.textSecondary,
-        lineHeight: '16px',
-        paddingLeft: 20,
-      }}>
-        {summaryText}
-      </div>
+      {expanded && summaryText && (
+        <div style={{
+          marginTop: 4,
+          fontSize: tokens.fontSize[1],
+          color: tokens.colors.textSecondary,
+          lineHeight: '16px',
+          paddingLeft: 20,
+        }}>
+          {summaryText}
+        </div>
+      )}
 
       {reasoningSnippet && (
         <div style={{

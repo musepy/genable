@@ -55,14 +55,9 @@ vi.mock('../../engine/llm-client/providers/gemini', () => ({
   })
 }));
 
-// Mock promptComposer
-vi.mock('../../engine/llm-client/context/promptComposer', () => ({
-  composeAgentSystemPrompt: vi.fn().mockReturnValue('System Prompt'),
-  calculateBudget: vi.fn().mockReturnValue({ 
-    totalTokens: 1000, 
-    remainingTokens: 500,
-    sections: {}
-  })
+// Mock static system prompt builder
+vi.mock('../../engine/llm-client/context/system', () => ({
+  buildStaticSystemPrompt: vi.fn().mockReturnValue('Static System Prompt')
 }));
 
 describe('AgentOrchestrator', () => {

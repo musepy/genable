@@ -106,6 +106,17 @@ export class ActionExecutor {
               delete props.layoutPositioning;
               delete props.layoutAlign;
               delete props.constraints;
+            } else if (subCategory === ActionErrorSubCategory.SIZING_CONFLICT) {
+              // Downgrade HUG/FILL to FIXED when parent context doesn't support them
+              if (props.layoutSizingHorizontal === 'HUG' || props.layoutSizingHorizontal === 'FILL') {
+                props.layoutSizingHorizontal = 'FIXED';
+              }
+              if (props.layoutSizingVertical === 'HUG' || props.layoutSizingVertical === 'FILL') {
+                props.layoutSizingVertical = 'FIXED';
+              }
+            } else if (subCategory === ActionErrorSubCategory.NODE_TYPE_CONSTRAINT) {
+              // Cannot auto-fix node type mismatch — break to avoid infinite retry
+              break;
             } else if (subCategory === ActionErrorSubCategory.FONT_UNLOADED) {
               props.fontFamily = 'Inter';
               props.fontWeight = 'Regular';
@@ -114,6 +125,13 @@ export class ActionExecutor {
               delete props.strokes;
             } else if (subCategory === ActionErrorSubCategory.EFFECT_INVALID) {
               delete props.effects;
+            } else if (subCategory === ActionErrorSubCategory.PROPERTY_INVALID) {
+              // Remove NaN/undefined values that commonly trigger this
+              for (const [k, v] of Object.entries(props)) {
+                if (v === undefined || (typeof v === 'number' && isNaN(v))) {
+                  delete props[k];
+                }
+              }
             }
           }
           result = await this.executeOne(action);
@@ -375,6 +393,55 @@ export class ActionExecutor {
     return null;
   }
 
+  /**
+   * Property application priority — Figma API requires certain properties to be set
+   * before others (e.g., layoutMode before layoutSizing*, font before characters).
+   * Lower number = applied first.
+   */
+  private static readonly PROP_ORDER: Record<string, number> = {
+    // Layout mode must be first — sizing/spacing depend on it
+    layoutMode: 0,
+    layoutWrap: 1,
+    // Sizing depends on layoutMode
+    layoutSizingHorizontal: 2,
+    layoutSizingVertical: 2,
+    // Spacing — auto-layout only
+    itemSpacing: 3,
+    counterAxisSpacing: 3,
+    paddingTop: 3,
+    paddingRight: 3,
+    paddingBottom: 3,
+    paddingLeft: 3,
+    // Child positioning
+    primaryAxisAlignItems: 4,
+    counterAxisAlignItems: 4,
+    layoutGrow: 4,
+    layoutAlign: 4,
+    layoutPositioning: 4,
+    // Dimensions
+    width: 5,
+    height: 5,
+    minWidth: 5,
+    minHeight: 5,
+    maxWidth: 5,
+    maxHeight: 5,
+    // Font must load before characters
+    fontName: 6,
+    fontSize: 6,
+    fontWeight: 6,
+    // Text content last among text props
+    characters: 7,
+  };
+
+  private static sortPropsByDependency(entries: [string, any][]): [string, any][] {
+    const defaultOrder = 5;
+    return entries.sort(([a], [b]) => {
+      const orderA = ActionExecutor.PROP_ORDER[a] ?? defaultOrder;
+      const orderB = ActionExecutor.PROP_ORDER[b] ?? defaultOrder;
+      return orderA - orderB;
+    });
+  }
+
   private async applyProps(node: SceneNode, props: Record<string, any>): Promise<any[]> {
     const warnings: any[] = [];
     const normalizedProps: Record<string, any> = { ...props };
@@ -388,25 +455,32 @@ export class ActionExecutor {
       delete normalizedProps.padding;
     }
 
-    // 2. Format conversions
-    for (const [key, value] of Object.entries(normalizedProps)) {
+    // 2. Sort properties by dependency order to avoid Figma API errors
+    //    (e.g., layoutMode must be set before layoutSizingVertical)
+    const sortedEntries = ActionExecutor.sortPropsByDependency(Object.entries(normalizedProps));
+
+    // 3. Format conversions + apply
+    for (const [key, value] of sortedEntries) {
       if (key === 'fills' && Array.isArray(value)) {
         try {
           (node as any).fills = this.normalizePaints(value);
         } catch (e: any) {
-          throw new Error(`Failed to apply fills: ${e.message}`);
+          console.warn(`[ActionExecutor] Failed to apply fills on node ${node.id}: ${e.message}`);
+          warnings.push({ code: 'PAINT_INVALID', severity: 'warning', message: `Failed to apply fills: ${e.message}` });
         }
       } else if (key === 'strokes' && Array.isArray(value)) {
         try {
           (node as any).strokes = this.normalizePaints(value);
         } catch (e: any) {
-          throw new Error(`Failed to apply strokes: ${e.message}`);
+          console.warn(`[ActionExecutor] Failed to apply strokes on node ${node.id}: ${e.message}`);
+          warnings.push({ code: 'PAINT_INVALID', severity: 'warning', message: `Failed to apply strokes: ${e.message}` });
         }
       } else if (key === 'effects' && Array.isArray(value)) {
         try {
           (node as any).effects = this.normalizeEffects(value);
         } catch (e: any) {
-          throw new Error(`Failed to apply effects: ${e.message}`);
+          console.warn(`[ActionExecutor] Failed to apply effects on node ${node.id}: ${e.message}`);
+          warnings.push({ code: 'EFFECT_INVALID', severity: 'warning', message: `Failed to apply effects: ${e.message}` });
         }
       } else if (key in node) {
         if (!this.canAssignProperty(node, key)) {

@@ -28,12 +28,12 @@ export const CONTEXT_CONSTANTS = {
   /** Maximum chars for standard tool result data before truncation (~750 tokens) */
   TOOL_RESULT_MAX_DATA_CHARS: 3000,
 
-  /** Maximum chars for batch operation results including idMap + results (~1250 tokens) */
+  /** Maximum chars for build_design results including idMap + lineResults (~1250 tokens) */
   TOOL_RESULT_BATCH_BUDGET: 5000,
 
-  /** 
+  /**
    * Max chars for a single tool call's args when stored in history.
-   * ~375 tokens. Prevents batchOperations with deep children from bloating context.
+   * ~375 tokens. Prevents large build_design instructions from bloating context.
    */
   MAX_HISTORY_ARGS_CHARS: 1500,
 } as const;

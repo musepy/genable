@@ -5,7 +5,7 @@ import { ToolDefinition } from '../../../agent/tools/types';
 describe('buildStaticSystemPrompt', () => {
     const mockTools: ToolDefinition[] = [
         {
-            name: 'searchDesignKnowledge',
+            name: 'query_knowledge',
             description: 'Search for design rules.',
             parameters: {
                 type: 'object',
@@ -16,15 +16,14 @@ describe('buildStaticSystemPrompt', () => {
             }
         },
         {
-            name: 'createNode',
-            description: 'Create a Figma node.',
+            name: 'build_design',
+            description: 'Create a Figma design via DSL instructions.',
             parameters: {
                 type: 'object',
                 properties: {
-                    type: { type: 'string', description: 'Node type.' },
-                    name: { type: 'string', description: 'Node name.' }
+                    instructions: { type: 'string', description: 'DSL instructions.' }
                 },
-                required: ['type', 'name']
+                required: ['instructions']
             }
         }
     ];
@@ -52,10 +51,10 @@ describe('buildStaticSystemPrompt', () => {
     it('should serialize tools correctly', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
         expect(prompt).toContain('## AVAILABLE TOOLS');
-        expect(prompt).toContain('**searchDesignKnowledge**');
+        expect(prompt).toContain('**query_knowledge**');
         expect(prompt).toContain('Search for design rules.');
-        expect(prompt).toContain('**createNode**');
-        expect(prompt).toContain('Create a Figma node.');
+        expect(prompt).toContain('**build_design**');
+        expect(prompt).toContain('Create a Figma design via DSL instructions.');
     });
 
     it('should include tool examples', () => {
@@ -107,8 +106,8 @@ describe('buildStaticSystemPrompt', () => {
                 parameters: { type: 'object', properties: {} }
             },
             {
-                name: 'create_node',
-                description: 'Create a node.',
+                name: 'build_design',
+                description: 'Create a design.',
                 category: 'create' as any,
                 parameters: { type: 'object', properties: {} }
             }

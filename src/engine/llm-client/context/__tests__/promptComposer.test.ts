@@ -8,7 +8,7 @@ describe('PromptComposer - Agent Mode', () => {
 
     const mockTools: ToolDefinition[] = [
         {
-            name: 'searchDesignKnowledge',
+            name: 'query_knowledge',
             description: 'Search for design rules.',
             parameters: {
                 type: 'object',
@@ -19,15 +19,14 @@ describe('PromptComposer - Agent Mode', () => {
             }
         },
         {
-            name: 'createNode',
-            description: 'Create a Figma node.',
+            name: 'build_design',
+            description: 'Create a Figma design via DSL instructions.',
             parameters: {
                 type: 'object',
                 properties: {
-                    type: { type: 'string', description: 'Node type.' },
-                    name: { type: 'string', description: 'Node name.' }
+                    instructions: { type: 'string', description: 'DSL instructions.' }
                 },
-                required: ['type', 'name']
+                required: ['instructions']
             }
         }
     ];
@@ -51,19 +50,19 @@ describe('PromptComposer - Agent Mode', () => {
 
     it('should serialize tools correctly', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
-        
+
         expect(prompt).toContain('## AVAILABLE TOOLS');
-        expect(prompt).toContain('**searchDesignKnowledge**');
+        expect(prompt).toContain('**query_knowledge**');
         expect(prompt).toContain('Search for design rules.');
-        expect(prompt).toContain('**createNode**');
-        expect(prompt).toContain('Create a Figma node.');
+        expect(prompt).toContain('**build_design**');
+        expect(prompt).toContain('Create a Figma design via DSL instructions.');
         expect(prompt).toContain('PROVIDER_TOOLS_2');
     });
 
     it('should include tool examples', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
         expect(prompt).toContain('## EXAMPLES');
-        expect(prompt).toContain('One-shot `create_node`');
+        expect(prompt).toContain('One-shot `build_design`');
     });
 
     it('should inject knowledge if intent requires it', () => {
@@ -86,7 +85,7 @@ describe('PromptComposer - Agent Mode', () => {
             ...mockDeps,
             selectionContext: {
                 hasSelection: true,
-                nodes: [{ 
+                nodes: [{
                     id: '1:1', type: 'FRAME', name: 'Header', visible: true, opacity: 1
                 } as any],
                 serializedDSL: '[]'

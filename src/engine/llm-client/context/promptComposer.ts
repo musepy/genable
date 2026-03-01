@@ -7,13 +7,10 @@ import { NodeSerializer } from '../../figma-adapter/nodeSerializer';
 import {
     AGENT_IDENTITY,
     AGENT_THINKING_PROTOCOL,
-    DYNAMIC_GUIDANCE,
-    AGENT_NAMING_CONVENTION,
-    AGENT_CONTENT_REQUIREMENT,
     AGENT_DESIGN_FREEDOM
 } from '../../agent/agentPrompts';
 // Direct imports from centralized prompt registry
-import { SCENE_GRAPH_MODEL, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
+import { SCENE_GRAPH_MODEL, DESIGN_AESTHETICS, MODE_GUIDANCE } from '../../prompt/promptRegistry';
 import { estimateTokens } from '../../agent/context/tokenEstimator';
 import { skillRegistry } from '../../agent/skills/SkillRegistry';
 
@@ -254,21 +251,10 @@ function buildUniversalCoreIdentity(): string {
 }
 
 /**
- * Build Execution Protocol section (Priority 1.2)
- * Contains strict JSON schema and naming rules needed ONLY during execution.
- */
-function buildExecutionProtocol(): string {
-    return [
-        AGENT_NAMING_CONVENTION.trim(),
-        AGENT_CONTENT_REQUIREMENT.trim()
-    ].join('\n\n');
-}
-
-/**
  * Build Mode-based Guidance section (Priority 1.2)
  */
 function buildModeGuidance(mode: AgentMode): string {
-    return (DYNAMIC_GUIDANCE as Record<string, string>)[mode] || DYNAMIC_GUIDANCE.EXECUTION || '';
+    return (MODE_GUIDANCE as Record<string, string>)[mode] || MODE_GUIDANCE.EXECUTION || '';
 }
 
 /**
@@ -296,7 +282,7 @@ function buildToolExamples(tools: ToolDefinition[], budget: number): string {
     let examples = TOOL_EXAMPLES;
     
     // Failsafe guard against legacy examples leaking into unified mode
-    const isUnifiedMode = tools.some(t => t.name === 'create_node');
+    const isUnifiedMode = tools.some(t => t.name === 'build_design');
     if (isUnifiedMode) {
         // Split by the markdown divider used in EXAMPLES.md
         const exampleBlocks = examples.split('\n---\n');
@@ -438,16 +424,7 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         budgetKey: 'examples',
         builder: (_deps, tools, budget) => buildToolExamples(tools, budget)
     },
-    {
-        id: 'execution-protocol',
-        priority: 1.2,
-        budgetKey: 'core',
-        builder: (_deps, _tools, _budget, mode) => {
-            // Only inject schema and naming rules in EXECUTION or RECOVERY modes
-            if (mode !== 'EXECUTION' && mode !== 'RECOVERY') return '';
-            return buildExecutionProtocol();
-        }
-    },
+
     {
         // Inline critical design knowledge directly (replaces broken lazy-loading KNOWLEDGE_INDEX).
         // SCENE_GRAPH_MODEL: tree structure, layout constraints, sizing rules (~778 tokens)
@@ -507,7 +484,7 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
             });
             if (skillSections.length === 0) return '';
             // Stop legacy skill injection for figma-core and project-ui-context
-            // Only keep the standard context aligned with create_node/patch_node/read_node tools
+            // Only keep the standard context aligned with build_design/patch_node/read_node tools
             return skillSections
                 .filter(s => s.skillId !== 'figma-core' && s.skillId !== 'project-ui-context')
                 .map(s => s.content)

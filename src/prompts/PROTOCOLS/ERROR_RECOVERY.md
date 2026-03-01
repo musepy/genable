@@ -9,5 +9,5 @@ When a tool returns an error:
 
 ## WARNING HANDLING
 When a tool returns success with warnings (e.g., `FONT_FALLBACK`):
-- Do NOT repeat the same `create_node` call.
+- Do NOT repeat the same `build_design` call.
 - Continue execution and report it in final `signal({ type: "complete", ... })` summary.

@@ -6,6 +6,7 @@
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
 import { GeminiProvider, OpenRouterProvider } from '../llm-client';
+import { ProxyProvider } from '../llm-client/providers/proxy';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
 import { inferBehavior, resolveBehavior } from '../agent/agentBehaviorConfig';
@@ -37,7 +38,11 @@ export interface AgentPluginData {
 export interface OrchestratorOptions {
   apiKey: string;
   modelName: string;
-  providerName?: string; // Optional: default to 'gemini'
+  providerName?: string; // Optional: 'gemini' | 'openrouter' | 'proxy'
+  /** Required when providerName === 'proxy' */
+  workerUrl?: string;
+  /** Required when providerName === 'proxy' — user's subscription token */
+  subscriptionToken?: string;
   designSystemId?: string; // Optional: default to 'vanilla'
   tools?: ToolDefinition[]; // Optional: default to agentTools
   thinkingLevel: ThinkingLevel;
@@ -57,6 +62,7 @@ import { getActiveEngineConfig } from '../engineConfig';
 import { configManager } from '../../config/configManager';
 
 import { IpcBridge } from '../agent/ipcBridge';
+import { buildDynamicContextContent } from '../llm-client/context/dynamicContext';
 
 export class AgentOrchestrator {
   private static initializationPromise: Promise<void> | null = null;
@@ -95,10 +101,16 @@ export class AgentOrchestrator {
     // 0. Ensure skills are fully loaded before starting
     await AgentOrchestrator.ensureSkillsInitialized(loopPolicy.useSkillSystem);
 
+    // ── Debug command: /debug prompt ──
+    if (prompt.trim().startsWith('/debug')) {
+      this.handleDebugCommand(prompt.trim(), pluginData, loopPolicy);
+      return;
+    }
+
     // [DI] Instantiate IpcBridge for this session
     const ipcBridge = new IpcBridge({
         logger: console,
-        defaultTimeoutMs: 30000 
+        defaultTimeoutMs: 30000
     });
 
     try {
@@ -160,6 +172,97 @@ export class AgentOrchestrator {
     }
   }
 
+  private emitDebugComplete(summary: string): void {
+    this.emitFallbackRuntimeEvent({
+      type: 'completed',
+      phase: 'idle',
+      iteration: 0,
+      totalIterations: 0,
+      summary: `[Debug] ${summary}`,
+    });
+  }
+
+  /**
+   * Handle /debug commands. Dumps system prompt and agent config to console.
+   */
+  private handleDebugCommand(
+    command: string,
+    pluginData: AgentPluginData,
+    loopPolicy: AgentLoopPolicy
+  ): void {
+    const subCommand = command.replace(/^\/debug\s*/, '').trim() || 'prompt';
+
+    if (subCommand === 'prompt' || subCommand === 'system') {
+      // Build the same system prompt that createAgent would produce
+      const {
+        modelName,
+        thinkingLevel,
+        designSystemId = 'vanilla',
+        tools = agentTools
+      } = this.options;
+      const providerName = this.options.providerName || 'gemini';
+
+      const hasSelection = !!pluginData.selectionStyles;
+      const behaviorConfig = resolveBehavior({
+        ...inferBehavior({ hasSelection, userPrompt: '' }),
+        thinkingLevel,
+        promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
+      });
+
+      const skillBodies = skillRegistry.getEnabled()
+        .filter(s => s.context.injectionType === 'system')
+        .map(s => s.context.systemPromptSection || '')
+        .filter(Boolean);
+      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, skillBodies);
+
+      // Dump to console
+      console.log('\n' + '='.repeat(80));
+      console.log('DEBUG: FULL SYSTEM PROMPT');
+      console.log('='.repeat(80));
+      console.log(`Provider: ${providerName} | Model: ${modelName} | Thinking: ${thinkingLevel}`);
+      console.log(`Behavior: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}`);
+      console.log(`Skills (system-injected): ${skillBodies.length}`);
+      console.log(`Tools: ${tools.length} (${tools.map(t => t.name).join(', ')})`);
+      console.log('-'.repeat(80));
+      console.log(systemPrompt);
+      console.log('='.repeat(80) + '\n');
+
+      // Also emit the dynamic context
+      console.log('DEBUG: DYNAMIC CONTEXT (per-iteration)');
+      console.log('-'.repeat(40));
+      console.log(buildDynamicContextContent('AUTONOMOUS'));
+      console.log('-'.repeat(40) + '\n');
+
+      this.emitDebugComplete(`System prompt dumped to console (~${Math.ceil(systemPrompt.length / 4)} tokens). Open DevTools → Console to copy.`);
+    } else if (subCommand === 'skills') {
+      console.log('\n' + '='.repeat(80));
+      console.log('DEBUG: SKILL REGISTRY');
+      console.log('='.repeat(80));
+      const allSkills = skillRegistry.getAll();
+      for (const skill of allSkills) {
+        const state = skillRegistry.getState(skill.id);
+        console.log(`  [${state?.stickyActive ? 'ACTIVE' : 'idle'}] ${skill.id} — triggers: ${skill.context.triggerPatterns?.join(', ') || 'none'}`);
+      }
+      console.log('='.repeat(80) + '\n');
+      this.emitDebugComplete(`${allSkills.length} skills dumped to console.`);
+    } else if (subCommand === 'config') {
+      console.log('\n' + '='.repeat(80));
+      console.log('DEBUG: AGENT CONFIG');
+      console.log('='.repeat(80));
+      console.log('Loop Policy:', JSON.stringify(loopPolicy, null, 2));
+      const behaviorConfig = resolveBehavior({
+        ...inferBehavior({ hasSelection: !!pluginData.selectionStyles, userPrompt: '' }),
+        thinkingLevel: this.options.thinkingLevel,
+        promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
+      });
+      console.log('Behavior Config:', JSON.stringify(behaviorConfig, null, 2));
+      console.log('='.repeat(80) + '\n');
+      this.emitDebugComplete(`Agent config dumped to console.`);
+    } else {
+      this.emitDebugComplete(`Unknown sub-command: "${subCommand}". Available: /debug prompt, /debug skills, /debug config`);
+    }
+  }
+
   /**
    * Creates and configures the AgentRuntime with the appropriate provider and tools.
    */
@@ -189,6 +292,14 @@ export class AgentOrchestrator {
     if (providerName === 'openrouter') {
       provider = new OpenRouterProvider(apiKey, modelName);
       emit('SEND_LOG', { message: `Using OpenRouter: ${modelName}`, type: 'ai' });
+    } else if (providerName === 'proxy') {
+      const workerUrl = this.options.workerUrl;
+      const subscriptionToken = this.options.subscriptionToken;
+      if (!workerUrl || !subscriptionToken) {
+        throw new Error('[AgentOrchestrator] ProxyProvider requires workerUrl and subscriptionToken');
+      }
+      provider = new ProxyProvider(workerUrl, subscriptionToken, modelName);
+      emit('SEND_LOG', { message: `Using Proxy (${workerUrl}): ${modelName}`, type: 'ai' });
     } else {
       // Default to Gemini (existing behavior)
       provider = new GeminiProvider(apiKey, modelName);

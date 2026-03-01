@@ -29,6 +29,7 @@ export type { LineResult, BuildDesignResult };
 interface CompiledEntry {
   line: ParsedLine;
   action: FigmaAction;
+  warnings?: Array<{ code: string; message: string }>;
 }
 
 interface CompilationError {
@@ -189,6 +190,11 @@ export class IncrementalExecutor {
       const actionResult = executionResult.results[0];
       const succeeded = actionResult?.success ?? false;
 
+      // Merge compiler warnings (sizing defaults) with executor warnings (font fallback, etc.)
+      const executorWarnings = actionResult?.warnings?.map(w => ({ code: w.code, message: w.message })) ?? [];
+      const compilerWarnings = entry.warnings ?? [];
+      const allWarnings = [...compilerWarnings, ...executorWarnings];
+
       const lr: LineResult = {
         line: line.lineNumber,
         raw: line.raw,
@@ -197,7 +203,7 @@ export class IncrementalExecutor {
         symbol: line.symbol,
         nodeId: succeeded ? (actionResult.nodeId ?? executionResult.idMap[line.symbol ?? '']) : undefined,
         error: succeeded ? undefined : (actionResult?.error ?? 'Unknown error'),
-        warnings: actionResult?.warnings?.map(w => ({ code: w.code, message: w.message })),
+        warnings: allWarnings.length > 0 ? allWarnings : undefined,
       };
 
       // Promote to 'warning' if succeeded but has warnings

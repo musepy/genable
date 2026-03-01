@@ -3,9 +3,8 @@ import { emit } from '@create-figma-plugin/utilities'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ToolCallRecord, IterationRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
-import { searchDesignKnowledge } from '../../engine/agent/tools/knowledgeTools'
-import { validateLayout } from '../../engine/agent/tools/validationTools'
-import { projectUITools } from '../../engine/agent/tools/projectUITools'
+import { searchDesignKnowledgeExecutor, projectUIExecutors } from '../../engine/agent/tools/unified/queryKnowledge'
+import { validateLayoutExecutor } from '../../engine/agent/tools/unified/validateDesign'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -270,20 +269,15 @@ export function useChat({
 
     try {
       const localExecutors = {
-        // Legacy tool executors (backward compat)
-        searchDesignKnowledge,
-        validateLayout,
-        ...projectUITools.executors,
-
         // ── Unified tool executors ──
         query_knowledge: async (params: any) => {
           switch (params.source) {
             case 'knowledge':
-              return searchDesignKnowledge(params)
+              return searchDesignKnowledgeExecutor(params)
             case 'components':
-              return projectUITools.executors.listProjectComponents?.(params) ?? { success: true, data: [] }
+              return projectUIExecutors.listProjectComponents?.(params) ?? { success: true, data: [] }
             case 'tokens':
-              return projectUITools.executors.getDesignSystemTokens?.(params) ?? { success: true, data: [] }
+              return projectUIExecutors.getDesignSystemTokens?.(params) ?? { success: true, data: [] }
             default:
               return { success: false, error: { code: 'INVALID_SOURCE', message: `Unknown source: ${params.source}` } }
           }
@@ -451,22 +445,22 @@ export function useChat({
         setRuntimePhase('execution')
         setRuntimeProgress({ iteration: 8, maxIterations: 40 })
         setLoadingStatus('Applying design patch')
-        calls.unshift(buildCall('tc-1', 'applyDesignPatch', 'success', 29))
+        calls.unshift(buildCall('tc-1', 'patch_node', 'success', 29))
         setFlowCalls([...calls])
       })
 
       queue(950, () => {
         setRuntimeProgress({ iteration: 10, maxIterations: 40 })
-        setLoadingStatus('Inspecting hierarchy')
-        calls.unshift(buildCall('tc-2', 'inspectDesign', 'success', 91))
+        setLoadingStatus('Reading hierarchy')
+        calls.unshift(buildCall('tc-2', 'read_node', 'success', 91))
         setFlowCalls([...calls])
       })
 
       queue(1400, () => {
         setRuntimeProgress({ iteration: 12, maxIterations: 40 })
         setRuntimeContextUsage({ current: 54410, max: 200000, percent: 27, visibleMessages: 2, hiddenMessages: 3 })
-        setLoadingStatus('Running batched operations')
-        calls.unshift(buildCall('tc-3', 'batchOperations', 'success', 370))
+        setLoadingStatus('Building design')
+        calls.unshift(buildCall('tc-3', 'build_design', 'success', 370))
         setFlowCalls([...calls])
       })
 
@@ -475,18 +469,18 @@ export function useChat({
         setRuntimeProgress({ iteration: 14, maxIterations: 40 })
         setRuntimeContextUsage({ current: 97738, max: 200000, percent: 49, visibleMessages: 3, hiddenMessages: 8 })
         setLoadingStatus('Verifying output')
-        calls.unshift(buildCall('tc-4', 'inspectDesign', 'success', 73))
+        calls.unshift(buildCall('tc-4', 'validate_design', 'success', 73))
         setFlowCalls([...calls])
       })
 
       queue(2500, () => {
-        setLoadingStatus('Checking failed operations')
-        calls.unshift(buildCall('tc-5', 'batchOperations', 'error', 3840, '3 operations failed in batch'))
+        setLoadingStatus('Patching nodes')
+        calls.unshift(buildCall('tc-5', 'patch_node', 'error', 3840, '3 patches failed'))
         setFlowCalls([...calls])
       })
 
       queue(2950, () => {
-        calls.unshift(buildCall('tc-6', 'inspectDesign', 'success', 50))
+        calls.unshift(buildCall('tc-6', 'read_node', 'success', 50))
         setFlowCalls([...calls])
       })
 
@@ -508,8 +502,8 @@ export function useChat({
       resetPreview()
 
       const calls: ToolCallRecord[] = [
-        buildCall('err-1', 'inspectDesign', 'success', 68),
-        buildCall('err-2', 'batchOperations', 'error', 2100, 'Validation failed on 2 nodes'),
+        buildCall('err-1', 'read_node', 'success', 68),
+        buildCall('err-2', 'build_design', 'error', 2100, 'Validation failed on 2 nodes'),
       ]
 
       setPrompt('@design-knowledge improve validation')

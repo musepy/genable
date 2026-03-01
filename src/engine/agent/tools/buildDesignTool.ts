@@ -44,11 +44,40 @@ A line may bind a symbol: \`mySymbol = create(FRAME, ...)\`
 Symbols can be referenced in subsequent lines as parent or target.
 Aliases: createFrame/createText/createShape → create, setLayout/setStyles/updateProps → update, createIcon → icon, deleteNode → delete.
 
-Example:
+## CRITICAL SIZING RULE
+Figma defaults ALL frames to 100×100px when width/height is omitted.
+This is almost NEVER correct. ALWAYS set explicit dimensions or use layoutSizingVertical/layoutSizingHorizontal: "HUG".
+Common sizes: Card root 360-480px wide, Input height 44px, Button height 44-48px, Icon 20-24px.
+For auto-layout containers: set width explicitly + layoutSizingVertical: "HUG" to hug content height.
+For children in auto-layout: use layoutSizingHorizontal: "FILL" to stretch to parent width.
+
+## Example — Simple Card
 \`\`\`
-card = create(FRAME, { name: "Card", width: 320, height: 200, fills: ["#FFFFFF"], cornerRadius: 12 })
-title = create(TEXT, parent=card, { characters: "Card Title", fontSize: 18, fontWeight: "Bold" })
-divider = create(RECTANGLE, parent=card, { width: 280, height: 1, fills: ["#E0E0E0"] })
+card = create(FRAME, { name: "Card", width: 400, layoutSizingVertical: "HUG", layoutMode: "VERTICAL", itemSpacing: 16, padding: 24, fills: ["#FFFFFF"], cornerRadius: 16, effects: [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":4},"radius":16}] })
+title = create(TEXT, parent=card, { characters: "Card Title", fontSize: 20, fontWeight: "Bold", fills: ["#111827"], layoutSizingHorizontal: "FILL" })
+desc = create(TEXT, parent=card, { characters: "Description text", fontSize: 14, fills: ["#6B7280"], layoutSizingHorizontal: "FILL" })
+\`\`\`
+
+## Example — Login Form (Input, Button, Divider)
+\`\`\`
+root = create(FRAME, { name: "Login Card", width: 420, layoutSizingVertical: "HUG", layoutMode: "VERTICAL", itemSpacing: 24, padding: 32, fills: ["#FFFFFF"], cornerRadius: 16, effects: [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":8},"radius":24}] })
+heading = create(TEXT, parent=root, { characters: "Sign In", fontSize: 28, fontWeight: "Bold", fills: ["#111827"] })
+# Email input
+emailWrap = create(FRAME, parent=root, { name: "Email Field", layoutMode: "VERTICAL", itemSpacing: 6, layoutSizingHorizontal: "FILL", layoutSizingVertical: "HUG" })
+emailLabel = create(TEXT, parent=emailWrap, { characters: "Email", fontSize: 14, fontWeight: "Medium", fills: ["#374151"] })
+emailInput = create(FRAME, parent=emailWrap, { name: "Email Input", height: 44, layoutSizingHorizontal: "FILL", layoutMode: "HORIZONTAL", padding: 12, fills: ["#F9FAFB"], cornerRadius: 8, strokes: ["#D1D5DB"], strokeWeight: 1 })
+emailPlaceholder = create(TEXT, parent=emailInput, { characters: "you@example.com", fontSize: 14, fills: ["#9CA3AF"] })
+# Password input
+passWrap = create(FRAME, parent=root, { name: "Password Field", layoutMode: "VERTICAL", itemSpacing: 6, layoutSizingHorizontal: "FILL", layoutSizingVertical: "HUG" })
+passLabel = create(TEXT, parent=passWrap, { characters: "Password", fontSize: 14, fontWeight: "Medium", fills: ["#374151"] })
+passInput = create(FRAME, parent=passWrap, { name: "Password Input", height: 44, layoutSizingHorizontal: "FILL", layoutMode: "HORIZONTAL", padding: 12, fills: ["#F9FAFB"], cornerRadius: 8, strokes: ["#D1D5DB"], strokeWeight: 1 })
+passPlaceholder = create(TEXT, parent=passInput, { characters: "••••••••", fontSize: 14, fills: ["#9CA3AF"] })
+# Submit button
+submitBtn = create(FRAME, parent=root, { name: "Submit Button", height: 48, layoutSizingHorizontal: "FILL", layoutMode: "HORIZONTAL", primaryAxisAlignItems: "CENTER", counterAxisAlignItems: "CENTER", fills: ["#4F46E5"], cornerRadius: 10 })
+submitLabel = create(TEXT, parent=submitBtn, { characters: "Sign In", fontSize: 16, fontWeight: "Bold", fills: ["#FFFFFF"] })
+# Divider
+divider = create(RECTANGLE, parent=root, { name: "Divider", height: 1, layoutSizingHorizontal: "FILL", fills: ["#E5E7EB"] })
+footer = create(TEXT, parent=root, { characters: "Don't have an account? Sign up", fontSize: 14, fills: ["#6B7280"], layoutSizingHorizontal: "FILL" })
 \`\`\`
 
 Returns: idMap (symbol → real Figma node ID), lineResults (per-line status), stats.

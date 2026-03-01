@@ -21,12 +21,12 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'createIcon',
-            parameters: { name: 'mail', size: 24, color: '#000' },
+            name: 'build_design',
+            parameters: { instructions: 'FRAME "Card" w=300 h=200\n  TEXT "Title" chars="Hello"' },
             status: 'success',
             startTime: 1000,
             endTime: 1200,
-            result: { success: true }
+            result: { success: true, data: { idMap: { Card: '1:1' } } }
           }
         ],
         iterations: [{ iteration: 1, thinking: 'Thinking...', startTime: 1000 }]
@@ -36,11 +36,11 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Prompt: "Hello"');
     expect(result).toContain('Tools: 1 ok, 0 err');
-    expect(result).toContain('#1 [createIcon] 200ms OK');
-    expect(result).toContain('params: {mail, 24, #000}');
+    expect(result).toContain('#1 [build_design] 200ms OK');
+    expect(result).toContain('2 lines:');
   });
 
-  it('should handle batchOperations with correct payload structure and idMap', () => {
+  it('should handle build_design with idMap in results', () => {
     const history: ChatMessage[] = [
       { role: 'user', text: 'Create stuff', id: '1' },
       {
@@ -50,12 +50,9 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'batchOperations',
+            name: 'build_design',
             parameters: {
-              operations: [
-                { action: 'createNode', params: { name: 'Header', type: 'FRAME' }, opId: 'op_h' },
-                { action: 'createNode', params: { name: 'Footer', type: 'FRAME' }, opId: 'op_f' }
-              ]
+              instructions: 'FRAME "Header" w=400 h=60\nFRAME "Footer" w=400 h=40'
             },
             status: 'success',
             startTime: 1000,
@@ -63,7 +60,7 @@ describe('generateLogDigest', () => {
             result: {
               success: true,
               data: {
-                idMap: { 'op_h': '3:1', 'op_f': '3:2' }
+                idMap: { 'Header': '3:1', 'Footer': '3:2' }
               }
             }
           }
@@ -72,36 +69,7 @@ describe('generateLogDigest', () => {
     ];
 
     const result = generateLogDigest(history);
-    expect(result).toContain('createNode(Header/FRAME), createNode(Footer/FRAME)');
-    expect(result).toContain('ids: op_h→3:1, op_f→3:2');
-  });
-
-  it('should handle truncated tool parameters gracefully', () => {
-    const history: ChatMessage[] = [
-      {
-        role: 'model',
-        text: 'Thinking...',
-        id: 'trunc',
-        toolCalls: [
-          {
-            id: 'call_trunc',
-            name: 'batchOperations',
-            parameters: {
-              _truncated: true,
-              operations: [
-                { opId: 'op1', action: 'createNode', name: 'TruncatedNode' }
-              ]
-            },
-            status: 'success',
-            startTime: 1100,
-            endTime: 1200
-          }
-        ]
-      }
-    ];
-
-    const digest = generateLogDigest(history);
-    expect(digest).toContain('createNode(TruncatedNode)');
+    expect(result).toContain('ids: Header→3:1, Footer→3:2');
   });
 
   it('should summarize errors correctly', () => {
@@ -114,12 +82,12 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'batchOperations',
-            parameters: { operations: [] },
+            name: 'build_design',
+            parameters: { instructions: '' },
             status: 'error',
             startTime: 1000,
             endTime: 1100,
-            error: 'Invalid parent node\nStack trace...'
+            error: 'Invalid instructions\nStack trace...'
           }
         ]
       }
@@ -128,7 +96,7 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Tools: 0 ok, 1 err');
     expect(result).toContain('--- ERRORS ---');
-    expect(result).toContain('#1 batchOperations: "Invalid parent node"');
+    expect(result).toContain('#1 build_design: "Invalid instructions"');
   });
 
   it('should truncate long prompts and summaries', () => {

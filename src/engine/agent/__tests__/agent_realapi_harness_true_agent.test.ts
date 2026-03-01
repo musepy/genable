@@ -231,25 +231,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
       return { success: true, data: { rootNodeId: result.rootNodeId, idMap: result.idMap } };
     },
 
-    batchOperations: async (params: any) => {
-      const ops = params.operations || [];
-      const idMap: Record<string, string> = {};
-      const results = ops.map((op: any) => {
-        const id = `mock-${op.opId || 'op'}-${Date.now().toString(36)}`;
-        if (op.opId) idMap[op.opId] = id;
-        return { opId: op.opId, action: op.action, success: true, nodeId: id };
-      });
-      return { success: true, data: { results, idMap } };
-    },
-
-    createNode: async (params: any) => ({
-      success: true,
-      data: { nodeId: `mock-${params.name || 'node'}-${Date.now().toString(36)}` },
-    }),
-
-    setNodeLayout: async () => ({ success: true }),
-    setNodeStyles: async () => ({ success: true }),
-    updateNodeProperties: async () => ({ success: true }),
     deleteNode: async () => ({ success: true }),
 
     createIcon: async (params: any) => ({
@@ -298,7 +279,7 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
 function inferPhase(toolCalls: Array<{ name: string }>): string {
   const names = new Set(toolCalls.map(tc => tc.name));
   if (names.has('planDesign') || names.has('searchDesignKnowledge') || names.has('getComponentAnatomy') || names.has('getFigmaLayoutRules')) return 'PLANNING';
-  if (names.has('generateDesign') || names.has('renderSubtree') || names.has('batchOperations') || names.has('createNode')) return 'EXECUTION';
+  if (names.has('build_design') || names.has('renderSubtree')) return 'EXECUTION';
   if (names.has('inspectDesign') || names.has('validateLayout')) return 'VERIFICATION';
   if (names.has('patchNode') || names.has('applyDesignPatch')) return 'VERIFICATION_FIX';
   if (names.has('complete_task')) return 'COMPLETION';

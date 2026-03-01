@@ -26,38 +26,29 @@ import { t } from '../../ui/i18n'
 import { categorizeError } from '../../engine/llm-client/errorCategorizer'
 import type { ErrorActionType } from '../../config/errorPatterns'
 
-// Inline styles
+// Inline styles — flat transcript layout
 const messagesContainerStyle = {
   display: 'flex',
   flexDirection: 'column' as const,
   flex: 1,
-  minHeight: 0, // CRITICAL for shrinking
+  minHeight: 0,
   overflowY: 'auto' as const,
   padding: `${tokens.space[3]}px ${tokens.space[3]}px`,
-  paddingBottom: tokens.space[3],
-  gap: tokens.space[1],
+  paddingBottom: tokens.space[1],
 };
 
-const messageBubbleUserStyle = {
+// Model messages: plain left-aligned text
+const messageItemStyle = {
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  width: '100%',
+};
+
+// User messages: subtle background to distinguish
+const userItemStyle = {
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  width: '100%',
   background: tokens.colors.alpha[2],
-  color: tokens.colors.textPrimary,
   borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-  width: '100%',
-};
-
-const messageBubbleModelStyle = {
-  borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-  width: '100%',
-};
-
-const messageBubbleResultStyle = {
-  background: 'transparent',
-  border: 'none',
-  borderRadius: 'var(--radius-4)',
-  padding: 0,
-  width: '100%',
 };
 
 // ------------------------------------------------------------------
@@ -189,11 +180,6 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
         const isCrossRole = prevRole !== null && prevRole !== msg.role;
         const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[3] : tokens.space[1]);
 
-        const hasToolCalls = !isUserMessage && Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0;
-        const bubbleStyle = isUserMessage
-          ? messageBubbleUserStyle
-          : (hasToolCalls ? messageBubbleResultStyle : messageBubbleModelStyle);
-
         const safeText = typeof msg.text === 'string' ? msg.text : String(msg.text ?? '');
 
         const lastIteration = msg.iterations?.[msg.iterations.length - 1];
@@ -207,16 +193,15 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
         );
 
         return (
-          <div key={msg.id || `msg-${i}`} className="message-enter" style={{ ...bubbleStyle as any, marginTop }}>
+          <div key={msg.id || `msg-${i}`} style={{ ...(isUserMessage ? userItemStyle : messageItemStyle), marginTop }}>
             {isUserMessage ? (
-              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)' }}>
+              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
                 {safeText}
               </span>
             ) : (
               <Fragment>
                 {shouldShowToolGroup && (
-                  <div style={{ marginBottom: tokens.space[3] }}>
-                    <ToolExecutionPanel
+                  <ToolExecutionPanel
                       toolCalls={msg.toolCalls}
                       thinkingStatus={thinkingStatus}
                       reasoningPreview={reasoningPreview}
@@ -232,10 +217,9 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                       onStop={onStop}
                       onContinue={onContinue}
                     />
-                  </div>
                 )}
 
-                {safeText ? <MessageRenderer content={safeText} level="L3" /> : <div />}
+                {safeText && <MessageRenderer content={safeText} level="L3" />}
 
                 {msg.rawOutput && (
                   <div style={{ marginTop: tokens.space[2] }}>

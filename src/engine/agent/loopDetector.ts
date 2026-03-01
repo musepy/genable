@@ -105,13 +105,9 @@ export class LoopDetector {
       const nameSample = tc.args?.name ? `|name:${this.truncate(tc.args.name, 64)}` : '';
       const contextSample = parentId ? `|parent:${this.truncate(parentId, 32)}` : '';
 
-      if (tc.name === 'create_node' && Array.isArray(tc.args?.nodes)) {
-        const nodeCount = tc.args.nodes.length;
-        const nodeNames = tc.args.nodes
-          .slice(0, 10)
-          .map((n: any) => n?.id || n?.props?.name || n?.type || 'node')
-          .join(',');
-        fingerprint = `|create:${nodeCount}|nodes:${this.hashString(nodeNames)}`;
+      if (tc.name === 'build_design' && typeof tc.args?.instructions === 'string') {
+        const instrHash = this.hashString(tc.args.instructions.slice(0, 256));
+        fingerprint = `|build:${instrHash}`;
       } else if (tc.name === 'patch_node' && Array.isArray(tc.args?.patches)) {
         const patchHash = this.hashString(JSON.stringify(
           tc.args.patches.map((p: any) => ({ n: p.nodeId, props: p.props }))

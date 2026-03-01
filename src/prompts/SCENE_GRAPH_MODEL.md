@@ -39,6 +39,6 @@
 - Rule: FILL width + long text → set textAutoResize=HEIGHT to enable wrapping.
 
 ### Efficiency: Think in Trees, Not Nodes
-- Output the complete structure in one `create_node` call when possible.
+- Output the complete structure in one `build_design` call when possible.
 - Plan the full hierarchy before outputting: root > sections > components > leaves.
 - Avoid creating bare frames and restyling in later iterations when requirements are already known.

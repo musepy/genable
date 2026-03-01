@@ -29,7 +29,7 @@ Only include the properties you want to CHANGE — unspecified properties remain
           properties: {
             nodeId: {
               type: 'string',
-              description: 'Real Figma node ID to update (from read_node or previous create_node response).'
+              description: 'Real Figma node ID to update (from read_node or previous build_design idMap).'
             },
             props: {
               type: 'object',

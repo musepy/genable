@@ -30,6 +30,7 @@ export type { LLMModel, RawGeminiModel } from './modelFilter';
 // Core generation
 export { GeminiProvider } from './providers/gemini';
 export { OpenRouterProvider } from './providers/openrouter';
+export { ProxyProvider } from './providers/proxy';
 export { OPENROUTER_CONFIG } from './config';
 
 

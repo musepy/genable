@@ -8,53 +8,32 @@ interface DigestMeta {
  * Tool-specific parameter extractors to keep only essential info.
  */
 const parameterExtractors: Record<string, (params: any) => string> = {
-  batchOperations: (params) => {
-    if (!params.operations || !Array.isArray(params.operations)) {
-      return params._truncated ? '[Truncated Operations]' : JSON.stringify(params).slice(0, 100);
+  build_design: (params) => {
+    if (!params.instructions || typeof params.instructions !== 'string') {
+      return params._truncated ? '[Truncated Instructions]' : JSON.stringify(params).slice(0, 100);
     }
-    return params.operations
-      .map((op: any) => {
-        const action = op.action || op.type || '?';
-        const name = op.params?.name || op.name || op.params?.nodeId || op.nodeId || op.opId || '?';
-        const type = op.params?.type ? `/${op.params.type}` : '';
-        return `${action}(${name}${type})`;
-      })
-      .join(', ');
+    const lines = params.instructions.split('\n').filter((l: string) => l.trim());
+    const preview = lines.slice(0, 2).join('; ').slice(0, 80);
+    return `${lines.length} lines: ${preview}${lines.length > 2 ? '...' : ''}`;
   },
-  applyDesignPatch: (params) => {
-    if (!Array.isArray(params.patches)) {
-      if (params._truncated && params.patches) return `[${params.patches.length} patches truncated]`;
-      return JSON.stringify(params).slice(0, 100);
-    }
+  patch_node: (params) => {
+    if (!Array.isArray(params.patches)) return JSON.stringify(params).slice(0, 100);
     return params.patches
-      .map((p: any) => `${p.nodeId || p.nodeRef || '?'}{${Object.keys(p).filter(k => !['nodeId', 'nodeRef'].includes(k)).join(',')}}`)
+      .map((p: any) => `${p.nodeId || '?'}{${Object.keys(p.props || {}).join(',')}}`)
       .join(', ');
   },
-  createIcon: (params) => `${params.name || '?'}, ${params.size || 'default'}, ${params.color || 'default'}`,
-  planDesign: (params) => `${params.approach || 'default'}, steps:${params.steps?.length || 0}`,
-  inspectDesign: (params) => {
+  read_node: (params) => {
     if (params.mode) {
       if (params.mode === 'selection') return `mode: selection`;
       const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
       return `mode: ${params.mode}, nodeId: ${params.nodeId || '?'}${depthStr}`;
     }
-    return `nodeIds: ${params.nodeIds?.join(',') || params.nodeId || '?'}`;
+    return `nodeId: ${params.nodeId || '?'}`;
   },
   signal: (params) => `${params.type || 'unknown'}: ${(params.summary || params.title || '').slice(0, 80)}`,
-  renderSubtree: (params) => {
-    if (Array.isArray(params.nodes)) return `nodes:${params.nodes.length}, parent:${params.parentId || 'root'}`;
-    return `${params.nodeId || '?'}, ${params.type || '?'}`;
-  },
-  patchNode: (params) => `${params.nodeId || '?'}, props:${Object.keys(params.props || {}).join(',')}`,
-  generateDesign: (params) => {
-    if (!Array.isArray(params.nodes)) return JSON.stringify(params).slice(0, 100);
-    const summary = params.nodes
-      .slice(0, 3)
-      .map((n: any) => `${n.type}(${n.props?.name || n.id || '?'})`)
-      .join(', ');
-    const more = params.nodes.length > 3 ? `... (+${params.nodes.length - 3} more)` : '';
-    return `nodes:${params.nodes.length} [${summary}${more}]`;
-  },
+  query_knowledge: (params) => `source: ${params.source || '?'}, query: ${(params.query || '').slice(0, 60)}`,
+  validate_design: (params) => `nodeId: ${params.nodeId || '?'}`,
+  delete_node: (params) => `nodeId: ${params.nodeId || '?'}`,
 };
 
 /**
@@ -63,7 +42,7 @@ const parameterExtractors: Record<string, (params: any) => string> = {
 function extractResultInfo(tool: ToolCallRecord): string {
   if (tool.status === 'error') return '';
   const idMap = tool.result?.data?.idMap || tool.result?.idMap;
-  if (tool.name === 'batchOperations' && idMap) {
+  if (tool.name === 'build_design' && idMap) {
     const mappings = Object.entries(idMap)
       .map(([key, id]) => `${key}→${id}`)
       .join(', ');
@@ -126,10 +105,7 @@ export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): st
         const status = tool.status === 'error' ? 'ERR' : 'OK';
         const toolDuration = tool.endTime ? `${tool.endTime - tool.startTime}ms` : '?';
         lines.push(`#${toolIndex} [${tool.name}] ${toolDuration} ${status}`);
-        
-        // Extract thinking if available (approximate link to tool call)
-        // Note: Real link is via iteration toolCallIds, but for digest a sequential flow is usually enough
-        
+
         const extractor = parameterExtractors[tool.name];
         const paramsStr = extractor ? extractor(tool.parameters) : JSON.stringify(tool.parameters).slice(0, 100);
         lines.push(`   params: {${paramsStr}}`);
@@ -140,7 +116,7 @@ export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): st
         if (tool.error) {
           lines.push(`   error: "${tool.error.split('\n')[0]}"`);
         }
-        
+
         lines.push('');
         toolIndex++;
       });

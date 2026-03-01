@@ -1,16 +1,8 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { PROPS, NODE_TYPES } from '../../constants/figma-api';
 
-// Mock figma global
-vi.stubGlobal('figma', {
-  getNodeById: vi.fn(),
-});
-
 describe('NodeSerializer - Compression', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
 
   it('should prune properties that match default values', () => {
     const mockNode = {

@@ -6,13 +6,14 @@
 ## EXECUTION RULES
 
 ### For NEW designs
-- Prefer one `create_node` call with a complete flat node list (`id` + `parent` references).
-- Put style/layout in `props` during creation; avoid create-then-restyle loops.
+- Prefer one `build_design` call with all nodes in a single DSL script.
+- Put style/layout in props during creation; avoid create-then-restyle loops.
+- ALWAYS set explicit width/height or HUG sizing on FRAME nodes to avoid 100×100px default.
 
 ### For EDITING existing designs
 - Call `read_node` first to get real node IDs.
 - Use `patch_node` for property updates.
-- Use `create_node` only for truly new nodes, with correct `parentId`.
+- Use `build_design` only for truly new nodes, with correct `parentId`.
 - Group related updates into one `patch_node` call when possible.
 
 ### Verification before completion

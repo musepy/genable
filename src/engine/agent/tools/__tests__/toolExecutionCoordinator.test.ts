@@ -7,7 +7,7 @@ describe('ToolExecutionCoordinator', () => {
   it.each([
     ['signal', {}, 'type'],
     ['read_node', {}, 'mode'],
-    ['create_node', {}, 'nodes'],
+    ['build_design', {}, 'instructions'],
     ['patch_node', {}, 'patches'],
     ['delete_node', {}, 'nodeId'],
     ['query_knowledge', {}, 'source'],
@@ -101,7 +101,7 @@ describe('ToolExecutionCoordinator', () => {
       'complete_task',
       { summary: 'done' },
       'EXECUTION',
-      ['signal', 'read_node', 'create_node', 'patch_node', 'delete_node', 'query_knowledge', 'validate_design']
+      ['signal', 'read_node', 'build_design', 'patch_node', 'delete_node', 'query_knowledge', 'validate_design']
     );
 
     expect(result.ok).toBe(false);

@@ -3,18 +3,19 @@ import { ToolResultCleaner } from '../toolResultCleaner';
 
 describe('ToolResultCleaner', () => {
   const tools: any[] = [
-    { name: 'batchOperations', parameters: { properties: { operations: { type: 'array' } } } }
+    { name: 'build_design', parameters: { properties: { instructions: { type: 'string' } } } }
   ];
   const cleaner = new ToolResultCleaner(tools);
 
-  it('preserves rollback information in batchOperations failure results', () => {
+  it('preserves rollback information in build_design failure results', () => {
     const rawResult = {
       success: false,
-      error: { code: 'PARTIAL_FAILURE', message: 'One or more operations failed.' },
+      name: 'build_design',
+      error: { code: 'PARTIAL_FAILURE', message: 'One or more lines failed.' },
       data: {
         results: [
-          { opId: 'op1', action: 'createNode', success: true, nodeId: 'node-1' },
-          { opId: 'op2', action: 'createNode', success: false, error: { code: 'APPLY_ERROR', message: 'failed' } }
+          { opId: 'op1', action: 'createFrame', success: true, nodeId: 'node-1' },
+          { opId: 'op2', action: 'createFrame', success: false, error: { code: 'APPLY_ERROR', message: 'failed' } }
         ],
         idMap: { op1: 'node-1' },
         rollback: {
@@ -50,15 +51,16 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.data.visibilityAutoFixed).toContain('Fixed overlap');
   });
 
-  it('preserves diff and diffInfo in batchOperations results', () => {
+  it('preserves diff and diffInfo in build_design results', () => {
     const rawResult = {
       success: false,
+      name: 'build_design',
       data: {
         results: [
-          { 
-            opId: 'op1', 
-            action: 'setNodeLayout', 
-            success: true, 
+          {
+            opId: 'op1',
+            action: 'createFrame',
+            success: true,
             nodeId: 'node-1',
             diff: ['layoutMode mismatch'],
             diffInfo: ['[Auto-corrected] Text node limitation']
@@ -79,14 +81,14 @@ describe('ToolResultCleaner', () => {
       success: false,
       error: {
         code: 'TOOL_VALIDATION_ERROR',
-        message: 'Validation Error: create_node is missing required parameter(s): nodes. Please provide a non-empty array of nodes.',
+        message: 'Validation Error: build_design is missing required parameter(s): instructions.',
         details: {
-          tool: 'create_node',
+          tool: 'build_design',
           mode: 'EXECUTION',
-          missing: ['nodes'],
+          missing: ['instructions'],
           invalid: [],
           receivedKeys: ['parentId'],
-          repairHint: 'provide a non-empty array of nodes',
+          repairHint: 'provide a non-empty instructions string',
           extra: 'should be dropped'
         }
       }
@@ -95,12 +97,12 @@ describe('ToolResultCleaner', () => {
     const cleaned = cleaner.cleanToolResult(rawResult);
 
     expect(cleaned.error.details).toEqual({
-      tool: 'create_node',
+      tool: 'build_design',
       mode: 'EXECUTION',
-      missing: ['nodes'],
+      missing: ['instructions'],
       invalid: [],
       receivedKeys: ['parentId'],
-      repairHint: 'provide a non-empty array of nodes'
+      repairHint: 'provide a non-empty instructions string'
     });
   });
 
@@ -235,7 +237,7 @@ describe('ToolResultCleaner', () => {
       // It should still process structurally, not just truncate to text
       expect(cleaned.data.id).toBe('root-1');
       expect(cleaned.data.props.layoutMode).toBe('VERTICAL');
-      
+
       // Children should be capped at 15
       expect(cleaned.data.children.length).toBe(15);
       expect(cleaned.data._moreChildren).toBe(5);

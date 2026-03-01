@@ -5,7 +5,7 @@
  */
 
 export { readNodeDefinition } from './readNode';
-export { createNodeDefinition as unifiedCreateNodeDefinition } from './createNode';
+export { buildDesignDefinition as unifiedBuildDesignDefinition } from '../buildDesignTool';
 export { patchNodeDefinition as unifiedPatchNodeDefinition } from './patchNode';
 export { deleteNodeDefinition as unifiedDeleteNodeDefinition } from './deleteNode';
 export { queryKnowledgeDefinition } from './queryKnowledge';
@@ -13,7 +13,7 @@ export { validateDesignDefinition } from './validateDesign';
 export { signalDefinition } from './signal';
 
 import { readNodeDefinition } from './readNode';
-import { createNodeDefinition } from './createNode';
+import { buildDesignDefinition } from '../buildDesignTool';
 import { patchNodeDefinition } from './patchNode';
 import { deleteNodeDefinition } from './deleteNode';
 import { queryKnowledgeDefinition } from './queryKnowledge';
@@ -29,7 +29,7 @@ import { ToolDefinition } from '../types';
 export const unifiedTools: ToolDefinition[] = [
   signalDefinition,             // Flow control (plan/task/progress/complete)
   readNodeDefinition,           // Read anything from Figma
-  createNodeDefinition,         // Create nodes
+  buildDesignDefinition,        // Create designs via DSL instructions
   patchNodeDefinition,          // Modify existing nodes
   deleteNodeDefinition,         // Delete nodes
   queryKnowledgeDefinition,     // Query knowledge/components/tokens

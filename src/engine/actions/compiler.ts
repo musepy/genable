@@ -21,6 +21,8 @@ export interface CompiledEntry {
   line: ParsedLine;
   /** The FigmaAction ready to be executed. */
   action: FigmaAction;
+  /** Non-fatal warnings generated during compilation (e.g. sizing defaults injected). */
+  warnings?: Array<{ code: string; message: string }>;
 }
 
 export interface CompilationError {
@@ -139,6 +141,7 @@ export class ActionCompiler {
     dependsOn: string[] | undefined,
   ): CompiledEntry | CompilationError {
     const nodeType = (line.nodeType ?? 'FRAME').toUpperCase();
+    const hasParent = !!parentId;
 
     if (nodeType === 'TEXT') {
       const action: FigmaAction = {
@@ -152,26 +155,81 @@ export class ActionCompiler {
     }
 
     if (SHAPE_TYPES.has(nodeType)) {
+      const { props: enhanced, warnings } = this.applySizingDefaults(props, hasParent, false);
       const action: FigmaAction = {
         action: 'createShape',
         shapeType: nodeType as 'RECTANGLE' | 'ELLIPSE' | 'LINE' | 'VECTOR',
         tempId: line.symbol,
         parentId,
-        props,
+        props: enhanced,
         dependsOn,
       };
-      return { line, action };
+      return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
     }
 
     // Default: FRAME (covers FRAME and any unknown node types)
+    const { props: enhanced, warnings } = this.applySizingDefaults(props, hasParent, true);
     const action: FigmaAction = {
       action: 'createFrame',
       tempId: line.symbol,
       parentId,
-      props,
+      props: enhanced,
       dependsOn,
     };
-    return { line, action };
+    return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: smart sizing defaults
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Inject sensible sizing defaults to prevent Figma's 100×100px fallback.
+   * Returns both the enhanced props and warnings describing what was injected,
+   * so the agent can see exactly which defaults were applied.
+   *
+   * Rules:
+   * - Root frames (no parent): width defaults to 360px when not specified.
+   * - Frames with layoutMode: layoutSizingVertical defaults to "HUG" when
+   *   neither explicit height nor layoutSizingVertical is provided.
+   * - Child frames/shapes (has parent): layoutSizingHorizontal defaults to
+   *   "FILL" when neither explicit width nor layoutSizingHorizontal is set.
+   */
+  private applySizingDefaults(
+    props: Record<string, any>,
+    hasParent: boolean,
+    isFrame: boolean,
+  ): { props: Record<string, any>; warnings: Array<{ code: string; message: string }> } {
+    const p = { ...props };
+    const warnings: Array<{ code: string; message: string }> = [];
+
+    if (isFrame) {
+      // Root frame: ensure reasonable width (avoid 100px default)
+      if (!hasParent && p.width === undefined && p.layoutSizingHorizontal !== 'FILL') {
+        p.width = 360;
+        warnings.push({ code: 'SIZING_DEFAULT', message: 'width defaulted to 360px (root frame without explicit width). Set width explicitly to control this.' });
+      }
+
+      // Frame with layoutMode: default to HUG height so it wraps content
+      if (p.layoutMode && p.height === undefined && p.layoutSizingVertical === undefined) {
+        p.layoutSizingVertical = 'HUG';
+        warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingVertical defaulted to "HUG" (auto-layout frame without explicit height). Set height or layoutSizingVertical explicitly.' });
+      }
+
+      // Child frame: default to FILL width (stretch to parent)
+      if (hasParent && p.width === undefined && p.layoutSizingHorizontal === undefined) {
+        p.layoutSizingHorizontal = 'FILL';
+        warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingHorizontal defaulted to "FILL" (child frame without explicit width). Set width or layoutSizingHorizontal explicitly.' });
+      }
+    }
+
+    // Child shapes (RECTANGLE, etc.): default to FILL width
+    if (!isFrame && hasParent && p.width === undefined && p.layoutSizingHorizontal === undefined) {
+      p.layoutSizingHorizontal = 'FILL';
+      warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingHorizontal defaulted to "FILL" (child shape without explicit width).' });
+    }
+
+    return { props: p, warnings };
   }
 
   private compileUpdate(

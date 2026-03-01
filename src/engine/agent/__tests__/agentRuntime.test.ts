@@ -100,7 +100,7 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'try create',
-        toolCalls: [{ name: 'create_node', args: {} }]
+        toolCalls: [{ name: 'build_design', args: {} }]
       })
       .mockResolvedValueOnce({
         text: 'done',
@@ -115,7 +115,7 @@ describe('AgentRuntime', () => {
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'create_node', description: 'Create', parameters: { type: 'object', properties: {} } },
+        { name: 'build_design', description: 'Create', parameters: { type: 'object', properties: {} } },
         { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
       ],
       ipcBridge: mockIpcBridge,
@@ -132,12 +132,12 @@ describe('AgentRuntime', () => {
 
     expect(firstResponse.success).toBe(false);
     expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
-    expect(firstResponse.error.message).toContain('Validation Error: create_node');
-    expect(firstResponse.error.message).toContain('nodes');
+    expect(firstResponse.error.message).toContain('Validation Error: build_design');
+    expect(firstResponse.error.message).toContain('instructions');
     expect(firstResponse.error.details).toMatchObject({
-      tool: 'create_node',
+      tool: 'build_design',
       mode: 'EXECUTION',
-      missing: ['nodes']
+      missing: ['instructions']
     });
   });
 
@@ -161,7 +161,7 @@ describe('AgentRuntime', () => {
       provider: mockProvider,
       tools: [
         { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } },
-        { name: 'create_node', description: 'Create', parameters: { type: 'object', properties: {} } }
+        { name: 'build_design', description: 'Create', parameters: { type: 'object', properties: {} } }
       ],
       ipcBridge: mockIpcBridge,
       loopPolicy: { useSkillSystem: false } as any

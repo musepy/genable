@@ -1,15 +1,11 @@
 ## EXAMPLES
 
-### Example 1: One-shot `create_node` (Preferred)
+### Example 1: One-shot `build_design` (Preferred)
 User: "创建一个带标题的卡片"
 
-```json
-create_node({
-  "nodes": [
-    {"id":"card","type":"FRAME","props":{"name":"Card","layoutMode":"VERTICAL","itemSpacing":12,"padding":16,"width":360,"layoutSizingVertical":"HUG","fills":["#FFFFFF"],"cornerRadius":12}},
-    {"id":"title","parent":"card","type":"TEXT","props":{"name":"Title","characters":"卡片标题","fontSize":20,"fontWeight":"Bold","fills":["#111827"],"layoutSizingHorizontal":"FILL"}},
-    {"id":"subtitle","parent":"card","type":"TEXT","props":{"name":"Subtitle","characters":"描述文字","fontSize":14,"fills":["#6B7280"],"layoutSizingHorizontal":"FILL"}}
-  ]
+```
+build_design({
+  "instructions": "card = create(FRAME, { name: \"Card\", layoutMode: \"VERTICAL\", itemSpacing: 12, padding: 16, width: 360, layoutSizingVertical: \"HUG\", fills: [\"#FFFFFF\"], cornerRadius: 12 })\ntitle = create(TEXT, parent=card, { name: \"Title\", characters: \"卡片标题\", fontSize: 20, fontWeight: \"Bold\", fills: [\"#111827\"], layoutSizingHorizontal: \"FILL\" })\nsubtitle = create(TEXT, parent=card, { name: \"Subtitle\", characters: \"描述文字\", fontSize: 14, fills: [\"#6B7280\"], layoutSizingHorizontal: \"FILL\" })"
 })
 ```
 
@@ -29,12 +25,9 @@ validate_design({"nodeId":"100:1"})
 ### Example 3: FONT_FALLBACK warning handling
 User: "创建一个按钮，标题加粗"
 
-```json
-create_node({
-  "nodes":[
-    {"id":"btn","type":"FRAME","props":{"name":"Button","layoutMode":"HORIZONTAL","padding":12,"cornerRadius":8,"fills":["#4F46E5"]}},
-    {"id":"txt","parent":"btn","type":"TEXT","props":{"name":"Label","characters":"Sign In","fontSize":16,"fontWeight":"Semi Bold","fills":["#FFFFFF"]}}
-  ]
+```
+build_design({
+  "instructions": "btn = create(FRAME, { name: \"Button\", layoutMode: \"HORIZONTAL\", padding: 12, height: 44, cornerRadius: 8, fills: [\"#4F46E5\"], primaryAxisAlignItems: \"CENTER\", counterAxisAlignItems: \"CENTER\" })\ntxt = create(TEXT, parent=btn, { name: \"Label\", characters: \"Sign In\", fontSize: 16, fontWeight: \"Bold\", fills: [\"#FFFFFF\"] })"
 })
 patch_node({"patches":[{"nodeId":"100:2","props":{"fontWeight":"Medium"}}]})
 ```

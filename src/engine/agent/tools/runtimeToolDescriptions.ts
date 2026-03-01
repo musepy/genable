@@ -56,10 +56,10 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     repairHint: 'provide "mode", and for "node"/"hierarchy" modes include a non-empty "nodeId"',
   },
   {
-    tool: 'create_node',
+    tool: 'build_design',
     mode: 'EXECUTION',
-    required: [{ name: 'nodes', check: 'non_empty_array' }],
-    repairHint: 'provide a non-empty array of nodes',
+    required: [{ name: 'instructions', check: 'required' }],
+    repairHint: 'provide a non-empty instructions string',
   },
   {
     tool: 'patch_node',

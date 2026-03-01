@@ -63,9 +63,7 @@ export class ToolResultCleaner {
         return cleaned;
       }
 
-      const isSpecializedTool = cleaned.name === 'applyDesignPatch' || 
-                                cleaned.name === 'batchOperations' ||
-                                cleaned.name === 'create_node' ||
+      const isSpecializedTool = cleaned.name === 'build_design' ||
                                 cleaned.name === 'patch_node';
       if (isSpecializedTool && cleaned.data) {
         // For these tools, use structural distillation rather than string truncation
@@ -409,16 +407,16 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
-      // Aggressive pruning for large create payloads
-      if (tc.name === 'create_node' && Array.isArray(tc.args?.nodes)) {
-        const nodeCount = tc.args.nodes.length;
-        const originalLength = tc.args ? JSON.stringify(tc.args).length : 0;
-        if (originalLength > 1000) {
+      // Aggressive pruning for large build_design instructions
+      if (tc.name === 'build_design' && typeof tc.args?.instructions === 'string') {
+        const originalLength = tc.args.instructions.length;
+        if (originalLength > 500) {
+          const lineCount = tc.args.instructions.split('\n').filter((l: string) => l.trim() && !l.trim().startsWith('#')).length;
           return {
             ...tc,
             args: {
               ...(tc.args?.parentId && { parentId: tc.args.parentId }),
-              nodes: `[_truncated: ${nodeCount} nodes omitted to save context. State tracked by Figma.]`,
+              instructions: `[_truncated: ${lineCount} lines, ${originalLength} chars omitted. State tracked by Figma.]`,
               _truncated: true,
               _originalSize: originalLength
             }
@@ -490,27 +488,7 @@ export class ToolResultCleaner {
   }
 
   private truncateArgs(toolName: string, sanitizedArgs: any, originalLength: number): any {
-    if (toolName === 'batchOperations' && Array.isArray(sanitizedArgs.operations)) {
-      return {
-        operations: sanitizedArgs.operations.map((op: any) => ({
-          opId: op.opId,
-          action: op.action,
-          _paramsTruncated: true,
-          ...(op.params?.nodeRef && { nodeRef: op.params.nodeRef }),
-          ...(op.params?.parentRef && { parentRef: op.params.parentRef }),
-          ...(op.params?.nodeId && { nodeId: op.params.nodeId }),
-          ...(op.params?.parentId && { parentId: op.params.parentId }),
-          ...(op.params?.name && { name: op.params.name }),
-          ...(Array.isArray(op.params?.children) && {
-            childOpIds: op.params.children.map((c: any) => c.opId).filter(Boolean)
-          }),
-        })),
-        strategy: sanitizedArgs.strategy,
-        onError: sanitizedArgs.onError,
-        _truncated: true,
-        _originalSize: originalLength
-      };
-    } else if (toolName === 'applyDesignPatch' && Array.isArray(sanitizedArgs.patches)) {
+    if (toolName === 'applyDesignPatch' && Array.isArray(sanitizedArgs.patches)) {
       return {
         patches: sanitizedArgs.patches.map((p: any) => ({
           nodeId: p.nodeId || p.nodeRef,

@@ -10,12 +10,10 @@ import {
     DYNAMIC_GUIDANCE,
     AGENT_NAMING_CONVENTION,
     AGENT_CONTENT_REQUIREMENT,
-    AGENT_PARENT_CHILD_RULE,
-    AGENT_DESIGN_FREEDOM,
-    JSON_FORMAT_RULES
+    AGENT_DESIGN_FREEDOM
 } from '../../agent/agentPrompts';
 // Direct imports from centralized prompt registry
-import { SCHEMA_RULES, SCENE_GRAPH_MODEL, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
+import { SCENE_GRAPH_MODEL, DESIGN_AESTHETICS } from '../../prompt/promptRegistry';
 import { estimateTokens } from '../../agent/context/tokenEstimator';
 import { skillRegistry } from '../../agent/skills/SkillRegistry';
 
@@ -261,8 +259,6 @@ function buildUniversalCoreIdentity(): string {
  */
 function buildExecutionProtocol(): string {
     return [
-        SCHEMA_RULES.trim(),
-        AGENT_PARENT_CHILD_RULE.trim(),
         AGENT_NAMING_CONVENTION.trim(),
         AGENT_CONTENT_REQUIREMENT.trim()
     ].join('\n\n');
@@ -296,11 +292,32 @@ function buildToolFormat(tools: ToolDefinition[], budget: number): string {
 /**
  * Build Tool Examples section (Priority 3)
  */
-function buildToolExamples(budget: number): string {
-    if (estimateTokens(TOOL_EXAMPLES) <= budget) {
-        return TOOL_EXAMPLES;
+function buildToolExamples(tools: ToolDefinition[], budget: number): string {
+    let examples = TOOL_EXAMPLES;
+    
+    // Failsafe guard against legacy examples leaking into unified mode
+    const isUnifiedMode = tools.some(t => t.name === 'create_node');
+    if (isUnifiedMode) {
+        // Split by the markdown divider used in EXAMPLES.md
+        const exampleBlocks = examples.split('\n---\n');
+        const filteredBlocks = exampleBlocks.filter(block => {
+            const hasLegacy = block.includes('generateDesign') || 
+                              block.includes('batchOperations') ||
+                              block.includes('setNodeLayout') ||
+                              block.includes('setNodeStyles');
+            if (hasLegacy) {
+                console.warn('[PromptComposer] Filtered out legacy example from context.');
+                return false;
+            }
+            return true;
+        });
+        examples = filteredBlocks.join('\n---\n');
     }
-    return truncateToBudget(TOOL_EXAMPLES, budget);
+
+    if (estimateTokens(examples) <= budget) {
+        return examples;
+    }
+    return truncateToBudget(examples, budget);
 }
 
 /**
@@ -419,7 +436,7 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
         id: 'tool-examples',
         priority: 1.1,
         budgetKey: 'examples',
-        builder: (_deps, _tools, budget) => buildToolExamples(budget)
+        builder: (_deps, tools, budget) => buildToolExamples(tools, budget)
     },
     {
         id: 'execution-protocol',
@@ -489,7 +506,13 @@ const AGENT_SECTION_REGISTRY: AgentPromptSection[] = [
                 designSystemId: deps.designSystemContext?.skillName,
             });
             if (skillSections.length === 0) return '';
-            return skillSections.map(s => s.content).filter(Boolean).join('\n\n');
+            // Stop legacy skill injection for figma-core and project-ui-context
+            // Only keep the standard context aligned with create_node/patch_node/read_node tools
+            return skillSections
+                .filter(s => s.skillId !== 'figma-core' && s.skillId !== 'project-ui-context')
+                .map(s => s.content)
+                .filter(Boolean)
+                .join('\n\n');
         }
     },
     {

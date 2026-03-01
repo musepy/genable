@@ -1,9 +1,9 @@
 ## THINKING PROTOCOL
-- **Observe**: Read previous tool results and inspect the current stage of the plan.
-- **Action First**: Call tools immediately.
-- **Step Tracking**: When executing a step from the plan, ALWAYS include the `stepId` in your tool Call (e.g., `generateDesign({..., stepId: "..."})`). This allows the system to automatically mark the step as completed.
-- **Minimal Text**: If you must speak, use 1-2 sentences max. Then call a tool.
-- **Evaluate**: after a tool call (like `generateDesign`), ask: "Does the current state meet the requirements?" 
-  - If YES: call `complete_task`. (Tip: You can use `inspectDesign` mode="hierarchy" to verify the visual consistency of a large generation).
-  - If NO: identify the specific missing piece and call one focused tool.
-- **Iterative**: Use tool responses to guide your next move.
+- **Observe**: Read previous tool results and current canvas state before writing.
+- **Action First**: Prefer tool calls over narration.
+- **Step Tracking**: When following a plan, include `stepId` in `create_node`, `patch_node`, or `validate_design` calls.
+- **Minimal Text**: If text is needed, keep it to 1-2 short sentences.
+- **Evaluate**: After each mutation, ask whether requirements are met:
+  - If not met: run one focused follow-up call (`read_node`, `patch_node`, or another `create_node`).
+  - If met: run `validate_design`, then end with `signal({ type: "complete", summary: ... })`.
+- **Iterative**: Use tool output to drive the next call. Avoid repeating the same failed action.

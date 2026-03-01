@@ -31,10 +31,10 @@ export const ERROR_RECOVERY = catalog.PROTOCOLS_ERROR_RECOVERY;
 export const TOOL_CALLING_PROTOCOL = catalog.PROTOCOLS_TOOL_CALLING;
 
 // ============================================================
-// DESIGN GENERATION — generateDesign & batchOperations guidance
+// DESIGN GENERATION — (REMOVED: Now handled by universal 4 tools)
 // ============================================================
 
-export const DESIGN_GENERATION_PROTOCOL = catalog.PROTOCOLS_DESIGN_GENERATION;
+// export const DESIGN_GENERATION_PROTOCOL = catalog.PROTOCOLS_DESIGN_GENERATION;
 
 // ============================================================
 // MODE GUIDANCE — Planning / Execution / Verification
@@ -48,7 +48,7 @@ export const MODE_GUIDANCE = catalog.MODE_GUIDANCE;
 
 export const NAMING_CONVENTION = catalog.CONVENTIONS_NAMING;
 export const CONTENT_REQUIREMENT = catalog.CONVENTIONS_CONTENT;
-export const PARENT_CHILD_RULE = catalog.CONVENTIONS_PARENT_CHILD;
+// export const PARENT_CHILD_RULE = catalog.CONVENTIONS_PARENT_CHILD;
 export const DESIGN_FREEDOM = catalog.CONVENTIONS_DESIGN_FREEDOM;
 
 // ============================================================
@@ -69,11 +69,7 @@ export const ICON_USAGE = catalog.CONVENTIONS_ICON_USAGE;
 
 export const SCENE_GRAPH_MODEL = catalog.SCENE_GRAPH_MODEL;
 
-// ============================================================
-// SCHEMA RULES — Output format constraints (replaces stale JSON_FORMAT_RULES)
-// ============================================================
-
-export const SCHEMA_RULES = catalog.SCHEMA_RULES;
+// SCHEMA RULES — Removed
 
 // ============================================================
 // EXAMPLES — Unified example set
@@ -123,14 +119,11 @@ export {
   MODE_GUIDANCE as DYNAMIC_GUIDANCE,
   NAMING_CONVENTION as AGENT_NAMING_CONVENTION,
   CONTENT_REQUIREMENT as AGENT_CONTENT_REQUIREMENT,
-  PARENT_CHILD_RULE as AGENT_PARENT_CHILD_RULE,
   DESIGN_FREEDOM as AGENT_DESIGN_FREEDOM,
-  DESIGN_GENERATION_PROTOCOL as DEEP_NODE_PROCESSING_PROTOCOL,
 };
 
 // constants/prompts.ts consumers
 export {
   ICON_USAGE as ICON_SEMANTIC_TEMPLATE,
   DESIGN_AESTHETICS as DESIGN_AGENT_PERSONA_TEMPLATE,
-  SCHEMA_RULES as JSON_FORMAT_RULES,
 };

@@ -150,12 +150,13 @@ function ErrorBanner({ error, errorActions }: {
   );
 }
 
-function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, queuedCount, onStop, onContinue, anchorRef }: {
+function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, reasoningText, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, queuedCount, onStop, onContinue, anchorRef }: {
   history: any[];
   expandedRawIds: Set<number>;
   toggleRaw: (id: number) => void;
   loading: boolean;
   loadingStatus?: string;
+  reasoningText?: string;
   runtimePhase: any;
   runtimeProgress: { iteration: number; maxIterations: number } | null;
   runtimeContextUsage: any;
@@ -197,10 +198,12 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
 
         const lastIteration = msg.iterations?.[msg.iterations.length - 1];
         const thinkingStatus = msg.streaming ? (loadingStatus || 'Thinking...') : undefined;
+        const reasoningPreview = msg.streaming ? reasoningText : undefined;
 
         const shouldShowToolGroup = !isUserMessage && (
           (msg.toolCalls && msg.toolCalls.length > 0) ||
-          !!thinkingStatus
+          !!thinkingStatus ||
+          !!reasoningPreview
         );
 
         return (
@@ -216,6 +219,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                     <ToolExecutionPanel
                       toolCalls={msg.toolCalls}
                       thinkingStatus={thinkingStatus}
+                      reasoningPreview={reasoningPreview}
                       currentTaskTitle={lastIteration?.taskTitle}
                       phase={msg.streaming ? runtimePhase : undefined}
                       progress={msg.streaming ? runtimeProgress : null}
@@ -361,6 +365,7 @@ export function ChatFeature(props: UseChatProps) {
           })}
           loading={loading}
           loadingStatus={loadingStatus}
+          reasoningText={thinkingText}
           runtimePhase={runtimePhase}
           runtimeProgress={runtimeProgress}
           runtimeContextUsage={runtimeContextUsage}

@@ -26,6 +26,9 @@ import {
   resolveNodeId as batchResolveNodeId,
   resolveParentId as batchResolveParentId
 } from './batchExecutor';
+import { ActionExecutor } from '../../engine/actions/executor';
+import { FigmaAction } from '../../engine/actions/types';
+import { translateBatchOperationsToActions } from '../../engine/actions/translator';
 import { deepMerge } from '../../utils/objectUtils';
 import { validatePostOp, collectTreeAnomalies } from '../../engine/validation/postOpValidator';
 import { logger } from '../../utils/logger';
@@ -71,7 +74,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   try {
     switch (toolName) {
       // ==========================================
-      // BATCH OPERATIONS — Used by agentRuntime.autoBatchToolCalls()
+      // BATCH OPERATIONS — Legacy-compatible bulk execution path
       // ==========================================
       case 'batchOperations': {
         const { operations, onError = 'skip-dependents' } = parameters || {};
@@ -81,6 +84,41 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             success: false,
             error: { code: 'INVALID_OPERATION', message: 'operations must be an array.' }
           };
+          break;
+        }
+
+        const SHADOW_RUN_TYPED_ACTIONS = parameters?.useTypedExecutor === true;
+
+        if (SHADOW_RUN_TYPED_ACTIONS) {
+          try {
+            const figmaActions = translateBatchOperationsToActions(operations);
+            const executor = new ActionExecutor({ onError });
+            const execResult = await executor.execute(figmaActions);
+            
+            const results: BatchOpResult[] = execResult.results.map(r => ({
+              opId: r.action.tempId || 'unknown',
+              action: r.action.action,
+              success: r.success,
+              nodeId: r.nodeId,
+              skipped: r.skipped,
+              error: r.error ? { code: 'EXECUTION_ERROR', message: r.error } : undefined
+            }));
+
+            response = {
+              success: execResult.success,
+              data: {
+                results,
+                idMap: execResult.idMap,
+                layoutSnapshots: {},
+                rollback: execResult.rollback
+              }
+            };
+          } catch (error: any) {
+            response = {
+              success: false,
+              error: { code: 'EXECUTION_ERROR', message: error.message || 'Unknown error during translation or execution' }
+            };
+          }
           break;
         }
 
@@ -136,10 +174,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             break;
           }
           case 'hierarchy': {
-            if (!readNodeId) {
-              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for hierarchy mode.' } };
-              break;
-            }
             const hNode = await figma.getNodeByIdAsync(readNodeId) as SceneNode;
             if (!hNode) {
               response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${readNodeId} not found.` } };
@@ -160,10 +194,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             break;
           }
           case 'node': {
-            if (!readNodeId) {
-              response = { success: false, error: { code: 'MISSING_PARAM', message: 'nodeId is required for node mode.' } };
-              break;
-            }
             const nNode = await figma.getNodeByIdAsync(readNodeId) as SceneNode;
             if (!nNode) {
               response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${readNodeId} not found.` } };
@@ -203,89 +233,174 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       }
 
       case 'create_node': {
-        // Delegate to generateDesign — it handles flat node lists
-        const createParams = {
-          prompt: parameters.prompt || 'create_node',
-          nodes: parameters.nodes || [],
-          parentId: parameters.parentId,
-          stepId: parameters.stepId
-        };
-        response = await agentToolService.generateDesign(createParams, context?.designSystemId);
+        const { nodes, parentId } = parameters;
+
+        const createActions = nodes.map((node: any) => {
+           let actionType = '';
+           switch(node.type) {
+             case 'FRAME': actionType = 'createFrame'; break;
+             case 'TEXT': actionType = 'createText'; break;
+             case 'ICON': actionType = 'createIcon'; break;
+             case 'RECTANGLE': 
+             case 'ELLIPSE':
+             case 'LINE':
+                actionType = 'createShape';
+                break;
+             default: actionType = 'createFrame'; break;
+           }
+           
+           const action: any = {
+              action: actionType,
+              tempId: node.id,
+              parentId: node.parent || parentId,
+              props: node.props || {}
+           };
+           
+           if (actionType === 'createShape') {
+              action.shapeType = node.type;
+           }
+           
+           if (node.parent) {
+             action.dependsOn = [node.parent];
+           }
+           
+           return action;
+        });
+
+        const executor = new ActionExecutor({ onError: 'skip-dependents' });
+        const execResult = await executor.execute(createActions);
+        
+        const failedResults = execResult.results.filter(r => !r.success);
+
+        const allWarnings: any[] = [];
+        execResult.results.forEach(r => {
+           if (r.warnings && r.warnings.length > 0) {
+               r.warnings.forEach((w: any) => {
+                   allWarnings.push({
+                       ...w,
+                       tempId: r.action.tempId,
+                       nodeId: r.nodeId
+                   });
+               });
+           }
+        });
+
+        if (!execResult.success && failedResults.length > 0) {
+          const firstFailure = failedResults[0];
+          response = {
+             success: false,
+             error: { 
+               code: 'ACTION_FAILED', 
+               message: `Failed to create nodes: ${firstFailure.error}. subCategory: ${firstFailure.errorContext?.subCategory || 'UNKNOWN'}, retryTried: ${firstFailure.errorContext?.retryTried || false}. See data.firstFailure for details.` 
+             },
+             data: {
+               results: execResult.results,
+               idMap: execResult.idMap,
+               firstFailure: {
+                 tempId: firstFailure.action.tempId,
+                 action: firstFailure.action.action,
+                 error: firstFailure.error,
+                 subCategory: firstFailure.errorContext?.subCategory || 'UNKNOWN',
+                 failedNodeId: firstFailure.errorContext?.failedNodeId || firstFailure.action.tempId,
+                 retryTried: firstFailure.errorContext?.retryTried || false
+               },
+               failureCount: failedResults.length,
+               failureActionIds: failedResults.map(r => r.action.tempId),
+               warnings: allWarnings.length > 0 ? allWarnings : undefined
+             }
+          };
+
+          const propsPreview = 'props' in firstFailure.action && firstFailure.action.props ? JSON.stringify(firstFailure.action.props).substring(0, 150) + '...' : undefined;
+          logger.error(`[create_node] Execution failed`, {
+             requestId,
+             failureCount: failedResults.length,
+             firstFailure: {
+                action: firstFailure.action.action,
+                tempId: 'tempId' in firstFailure.action ? firstFailure.action.tempId : undefined,
+                error: firstFailure.error,
+                subCategory: firstFailure.errorContext?.subCategory || 'UNKNOWN',
+                failedNodeId: firstFailure.errorContext?.failedNodeId || firstFailure.action.tempId,
+                retryTried: firstFailure.errorContext?.retryTried || false
+             },
+             normalizedPropsPreview: propsPreview,
+             errorCategory: 'CREATE_NODE_BATCH_FAILURE'
+          });
+        } else {
+          response = {
+             success: execResult.success,
+             data: {
+               results: execResult.results,
+               idMap: execResult.idMap,
+               warnings: allWarnings.length > 0 ? allWarnings : undefined
+             }
+          };
+        }
         break;
       }
 
       case 'patch_node': {
-        // Delegate to applyDesignPatch-style logic
         const { patches, stepId: _patchStepId } = parameters;
 
-        if (!Array.isArray(patches) || patches.length === 0) {
-          response = { success: false, error: { code: 'INVALID_INPUT', message: 'patch_node requires a non-empty patches array.' } };
-          break;
-        }
+        const patchActions: FigmaAction[] = patches.map((patch: any) => ({
+          action: 'updateProps' as const,
+          nodeId: patch.nodeId,
+          props: patch.props || {}
+        }));
 
-        // Validate preconditions
-        const patchPrecondition = await validatePreconditions('applyDesignPatch', { patches });
-        if (!patchPrecondition.valid) {
-          response = { success: false, error: { code: 'PRECONDITION_FAILED', message: patchPrecondition.error || 'Precondition check failed.' } };
-          break;
-        }
+        const executor = new ActionExecutor({ onError: 'skip-dependents' });
+        const execResult = await executor.execute(patchActions);
 
-        const patchResults = [];
-        let patchSkipped = 0;
+        const failedResults = execResult.results.filter(r => !r.success);
 
-        for (const patch of patches) {
-          const { nodeId: patchNodeId, props } = patch;
-          if (!patchNodeId || !props) {
-            patchResults.push({ nodeId: patchNodeId, success: false, error: 'Missing nodeId or props' });
-            continue;
-          }
+        const allWarnings: any[] = [];
+        execResult.results.forEach(r => {
+           if (r.warnings && r.warnings.length > 0) {
+               r.warnings.forEach((w: any) => {
+                   allWarnings.push({
+                       ...w,
+                       nodeId: r.nodeId || ('nodeId' in r.action ? r.action.nodeId : undefined)
+                   });
+               });
+           }
+        });
 
-          if (patchCache && !patchCache.shouldApply(patchNodeId, 'properties', props)) {
-            patchSkipped++;
-            patchResults.push({ nodeId: patchNodeId, success: true });
-            continue;
-          }
+        if (!execResult.success && failedResults.length > 0) {
+          const firstFailure = failedResults[0];
+          const errorContext = firstFailure.errorContext;
+          const retryTried = errorContext ? errorContext.retryTried : false;
+          const subCategory = errorContext ? errorContext.subCategory : 'UNKNOWN';
+          const failedNodeId = firstFailure.nodeId || ('nodeId' in firstFailure.action ? firstFailure.action.nodeId : undefined);
 
-          const node = await figma.getNodeByIdAsync(patchNodeId) as SceneNode;
-          if (!node) {
-            patchResults.push({ nodeId: patchNodeId, success: false, error: 'NODE_NOT_FOUND' });
-            continue;
-          }
-
-          const currentDSL = NodeSerializer.serialize(node);
-          const mergedProps = deepMerge(currentDSL.props || {}, sanitizeFlatProps(props));
-
-          try {
-            const result = await handleUnifiedRender({
-              ...currentDSL,
-              props: mergedProps,
-              __modifyMode: 'UPDATE',
-              __modifyTargetId: patchNodeId,
-              designSystemId: context?.designSystemId || 'vanilla',
-              streamSessionId: `unified-patch-${Date.now()}`,
-              meta: { traceId: 'unified-patch' }
-            }, false, node.parent as any);
-
-            if (result) {
-              const visResult = validateVisibility(result);
-              if (!visResult.valid) {
-                visResult.issues.filter(i => i.severity === 'error').forEach(i => i.autoFix?.());
-              }
+          response = {
+            success: false,
+            error: {
+              code: 'ACTION_FAILED',
+              message: `Failed to patch nodes: ${firstFailure.error}. subCategory: ${subCategory}, retryTried: ${retryTried}. See data.firstFailure for details.`
+            },
+            data: {
+              results: execResult.results,
+              firstFailure: {
+                nodeId: failedNodeId,
+                action: firstFailure.action.action,
+                error: firstFailure.error,
+                subCategory,
+                failedNodeId: errorContext?.failedNodeId || failedNodeId,
+                retryTried
+              },
+              failureCount: failedResults.length,
+              failureActionIds: failedResults.map(r => r.nodeId || ('nodeId' in r.action ? r.action.nodeId : undefined)),
+              warnings: allWarnings.length > 0 ? allWarnings : undefined
             }
-
-            patchResults.push({ nodeId: patchNodeId, success: true, propsUpdated: Object.keys(props) });
-          } catch (e: any) {
-            patchResults.push({ nodeId: patchNodeId, success: false, error: e.message });
-          }
+          };
+        } else {
+          response = {
+            success: execResult.success,
+            data: {
+              results: execResult.results,
+              warnings: allWarnings.length > 0 ? allWarnings : undefined
+            }
+          };
         }
-
-        response = {
-          success: true,
-          data: {
-            results: patchResults,
-            summary: { total: patches.length, applied: patches.length - patchSkipped, skipped: patchSkipped }
-          }
-        };
         break;
       }
 
@@ -296,10 +411,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
       case 'validate_design': {
         const valNodeId = parameters.nodeId;
-        if (!valNodeId) {
-          response = { success: false, error: { code: 'MISSING_PARAM', message: 'validate_design requires nodeId.' } };
-          break;
-        }
         const valNode = await figma.getNodeByIdAsync(valNodeId) as SceneNode;
         if (!valNode) {
           response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${valNodeId} not found.` } };

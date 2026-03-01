@@ -61,6 +61,26 @@ interface SkillFrontmatter {
 }
 
 /**
+ * Normalize legacy tool names in skill prose to unified tool names.
+ * This prevents old prompts from nudging the model toward deprecated calls.
+ */
+function sanitizeLegacyToolReferences(text: string): string {
+  if (!text) return text;
+
+  return text
+    .replace(/\bcomplete_task\b/g, 'signal({ type: "complete", ... })')
+    .replace(/\bnew_task\b/g, 'signal({ type: "task_start", ... })')
+    .replace(/\bupdate_todo_list\b/g, 'signal({ type: "progress", ... })')
+    .replace(/\bsummarize_progress\b/g, 'signal({ type: "progress", ... })')
+    .replace(/\bsearchDesignKnowledge\b/g, 'query_knowledge(source="knowledge")')
+    .replace(/\bgetComponentAnatomy\b/g, 'query_knowledge(source="knowledge")')
+    .replace(/\bgetFigmaLayoutRules\b/g, 'query_knowledge(source="knowledge")')
+    .replace(/\bgetProjectUIContext\b/g, 'query_knowledge(source="components")')
+    .replace(/\blistProjectComponents\b/g, 'query_knowledge(source="components")')
+    .replace(/\bgetDesignSystemTokens\b/g, 'query_knowledge(source="tokens")');
+}
+
+/**
  * Get tool definition by name from the registry.
  */
 function getToolByName(name: string): ToolDefinition | undefined {
@@ -165,7 +185,7 @@ export function loadSkillContent(skill: SkillMetadata): SkillDefinition | null {
 
     const context: SkillContext = {
       injectionType: fm.injectionType || 'dynamic',
-      systemPromptSection: body.trim(),
+      systemPromptSection: sanitizeLegacyToolReferences(body.trim()),
       triggerPatterns: fm.triggerPatterns,
     };
 

@@ -17,6 +17,7 @@ import RUNTIME_CONFIG from '../../config/runtime-coercion.json';
 export class Normalizer {
     /**
      * Main entry: Recursively normalize a NodeLayer tree
+     * @deprecated Normalizer is being phased out in Phase 4. We now rely on strict schema validation and Typed Actions. 
      */
     public static normalize(input: unknown): NodeLayer {
         if (!input) return this.createDefaultNode();

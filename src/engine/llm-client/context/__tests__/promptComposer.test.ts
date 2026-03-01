@@ -47,8 +47,6 @@ describe('PromptComposer - Agent Mode', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider, { mode: 'EXECUTION' });
         expect(prompt).toContain('You are a Figma plugin agent');
         expect(prompt).toContain('CORE POLICIES');
-        expect(prompt).toContain('NAMING CONVENTION');
-        expect(prompt).toContain('CANONICAL PROPERTY NAMES'); // From SCHEMA_RULES
     });
 
     it('should serialize tools correctly', () => {
@@ -65,7 +63,7 @@ describe('PromptComposer - Agent Mode', () => {
     it('should include tool examples', () => {
         const prompt = composeAgentSystemPrompt(mockDeps, mockTools, mockProvider);
         expect(prompt).toContain('## EXAMPLES');
-        expect(prompt).toContain('Card Container');
+        expect(prompt).toContain('One-shot `create_node`');
     });
 
     it('should inject knowledge if intent requires it', () => {

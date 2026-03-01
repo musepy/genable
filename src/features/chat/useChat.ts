@@ -147,19 +147,13 @@ export function useChat({
         if (event.iteration && event.maxIterations) {
           setRuntimeProgress({ iteration: event.iteration, maxIterations: event.maxIterations })
         }
-        if (event.thinking) {
-          setThinkingText(event.thinking)
-          updateStreamingMessage(msg => {
-            const iterations = [...(msg.iterations || [])]
-            if (iterations.length === 0) return msg
-            const last = iterations[iterations.length - 1]
-            iterations[iterations.length - 1] = {
-              ...last,
-              thinking: event.thinking || '',
-            }
-            return { ...msg, iterations }
-          })
-        }
+        break
+      }
+      case 'reasoning_delta': {
+        const delta = event.text || ''
+        if (!delta) break
+
+        setThinkingText(prev => `${prev}${delta}`.slice(-4000))
         break
       }
       case 'completed': {

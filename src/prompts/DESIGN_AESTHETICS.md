@@ -1,8 +1,8 @@
 ## VISUAL QUALITY STANDARD
 
 ### Depth & Elevation
-- Cards/modals: effects: [{"type": "DROP_SHADOW", "color": "#0000001A", "offset": {"x": 0, "y": 4}, "blur": 16, "spread": 0}]
-- Buttons: effects: [{"type": "DROP_SHADOW", "color": "#0000000F", "offset": {"x": 0, "y": 2}, "blur": 8}]
+- Cards/modals: Use DROP_SHADOW effects with 10-16px radius and 10% opacity.
+- Buttons: Use DROP_SHADOW effects with 4-8px radius and 5-10% opacity.
 - Elevated sections: layer multiple subtle shadows for depth
 
 ### Color Strategy
@@ -13,7 +13,7 @@
 
 ### Typography Hierarchy
 - Hero: 32-48px, fontWeight "Bold", fills ["#111827"]
-- Section heading: 20-24px, fontWeight "SemiBold", fills ["#1F2937"]
+- Section heading: 20-24px, fontWeight "Bold", fills ["#1F2937"] (Avoid "SemiBold")
 - Body: 14-16px, fills ["#4B5563"] or ["#6B7280"]
 - Caption/label: 12px, fills ["#9CA3AF"], fontWeight "Medium"
 
@@ -23,7 +23,7 @@
 - Component padding: 16-24px
 - Tight groups (label+input): 8px gap
 
-### Visual Checklist (verify before complete_task)
+### Visual Checklist (verify before signal complete)
 - At least one shadow on elevated elements (cards, buttons, modals)
 - Text uses 2+ different sizes and 2+ different fill colors
 - Containers have cornerRadius (8-16px cards, 6-8px inputs, 20+ pills)

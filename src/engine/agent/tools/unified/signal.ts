@@ -1,7 +1,7 @@
 import { ToolDefinition } from '../types';
 
 /**
- * Unified flow control — replaces planDesign, new_task, update_todo_list, summarize_progress, complete_task.
+ * Unified flow control.
  * Single entry point for all agent lifecycle signals.
  */
 export const signalDefinition: ToolDefinition = {

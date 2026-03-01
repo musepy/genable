@@ -40,7 +40,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Consecutive iterations where ALL tool calls fail before injecting planning fallback */
   CONSECUTIVE_FAILURE_THRESHOLD: 3,
 
-  /** Max retries before accepting a text-only response as completion (without complete_task) */
+  /** Max retries before accepting a text-only response as completion (without signal(type="complete")) */
   MAX_TEXT_ONLY_COMPLETION_RETRIES: 2,
 } as const;
 

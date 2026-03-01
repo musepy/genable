@@ -77,8 +77,9 @@ if (isWatch) {
 } else {
   // One-shot build
   try {
-    console.log(`📸 Running UI Capture Engine...`);
-    execSync(`npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/capture-ui.ts`, { stdio: 'inherit' });
+    // UI capture disabled per user request
+    // console.log(`📸 Running UI Capture Engine...`);
+    // execSync(`npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/capture-ui.ts`, { stdio: 'inherit' });
 
     console.log(`🔨 Generating Agent Registries...`);
     execSync(`node scripts/generate-skills-registry.js`, { stdio: 'inherit' });

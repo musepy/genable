@@ -4,6 +4,7 @@ import { nodeLayoutService } from '../../../engine/services';
 import { handleUnifiedRender } from '../../helpers/renderHelper';
 import { emit } from '@create-figma-plugin/utilities';
 import { NodeSerializer } from '../../../engine/figma-adapter/nodeSerializer';
+import { ActionExecutor } from '../../../engine/actions/executor';
 
 // Mock dependencies
 vi.mock('@create-figma-plugin/utilities', () => ({
@@ -22,6 +23,24 @@ vi.mock('../../../engine/services', () => ({
 
 vi.mock('../../helpers/renderHelper', () => ({
   handleUnifiedRender: vi.fn(),
+}));
+
+// Setup an observable mock implementation at module level
+const { mockActionExecutorExecute } = vi.hoisted(() => ({
+  mockActionExecutorExecute: vi.fn().mockResolvedValue({
+    success: true,
+    results: [],
+    idMap: {},
+    rollback: undefined
+  })
+}));
+
+export { mockActionExecutorExecute };
+
+vi.mock('../../../engine/actions/executor', () => ({
+  ActionExecutor: class {
+    execute = mockActionExecutorExecute;
+  }
 }));
 
 vi.mock('../../../engine/figma-adapter/nodeSerializer', () => ({
@@ -61,8 +80,14 @@ describe('State-Driven Tools', () => {
 
     describe('batchOperations support', () => {
         it('should support renderSubtree in batch', async () => {
-            const mockNode = { id: '10:1', name: 'BatchNode', type: 'FRAME' };
-            (handleUnifiedRender as any).mockResolvedValue(mockNode);
+            mockActionExecutorExecute.mockResolvedValueOnce({
+                success: true,
+                results: [
+                    { action: { action: 'renderSubtree', tempId: 'op1' }, success: true, nodeId: '10:1' }
+                ],
+                idMap: { 'op1': '10:1' },
+                rollback: undefined
+            });
 
             await handleToolCall({
                 toolName: 'batchOperations',
@@ -80,7 +105,7 @@ describe('State-Driven Tools', () => {
                 requestId: 'req-batch-1'
             });
 
-            expect(handleUnifiedRender).toHaveBeenCalled();
+            expect(mockActionExecutorExecute).toHaveBeenCalled();
             expect(emit).toHaveBeenCalledWith('TOOL_RESULT', expect.objectContaining({
                 response: expect.objectContaining({
                     success: true,
@@ -93,13 +118,13 @@ describe('State-Driven Tools', () => {
 
         it('should support patchNode in batch', async () => {
             const nodeId = '20:1';
-            const mockNode = { id: nodeId, name: 'Target', type: 'FRAME', parent: null };
-            (mockFigma.getNodeByIdAsync as any).mockResolvedValue(mockNode);
-            (handleUnifiedRender as any).mockResolvedValue(mockNode);
-            (NodeSerializer.serialize as any).mockReturnValue({
-                id: nodeId,
-                type: 'FRAME',
-                props: { name: 'Target' }
+            mockActionExecutorExecute.mockResolvedValueOnce({
+                success: true,
+                results: [
+                    { action: { action: 'patchNode', tempId: 'op2' }, success: true, nodeId: nodeId }
+                ],
+                idMap: { 'op2': nodeId },
+                rollback: undefined
             });
 
             await handleToolCall({
@@ -119,7 +144,7 @@ describe('State-Driven Tools', () => {
                 requestId: 'req-batch-2'
             });
 
-            expect(handleUnifiedRender).toHaveBeenCalled();
+            expect(mockActionExecutorExecute).toHaveBeenCalled();
             expect(emit).toHaveBeenCalledWith('TOOL_RESULT', expect.objectContaining({
                 response: expect.objectContaining({ success: true })
             }));

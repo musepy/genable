@@ -12,6 +12,5 @@
 export {
     ICON_SEMANTIC_TEMPLATE,
     DESIGN_AGENT_PERSONA_TEMPLATE,
-    JSON_FORMAT_RULES,
     PROMPT_HEADERS,
 } from '../engine/prompt/promptRegistry';

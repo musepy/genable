@@ -19,7 +19,7 @@
 1. FILL requires auto-layout parent: layoutSizingHorizontal: "FILL" only works if parent has layoutMode set. Otherwise Figma silently reverts to FIXED.
 2. HUG requires auto-layout on self: A FRAME with HUG sizing must also have its own layoutMode set. Without it, HUG is ignored.
 3. No HUG parent + FILL child: This creates a circular dependency. Figma silently breaks the cycle by forcing FIXED.
-4. Root must have explicit dimensions: The first node (parent: null) MUST have width and height. Without them, Figma defaults to 100x100.
+4. Root should have explicit dimensions: Without width/height, defaults may be undesirable.
 
 ### Nesting Strategy
 - Nest when children share a layout axis (row of buttons = FRAME[HORIZONTAL] > button + button + button).
@@ -39,6 +39,6 @@
 - Rule: FILL width + long text → set textAutoResize=HEIGHT to enable wrapping.
 
 ### Efficiency: Think in Trees, Not Nodes
-- Output the COMPLETE tree in one generateDesign call. Each additional iteration costs ~4000 tokens of overhead.
-- Plan the full hierarchy BEFORE outputting: root > sections > components > leaves.
-- Never create a bare FRAME and style it later. Include ALL props inline.
+- Output the complete structure in one `create_node` call when possible.
+- Plan the full hierarchy before outputting: root > sections > components > leaves.
+- Avoid creating bare frames and restyling in later iterations when requirements are already known.

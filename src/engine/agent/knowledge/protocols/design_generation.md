@@ -10,7 +10,7 @@ For creating NEW components, layouts, or pages: use `generateDesign` to output A
 2. First node has `parent: null` (root), others reference their parent by `id`
 3. ALL styling (fills, cornerRadius, gap, padding, fontSize, etc.) goes inside `props`.
 4. **Root Sizing**: ALWAYS provide explicit `width` and `height` for the root container (first node) to avoid default fallback dimensions.
-5. **Step Tracking**: Include the `stepId` from the plan to mark THIS STEP as done. Remaining plan steps must still be executed before calling `complete_task`.
+5. **Step Tracking**: Include the `stepId` from the plan to mark THIS STEP as done. Remaining plan steps must still be executed before calling `signal` with `type: "complete"`.
 6. The system reconstructs the tree and renders everything in one pass.
 
 **Example** — a polished card with shadow and button:

@@ -6,19 +6,13 @@ category: figma
 priority: 1
 injectionType: system
 tools:
-  - planDesign
-  - generateDesign
-  - renderElement
-  - patchElement
-  - inspectDesign
-  - createNode
-  - setNodeLayout
-  - setNodeStyles
-  - createIcon
-  - updateNodeProperties
-  - deleteNode
-  - applyDesignPatch
-  - validateLayout
+  - create_node
+  - patch_node
+  - read_node
+  - delete_node
+  - query_knowledge
+  - validate_design
+  - signal
 enabledByDefault: true
 ---
 
@@ -26,59 +20,42 @@ enabledByDefault: true
 
 ### PREFERRED: One-Shot Generation
 
-For creating NEW components/layouts, use `generateDesign` — output ALL nodes in one call. 
+For creating NEW components/layouts, use `create_node` — output ALL nodes in one call using a flat list with `id` and `parent` references.
 
 > [!IMPORTANT]
-> Even if your plan has multiple steps (e.g., 1. Header, 2. Form, 3. Footer), you should ideally use **ONE** `generateDesign` call to output the entire tree at once. This ensures consistency and is much faster.
+> Even if your plan has multiple steps (e.g., 1. Header, 2. Form, 3. Footer), you should ideally use **ONE** `create_node` call to output the entire tree at once. This ensures consistency and is much faster.
 
 ```json
-generateDesign({nodes: [
-  {"id": "card", "parent": null, "type": "FRAME", "props": {"name": "Card", "layoutMode": "VERTICAL", "gap": 12, "padding": 16, "fills": ["#FFFFFF"], "cornerRadius": 12}},
-  {"id": "title", "parent": "card", "type": "TEXT", "props": {"characters": "Card Title", "fontSize": 18, "fontWeight": "Bold"}},
-  {"id": "desc", "parent": "card", "type": "TEXT", "props": {"characters": "Description text", "fontSize": 14, "fills": ["#6B7280"]}}
-]})
+create_node({
+  "nodes": [
+    {"id": "card", "type": "FRAME", "props": {"name": "Card", "layoutMode": "VERTICAL", "gap": 12, "padding": 16, "fills": ["#FFFFFF"], "cornerRadius": 12}},
+    {"id": "title", "parent": "card", "type": "TEXT", "props": {"characters": "Card Title", "fontSize": 18, "fontWeight": "Bold"}},
+    {"id": "desc", "parent": "card", "type": "TEXT", "props": {"characters": "Description text", "fontSize": 14, "fills": ["#6B7280"]}}
+  ]
+})
 ```
 
 This is faster and more reliable than creating nodes one-by-one.
 
-### NEW: State-Driven Operations (PREFERRED)
+### MODIFICATION (PREFERRED)
 
-For high-level creation and modification, use `renderElement` and `patchElement`. These avoid atomic loops and are much more token-efficient.
+For high-level modification, use `patch_node`. This avoids atomic loops and is much more token-efficient.
 
-#### renderElement (Create Tree)
-Create a complete component or sub-tree in a single call.
-```json
-renderElement({
-  "parentId": "123:456",
-  "element": {
-    "type": "FRAME",
-    "props": {"name": "Button", "layoutMode": "HORIZONTAL", "padding": 12, "fills": ["#4F46E5"], "cornerRadius": 8},
-    "children": [
-      {"type": "TEXT", "props": {"name": "label", "characters": "Submit", "fills": ["#FFFFFF"]}}
-    ]
-  }
-})
-```
-
-#### patchElement (Modify State)
+#### patch_node (Modify State)
 Incrementally update an element by merging properties. Preserves children automatically.
 ```json
-patchElement({
-  "nodeId": "123:456",
-  "fragment": {"fills": ["#EF4444"], "padding": 16}
+patch_node({
+  "patches": [
+    {
+      "nodeId": "123:456",
+      "props": {"fills": ["#EF4444"], "padding": 16}
+    }
+  ]
 })
 ```
 
-### Node-by-Node (LEGACY - use only for single node tweaks)
-
-Avoid using `createNode` / `setNodeLayout` / `setNodeStyles` in loops. Preferred:
-1. `generateDesign` (for complex NEW trees)
-2. `renderElement` (for NEW sub-trees or single complex nodes)
-3. `patchElement` (for UPDATING existing nodes)
-4. `batchOperations` (for executing multiple state-driven calls at once)
-
 ### Key Rules
-- **generateDesign**: First node must have `parent: null` (root). All others reference parent by id.
+- **create_node**: First node without `parent` is the root. All others reference parent by temporary `id`.
 - **All props in `props`**: layoutMode, gap, fills, fontSize, cornerRadius, effects, etc.
 - **TEXT nodes MUST have characters**
 - **Meaningful names**: Never use "unnamed" or "frame"
@@ -90,7 +67,7 @@ Avoid using `createNode` / `setNodeLayout` / `setNodeStyles` in loops. Preferred
   Types: DROP_SHADOW, INNER_SHADOW, LAYER_BLUR, BACKGROUND_BLUR
 - **Colors**: Use non-pure-black for text (#111827), subtle borders (#D1D5DB) for inputs
 
-### Error Recovery
-- `PARENT_NOT_FOUND` → Create parent first
-- `NODE_NOT_FOUND` → Use inspectDesign to find valid IDs
-- `RECONSTRUCTION_FAILED` → Check parent references in nodes array
+### Error & Warning Recovery
+- **`PARENT_NOT_FOUND` Error** → Create parent first.
+- **`NODE_NOT_FOUND` Error** → Use `read_node` or `inspectDesign` to find valid IDs.
+- **`FONT_FALLBACK` Warning** → **DO NOT** repeat `create_node`. If it's a critical text element (e.g., Title or Button), use `patch_node` ONCE to attempt using an available `fontWeight` (like `Regular` or `Medium`). If it fails again, proceed with the task and summarize unresolved `warningsDigest` in the final `signal({ type: "complete", ... })` call.

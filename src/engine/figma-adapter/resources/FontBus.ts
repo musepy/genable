@@ -48,26 +48,46 @@ export class FontBus {
         console.log('[FontBus] Warmup complete.');
     }
 
-    /**
-     * Get or Load: High-level entry for Renderers
-     * If the font is not ready, it kicks off loading and returns immediate status.
-     */
-    public async getOrLoad(family: string, style: string): Promise<boolean> {
+    public async getOrLoad(family: string, style: string): Promise<{ success: boolean; loadedStyle: string }> {
         const normalizedStyle = this.normalizeStyle(style);
         const key = this.getFontKey(family, normalizedStyle);
         
-        if (this.loadedFonts.has(key)) return true;
-        if (this.isInFailureCooldown(key)) return false;
+        if (this.loadedFonts.has(key)) return { success: true, loadedStyle: normalizedStyle };
+        
+        if (this.isInFailureCooldown(key)) {
+            const regularKey = this.getFontKey(family, 'Regular');
+            if (this.loadedFonts.has(regularKey)) {
+                return { success: true, loadedStyle: 'Regular' };
+            }
+            return { success: false, loadedStyle: normalizedStyle };
+        }
 
         // If currently loading, wait for it
         if (this.loadingQueues.has(key)) {
             await this.loadingQueues.get(key);
-            return this.loadedFonts.has(key);
+            if (this.loadedFonts.has(key)) {
+                return { success: true, loadedStyle: normalizedStyle };
+            }
+            const regularKey = this.getFontKey(family, 'Regular');
+            if (this.loadedFonts.has(regularKey)) {
+                return { success: true, loadedStyle: 'Regular' };
+            }
+            return { success: false, loadedStyle: normalizedStyle };
         }
 
         // Trigger dynamic on-demand load
         await this.loadFontAsync({ family, style: normalizedStyle });
-        return this.loadedFonts.has(key);
+        
+        if (this.loadedFonts.has(key)) {
+            return { success: true, loadedStyle: normalizedStyle };
+        }
+        
+        const regularKey = this.getFontKey(family, 'Regular');
+        if (this.loadedFonts.has(regularKey)) {
+            return { success: true, loadedStyle: 'Regular' };
+        }
+        
+        return { success: false, loadedStyle: normalizedStyle };
     }
 
     /**

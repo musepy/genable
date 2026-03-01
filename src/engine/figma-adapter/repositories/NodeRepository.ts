@@ -9,7 +9,7 @@
  * making the code testable and the architecture layered.
  */
 
-import { findNodeByIdAsync } from '../../pipeline/RenderOrchestrator';
+import { findNodeByIdAsync } from './nodeRegistry';
 
 export interface NodeLayoutConfig {
   layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL';

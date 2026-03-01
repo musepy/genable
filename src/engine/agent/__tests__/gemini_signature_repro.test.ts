@@ -60,7 +60,7 @@ describe('Gemini Signature Repro', () => {
       })
       .mockResolvedValueOnce({
         text: 'Done!',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }],
+        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }],
         fullParts: [
           { text: 'Closing thought...' },
           { text: 'Done!' }

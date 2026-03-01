@@ -62,15 +62,15 @@ describe('Atomic Tools Interactions', () => {
           })
           .mockResolvedValueOnce({
             text: 'Done', 
-            toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] 
+            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] 
           })
           .mockResolvedValueOnce({
             text: 'Really done', 
-            toolCalls: [{ name: 'complete_task', args: { summary: 'Really done' } }] 
+            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Really done' } }] 
           })
           .mockResolvedValue({
             text: 'Absolutely done',
-            toolCalls: [{ name: 'complete_task', args: { summary: 'Absolutely done' } }]
+            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Absolutely done' } }]
           }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
@@ -101,8 +101,8 @@ describe('Atomic Tools Interactions', () => {
       tools: [
         { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
         { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
-        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } },
-        { name: 'complete_step', description: 'Complete step', parameters: { type: 'object', properties: {} } }
+        { name: 'signal', description: 'Agent signal', parameters: { type: 'object', properties: {} } }
+
       ],
       ipcBridge: mockIpcBridge
     });
@@ -212,15 +212,15 @@ describe('Atomic Tools Interactions', () => {
           })
           .mockResolvedValueOnce({
             text: 'Done', 
-            toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }] 
+            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] 
           })
           .mockResolvedValueOnce({
             text: 'Really done', 
-            toolCalls: [{ name: 'complete_task', args: { summary: 'Really done' } }] 
+            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Really done' } }] 
           })
           .mockResolvedValue({
             text: 'Absolutely done',
-            toolCalls: [{ name: 'complete_task', args: { summary: 'Absolutely done' } }]
+            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Absolutely done' } }]
           }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
@@ -245,8 +245,8 @@ describe('Atomic Tools Interactions', () => {
       tools: [
         { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
         { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
-        { name: 'complete_task', description: 'Complete', parameters: { type: 'object', properties: {} } },
-        { name: 'complete_step', description: 'Complete step', parameters: { type: 'object', properties: {} } }
+        { name: 'signal', description: 'Agent signal', parameters: { type: 'object', properties: {} } }
+
       ],
       ipcBridge: (runtime as any).options.ipcBridge
     });

@@ -4,7 +4,7 @@
  * 
  * [ARCHITECTURE] Two tool sets are exported:
  * - `agentTools` (default): 7 unified primitives — used by the LLM.
- * - `legacyAgentTools`: Original 21 tools — kept for backward compatibility in routing.
+ * - `legacyAgentTools`: Legacy design/edit tools kept for compatibility in routing.
  */
 
 // ── Unified Tools (7 primitives) ──
@@ -45,8 +45,6 @@ import {
   patchNodeDefinition 
 } from './stateTools';
 
-import { workflowTools } from './workflowTools';
-import { ToolValidator } from './toolValidator';
 import { ToolDefinition } from './types';
 
 /**
@@ -60,7 +58,6 @@ export const agentTools: ToolDefinition[] = unifiedTools;
  * The toolCallHandler still routes old tool names to their implementations.
  */
 export const legacyAgentTools: ToolDefinition[] = [
-  ...workflowTools,
   ...projectUITools.definitions,
   inspectDesignDefinition,
   generateDesignDefinition,
@@ -80,5 +77,4 @@ export const legacyAgentTools: ToolDefinition[] = [
 
 // Re-export types and utilities
 export * from './types';
-export { ToolValidator } from './toolValidator';
 export { unifiedTools } from './unified';

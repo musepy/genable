@@ -5,8 +5,8 @@
  * hooks via the HookRegistry → HookRunner pipeline.
  */
 
-import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall, Part } from '../llm-client/providers/types';
-import { ToolDefinition, ToolParameter, ToolValidator } from './tools';
+import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, LLMToolCall, Part } from '../llm-client/providers/types';
+import { ToolDefinition, ToolParameter } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { ContextManager } from './context/contextManager';
@@ -19,6 +19,7 @@ import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { CONTEXT_CONSTANTS } from './context/constants';
 import { AgentRuntimeEvent, AgentRuntimePhase, AgentRuntimeRetryEvent } from '../../shared/protocol/agentRuntimeEvents';
+import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,8 +38,6 @@ export interface AgentRuntimeOptions {
   maxContextTokens?: number;
   systemPrompt?: string;
   behaviorConfig?: Partial<AgentBehaviorConfig>;
-  onProgress?: (chunk: string) => void;
-  onThinking?: (thought: string) => void;
   onToolCall?: (toolCall: LLMToolCall) => void;
   onToolResult?: (toolCall: LLMToolCall, result: any) => void;
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string; taskTitle: string }) => void;
@@ -79,6 +78,8 @@ export class AgentRuntime {
   private promptAssembler: PromptAssembler;
 
   private cleaner: ToolResultCleaner;
+  private toolExecutionCoordinator = new ToolExecutionCoordinator();
+  private allowedExecutionToolNames: Set<string>;
   private idCounter: number = 0;
   private lastThinkingText: string = '';
   private textOnlyCompletionRetries: number = 0;
@@ -87,12 +88,6 @@ export class AgentRuntime {
   private hookRegistry: HookRegistry;
   private hookRunner: HookRunner;
   private resetBuiltinState: (() => void) | null = null;
-  private readonly AUTO_BATCH_TOOL_NAMES = new Set([
-    'createIcon',
-    'deleteNode',
-    'applyDesignPatch',
-    'patchNode'
-  ]);
   systemPrompt?: string;
   behaviorConfig: AgentBehaviorConfig;
   loopPolicy: AgentLoopPolicy;
@@ -113,6 +108,7 @@ export class AgentRuntime {
     this.maxContextTokens = options.maxContextTokens || AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS;
     this.designSystemId = options.designSystemId;
     this.cleaner = new ToolResultCleaner(options.tools);
+    this.allowedExecutionToolNames = new Set(options.tools.map((tool) => tool.name));
     this.context = new ContextManager(this.maxContextTokens, options.messages);
     this.promptAssembler = new PromptAssembler({
       provider: options.provider,
@@ -198,13 +194,6 @@ export class AgentRuntime {
 
   // ─── Sanitization ────────────────────────────────────────────
 
-  private sanitizeOpId(value: string): string {
-    return value
-      .replace(/[^a-zA-Z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 24);
-  }
-
   private sanitizeString(value: any, maxLength = 200): string {
     const text = String(value ?? '');
     if (text.length <= maxLength) return text;
@@ -253,65 +242,6 @@ export class AgentRuntime {
       default:
         return value;
     }
-  }
-
-  // ─── Tool batching ───────────────────────────────────────────
-
-  private buildBatchOperationsCall(calls: LLMToolCall[]): LLMToolCall {
-    const ops = calls.map((tc, index) => {
-      const base =
-        tc.args?.name ||
-        tc.args?.iconName ||
-        tc.args?.nodeId ||
-        tc.args?.parentId ||
-        tc.name;
-      const safeBase = base ? this.sanitizeOpId(String(base)) : '';
-      const opId = `${tc.name}_${safeBase || 'op'}_${index + 1}`;
-      return {
-        opId,
-        action: tc.name,
-        params: tc.args
-      };
-    });
-
-    return {
-      id: `batch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-      name: 'batchOperations',
-      args: {
-        operations: ops,
-        strategy: 'sequential',
-        onError: 'skip-dependents'
-      },
-      thought_signature: calls[0]?.thought_signature
-    };
-  }
-
-  private autoBatchToolCalls(toolCalls: LLMToolCall[]): LLMToolCall[] {
-    if (!toolCalls || toolCalls.length < 2) return toolCalls;
-
-    const batched: LLMToolCall[] = [];
-    let buffer: LLMToolCall[] = [];
-
-    const flush = () => {
-      if (buffer.length >= 2) {
-        batched.push(this.buildBatchOperationsCall(buffer));
-      } else if (buffer.length === 1) {
-        batched.push(buffer[0]);
-      }
-      buffer = [];
-    };
-
-    for (const tc of toolCalls) {
-      if (this.AUTO_BATCH_TOOL_NAMES.has(tc.name)) {
-        buffer.push(tc);
-        continue;
-      }
-      flush();
-      batched.push(tc);
-    }
-
-    flush();
-    return batched;
   }
 
   private sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
@@ -364,7 +294,7 @@ export class AgentRuntime {
   //    b. LLM generate (all tools available, AUTO mode)
   //    c. Tool execution (dispatch to executors)
   //    d. Safety guardrails (loop detection, rambling, token limit)
-  // 3. Termination: complete_task or max iterations
+  // 3. Termination: completion signal or max iterations
   // ═══════════════════════════════════════════════════════════════
 
   async run(userPrompt: string): Promise<string> {
@@ -416,6 +346,19 @@ export class AgentRuntime {
       const hiddenMessages = this.context.getMessages(true).length;
       console.log(`[AgentRuntime] --- Iteration ${iteration}/${this.maxIterations} ---`);
       console.log(`[AgentRuntime] Context: ${currentTokens}/${this.maxContextTokens} tokens (${Math.round(currentTokens/this.maxContextTokens*100)}%)`);
+      this.emitRuntimeEvent({
+        type: 'context_usage',
+        iteration: iteration + 1,
+        mode: 'AUTONOMOUS',
+        phase: 'execution' as AgentRuntimePhase,
+        usage: {
+          current: currentTokens,
+          max: this.maxContextTokens,
+          percent: Math.round((currentTokens / this.maxContextTokens) * 100),
+          visibleMessages: visibleMessageCount,
+          hiddenMessages
+        }
+      });
 
       // Hard stop: token budget overflow
       if (currentTokens > this.maxContextTokens * 1.2) {
@@ -469,6 +412,7 @@ export class AgentRuntime {
       let toolCallsForExecution: LLMToolCall[] = [];
       let rawToolCallsForLoopDetection: LLMToolCall[] = [];
       let response: LLMResponse;
+      const providerCapabilities = this.options.provider.getCapabilities?.() || DEFAULT_PROVIDER_CAPABILITIES;
 
       try {
         this.throwIfCanceled(iteration + 1);
@@ -480,25 +424,19 @@ export class AgentRuntime {
             maxTokens: this.loopPolicy.maxOutputTokens,
             abortSignal: abortController.signal,
             streamTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
-            onProgress: (chunk) => {
+            onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
               notifyIterationStartOnce();
               currentIterationText += chunk;
               if (currentIterationText.length > ramblingThreshold) {
                 console.warn(`[AgentRuntime] RAMBLING DETECTED: ${currentIterationText.length} chars. Aborting stream.`);
                 abortController.abort();
               }
-              const now = Date.now();
-              if (now - this.lastNotificationTime >= this.THROTTLE_MS) {
-                this.options.onProgress?.(chunk);
-                this.lastNotificationTime = now;
-              }
-            },
-            onThinking: (thought) => {
+            } : undefined,
+            onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
               if (thought && thought !== this.lastThinkingText) {
                 notifyIterationStartOnce();
                 const now = Date.now();
                 if (now - this.lastNotificationTime >= this.THROTTLE_MS) {
-                  this.options.onThinking?.(thought);
                   this.emitRuntimeEvent({
                     type: 'status',
                     phase: 'execution' as AgentRuntimePhase,
@@ -506,13 +444,19 @@ export class AgentRuntime {
                     iteration: iteration + 1,
                     maxIterations: this.maxIterations,
                     message: 'Working...',
-                    thinking: thought,
+                  });
+                  this.emitRuntimeEvent({
+                    type: 'reasoning_delta',
+                    phase: 'execution' as AgentRuntimePhase,
+                    mode: 'AUTONOMOUS',
+                    iteration: iteration + 1,
+                    text: thought,
                   });
                   this.lastNotificationTime = now;
                 }
                 this.lastThinkingText = thought;
               }
-            },
+            } : undefined,
             thinkingLevel: this.behaviorConfig.thinkingLevel
           }),
           {
@@ -551,22 +495,18 @@ export class AgentRuntime {
           }
         );
 
+        if (!response) {
+          response = { text: '', toolCalls: [] };
+        }
         let rawToolCalls = response.toolCalls || [];
         rawToolCallsForLoopDetection = [...rawToolCalls];
-        const executionToolCalls = rawToolCalls.length > 1
-          ? this.autoBatchToolCalls(rawToolCalls)
-          : rawToolCalls;
 
-        for (const tc of executionToolCalls) {
+        for (const tc of rawToolCalls) {
           tc.id = this.normalizeToolCallId(tc, 'call');
         }
 
-        if (executionToolCalls.length !== rawToolCalls.length) {
-          console.log(`[AgentRuntime] Auto-batched ${rawToolCalls.length} → ${executionToolCalls.length} tool calls`);
-        }
-
-        toolCallsForExecution = executionToolCalls;
-        const historyToolCalls = this.sanitizeToolCallsForHistory(executionToolCalls);
+        toolCallsForExecution = rawToolCalls;
+        const historyToolCalls = this.sanitizeToolCallsForHistory(rawToolCalls);
         response.toolCalls = historyToolCalls;
       } catch (error: any) {
         if (this.canceled || abortController.signal.aborted) {
@@ -631,8 +571,8 @@ export class AgentRuntime {
           tc.id = this.normalizeToolCallId(tc, 'call');
           const startedAt = Date.now();
 
-          // ── Terminal actions: complete_task OR signal(type=complete) ──
-          if (tc.name === 'complete_task' || (tc.name === 'signal' && tc.args?.type === 'complete')) {
+          // ── Terminal action: signal(type=complete) ──
+          if (tc.name === 'signal' && tc.args?.type === 'complete') {
             this.options.onToolCall?.(tc);
             this.emitRuntimeEvent({
               type: 'tool_call',
@@ -702,11 +642,13 @@ export class AgentRuntime {
         iteration++;
         continue;
       } else {
-        // No tool calls — nudge LLM to call complete_task
+        // No tool calls — nudge LLM to call signal(type=complete)
         if (this.textOnlyCompletionRetries < AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES) {
           this.textOnlyCompletionRetries++;
           this.context.addMessage({
-            id: this.generateId('nudge'), role: 'user', content: 'Call complete_task to signal completion.'
+            id: this.generateId('nudge'),
+            role: 'user',
+            content: 'Call signal with type "complete" to finish.'
           });
           iteration = Math.max(0, iteration - 1);
           continue;
@@ -754,9 +696,20 @@ export class AgentRuntime {
     this.throwIfCanceled();
     const toolExec = this.options.toolExecutors?.[tc.name];
     
-    try {
-      ToolValidator.validate(tc);
+    const validation = this.toolExecutionCoordinator.validateToolCall(
+      tc.name,
+      tc.args,
+      'EXECUTION',
+      this.allowedExecutionToolNames
+    );
+    if (!validation.ok) {
+      return {
+        success: false,
+        error: validation.error,
+      };
+    }
 
+    try {
       if (toolExec) {
         return await toolExec(tc.args);
       } else if (this.options.ipcBridge) {
@@ -765,11 +718,10 @@ export class AgentRuntime {
         return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `No executor found for tool '${tc.name}'` } };
       }
     } catch (e: any) {
-      const isValidationError = e?.message?.includes('Validation Error');
       return { 
         success: false, 
         error: { 
-          code: isValidationError ? 'TOOL_VALIDATION_ERROR' : 'TOOL_EXEC_EXCEPTION', 
+          code: 'TOOL_EXEC_EXCEPTION',
           message: e.message 
         } 
       };
@@ -784,4 +736,3 @@ export class AgentRuntime {
     return this.context.getAllMessages();
   }
 }
-

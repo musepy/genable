@@ -42,7 +42,6 @@ export interface OrchestratorOptions {
   tools?: ToolDefinition[]; // Optional: default to agentTools
   thinkingLevel: ThinkingLevel;
   onStatusChange?: (status: string) => void;
-  onThinkingUpdate?: (thought: string) => void;
   onComplete?: (data: any, rawText?: string) => void;
   onError?: (msg: string) => void;
   onToolCall?: (toolCall: any) => void;
@@ -230,8 +229,6 @@ export class AgentOrchestrator {
         nodes: [],
       },
       onIteration: (iteration: number, response: any, taskInfo?: any) => this.options.onIteration?.(iteration, response, taskInfo),
-      onProgress: this.handleProgress.bind(this),
-      onThinking: this.handleThinking.bind(this),
       onToolCall: this.handleToolCall.bind(this),
       onToolResult: this.handleToolResult.bind(this),
       onIterationStart: (iteration: number, taskInfo?: any) => this.options.onIterationStart?.(iteration, taskInfo),
@@ -242,15 +239,6 @@ export class AgentOrchestrator {
   // ==========================================
   // REUSABLE CALLBACK HANDLERS
   // ==========================================
-
-  private handleProgress(chunk: string) {
-    console.log(`[Agent] Progress: ${chunk}`);
-    // Optional: emit to UI if needed
-  }
-
-  private handleThinking(thought: string) {
-    this.options.onThinkingUpdate?.(thought);
-  }
 
   private handleToolCall(tc: any) {
     this.options.onStatusChange?.(`Executing tool: ${tc.name}...`);

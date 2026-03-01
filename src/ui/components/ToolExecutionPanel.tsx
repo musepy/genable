@@ -8,6 +8,7 @@ import { AgentRuntimeContextUsage, AgentRuntimePhase } from '../../shared/protoc
 interface ToolExecutionPanelProps {
   toolCalls?: ToolCallRecord[]
   thinkingStatus?: string
+  reasoningPreview?: string
   currentTaskTitle?: string
   phase?: AgentRuntimePhase
   progress?: { iteration: number; maxIterations: number } | null
@@ -97,6 +98,7 @@ function useRunningDots(active: boolean) {
 export function ToolExecutionPanel({
   toolCalls = [],
   thinkingStatus,
+  reasoningPreview,
   currentTaskTitle,
   phase,
   progress,
@@ -109,6 +111,7 @@ export function ToolExecutionPanel({
   const recentCalls = toolCalls.slice(-6).reverse()
   const [expanded, setExpanded] = useState(false)
   const dots = useRunningDots(runState === 'running')
+  const reasoningSnippet = reasoningPreview ? reasoningPreview.slice(-240) : ''
 
   useEffect(() => {
     if (runState === 'error') setExpanded(true)
@@ -132,6 +135,7 @@ export function ToolExecutionPanel({
   if (
     toolCalls.length === 0 &&
     !thinkingStatus &&
+    !reasoningPreview &&
     !contextUsage &&
     !progress &&
     !runState
@@ -226,6 +230,21 @@ export function ToolExecutionPanel({
       }}>
         {summaryText}
       </div>
+
+      {reasoningSnippet && (
+        <div style={{
+          marginTop: 4,
+          marginLeft: 20,
+          fontSize: 11,
+          lineHeight: '15px',
+          color: tokens.colors.textSecondary,
+          whiteSpace: 'pre-wrap',
+          maxHeight: 48,
+          overflow: 'hidden',
+        }}>
+          {reasoningSnippet}
+        </div>
+      )}
 
       <div style={{
         maxHeight: expanded ? 360 : 0,

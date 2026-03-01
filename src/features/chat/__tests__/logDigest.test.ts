@@ -142,8 +142,8 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'complete_task',
-            parameters: { summary: 'B'.repeat(150) },
+            name: 'signal',
+            parameters: { type: 'complete', summary: 'B'.repeat(150) },
             status: 'success',
             startTime: 1000,
             endTime: 1100
@@ -154,6 +154,6 @@ describe('generateLogDigest', () => {
 
     const result = generateLogDigest(history);
     expect(result).toContain('Prompt: "' + 'A'.repeat(100) + '..."');
-    expect(result).toContain('params: {' + 'B'.repeat(80) + '}');
+    expect(result).toContain('params: {complete: ' + 'B'.repeat(80) + '}');
   });
 });

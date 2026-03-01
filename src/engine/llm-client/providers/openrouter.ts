@@ -12,6 +12,13 @@ export class OpenRouterProvider implements LLMProvider {
 
   constructor(private apiKey: string, private modelName: string = OPENROUTER_CONFIG.DEFAULT_MODEL) {}
 
+  getCapabilities() {
+    return {
+      supportsTextStreaming: false,
+      supportsReasoningStreaming: false,
+    };
+  }
+
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, responseSchema, toolConfig, onProgress, models } = options;
 

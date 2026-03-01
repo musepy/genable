@@ -45,7 +45,7 @@ describe('AgentRuntime Loop Detection', () => {
           } 
         } as any,
         { 
-          name: 'complete_task', 
+          name: 'signal', 
           description: 'desc', 
           parameters: {
             type: 'object',
@@ -55,7 +55,7 @@ describe('AgentRuntime Loop Detection', () => {
       ],
       toolExecutors: {
         'createNode': vi.fn().mockResolvedValue({ success: true, data: { nodeId: 'new-node-id' } }),
-        'complete_task': vi.fn().mockResolvedValue({ success: true })
+        'signal': vi.fn().mockResolvedValue({ success: true })
       },
       maxIterations: 10
     });
@@ -87,7 +87,7 @@ describe('AgentRuntime Loop Detection', () => {
       })
       .mockResolvedValue({ 
         text: 'Done', 
-        toolCalls: [{ id: '4', name: 'complete_task', args: {} }]
+        toolCalls: [{ id: '4', name: 'signal', args: { type: 'complete', summary: 'done' } }]
       });
 
     // Run the agent. 

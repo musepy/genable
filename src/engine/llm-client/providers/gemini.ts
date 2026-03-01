@@ -37,6 +37,13 @@ export class GeminiProvider implements LLMProvider {
 
   private static readonly PROVIDER_VERSION = 'v2026-02-13-fix2';
 
+  getCapabilities() {
+    return {
+      supportsTextStreaming: true,
+      supportsReasoningStreaming: true,
+    };
+  }
+
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig, onProgress, onThinking, abortSignal, streamTimeoutMs } = options;
 
@@ -154,10 +161,13 @@ export class GeminiProvider implements LLMProvider {
       contentsCount: contents.length,
     });
 
-    // Full dump (truncated)
-    const fullRequest = { model: this.modelName, contents, config };
-    GeminiLogger.debug(`🔍 FULL REQUEST DUMP:`,
-      JSON.stringify(fullRequest, null, 2).slice(0, 80000));
+    // Privacy-safe debug summary (avoid dumping prompt/content text)
+    GeminiLogger.debug(`🔍 REQUEST SHAPE:`, {
+      model: this.modelName,
+      roleSequence: contents.map((c: any) => c.role).slice(0, 20),
+      partsPerMessage: contents.map((c: any) => Array.isArray(c.parts) ? c.parts.length : 0).slice(0, 20),
+      configKeys: Object.keys(config),
+    });
 
     if (onProgress || onThinking) {
       let result;

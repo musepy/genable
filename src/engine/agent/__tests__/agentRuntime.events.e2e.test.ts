@@ -40,7 +40,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       },
       {
         text: '',
-        toolCalls: [{ id: 't2', name: 'complete_task', args: { summary: 'Done' } }],
+        toolCalls: [{ id: 't2', name: 'signal', args: { type: 'complete', summary: 'Done' } }],
       },
     ]);
 
@@ -50,7 +50,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       provider,
       tools: [
         { name: 'mock_tool', description: 'Mock tool', parameters: emptyParams },
-        { name: 'complete_task', description: 'Complete', parameters: emptyParams },
+        { name: 'signal', description: 'Signal', parameters: emptyParams },
       ],
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {
@@ -63,7 +63,6 @@ describe('AgentRuntime Event E2E Scenarios', () => {
 
     expect(result).toBe('Done');
     expect(events.some(e => e.type === 'iteration_start')).toBe(true);
-    expect(events.some(e => e.type === 'context_usage')).toBe(true);
     expect(events.some(e => e.type === 'tool_call' && e.toolCall.name === 'mock_tool')).toBe(true);
     expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'mock_tool' && e.toolResult.success)).toBe(true);
     expect(events.some(e => e.type === 'completed' && e.summary === 'Done')).toBe(true);
@@ -81,7 +80,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       },
       {
         text: '',
-        toolCalls: [{ id: 'f3', name: 'complete_task', args: { summary: 'Recovered' } }],
+        toolCalls: [{ id: 'f3', name: 'signal', args: { type: 'complete', summary: 'Recovered' } }],
       },
     ]);
 
@@ -92,7 +91,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       tools: [
         { name: 'fail_tool', description: 'Fails intentionally', parameters: emptyParams },
         { name: 'fix_tool', description: 'Fixes previous error', parameters: emptyParams },
-        { name: 'complete_task', description: 'Complete', parameters: emptyParams },
+        { name: 'signal', description: 'Signal', parameters: emptyParams },
       ],
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {

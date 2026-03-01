@@ -37,10 +37,16 @@ export class ToolResultCleaner {
 
     // Clean error object
     if (cleaned.error && typeof cleaned.error === 'object') {
+      const errorCode = cleaned.error.code;
+      const validationDetails =
+        errorCode === 'TOOL_VALIDATION_ERROR'
+          ? this.cleanValidationErrorDetails(cleaned.error.details)
+          : undefined;
       cleaned.error = {
         message: cleaned.error.message || 'Unknown error',
-        code: cleaned.error.code,
-        ...(cleaned.error.semanticFeedback && { semanticFeedback: cleaned.error.semanticFeedback })
+        code: errorCode,
+        ...(cleaned.error.semanticFeedback && { semanticFeedback: cleaned.error.semanticFeedback }),
+        ...(validationDetails && { details: validationDetails }),
       };
     }
 
@@ -58,10 +64,9 @@ export class ToolResultCleaner {
       }
 
       const isSpecializedTool = cleaned.name === 'applyDesignPatch' || 
-                                cleaned.name === 'generateDesign' || 
                                 cleaned.name === 'batchOperations' ||
-                                cleaned.name === 'renderElement' ||
-                                cleaned.name === 'patchElement';
+                                cleaned.name === 'create_node' ||
+                                cleaned.name === 'patch_node';
       if (isSpecializedTool && cleaned.data) {
         // For these tools, use structural distillation rather than string truncation
         cleaned.data = cleaned.data.results 
@@ -91,7 +96,7 @@ export class ToolResultCleaner {
     // Results within budget
     if (cleaned.name === 'inspectDesign') {
       cleaned.data = this.cleanInspectResult(cleaned.data);
-    } else if (cleaned.data.results && cleaned.data.idMap) {
+    } else if (cleaned.data.results) {
       cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
     } else if (cleaned.success && typeof cleaned.data === 'object') {
       cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
@@ -102,10 +107,10 @@ export class ToolResultCleaner {
 
   private cleanBatchResult(data: any, originalSize: number): any {
     const essentialData: any = {
-      idMap: data.idMap, // Always keep full idMap
+      ...(data.idMap && { idMap: data.idMap }),
       results: data.results.map((r: any) => ({
-        opId: r.opId,
-        action: r.action,
+        opId: r.opId || (r.action && r.action.tempId),
+        action: typeof r.action === 'string' ? r.action : (r.action && r.action.action),
         success: r.success,
         ...(r.nodeId && { nodeId: r.nodeId }),
         ...(r.name && { name: r.name }),
@@ -113,7 +118,7 @@ export class ToolResultCleaner {
         ...(r.diff && { diff: r.diff }),
         ...(r.diffInfo && { diffInfo: r.diffInfo }),
         ...(r.error && {
-          error: {
+          error: typeof r.error === 'string' ? r.error : {
             code: r.error.code,
             message: r.error.message,
             ...(r.error.semanticFeedback && { semanticFeedback: r.error.semanticFeedback })
@@ -134,6 +139,9 @@ export class ToolResultCleaner {
       })),
       // TIER 0: Critical signals
       ...(data.rollback && { rollback: data.rollback }),
+      ...(data.firstFailure && { firstFailure: data.firstFailure }),
+      ...(data.failureCount && { failureCount: data.failureCount }),
+      ...(data.failureActionIds && { failureActionIds: data.failureActionIds }),
       _truncated: true,
       _originalSize: originalSize,
     };
@@ -267,6 +275,44 @@ export class ToolResultCleaner {
     return cleanedNode;
   }
 
+  private cleanValidationErrorDetails(details: any): any | undefined {
+    if (!details || typeof details !== 'object') return undefined;
+
+    const safeMissing = Array.isArray(details.missing)
+      ? details.missing
+          .slice(0, 20)
+          .map((name: any) => this.sanitizeString(name, 80))
+      : [];
+
+    const safeInvalid = Array.isArray(details.invalid)
+      ? details.invalid.slice(0, 20).map((entry: any) => {
+          const sanitized: Record<string, any> = {
+            name: this.sanitizeString(entry?.name || '', 80),
+            reason: this.sanitizeString(entry?.reason || '', 160),
+          };
+          if (entry?.mapPath) {
+            sanitized.mapPath = this.sanitizeString(entry.mapPath, 120);
+          }
+          return sanitized;
+        })
+      : [];
+
+    const safeReceivedKeys = Array.isArray(details.receivedKeys)
+      ? details.receivedKeys
+          .slice(0, 30)
+          .map((name: any) => this.sanitizeString(name, 80))
+      : [];
+
+    return {
+      tool: typeof details.tool === 'string' ? this.sanitizeString(details.tool, 80) : '',
+      mode: typeof details.mode === 'string' ? this.sanitizeString(details.mode, 40) : '',
+      missing: safeMissing,
+      invalid: safeInvalid,
+      receivedKeys: safeReceivedKeys,
+      repairHint: typeof details.repairHint === 'string' ? this.sanitizeString(details.repairHint, 240) : '',
+    };
+  }
+
   private cleanAnomalies(anomalies: any[], maxAnomalies: number = 12): any[] {
     return anomalies.slice(0, maxAnomalies).map((a: any) => {
       const code = typeof a?.code === 'string'
@@ -363,22 +409,21 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
-      // Aggressive pruning for massive generation tools
-      if (tc.name === 'generateDesign' || tc.name === 'renderSubtree') {
-         const nodeCount = Array.isArray(tc.args?.nodes) ? tc.args.nodes.length : 0;
-         const originalLength = tc.args ? JSON.stringify(tc.args).length : 0;
-         if (originalLength > 1000) {
-             return {
-                 ...tc,
-                 args: {
-                     ...(tc.args?.parentId && { parentId: tc.args.parentId }),
-                     ...(tc.args?.stepId && { stepId: tc.args.stepId }),
-                     nodes: `[_truncated: ${nodeCount} nodes omitted to save context. State tracked by Figma.]`,
-                     _truncated: true,
-                     _originalSize: originalLength
-                 }
-             };
-         }
+      // Aggressive pruning for large create payloads
+      if (tc.name === 'create_node' && Array.isArray(tc.args?.nodes)) {
+        const nodeCount = tc.args.nodes.length;
+        const originalLength = tc.args ? JSON.stringify(tc.args).length : 0;
+        if (originalLength > 1000) {
+          return {
+            ...tc,
+            args: {
+              ...(tc.args?.parentId && { parentId: tc.args.parentId }),
+              nodes: `[_truncated: ${nodeCount} nodes omitted to save context. State tracked by Figma.]`,
+              _truncated: true,
+              _originalSize: originalLength
+            }
+          };
+        }
       }
 
       const def = this.toolMap.get(tc.name);

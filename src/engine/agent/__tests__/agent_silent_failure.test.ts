@@ -45,7 +45,6 @@ describe('Agent Silent Failure Repro', () => {
       tools: [],
       // Mock callbacks to see if they get called
       onIteration: vi.fn(),
-      onThinking: vi.fn(),
       ipcBridge: { callTool: vi.fn(), dispose: vi.fn() } as any
     });
 

@@ -29,6 +29,25 @@ vi.mock('../../../engine/serialization/NodeSerializer', () => ({
   },
 }));
 
+// Setup an observable mock implementation at module level
+const { mockActionExecutorExecute } = vi.hoisted(() => ({
+  mockActionExecutorExecute: vi.fn().mockResolvedValue({
+    success: true,
+    results: [],
+    idMap: {},
+    rollback: undefined
+  })
+}));
+
+export { mockActionExecutorExecute };
+
+vi.mock('../../../engine/actions/executor', () => ({
+  ActionExecutor: class {
+    execute = mockActionExecutorExecute;
+  }
+}));
+
+
 // Mock Figma Global
 const mockFigma = {
     getNodeByIdAsync: vi.fn(),
@@ -50,13 +69,18 @@ describe('batchOperations - Hierarchical Transactions', () => {
     });
 
     it('should create deeply nested structures using virtual IDs (opId)', async () => {
-        // Setup: Parent creation mock
+        // Setup: ActionExecutor mock for success
         const parentNodeId = '100:1';
-        (handleUnifiedRender as any).mockResolvedValueOnce({ id: parentNodeId, name: 'Parent' });
-
-        // Setup: Child creation mock
         const childNodeId = '100:2';
-        (handleUnifiedRender as any).mockResolvedValueOnce({ id: childNodeId, name: 'Child' });
+        mockActionExecutorExecute.mockResolvedValueOnce({
+            success: true,
+            results: [
+                { action: { action: 'createFrame', tempId: 'parent-frame' }, success: true, nodeId: parentNodeId },
+                { action: { action: 'createFrame', tempId: 'child-frame' }, success: true, nodeId: childNodeId }
+            ],
+            idMap: { 'parent-frame': parentNodeId, 'child-frame': childNodeId },
+            rollback: undefined
+        });
 
         const batchParams = {
             operations: [
@@ -88,21 +112,11 @@ describe('batchOperations - Hierarchical Transactions', () => {
             requestId: 'test-req-1'
         });
 
-        // Verification: parent frame should be created first with no parent (null)
-        expect(handleUnifiedRender).toHaveBeenNthCalledWith(
-            1,
-            expect.objectContaining({ props: expect.objectContaining({ name: 'Parent Container' }) }),
-            false,
-            null
-        );
-
-        // Verification: child frame should be created with the resolved parentNodeId
-        expect(handleUnifiedRender).toHaveBeenNthCalledWith(
-            2,
-            expect.objectContaining({ props: expect.objectContaining({ name: 'Child Content' }) }),
-            false,
-            parentNodeId // This is the resolved parentRef
-        );
+        // Verification: ActionExecutor should be called with translated actions
+        expect(mockActionExecutorExecute).toHaveBeenCalledWith(expect.arrayContaining([
+            expect.objectContaining({ action: 'createFrame', tempId: 'parent-frame' }),
+            expect.objectContaining({ action: 'createFrame', tempId: 'child-frame' })
+        ]));
 
         // Verification: handleToolResult was emitted with success and snapshots
         expect(emit).toHaveBeenCalledWith('TOOL_RESULT', expect.objectContaining({
@@ -124,8 +138,17 @@ describe('batchOperations - Hierarchical Transactions', () => {
         // Setup mocks
         const parentId = '100:1';
         const sibling1Id = '100:2';
-        (handleUnifiedRender as any).mockResolvedValueOnce({ id: parentId, name: 'Container' });
-        (handleUnifiedRender as any).mockResolvedValueOnce({ id: sibling1Id, name: 'Sibling1' });
+        
+        mockActionExecutorExecute.mockResolvedValueOnce({
+            success: true,
+            results: [
+                { action: { action: 'createFrame', tempId: 'container' }, success: true, nodeId: parentId },
+                { action: { action: 'createFrame', tempId: 'item1' }, success: true, nodeId: sibling1Id },
+                { action: { action: 'updateProps', tempId: 'style-item1' }, success: true, nodeId: sibling1Id }
+            ],
+            idMap: { 'container': parentId, 'item1': sibling1Id },
+            rollback: undefined
+        });
 
         // Batch: Create parent, Create child1 inside parent, then set sibling1 styles using opId
         const batchParams = {
@@ -148,8 +171,6 @@ describe('batchOperations - Hierarchical Transactions', () => {
             ]
         };
 
-        (nodeLayoutService.applyStyles as any).mockResolvedValueOnce({ success: true });
-
         // Execution
         await handleToolCall({
             toolName: 'batchOperations',
@@ -157,15 +178,23 @@ describe('batchOperations - Hierarchical Transactions', () => {
             requestId: 'test-req-2'
         });
 
-        // Verification: setNodeStyles resolved 'item1' to sibling1Id
-        expect(nodeLayoutService.applyStyles).toHaveBeenCalledWith(
-            sibling1Id,
-            expect.objectContaining({ fills: expect.any(Array) })
-        );
+        // Verification: ActionExecutor called with proper translations
+        expect(mockActionExecutorExecute).toHaveBeenCalledWith(expect.arrayContaining([
+            expect.objectContaining({ action: 'createFrame', tempId: 'container' }),
+            expect.objectContaining({ action: 'createFrame', tempId: 'item1', parentId: 'container' }),
+            expect.objectContaining({ action: 'updateProps', nodeId: 'item1' }) // nodeRef translates to nodeId placeholder
+        ]));
     });
 
-    it('fails createNode when explicit parent cannot be resolved', async () => {
-        (nodeLayoutService.resolveParent as any).mockResolvedValueOnce(null);
+    it('fails when underlying operation fails', async () => {
+        mockActionExecutorExecute.mockResolvedValueOnce({
+            success: false,
+            results: [
+                { action: { action: 'createFrame', tempId: 'child' }, success: false, error: 'Parent not found' }
+            ],
+            idMap: {},
+            rollback: undefined
+        });
 
         await handleToolCall({
             toolName: 'batchOperations',
@@ -185,36 +214,27 @@ describe('batchOperations - Hierarchical Transactions', () => {
             requestId: 'test-req-parent-missing'
         });
 
-        expect(handleUnifiedRender).not.toHaveBeenCalled();
-
         const toolResultCall = (emit as any).mock.calls.find((call: any[]) => call[0] === 'TOOL_RESULT');
         const payload = toolResultCall?.[1];
+        
         expect(payload.response.success).toBe(false);
-        expect(payload.response.error.code).toBe('PARTIAL_FAILURE');
-        expect(payload.response.error.message).toContain("1 operation failed in batch (First failure: opId='child', action='createNode', error='Parent 'missing-parent' not found.");
-        expect(payload.response.data.results[0].error.code).toBe('PARENT_NOT_FOUND');
+        // Under SHADOW_RUN_TYPED_ACTIONS, failure payload returns execResult verbatim via BatchOpResult mapping.
+        const failureResult = payload.response.data.results.find((r: any) => !r.success);
+        expect(failureResult.error.code).toBe('EXECUTION_ERROR');
+        expect(failureResult.error.message).toBe('Parent not found');
     });
 
     it('rolls back created nodes when batch has partial failure', async () => {
         const createdNodeId = '100:9';
-        const createdNode = {
-            id: createdNodeId,
-            type: 'FRAME',
-            name: 'Transient Node',
-            removed: false,
-            remove: vi.fn(function (this: any) {
-                this.removed = true;
-            })
-        };
-
-        (handleUnifiedRender as any).mockResolvedValueOnce({ id: createdNodeId, name: 'Transient Node' });
-        (mockFigma.getNodeByIdAsync as any).mockImplementation(async (id: string) => {
-            if (id === createdNodeId) return createdNode;
-            return null;
-        });
-        (nodeLayoutService.applyLayout as any).mockResolvedValueOnce({
+        
+        mockActionExecutorExecute.mockResolvedValueOnce({
             success: false,
-            error: { code: 'APPLY_ERROR', message: 'forced failure' }
+            results: [
+                { action: { action: 'createFrame', tempId: 'create-ok' }, success: true, nodeId: createdNodeId },
+                { action: { action: 'updateProps', tempId: 'bad-op' }, success: false, error: 'forced failure' }
+            ],
+            idMap: { 'create-ok': createdNodeId },
+            rollback: { attempted: 1, removed: 1, failed: [] }
         });
 
         await handleToolCall({
@@ -238,12 +258,11 @@ describe('batchOperations - Hierarchical Transactions', () => {
 
         const toolResultCall = (emit as any).mock.calls.find((call: any[]) => call[0] === 'TOOL_RESULT');
         const payload = toolResultCall?.[1];
+        
         expect(payload.response.success).toBe(false);
-        expect(payload.response.error.code).toBe('PARTIAL_FAILURE');
-        expect(payload.response.error.message).toContain("1 operation failed in batch (First failure: opId='bad-op', action='setNodeLayout', error='forced failure')");
+        // Verify rollback info is propagated
         expect(payload.response.data.rollback).toEqual(
             expect.objectContaining({ attempted: 1, removed: 1 })
         );
-        expect(payload.response.data.idMap).toEqual({});
     });
 });

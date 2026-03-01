@@ -11,23 +11,17 @@
       "priority": 1,
       "injectionType": "system",
       "tools": [
-        "planDesign",
-        "generateDesign",
-        "renderElement",
-        "patchElement",
-        "inspectDesign",
-        "createNode",
-        "setNodeLayout",
-        "setNodeStyles",
-        "createIcon",
-        "updateNodeProperties",
-        "deleteNode",
-        "applyDesignPatch",
-        "validateLayout"
+        "create_node",
+        "patch_node",
+        "read_node",
+        "delete_node",
+        "query_knowledge",
+        "validate_design",
+        "signal"
       ],
       "enabledByDefault": true
     },
-    "body": "## FIGMA OPERATIONS\n\n### PREFERRED: One-Shot Generation\n\nFor creating NEW components/layouts, use `generateDesign` — output ALL nodes in one call. \n\n> [!IMPORTANT]\n> Even if your plan has multiple steps (e.g., 1. Header, 2. Form, 3. Footer), you should ideally use **ONE** `generateDesign` call to output the entire tree at once. This ensures consistency and is much faster.\n\n```json\ngenerateDesign({nodes: [\n  {\"id\": \"card\", \"parent\": null, \"type\": \"FRAME\", \"props\": {\"name\": \"Card\", \"layoutMode\": \"VERTICAL\", \"gap\": 12, \"padding\": 16, \"fills\": [\"#FFFFFF\"], \"cornerRadius\": 12}},\n  {\"id\": \"title\", \"parent\": \"card\", \"type\": \"TEXT\", \"props\": {\"characters\": \"Card Title\", \"fontSize\": 18, \"fontWeight\": \"Bold\"}},\n  {\"id\": \"desc\", \"parent\": \"card\", \"type\": \"TEXT\", \"props\": {\"characters\": \"Description text\", \"fontSize\": 14, \"fills\": [\"#6B7280\"]}}\n]})\n```\n\nThis is faster and more reliable than creating nodes one-by-one.\n\n### NEW: State-Driven Operations (PREFERRED)\n\nFor high-level creation and modification, use `renderElement` and `patchElement`. These avoid atomic loops and are much more token-efficient.\n\n#### renderElement (Create Tree)\nCreate a complete component or sub-tree in a single call.\n```json\nrenderElement({\n  \"parentId\": \"123:456\",\n  \"element\": {\n    \"type\": \"FRAME\",\n    \"props\": {\"name\": \"Button\", \"layoutMode\": \"HORIZONTAL\", \"padding\": 12, \"fills\": [\"#4F46E5\"], \"cornerRadius\": 8},\n    \"children\": [\n      {\"type\": \"TEXT\", \"props\": {\"name\": \"label\", \"characters\": \"Submit\", \"fills\": [\"#FFFFFF\"]}}\n    ]\n  }\n})\n```\n\n#### patchElement (Modify State)\nIncrementally update an element by merging properties. Preserves children automatically.\n```json\npatchElement({\n  \"nodeId\": \"123:456\",\n  \"fragment\": {\"fills\": [\"#EF4444\"], \"padding\": 16}\n})\n```\n\n### Node-by-Node (LEGACY - use only for single node tweaks)\n\nAvoid using `createNode` / `setNodeLayout` / `setNodeStyles` in loops. Preferred:\n1. `generateDesign` (for complex NEW trees)\n2. `renderElement` (for NEW sub-trees or single complex nodes)\n3. `patchElement` (for UPDATING existing nodes)\n4. `batchOperations` (for executing multiple state-driven calls at once)\n\n### Key Rules\n- **generateDesign**: First node must have `parent: null` (root). All others reference parent by id.\n- **All props in `props`**: layoutMode, gap, fills, fontSize, cornerRadius, effects, etc.\n- **TEXT nodes MUST have characters**\n- **Meaningful names**: Never use \"unnamed\" or \"frame\"\n- **Auto Layout for HUG**: Add layoutMode before using HUG sizing\n- **Effects**: Use effects for visual depth. Example:\n  ```json\n  \"effects\": [{\"type\": \"DROP_SHADOW\", \"color\": \"#0000001A\", \"offset\": {\"x\": 0, \"y\": 4}, \"blur\": 16, \"spread\": 0}]\n  ```\n  Types: DROP_SHADOW, INNER_SHADOW, LAYER_BLUR, BACKGROUND_BLUR\n- **Colors**: Use non-pure-black for text (#111827), subtle borders (#D1D5DB) for inputs\n\n### Error Recovery\n- `PARENT_NOT_FOUND` → Create parent first\n- `NODE_NOT_FOUND` → Use inspectDesign to find valid IDs\n- `RECONSTRUCTION_FAILED` → Check parent references in nodes array"
+    "body": "## FIGMA OPERATIONS\n\n### PREFERRED: One-Shot Generation\n\nFor creating NEW components/layouts, use `create_node` — output ALL nodes in one call using a flat list with `id` and `parent` references.\n\n> [!IMPORTANT]\n> Even if your plan has multiple steps (e.g., 1. Header, 2. Form, 3. Footer), you should ideally use **ONE** `create_node` call to output the entire tree at once. This ensures consistency and is much faster.\n\n```json\ncreate_node({\n  \"nodes\": [\n    {\"id\": \"card\", \"type\": \"FRAME\", \"props\": {\"name\": \"Card\", \"layoutMode\": \"VERTICAL\", \"gap\": 12, \"padding\": 16, \"fills\": [\"#FFFFFF\"], \"cornerRadius\": 12}},\n    {\"id\": \"title\", \"parent\": \"card\", \"type\": \"TEXT\", \"props\": {\"characters\": \"Card Title\", \"fontSize\": 18, \"fontWeight\": \"Bold\"}},\n    {\"id\": \"desc\", \"parent\": \"card\", \"type\": \"TEXT\", \"props\": {\"characters\": \"Description text\", \"fontSize\": 14, \"fills\": [\"#6B7280\"]}}\n  ]\n})\n```\n\nThis is faster and more reliable than creating nodes one-by-one.\n\n### MODIFICATION (PREFERRED)\n\nFor high-level modification, use `patch_node`. This avoids atomic loops and is much more token-efficient.\n\n#### patch_node (Modify State)\nIncrementally update an element by merging properties. Preserves children automatically.\n```json\npatch_node({\n  \"patches\": [\n    {\n      \"nodeId\": \"123:456\",\n      \"props\": {\"fills\": [\"#EF4444\"], \"padding\": 16}\n    }\n  ]\n})\n```\n\n### Key Rules\n- **create_node**: First node without `parent` is the root. All others reference parent by temporary `id`.\n- **All props in `props`**: layoutMode, gap, fills, fontSize, cornerRadius, effects, etc.\n- **TEXT nodes MUST have characters**\n- **Meaningful names**: Never use \"unnamed\" or \"frame\"\n- **Auto Layout for HUG**: Add layoutMode before using HUG sizing\n- **Effects**: Use effects for visual depth. Example:\n  ```json\n  \"effects\": [{\"type\": \"DROP_SHADOW\", \"color\": \"#0000001A\", \"offset\": {\"x\": 0, \"y\": 4}, \"blur\": 16, \"spread\": 0}]\n  ```\n  Types: DROP_SHADOW, INNER_SHADOW, LAYER_BLUR, BACKGROUND_BLUR\n- **Colors**: Use non-pure-black for text (#111827), subtle borders (#D1D5DB) for inputs\n\n### Error & Warning Recovery\n- **`PARENT_NOT_FOUND` Error** → Create parent first.\n- **`NODE_NOT_FOUND` Error** → Use `read_node` or `inspectDesign` to find valid IDs.\n- **`FONT_FALLBACK` Warning** → **DO NOT** repeat `create_node`. If it's a critical text element (e.g., Title or Button), use `patch_node` ONCE to attempt using an available `fontWeight` (like `Regular` or `Medium`). If it fails again, proceed with the task and summarize unresolved `warningsDigest` in the final `signal({ type: \"complete\", ... })` call."
   },
   "figma-sandbox": {
     "id": "figma-sandbox",
@@ -118,25 +112,37 @@
     },
     "body": "## PROJECT UI CONTEXT\n\nThis project has existing UI components defined in code. Before creating new designs:\n\n1. **Query Components First**: Use `getProjectUIContext` to understand existing component structure\n2. **Use Design Tokens**: Use `getDesignSystemTokens` to get colors, spacing, typography\n3. **Match Patterns**: Generated designs should match the project's established patterns\n\n**When to use these tools:**\n- Creating buttons, headers, cards, inputs → Query the component first\n- Unsure about spacing/colors → Get design tokens\n- Need to match existing style → List and inspect components\n\n### Examples\n\n**Create button matching project style:**\n```\ngetProjectUIContext({component: \"Button\"})\n→ {props: [...], figmaMapping: {...}}\n\ncreateNode({...based on mapping...})\n```\n\n**创建符合设计系统的卡片:**\n```\ngetDesignSystemTokens({tokenType: \"all\"})\ngetProjectUIContext({component: \"Card\"})\ncreateNode(...)\n```"
   },
+  "typed-actions-refactor": {
+    "id": "typed-actions-refactor",
+    "name": "DSL → Typed Actions Refactoring",
+    "description": "将写入协议从 DSL 中间语言迁移到直接 Figma Plugin API 操作指令。DSL 保留为只读上下文层。",
+    "frontmatter": {
+      "id": "typed-actions-refactor",
+      "name": "DSL → Typed Actions Refactoring",
+      "description": "将写入协议从 DSL 中间语言迁移到直接 Figma Plugin API 操作指令。DSL 保留为只读上下文层。",
+      "category": "architecture",
+      "priority": 0,
+      "injectionType": "manual",
+      "enabledByDefault": false
+    },
+    "body": "# DSL → Typed Actions 重构\n\n## 一句话定义\n\n> DSL 退为只读上下文层（给 Agent 理解画布状态），写入协议改为 Typed Actions（直接映射 figma.* API），消除 6 层翻译链。\n\n## 核心文件索引\n\n使用前请先阅读这些文件获取完整上下文：\n\n| 文件 | 用途 |\n|------|------|\n| `context/architecture.md` | 完整架构分析（当前 vs 目标） |\n| `context/codebase-map.md` | 受影响文件及其角色 |\n| `progress.md` | 进度跟踪 + 子任务清单 |\n| `assumptions.md` | 假设、竞争方案、置信度评估 |\n\n## 使用方式\n\n**新对话开始时**：如果任务涉及以下内容，先 `view_file` 本 SKILL.md 和相关子文件：\n- 修改 Agent 的 tool 定义（create_node, patch_node, read_node）\n- 修改渲染链（renderers, TreeReconstructor, Normalizer）\n- 修改 PropertyTransformer\n- 讨论 Agent 输出格式\n\n**完成工作后**：更新 `progress.md` 记录本次推进。\n\n## 设计原则\n\n1. **Agent 说 Figma 的语言** — 属性名直接用 Figma API 名，不再翻译\n2. **Action 是原子操作** — 每个 Action 对应一次 figma.* 调用\n3. **读写分离** — read path 做适度压缩给 Agent 看，write path 直通\n4. **渐进迁移** — Shadow Run 模式，新旧并行验证后再切换"
+  },
   "workflow": {
     "id": "workflow",
     "name": "Workflow Management",
-    "description": "Task and workflow management tools",
+    "description": "Task lifecycle signaling guidance",
     "frontmatter": {
       "id": "workflow",
       "name": "Workflow Management",
-      "description": "Task and workflow management tools",
+      "description": "Task lifecycle signaling guidance",
       "category": "workflow",
       "priority": 4,
       "injectionType": "on-demand",
       "tools": [
-        "new_task",
-        "update_todo_list",
-        "summarize_progress",
-        "complete_task"
+        "signal"
       ],
       "enabledByDefault": true
     },
-    "body": "## WORKFLOW MANAGEMENT\n\nTools for managing tasks and progress:\n\n- `new_task`: Initiate a new design task\n- `update_todo_list`: Track progress with TODO items\n- `summarize_progress`: Generate progress summary\n- `complete_task`: Mark task as complete\n\nUse these tools to maintain clear task flow and progress tracking."
+    "body": "## WORKFLOW MANAGEMENT\n\nUse `signal` for all task lifecycle updates:\n\n- `signal({ type: \"plan\", ... })`: announce the plan\n- `signal({ type: \"task_start\", ... })`: start a semantic task\n- `signal({ type: \"progress\", ... })`: report incremental progress\n- `signal({ type: \"complete\", ... })`: finish the task\n\nDo not use legacy workflow tools (`new_task`, `update_todo_list`, `summarize_progress`, `complete_task`)."
   }
 }

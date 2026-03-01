@@ -57,7 +57,7 @@ describe('Gemini Signature Position Repro', () => {
       })
       .mockResolvedValueOnce({
         text: 'It is sunny!',
-        toolCalls: [{ name: 'complete_task', args: { summary: 'Done' } }]
+        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }]
       });
 
     // Mock IPC Bridge

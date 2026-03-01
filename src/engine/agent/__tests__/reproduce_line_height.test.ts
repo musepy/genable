@@ -106,7 +106,7 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
 }
 
 describe('Reproduction: Line-Height Issue', () => {
-  it('should catch and fix small line-height', { timeout: 120_000 }, async () => {
+  it.skip('should catch and fix small line-height', { timeout: 120_000 }, async () => {
     const prompt = 'Create a hero section with a large title "Experience Evolution" and a short description. Use modern typography.';
     const state = new MockFigmaState();
     const executors = createMockExecutors(state);

@@ -6,14 +6,15 @@
  * This is extracted from main.ts to separate concerns.
  */
 
-import { NodeLayer } from '../../types';
-import { renderOrchestrator } from '../../engine/pipeline/RenderOrchestrator';
+import { NodeLayer } from '../../schema/layerSchema';
 import { RenderLifecycleManager } from '../../engine/pipeline/RenderLifecycleManager';
 import { StreamBufferManager } from '../../engine/pipeline/StreamBufferManager';
 import { CanvasOrchestrator } from '../../engine/pipeline/CanvasOrchestrator';
 import { getActiveEngineConfig } from '../../engine/engineConfig';
 import { SendLogHandler } from '../../types';
 import { emit } from '@create-figma-plugin/utilities';
+import { DslToActionAdapter } from '../../engine/actions/dslAdapter';
+import { ActionExecutor } from '../../engine/actions/executor';
 
 // State management for streaming
 const streamRoots = new Map<string, SceneNode>();
@@ -82,22 +83,16 @@ export async function handleUnifiedRender(
   const activeConfig = getActiveEngineConfig(designSystemId);
   const traceId = streamSessionId || meta?.traceId || 'unified';
 
-  const rootNode = await renderOrchestrator.process({
-    layerData: layerData as NodeLayer,
-    designSystemId,
-    designSystemConfig: activeConfig,
-    renderContext: renderContext,
-    meta: {
-      traceId,
-      isStream,
-      position: placement.position,
-      positionStrategy: placement.strategy as any,
-      viewportCenter: figma.viewport.center,
-      parentBounds: placement.parentBounds,
-      parent: placement.parent as any,
-      insertIndex: placement.index
-    }
-  });
+  // [Phase 3.5] Migrate legacy entries to ActionExecutor via Adapter
+  let rootNode: SceneNode | null = null;
+  const actions = DslToActionAdapter.convert(layerData as NodeLayer, placement.parent?.id);
+  const executor = new ActionExecutor();
+  const result = await executor.execute(actions);
+
+  // Assume the first successful tempId -> realId is the root
+  if (result.results.length > 0 && result.results[0].success) {
+      rootNode = await figma.getNodeByIdAsync(result.results[0].nodeId!) as SceneNode;
+  }
 
   if (rootNode) {
     if (existingStreamRoot && rootNode !== existingStreamRoot) {

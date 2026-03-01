@@ -110,10 +110,23 @@ export interface LLMToolConfig {
   allowedTools?: string[];
 }
 
+export interface LLMProviderCapabilities {
+  /** Provider can return incremental text chunks in a single generation turn. */
+  supportsTextStreaming: boolean;
+  /** Provider can return incremental reasoning/thought chunks in a single generation turn. */
+  supportsReasoningStreaming: boolean;
+}
+
+export const DEFAULT_PROVIDER_CAPABILITIES: LLMProviderCapabilities = {
+  supportsTextStreaming: false,
+  supportsReasoningStreaming: false,
+};
+
 export interface LLMProvider {
   name: string;
   generate(options: LLMGenerateOptions): Promise<LLMResponse>;
   generateStream?(options: LLMGenerateOptions): AsyncIterable<LLMResponse>;
+  getCapabilities?(): LLMProviderCapabilities;
   
   /**
    * Format an LLM response into a message for history record.

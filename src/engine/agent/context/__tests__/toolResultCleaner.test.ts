@@ -74,6 +74,50 @@ describe('ToolResultCleaner', () => {
     expect(op1.diffInfo).toBeDefined();
   });
 
+  it('preserves validation error details for TOOL_VALIDATION_ERROR', () => {
+    const rawResult = {
+      success: false,
+      error: {
+        code: 'TOOL_VALIDATION_ERROR',
+        message: 'Validation Error: create_node is missing required parameter(s): nodes. Please provide a non-empty array of nodes.',
+        details: {
+          tool: 'create_node',
+          mode: 'EXECUTION',
+          missing: ['nodes'],
+          invalid: [],
+          receivedKeys: ['parentId'],
+          repairHint: 'provide a non-empty array of nodes',
+          extra: 'should be dropped'
+        }
+      }
+    };
+
+    const cleaned = cleaner.cleanToolResult(rawResult);
+
+    expect(cleaned.error.details).toEqual({
+      tool: 'create_node',
+      mode: 'EXECUTION',
+      missing: ['nodes'],
+      invalid: [],
+      receivedKeys: ['parentId'],
+      repairHint: 'provide a non-empty array of nodes'
+    });
+  });
+
+  it('keeps non-validation errors compact (details stripped)', () => {
+    const rawResult = {
+      success: false,
+      error: {
+        code: 'EXECUTION_ERROR',
+        message: 'Something failed',
+        details: { deep: true }
+      }
+    };
+
+    const cleaned = cleaner.cleanToolResult(rawResult);
+    expect(cleaned.error.details).toBeUndefined();
+  });
+
   describe('inspectDesign specific cleaning', () => {
     it('preserves visual properties in hierarchy mode', () => {
       const rawResult = {

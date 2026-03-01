@@ -83,7 +83,14 @@ export interface AgentRuntimeStatusEvent extends AgentRuntimeBaseEvent {
   maxIterations?: number;
   taskInfo?: AgentRuntimeTaskInfo;
   message: string;
-  thinking?: string;
+}
+
+export interface AgentRuntimeReasoningDeltaEvent extends AgentRuntimeBaseEvent {
+  type: 'reasoning_delta';
+  phase: AgentRuntimePhase;
+  mode?: AgentMode;
+  iteration?: number;
+  text: string;
 }
 
 export interface AgentRuntimeErrorEvent extends AgentRuntimeBaseEvent {
@@ -126,6 +133,7 @@ export type AgentRuntimeEvent =
   | AgentRuntimeToolResultEvent
   | AgentRuntimeContextUsageEvent
   | AgentRuntimeStatusEvent
+  | AgentRuntimeReasoningDeltaEvent
   | AgentRuntimeErrorEvent
   | AgentRuntimeCompletedEvent
   | AgentRuntimeRetryEvent
@@ -137,6 +145,7 @@ export type AgentRuntimeEventType =
   | 'tool_result'
   | 'context_usage'
   | 'status'
+  | 'reasoning_delta'
   | 'error'
   | 'completed'
   | 'retry'

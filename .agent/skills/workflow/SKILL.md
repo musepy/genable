@@ -1,25 +1,22 @@
 ---
 id: workflow
 name: Workflow Management
-description: Task and workflow management tools
+description: Task lifecycle signaling guidance
 category: workflow
 priority: 4
 injectionType: on-demand
 tools:
-  - new_task
-  - update_todo_list
-  - summarize_progress
-  - complete_task
+  - signal
 enabledByDefault: true
 ---
 
 ## WORKFLOW MANAGEMENT
 
-Tools for managing tasks and progress:
+Use `signal` for all task lifecycle updates:
 
-- `new_task`: Initiate a new design task
-- `update_todo_list`: Track progress with TODO items
-- `summarize_progress`: Generate progress summary
-- `complete_task`: Mark task as complete
+- `signal({ type: "plan", ... })`: announce the plan
+- `signal({ type: "task_start", ... })`: start a semantic task
+- `signal({ type: "progress", ... })`: report incremental progress
+- `signal({ type: "complete", ... })`: finish the task
 
-Use these tools to maintain clear task flow and progress tracking.
+Do not use legacy workflow tools (`new_task`, `update_todo_list`, `summarize_progress`, `complete_task`).

@@ -75,6 +75,42 @@ export interface ToolContext {
   userId?: string;
 }
 
+export type RuntimeValidationMode = 'EXECUTION';
+
+export interface RuntimeRequiredParamSpec {
+  name: string;
+  source?: 'direct' | 'map';
+  mapPath?: string;
+  trim?: boolean;
+  check?: 'required' | 'non_empty_array' | 'non_empty_object';
+}
+
+export interface ToolValidationInvalidParam {
+  name: string;
+  reason: string;
+  mapPath?: string;
+}
+
+export interface ToolValidationErrorDetail {
+  tool: string;
+  mode: RuntimeValidationMode;
+  missing: string[];
+  invalid: ToolValidationInvalidParam[];
+  receivedKeys: string[];
+  repairHint: string;
+}
+
+export type RuntimeToolValidationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error: {
+        code: 'TOOL_VALIDATION_ERROR';
+        message: string;
+        details: ToolValidationErrorDetail;
+      };
+    };
+
 /**
  * Type for a tool execution function.
  */

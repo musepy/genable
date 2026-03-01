@@ -76,62 +76,7 @@ export class PropertyTransformer {
         }
     }
 
-    /**
-     * DESERIALIZE: DSL -> Figma API
-     * Converts a DSL value into a format that can be applied to a Figma node.
-     * Note: Some properties (like colors) require async factory functions (createPaint).
-     * 
-     * @param dslValue - The value from LLM/DSL
-     * @param dslKey - The key from PROPS
-     * @returns The Figma-compatible value (or instruction for the renderer)
-     */
-    static deserialize(dslValue: any, dslKey: string): any {
-        const meta = PROP_METADATA[dslKey];
-        if (!meta) return dslValue;
 
-        switch (meta.type) {
-            case 'color':
-                // Fills/Strokes are handled by the renderer calling createPaintFn
-                // We return the raw value (string or array)
-                return dslValue;
-
-            case 'enum':
-                if (meta.enumMap && typeof dslValue === 'string') {
-                    const mapped = meta.enumMap[dslValue.toUpperCase()];
-                    if (mapped) return mapped;
-                    
-                    // NEW: Invalid enum -> return defaultValue instead of raw input
-                    console.warn(`[PropertyTransformer] Invalid enum "${dslValue}" for ${dslKey}, using default`);
-                    return meta.defaultValue ?? dslValue;
-                }
-                return dslValue;
-
-            case 'scalar': {
-                let num: number;
-                if (dslValue === null || dslValue === undefined) {
-                    num = meta.defaultValue ?? 0;
-                } else if (typeof dslValue === 'string' && !dslValue.startsWith('$')) {
-                    const parsed = parseFloat(dslValue);
-                    num = isNaN(parsed) ? 0 : parsed;
-                } else if (typeof dslValue === 'number') {
-                    num = isNaN(dslValue) ? 0 : dslValue;
-                } else {
-                    return dslValue; // Variable reference ($token)
-                }
-
-                // NEW: Bounds clamping from metadata
-                if (meta.min !== undefined && num < meta.min) num = meta.min;
-                if (meta.max !== undefined && num > meta.max) num = meta.max;
-                return num;
-            }
-
-            case 'string':
-                return String(dslValue ?? '');
-
-            default:
-                return dslValue;
-        }
-    }
 
     /**
      * Internal: Handle properties that require specific logic to extract

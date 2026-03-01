@@ -72,7 +72,6 @@ describe('AgentOrchestrator', () => {
     modelName: 'gemini-pro',
     thinkingLevel: 'high' as const,
     onStatusChange: vi.fn(),
-    onThinkingUpdate: vi.fn(),
     onComplete: vi.fn(),
     onError: vi.fn()
   };

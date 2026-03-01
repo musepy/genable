@@ -24,10 +24,10 @@ import {
   SelectNodeHandler
 } from './types'
 import { WINDOW_WIDTH, getIdealHeight } from './ui/constants/layout'
-import { renderNodeDSL } from './engine/figma-adapter/renderers/index'
+
 import { figmaVariableCache } from './engine/figma-adapter/caches/figmaVariableCache'
 import { getActiveEngineConfig } from './engine/engineConfig'
-import { initializeRenderers } from './engine/figma-adapter/renderers'
+
 import { NodeSerializer } from './engine/figma-adapter/nodeSerializer';
 import { TreeReconstructor } from './engine/figma-adapter/treeReconstructor';
 import { DEFAULT_MODEL } from './ui/constants/models'
@@ -53,10 +53,7 @@ const throttledRenderers = new Map<string, (...args: any[]) => void>();
 export default async function () {
   console.log(`[Genable] 🚀 Plugin started | State-Driven Architecture`);
 
-  initializeRenderers(
-      (color) => PaintResolver.resolve(color),
-      []
-  );
+
 
   function getNodeCenter(node: SceneNode) {
     // Use any cast to avoid complex type narrowing issues with SceneNode subtypes

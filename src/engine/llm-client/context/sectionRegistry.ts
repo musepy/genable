@@ -1,6 +1,5 @@
 import { PromptDependencies, PromptSection } from '../../../types/context';
 import {
-    SCHEMA_RULES,
     DESIGN_AESTHETICS,
     ICON_USAGE,
     LINEAR_ROLE_TEMPLATE,
@@ -15,7 +14,7 @@ import { renderTemplate } from './templateLoader';
 function buildRoleSection(_deps: PromptDependencies, context: { isModifyMode: boolean }): string {
     return renderTemplate(LINEAR_ROLE_TEMPLATE, {
         isModifyMode: context?.isModifyMode ?? false,
-        formatRules: SCHEMA_RULES
+        formatRules: ''
     });
 }
 

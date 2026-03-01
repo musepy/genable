@@ -1,0 +1,616 @@
+/**
+ * @file executor.ts
+ * @description The ActionExecutor processes a sequential list of Typed Actions,
+ * applying them directly to the Figma document. It supports transactions, rollbacks,
+ * and dependency validation.
+ */
+
+import { FigmaAction, ExecutionResult, ActionResult } from './types';
+import { ActionValidator } from './validator';
+// We need to import the fontLoader utility
+import { fontBus } from '../figma-adapter/resources/FontBus'; // Assuming this exists based on progress.md
+import { fetchIconSvg } from '../figma-adapter/assets/iconify';
+import { parseActionError } from './errorParser';
+import { ActionErrorSubCategory } from './errorTypes';
+
+export class ActionExecutor {
+  private tempIdMap = new Map<string, string>(); // tempId → realFigmaId
+  private opStatus = new Map<string, { success: boolean; error?: string }>();
+  private rollbackStack: Array<{ tempId: string; nodeId: string }> = [];
+
+  constructor(private readonly options: { onError?: 'skip-dependents' | 'abort' } = {}) {}
+
+  /**
+   * Main execution entry point. 
+   * Topologically sorts actions based on dependsOn, then executes.
+   */
+  async execute(actions: FigmaAction[]): Promise<ExecutionResult> {
+    this.tempIdMap.clear();
+    this.opStatus.clear();
+    this.rollbackStack = [];
+    
+    const results: ActionResult[] = [];
+    const globalOnError = this.options.onError || 'skip-dependents';
+    let aborted = false;
+
+    // 1. Collect all tempIds within this batch
+    const currentBatchTempIds = new Set<string>();
+    for (const action of actions) {
+      if (action.tempId) currentBatchTempIds.add(action.tempId);
+    }
+
+    // 2. Sort actions topologically based on dependsOn to ensure dependencies run first
+    const sortedActions = this.topologicalSort(actions);
+
+    // 2. Execute sequentially
+    for (const action of sortedActions) {
+      if (aborted) {
+         results.push({ action, success: false, error: 'Aborted due to prior failure', skipped: true });
+         continue;
+      }
+
+      // Check dependencies
+      if (action.dependsOn && action.dependsOn.length > 0) {
+        let missingDep: string | undefined;
+        for (const dep of action.dependsOn) {
+          if (currentBatchTempIds.has(dep)) {
+            const status = this.opStatus.get(dep);
+            if (!status || !status.success) {
+              missingDep = dep;
+              break;
+            }
+          } else {
+            // It might be a real pre-existing Figma node ID. Validate it.
+            try {
+              const realNode = await figma.getNodeByIdAsync(dep);
+              if (!realNode) {
+                missingDep = dep;
+                break;
+              }
+            } catch (e) {
+              missingDep = dep;
+              break;
+            }
+          }
+        }
+
+        if (missingDep) {
+          const actionOnError = action.onError || globalOnError;
+          results.push({ action, success: false, error: `Dependency '${missingDep}' failed or was not executed.`, skipped: actionOnError === 'skip-dependents' });
+          this.opStatus.set(action.tempId || action.action, { success: false });
+          if (actionOnError === 'abort') {
+            aborted = true;
+          }
+          continue;
+        }
+      }
+
+      // Execute action
+      let result = await this.executeOne(action);
+      let retryCount = 0;
+      let retryTried = false;
+      let subCategory = ActionErrorSubCategory.UNKNOWN;
+
+      while (!result.success && retryCount < 2) {
+        const rawError = result.error || 'Unknown error';
+        subCategory = parseActionError(rawError);
+        
+        if (subCategory !== ActionErrorSubCategory.UNKNOWN && action.action !== 'delete') {
+          retryTried = true;
+          retryCount++;
+          console.warn(`[ActionExecutor] Auto-fixing and retrying action ${action.action} (attempt ${retryCount}) due to ${subCategory}`);
+          
+          const props = (action as any).props;
+          if (props) {
+            if (subCategory === ActionErrorSubCategory.LAYOUT_CONSTRAINT) {
+              delete props.layoutPositioning;
+              delete props.layoutAlign;
+              delete props.constraints;
+            } else if (subCategory === ActionErrorSubCategory.FONT_UNLOADED) {
+              props.fontFamily = 'Inter';
+              props.fontWeight = 'Regular';
+            } else if (subCategory === ActionErrorSubCategory.PAINT_INVALID) {
+              delete props.fills;
+              delete props.strokes;
+            } else if (subCategory === ActionErrorSubCategory.EFFECT_INVALID) {
+              delete props.effects;
+            }
+          }
+          result = await this.executeOne(action);
+        } else {
+          break; // Unrecoverable or unknown error
+        }
+      }
+
+      if (!result.success) {
+        // Attach extra context for logging/reporting
+        (result as ActionResult).errorContext = {
+          subCategory: subCategory !== ActionErrorSubCategory.UNKNOWN ? subCategory : parseActionError(result.error || ''),
+          rawMessage: result.error || 'Unknown error',
+          failedNodeId: (action as any).nodeId || action.tempId || action.action,
+          retryTried,
+          canRetryLocally: false
+        };
+      }
+
+      results.push({ action, ...result });
+
+      if (action.tempId) {
+         this.opStatus.set(action.tempId, { success: result.success, error: result.error });
+         if (result.success && result.nodeId) {
+            this.tempIdMap.set(action.tempId, result.nodeId);
+            if (action.action !== 'delete') {
+              this.rollbackStack.push({ tempId: action.tempId, nodeId: result.nodeId });
+            }
+         }
+      }
+
+      // Handle failure policy
+      if (!result.success) {
+        const actionOnError = action.onError || globalOnError;
+        if (actionOnError === 'abort') {
+          aborted = true;
+        }
+      }
+    }
+
+    // 4. Rollback on failure if anything failed and we shouldn't keep partials
+    // Only trigger global rollback if globalOnError === 'abort'.
+    // For 'skip-dependents', we keep other successfully executed nodes.
+    const hasFailures = results.some(r => !r.success && !r.skipped);
+    const rollbackSummary = await this.rollbackIfNeeded(hasFailures, globalOnError);
+
+    return {
+      success: !hasFailures,
+      results,
+      idMap: Object.fromEntries(this.tempIdMap),
+      rollback: rollbackSummary
+    };
+  }
+
+  private async executeOne(action: FigmaAction): Promise<Omit<ActionResult, 'action'>> {
+    try {
+      const parentNode = await this.resolveParent(action.parentId);
+
+      // Pre-validation
+      let targetNode: SceneNode | null = null;
+      if (action.action === 'updateProps' || action.action === 'delete' || action.action === 'move') {
+        const resolvedTargetId = this.resolveId(action.nodeId);
+        targetNode = (await figma.getNodeByIdAsync(resolvedTargetId)) as SceneNode;
+        if (!targetNode) {
+          return { success: false, error: `Node ${action.nodeId} not found` };
+        }
+      }
+
+      const validation = ActionValidator.validate(action, targetNode, parentNode);
+      if (!validation.valid) {
+        return { success: false, error: validation.error };
+      }
+
+      // Root node centering for newly created elements
+      if (!parentNode && ['createFrame', 'createText', 'createShape', 'createIcon', 'createInstance'].includes(action.action)) {
+        (action as any).props = this.centerNodeInViewport((action as any).props, action.action);
+      }
+
+      switch (action.action) {
+        case 'createFrame': {
+          const frame = figma.createFrame();
+          if (parentNode && 'appendChild' in parentNode) {
+            parentNode.appendChild(frame);
+          }
+          try {
+            const warnings = await this.applyProps(frame, action.props);
+            return { success: true, nodeId: frame.id, warnings: warnings.length ? warnings : undefined };
+          } catch (e: any) {
+            frame.remove();
+            throw e;
+          }
+        }
+
+        case 'createText': {
+          const text = figma.createText();
+          if (parentNode && 'appendChild' in parentNode) {
+            parentNode.appendChild(text);
+          }
+          try {
+            const warnings = await this.applyTextProps(text, action.props);
+            return { success: true, nodeId: text.id, warnings: warnings.length ? warnings : undefined };
+          } catch (e: any) {
+            text.remove();
+            throw e;
+          }
+        }
+
+        case 'createShape': {
+          let shape: RectangleNode | EllipseNode | LineNode | VectorNode;
+          if (action.shapeType === 'ELLIPSE') shape = figma.createEllipse();
+          else if (action.shapeType === 'LINE') shape = figma.createLine();
+          else if (action.shapeType === 'VECTOR') shape = figma.createVector();
+          else shape = figma.createRectangle();
+
+          if (parentNode && 'appendChild' in parentNode) {
+            parentNode.appendChild(shape);
+          }
+          try {
+            const warnings = await this.applyProps(shape, action.props);
+            return { success: true, nodeId: shape.id, warnings: warnings.length ? warnings : undefined };
+          } catch (e: any) {
+            shape.remove();
+            throw e;
+          }
+        }
+
+        case 'createIcon': {
+           let svgData = action.props.svgData;
+           if (!svgData && action.props.iconName) {
+             svgData = await fetchIconSvg(action.props.iconName) || undefined;
+           }
+           const iconParam = svgData || `<svg width="${action.props.width || 24}" height="${action.props.height || 24}"></svg>`;
+           const iconNode = figma.createNodeFromSvg(iconParam);
+           if (parentNode && 'appendChild' in parentNode) {
+             parentNode.appendChild(iconNode);
+           }
+           try {
+             const warnings = await this.applyProps(iconNode, action.props);
+             return { success: true, nodeId: iconNode.id, warnings: warnings.length ? warnings : undefined };
+           } catch (e: any) {
+             iconNode.remove();
+             throw e;
+           }
+        }
+
+        case 'createInstance': {
+          const master = await this.resolveComponent(action.source.componentKey, action.source.nodeId);
+          if (!master) {
+            return { success: false, error: 'Component source not found' };
+          }
+          const instance = master.createInstance();
+          if (parentNode && 'appendChild' in parentNode) {
+            parentNode.appendChild(instance);
+          }
+          let warnings: any[] = [];
+          if (action.props) {
+            try {
+              warnings = await this.applyProps(instance, action.props);
+            } catch (e: any) {
+              instance.remove();
+              throw e;
+            }
+          }
+          return { success: true, nodeId: instance.id, warnings: warnings.length ? warnings : undefined };
+        }
+
+        case 'swapInstance': {
+          if (!targetNode || targetNode.type !== 'INSTANCE') {
+             return { success: false, error: `Target node ${action.nodeId} is not an INSTANCE` };
+          }
+          const newMaster = await this.resolveComponent(action.newComponentKey, action.newComponentNodeId);
+          if (!newMaster) {
+            return { success: false, error: 'New component source not found' };
+          }
+          // figma plugin API swap components:
+          targetNode.swapComponent(newMaster);
+          return { success: true, nodeId: targetNode.id };
+        }
+
+        case 'updateProps': {
+          if (!targetNode) return { success: false, error: 'Node not found' };
+          const warnings = await this.applyProps(targetNode, action.props);
+          return { success: true, nodeId: targetNode.id, warnings: warnings.length ? warnings : undefined };
+        }
+
+        case 'delete': {
+          if (!targetNode) return { success: false, error: 'Node not found' };
+          if (!targetNode.removed) {
+            targetNode.remove();
+          }
+          return { success: true, nodeId: targetNode.id };
+        }
+
+        case 'move': {
+          if (!targetNode) return { success: false, error: 'Node not found' };
+          if (!parentNode || !('insertChild' in parentNode)) {
+             return { success: false, error: 'Invalid parent node for move' };
+          }
+          if (action.index !== undefined) {
+             parentNode.insertChild(action.index, targetNode);
+          } else {
+             parentNode.appendChild(targetNode);
+          }
+          return { success: true, nodeId: targetNode.id };
+        }
+
+        default:
+          return { success: false, error: `Unknown action type: ${(action as any).action}` };
+      }
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Unknown error' };
+    }
+  }
+
+  // --- Helpers ---
+
+  private centerNodeInViewport(props: Record<string, any> | undefined, actionType: string): Record<string, any> {
+    const p = props || {};
+    if (p.x === undefined && p.y === undefined) {
+      const defaultWidth = actionType === 'createText' ? 0 : 100;
+      const defaultHeight = actionType === 'createText' ? 0 : 100;
+      const w = p.width !== undefined ? p.width : defaultWidth;
+      const h = p.height !== undefined ? p.height : defaultHeight;
+
+      if (typeof figma !== 'undefined' && figma.viewport) {
+        p.x = Math.round(figma.viewport.center.x - w / 2);
+        p.y = Math.round(figma.viewport.center.y - h / 2);
+      }
+    }
+    return p;
+  }
+
+  private resolveId(idOrTempId: string): string {
+    return this.tempIdMap.get(idOrTempId) || idOrTempId;
+  }
+
+  private async resolveParent(parentId?: string): Promise<SceneNode | null> {
+    if (!parentId || parentId === 'root') return null; // root or unspecified is conceptually null (handled by caller context if needed, but usually current selection or page active)
+    const realId = this.resolveId(parentId);
+    // asynchronously get node
+    const node = await figma.getNodeByIdAsync(realId);
+    return node as SceneNode | null;
+  }
+
+  private async resolveComponent(key?: string, nodeId?: string): Promise<ComponentNode | null> {
+    if (key) {
+      try {
+        const comp = await figma.importComponentByKeyAsync(key);
+        if (comp) return comp;
+      } catch (e) {
+        console.warn('Import component key failed', e);
+      }
+    }
+    if (nodeId) {
+      const node = await figma.getNodeByIdAsync(nodeId);
+      if (node && node.type === 'COMPONENT') return node as ComponentNode;
+      if (node && node.type === 'COMPONENT_SET') return (node as ComponentSetNode).defaultVariant as ComponentNode;
+    }
+    return null;
+  }
+
+  private async applyProps(node: SceneNode, props: Record<string, any>): Promise<any[]> {
+    const warnings: any[] = [];
+    const normalizedProps: Record<string, any> = { ...props };
+
+    // 1. Padding expansion (avoid mutating the caller object)
+    if (normalizedProps.padding !== undefined) {
+      normalizedProps.paddingTop = normalizedProps.padding;
+      normalizedProps.paddingRight = normalizedProps.padding;
+      normalizedProps.paddingBottom = normalizedProps.padding;
+      normalizedProps.paddingLeft = normalizedProps.padding;
+      delete normalizedProps.padding;
+    }
+
+    // 2. Format conversions
+    for (const [key, value] of Object.entries(normalizedProps)) {
+      if (key === 'fills' && Array.isArray(value)) {
+        try {
+          (node as any).fills = this.normalizePaints(value);
+        } catch (e: any) {
+          throw new Error(`Failed to apply fills: ${e.message}`);
+        }
+      } else if (key === 'strokes' && Array.isArray(value)) {
+        try {
+          (node as any).strokes = this.normalizePaints(value);
+        } catch (e: any) {
+          throw new Error(`Failed to apply strokes: ${e.message}`);
+        }
+      } else if (key === 'effects' && Array.isArray(value)) {
+        try {
+          (node as any).effects = this.normalizeEffects(value);
+        } catch (e: any) {
+          throw new Error(`Failed to apply effects: ${e.message}`);
+        }
+      } else if (key in node) {
+        if (!this.canAssignProperty(node, key)) {
+          console.warn(`[ActionExecutor] Skipping readonly property '${key}' on node ${node.id} (${node.type})`);
+          warnings.push({ code: 'SKIPPED_READONLY', severity: 'warning', message: `Skipped readonly property '${key}'` });
+          continue;
+        }
+
+        try {
+          (node as any)[key] = value;
+        } catch (e: any) {
+          const message = e?.message || 'Unknown property set error';
+          if (String(message).includes('no setter for property')) {
+            console.warn(`[ActionExecutor] Skipping property '${key}' due to missing setter on node ${node.id} (${node.type})`);
+            warnings.push({ code: 'MISSING_SETTER', severity: 'warning', message: `Skipped property '${key}' due to missing setter` });
+            continue;
+          }
+          throw e;
+        }
+      }
+    }
+    return warnings;
+  }
+
+  private normalizePaints(paints: any[]): Paint[] {
+    return paints.map(item => {
+      if (typeof item === 'string') {
+        return figma.util.solidPaint(item);
+      }
+      if (typeof item === 'object' && item !== null) {
+        return item as Paint;
+      }
+      throw new Error(`Invalid paint format: ${JSON.stringify(item)}`);
+    });
+  }
+
+  private normalizeEffects(effects: any[]): Effect[] {
+    return effects.map(item => {
+      if (typeof item !== 'object' || item === null || !item.type) {
+        throw new Error(`Invalid effect format: ${JSON.stringify(item)}`);
+      }
+      
+      const normalized: any = { ...item };
+      
+      // Convert legacy "blur" to "radius"
+      if ('blur' in normalized && !('radius' in normalized)) {
+        normalized.radius = normalized.blur;
+        delete normalized.blur;
+      }
+      
+      // Convert legacy hex color to {r,g,b,a} color object
+      if (typeof normalized.color === 'string') {
+        const parsed = this.parseHexColor(normalized.color);
+        if (parsed) {
+          normalized.color = parsed;
+        } else {
+           throw new Error(`Invalid hex color in effect: ${normalized.color}`);
+        }
+      }
+      
+      // Ensure blendMode and visible have defaults
+      if (!normalized.blendMode) normalized.blendMode = 'NORMAL';
+      if (normalized.visible === undefined) normalized.visible = true;
+      if (normalized.type === 'DROP_SHADOW' || normalized.type === 'INNER_SHADOW') {
+         if (!normalized.offset) normalized.offset = {x: 0, y: 0};
+      }
+      
+      return normalized as Effect;
+    });
+  }
+
+  private parseHexColor(hex: string): {r: number, g: number, b: number, a: number} | null {
+    const clean = hex.replace('#', '');
+    if (clean.length === 6 || clean.length === 8) {
+      const r = parseInt(clean.slice(0, 2), 16) / 255;
+      const g = parseInt(clean.slice(2, 4), 16) / 255;
+      const b = parseInt(clean.slice(4, 6), 16) / 255;
+      const a = clean.length === 8 ? parseInt(clean.slice(6, 8), 16) / 255 : 1;
+      if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a)) return null;
+      return { r, g, b, a };
+    }
+    return null;
+  }
+
+  private canAssignProperty(node: SceneNode, key: string): boolean {
+    // Walk the prototype chain to detect getter-only/readonly properties.
+    let target: any = node;
+    while (target) {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key);
+      if (descriptor) {
+        return descriptor.writable === true || typeof descriptor.set === 'function';
+      }
+      target = Object.getPrototypeOf(target);
+    }
+    // If we cannot resolve a descriptor, keep previous behavior and attempt assignment.
+    return true;
+  }
+
+  private async applyTextProps(node: TextNode, props: Record<string, any>): Promise<any[]> {
+    const warnings: any[] = [];
+    // Handle font resolution before setting characters
+    const family = props.fontFamily || 'Inter';
+    const style = props.fontWeight || 'Regular';
+    
+    // Default font loading
+    const { success, loadedStyle } = await fontBus.getOrLoad(family, style);
+    if (!success && loadedStyle !== style) {
+       warnings.push({
+           code: 'FONT_FALLBACK',
+           severity: 'warning',
+           requested: { family, style },
+           applied: { family, style: loadedStyle },
+           message: `Font not found, applied fallback: ${loadedStyle}`
+       });
+    }
+    
+    node.fontName = { family, style: loadedStyle };
+
+    if (props.characters !== undefined) {
+       node.characters = props.characters;
+    }
+
+    const otherProps = { ...props };
+    delete otherProps.fontFamily;
+    delete otherProps.fontWeight;
+    delete otherProps.characters;
+
+    const propWarnings = await this.applyProps(node, otherProps);
+    if (propWarnings.length > 0) warnings.push(...propWarnings);
+    return warnings;
+  }
+
+  // --- Transactions ---
+
+  private async rollbackIfNeeded(hasFailures: boolean, globalOnError: string) {
+    const summary = {
+      attempted: 0,
+      removed: 0,
+      failed: [] as Array<{ opId: string; nodeId: string; reason: string }>
+    };
+
+    if (!hasFailures || globalOnError !== 'abort') {
+      return summary;
+    }
+
+    summary.attempted = this.rollbackStack.length;
+
+    for (const ref of [...this.rollbackStack].reverse()) {
+      try {
+        const node = await figma.getNodeByIdAsync(ref.nodeId) as SceneNode | null;
+        if (node && !node.removed) {
+          node.remove();
+          summary.removed++;
+        }
+      } catch (e: any) {
+        summary.failed.push({
+          opId: ref.tempId,
+          nodeId: ref.nodeId,
+          reason: e?.message || 'Unknown rollback error'
+        });
+      }
+    }
+
+    return summary;
+  }
+
+  private topologicalSort(actions: FigmaAction[]): FigmaAction[] {
+    const sorted: FigmaAction[] = [];
+    const visited = new Set<string>();
+    const processing = new Set<string>(); // to detect circular logic
+
+    const actionMap = new Map<string, FigmaAction>();
+    for (const action of actions) {
+      if (action.tempId) {
+        actionMap.set(action.tempId, action);
+      }
+    }
+
+    const visit = (action: FigmaAction) => {
+      const id = action.tempId || Symbol().toString();
+      if (visited.has(id)) return;
+      if (processing.has(id)) {
+        console.warn('Circular dependency detected in batch operations');
+        return; // just break circle
+      }
+
+      processing.add(id);
+      
+      if (action.dependsOn) {
+        for (const dep of action.dependsOn) {
+          const depAction = actionMap.get(dep);
+          if (depAction) visit(depAction);
+        }
+      }
+
+      processing.delete(id);
+      visited.add(id);
+      sorted.push(action);
+    };
+
+    for (const action of actions) {
+      visit(action);
+    }
+
+    return sorted;
+  }
+}

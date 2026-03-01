@@ -20,6 +20,11 @@ describe('Prompt Composer - Tool Use Iron Rules', () => {
             name: 'updateLayout',
             description: 'Updates the layout of a node',
             parameters: { type: 'object', properties: {} }
+        },
+        {
+            name: 'search_nodes',
+            description: 'Searches for nodes in the Figma document',
+            parameters: { type: 'object', properties: {} }
         }
     ];
 
@@ -28,13 +33,12 @@ describe('Prompt Composer - Tool Use Iron Rules', () => {
 
         // 1. Core Tool Calling Format
         expect(prompt).toContain('## MODE: PLANNING');
-        expect(prompt).toContain('planDesign');
+        expect(prompt).toContain('search_nodes');
         
-        // 2. Core Policies
-        expect(prompt).toContain('CORE POLICIES');
-        expect(prompt).toContain('Reliability First');
-
-        // 3. Negative Constraints (Implicit in guidelines - Removed explicit text to be lean)
+        // 2. Core Policies (now integrated into identity)
+        expect(prompt).toContain('You are a Figma plugin agent. You operate within the Figma sandbox');
+        
+        // 3. Negative Constraints
         // Verified by presence of Examples which show correct behavior
         expect(prompt).toContain('## EXAMPLES');
     });

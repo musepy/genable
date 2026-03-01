@@ -12,7 +12,8 @@ batchOperations({operations: [
   { opId: "btn", action: "createNode", params: { type: "FRAME", name: "Sign In Button", parentRef: "form", props: { layoutMode: "HORIZONTAL", padding: 12, fills: ["#4F46E5"], cornerRadius: 8 } } },
   { opId: "btnText", action: "createNode", params: { type: "TEXT", name: "Button Label", parentRef: "btn", props: { characters: "Sign In" } } }
 ]})
-summarize_progress({summary: "Login form created with all fields and button", isComplete: true})
+signal({type: "progress", summary: "Login form created with all fields and button"})
+signal({type: "complete", summary: "Login form created with all fields and button"})
 
 ✅ Entire form built in 1 iteration with 2 tool calls using flat props.
 ❌ WRONG: Creating 1 node per iteration = 8 iterations = waste.

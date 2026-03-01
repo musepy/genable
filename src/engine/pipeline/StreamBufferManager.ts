@@ -1,4 +1,4 @@
-import { NodeLayer } from '../figma-adapter/renderers';
+import { NodeLayer } from '../../schema/layerSchema';
 import { TreeReconstructor } from '../figma-adapter/treeReconstructor';
 import { GenerationPhase, GenerationState } from '../llm-client/types';
 

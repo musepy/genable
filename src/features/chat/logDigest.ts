@@ -40,7 +40,7 @@ const parameterExtractors: Record<string, (params: any) => string> = {
     }
     return `nodeIds: ${params.nodeIds?.join(',') || params.nodeId || '?'}`;
   },
-  complete_task: (params) => (params.summary || '').slice(0, 80),
+  signal: (params) => `${params.type || 'unknown'}: ${(params.summary || params.title || '').slice(0, 80)}`,
   renderSubtree: (params) => {
     if (Array.isArray(params.nodes)) return `nodes:${params.nodes.length}, parent:${params.parentId || 'root'}`;
     return `${params.nodeId || '?'}, ${params.type || '?'}`;

@@ -37,9 +37,31 @@ class Logger {
     }
   }
 
+  private safeStringify(obj: any): string {
+    const cache = new Set();
+    try {
+      const str = JSON.stringify(obj, (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+          if (cache.has(value)) {
+            return '[Circular]';
+          }
+          if ('type' in value && 'id' in value && 'parent' in value) {
+            return `[FigmaNode ${value.type} ${value.id}]`;
+          }
+          cache.add(value);
+        }
+        return value;
+      }, 2);
+      return str.length > 5000 ? str.substring(0, 5000) + '... [truncated]' : str;
+    } catch (e) {
+      return '[Unserializable Object]';
+    }
+  }
+
   error(message: string, ...args: any[]) {
     if (this.level <= LogLevel.ERROR) {
-      console.error(`${this.prefix} [ERROR] ${message}`, ...args);
+      const safeArgs = args.map(arg => typeof arg === 'object' ? this.safeStringify(arg) : arg);
+      console.error(`${this.prefix} [ERROR] ${message}`, ...safeArgs);
     }
   }
 }

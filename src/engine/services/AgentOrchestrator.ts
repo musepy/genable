@@ -139,11 +139,12 @@ export class AgentOrchestrator {
       // NOTE: agent.run() returns a string summary. Usage data is tracked
       // per-iteration inside AgentRuntime via TokenRecorder (dev tool).
       // Production telemetry here is a placeholder for future integration.
+      const { tokenUsage } = agent.getRunStats();
       TelemetryService.logLLMCall({
         provider: this.options.providerName || 'gemini',
         modelName: this.options.modelName,
-        promptTokens: 0,
-        completionTokens: 0,
+        promptTokens: tokenUsage.totalPromptTokens,
+        completionTokens: tokenUsage.totalCompletionTokens,
         latencyMs,
         promptText: prompt
       });

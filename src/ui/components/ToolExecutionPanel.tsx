@@ -67,14 +67,18 @@ function useRunningDots(active: boolean) {
 }
 
 /** Summarize LLM call records for display */
-function summarizeLLMCalls(calls: LLMCallRecord[]): { count: number; totalTokens: number; avgDurationMs: number } | null {
+function summarizeLLMCalls(calls: LLMCallRecord[]): { count: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number; avgDurationMs: number } | null {
   const completed = calls.filter(c => c.durationMs != null)
   if (completed.length === 0) return null
   const totalTokens = completed.reduce((sum, c) => sum + (c.usage?.totalTokens || 0), 0)
+  const totalPromptTokens = completed.reduce((sum, c) => sum + (c.usage?.promptTokens || 0), 0)
+  const totalCompletionTokens = completed.reduce((sum, c) => sum + (c.usage?.completionTokens || 0), 0)
   const totalDuration = completed.reduce((sum, c) => sum + (c.durationMs || 0), 0)
   return {
     count: completed.length,
     totalTokens,
+    totalPromptTokens,
+    totalCompletionTokens,
     avgDurationMs: Math.round(totalDuration / completed.length),
   }
 }
@@ -250,7 +254,10 @@ export function ToolExecutionPanel({
       {expanded && (() => {
         const summary = summarizeLLMCalls(llmCalls)
         if (!summary) return null
-        const tokenStr = summary.totalTokens > 0 ? ` · ${(summary.totalTokens / 1000).toFixed(1)}k tok` : ''
+        const hasBreakdown = summary.totalPromptTokens > 0 || summary.totalCompletionTokens > 0
+        const tokenStr = hasBreakdown
+          ? ` · ${(summary.totalPromptTokens / 1000).toFixed(1)}k in · ${(summary.totalCompletionTokens / 1000).toFixed(1)}k out`
+          : summary.totalTokens > 0 ? ` · ${(summary.totalTokens / 1000).toFixed(1)}k tok` : ''
         return (
           <div style={{ marginTop: tokens.space[1], fontSize: sz, color: faint }}>
             {summary.count} llm call{summary.count > 1 ? 's' : ''} · avg {summary.avgDurationMs}ms{tokenStr}

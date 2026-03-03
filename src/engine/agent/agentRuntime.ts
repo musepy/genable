@@ -105,7 +105,10 @@ export class AgentRuntime {
   private currentRunId = '';
   private eventSequence = 0;
   private canceledEventEmitted = false;
-  private runStats = { toolCallCount: 0, toolErrorCount: 0, loopDetected: false };
+  private runStats = {
+    toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
+    tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
+  };
 
   constructor(private options: AgentRuntimeOptions) {
 
@@ -439,7 +442,10 @@ export class AgentRuntime {
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
     this.idCounter = 0;
-    this.runStats = { toolCallCount: 0, toolErrorCount: 0, loopDetected: false };
+    this.runStats = {
+      toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
+      tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
+    };
 
     this.textOnlyCompletionRetries = 0;
 
@@ -596,6 +602,12 @@ export class AgentRuntime {
 
       // Track real prompt tokens from LLM response
       this.lastPromptTokens = response.usage?.promptTokens ?? this.lastPromptTokens;
+      if (response.usage) {
+        this.runStats.tokenUsage.totalPromptTokens += response.usage.promptTokens;
+        this.runStats.tokenUsage.totalCompletionTokens += response.usage.completionTokens;
+        this.runStats.tokenUsage.totalTokens += response.usage.totalTokens;
+        this.runStats.tokenUsage.callCount++;
+      }
 
       // ──── TOOL EXECUTION ────
       if (toolCallsForExecution.length > 0) {

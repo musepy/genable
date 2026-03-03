@@ -10,7 +10,7 @@
 
 import type { NodeLayer } from '../../schema/layerSchema';
 import { flowObserver, FlowPhase } from '../figma-adapter/observers/flowObserver';
-import { NODE_TYPES, PROPS, LAYOUT_MODES, SIZING_MODES } from '../../constants/figma-api';
+import { NODE_TYPES, PROPS, PROP_METADATA } from '../../constants/figma-api';
 // Static import for config
 import RUNTIME_CONFIG from '../../config/runtime-coercion.json';
 
@@ -190,37 +190,19 @@ export class Normalizer {
     }
 
     private static validateEnums(props: any): void {
-         const ENUM_VALIDATORS: Record<string, string[]> = {
-            [PROPS.layoutMode]: [LAYOUT_MODES.VERTICAL, LAYOUT_MODES.HORIZONTAL, LAYOUT_MODES.NONE],
-            [PROPS.layoutSizingHorizontal]: [SIZING_MODES.FIXED, SIZING_MODES.FILL, SIZING_MODES.HUG],
-            [PROPS.layoutSizingVertical]: [SIZING_MODES.FIXED, SIZING_MODES.FILL, SIZING_MODES.HUG]
-        };
-
-        const ENUM_ALIASES: Record<string, Record<string, string>> = {
-            [PROPS.layoutSizingHorizontal]: { 'AUTO': SIZING_MODES.HUG, 'STRETCH': SIZING_MODES.FILL },
-            [PROPS.layoutSizingVertical]: { 'AUTO': SIZING_MODES.HUG, 'STRETCH': SIZING_MODES.FILL }
-        };
-
-        for (const [prop, validValues] of Object.entries(ENUM_VALIDATORS)) {
-            const rawValue = props[prop];
-            if (rawValue) {
-                let currentVal = String(rawValue).toUpperCase();
-                
-                // Handle Alises
-                if (ENUM_ALIASES[prop] && ENUM_ALIASES[prop][currentVal]) {
-                    currentVal = ENUM_ALIASES[prop][currentVal];
-                }
-
-                if (validValues.includes(currentVal)) {
-                    props[prop] = currentVal;
-                } else if (!validValues.includes(rawValue)) {
-                     // Invalid enum value? Delete it (Strict)
-                     delete props[prop];
-                }
+        // Data-driven: loop over all enum props in PROP_METADATA
+        for (const [prop, meta] of Object.entries(PROP_METADATA)) {
+            if (meta.type !== 'enum' || !meta.enumMap || props[prop] === undefined) continue;
+            const raw = String(props[prop]).toUpperCase();
+            const mapped = meta.enumMap[raw];
+            if (mapped) {
+                props[prop] = mapped;
+            } else {
+                delete props[prop]; // invalid enum → remove
             }
         }
-        
-        // Name check?
+
+        // Semantic is a virtual type, not an enum — special-case normalization
         if (props[PROPS.semantic]) {
             props[PROPS.semantic] = String(props[PROPS.semantic]).toUpperCase().trim().replace(/ /g, '_');
         }

@@ -114,10 +114,26 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
     enumMap: { 'VERTICAL': 'VERTICAL', 'HORIZONTAL': 'HORIZONTAL', 'NONE': 'NONE' },
     defaultValue: 'NONE'
   },
-  [PROPS.layoutSizingHorizontal]: { figmaKey: 'layoutSizingHorizontal', type: 'enum', defaultValue: 'FIXED' },
-  [PROPS.layoutSizingVertical]: { figmaKey: 'layoutSizingVertical', type: 'enum', defaultValue: 'FIXED' },
-  [PROPS.primaryAxisAlignItems]: { figmaKey: 'primaryAxisAlignItems', type: 'enum', defaultValue: 'MIN' },
-  [PROPS.counterAxisAlignItems]: { figmaKey: 'counterAxisAlignItems', type: 'enum', defaultValue: 'MIN' },
+  [PROPS.layoutSizingHorizontal]: {
+    figmaKey: 'layoutSizingHorizontal', type: 'enum',
+    enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
+    defaultValue: 'FIXED'
+  },
+  [PROPS.layoutSizingVertical]: {
+    figmaKey: 'layoutSizingVertical', type: 'enum',
+    enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
+    defaultValue: 'FIXED'
+  },
+  [PROPS.primaryAxisAlignItems]: {
+    figmaKey: 'primaryAxisAlignItems', type: 'enum',
+    enumMap: { MIN: 'MIN', CENTER: 'CENTER', MAX: 'MAX', SPACE_BETWEEN: 'SPACE_BETWEEN' },
+    defaultValue: 'MIN'
+  },
+  [PROPS.counterAxisAlignItems]: {
+    figmaKey: 'counterAxisAlignItems', type: 'enum',
+    enumMap: { MIN: 'MIN', CENTER: 'CENTER', MAX: 'MAX', BASELINE: 'BASELINE' },
+    defaultValue: 'MIN'
+  },
   [PROPS.gap]: { figmaKey: 'itemSpacing', type: 'scalar', defaultValue: 0, min: 0, max: 1000 }, // Note: itemSpacing in Figma API
   [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
@@ -228,6 +244,26 @@ export const STROKE_ALIGNS = {
  * Shared JSON Schema fragment for text/typography properties.
  * Import and spread into tool definition `props.properties` to keep schemas DRY.
  */
+/**
+ * Get all accepted input keys for an enum property (including aliases).
+ * Use for Valibot picklists ("宽进": accept aliases like AUTO/STRETCH).
+ */
+export function getEnumInputs(prop: string): string[] {
+  const meta = PROP_METADATA[prop];
+  if (!meta?.enumMap) return [];
+  return Object.keys(meta.enumMap);
+}
+
+/**
+ * Get unique canonical output values for an enum property.
+ * Use for strict output validation.
+ */
+export function getCanonicalValues(prop: string): string[] {
+  const meta = PROP_METADATA[prop];
+  if (!meta?.enumMap) return [];
+  return [...new Set(Object.values(meta.enumMap))];
+}
+
 export const TEXT_PROPS_SCHEMA = {
   characters: { type: 'string', description: 'Text content (TEXT nodes only)' },
   fontSize: { type: 'number', description: 'Font size in px' },

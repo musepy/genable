@@ -10,45 +10,36 @@
  */
 
 import * as v from 'valibot';
-import { PROPS, NODE_TYPES, LAYOUT_MODES, SIZING_MODES } from '../constants/figma-api';
+import { PROPS, NODE_TYPES, getEnumInputs } from '../constants/figma-api';
 import { Normalizer } from '../engine/pipeline/Normalizer';
 
 // ==========================================
 // PRIMITIVE SCHEMAS
 // ==========================================
 
-/**
- * Layout sizing modes
- */
-export const LayoutSizingSchema = v.picklist([SIZING_MODES.FILL, SIZING_MODES.HUG, SIZING_MODES.FIXED]);
+// Derive enum picklists from PROP_METADATA (single source of truth)
+const enumPicklist = (prop: string) =>
+  v.picklist(getEnumInputs(prop) as [string, ...string[]]);
+
+export const LayoutSizingSchema = enumPicklist(PROPS.layoutSizingHorizontal);
 export type LayoutSizing = v.InferOutput<typeof LayoutSizingSchema>;
 
-/**
- * Layout directions
- */
-export const LayoutModeSchema = v.picklist([LAYOUT_MODES.VERTICAL, LAYOUT_MODES.HORIZONTAL, LAYOUT_MODES.NONE]);
+export const LayoutModeSchema = enumPicklist(PROPS.layoutMode);
 export type LayoutMode = v.InferOutput<typeof LayoutModeSchema>;
 
-/**
- * Axis alignment options
- */
-export const AxisAlignSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN', 'BASELINE']);
+export const PrimaryAxisAlignSchema = enumPicklist(PROPS.primaryAxisAlignItems);
+export const CounterAxisAlignSchema = enumPicklist(PROPS.counterAxisAlignItems);
 
-/**
- * Auto-layout child positioning
- */
-export const LayoutPositioningSchema = v.picklist(['AUTO', 'ABSOLUTE']);
+export const LayoutPositioningSchema = enumPicklist(PROPS.layoutPositioning);
 
 /**
  * Constraint axes (allow canonical and common alias labels from design tools)
+ * Not derived — constraints are an object type, not a simple enum in PROP_METADATA.
  */
 export const HorizontalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT']);
 export const VerticalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM']);
 
-/**
- * Stroke alignment
- */
-export const StrokeAlignSchema = v.picklist(['INSIDE', 'OUTSIDE', 'CENTER']);
+export const StrokeAlignSchema = enumPicklist(PROPS.strokeAlign);
 
 export const SemanticTypeSchema = v.optional(v.string());
 
@@ -138,7 +129,7 @@ export const NodeLayerPropsSchema = v.looseObject({
     [PROPS.layoutSizingVertical]: v.optional(LayoutSizingSchema),
     [PROPS.layoutPositioning]: v.optional(LayoutPositioningSchema),
     [PROPS.layoutGrow]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.layoutAlign]: v.optional(v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'INHERIT'])),
+    [PROPS.layoutAlign]: v.optional(enumPicklist(PROPS.layoutAlign)),
     [PROPS.constraints]: v.optional(v.object({
         horizontal: v.optional(HorizontalConstraintSchema),
         vertical: v.optional(VerticalConstraintSchema)
@@ -154,8 +145,8 @@ export const NodeLayerPropsSchema = v.looseObject({
     [PROPS.paddingRight]: v.optional(v.union([v.number(), v.string()])),
     [PROPS.paddingBottom]: v.optional(v.union([v.number(), v.string()])),
     [PROPS.paddingLeft]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.primaryAxisAlignItems]: v.optional(AxisAlignSchema),
-    [PROPS.counterAxisAlignItems]: v.optional(AxisAlignSchema),
+    [PROPS.primaryAxisAlignItems]: v.optional(PrimaryAxisAlignSchema),
+    [PROPS.counterAxisAlignItems]: v.optional(CounterAxisAlignSchema),
     
     // Appearance
     [PROPS.fills]: v.optional(v.array(FillItemSchema)),

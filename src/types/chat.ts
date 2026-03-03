@@ -29,12 +29,41 @@ export interface CorrectionLog {
 export interface ToolCallRecord {
     id: string;
     name: string;
+    displayName?: string;
+    group?: string;
     parameters: any;
     status: 'pending' | 'running' | 'success' | 'error';
     startTime: number;
     endTime?: number;
     result?: any;
     error?: string;
+}
+
+export interface LLMCallRecord {
+    llmCallId: string;
+    iteration: number;
+    startTime: number;
+    endTime?: number;
+    durationMs?: number;
+    messageCount: number;
+    toolNames: string[];
+    config: {
+        maxOutputTokens: number;
+        thinkingLevel: string;
+        toolMode: string;
+    };
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    responseShape?: {
+        textLength: number;
+        thoughtsLength: number;
+        toolCallCount: number;
+        toolCallNames: string[];
+    };
+    success?: boolean;
 }
 
 export interface IterationRecord {
@@ -58,6 +87,8 @@ export interface ChatMessage {
     corrections?: CorrectionLog[];
     /** Tool execution records for this response (Phase 1) */
     toolCalls?: ToolCallRecord[];
+    /** LLM call records for this response */
+    llmCalls?: LLMCallRecord[];
     /** Reasoning iterations for this response (Phase 2) */
     iterations?: IterationRecord[];
     /** Whether the message is currently being streamed/generated */
@@ -70,6 +101,12 @@ export interface ChatMessage {
     runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting';
     /** Error message, if any */
     runError?: string;
+    /** Post-run agent debrief (collected after difficult runs) */
+    debrief?: {
+        exitReason: string;
+        text: string;
+        structured?: { confusingTools: string[]; hardParts: string[]; suggestions: string[] };
+    };
     /** Stable identifier for DOM reconciliation */
     id: string;
 }

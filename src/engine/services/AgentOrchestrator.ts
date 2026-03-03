@@ -20,7 +20,9 @@ import { settingsService } from './SettingsService';
 
 import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
-import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
+import { AgentRuntimeEvent, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
+import { LLMProvider } from '../llm-client/providers/types';
+import { generateLogDigest } from '../../features/chat/logDigest';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -67,6 +69,7 @@ import { buildDynamicContextContent } from '../llm-client/context/dynamicContext
 export class AgentOrchestrator {
   private static initializationPromise: Promise<void> | null = null;
   private activeAgent: AgentRuntime | null = null;
+  private currentProvider: LLMProvider | null = null;
   private fallbackEventSequence = 0;
 
   constructor(private options: OrchestratorOptions) {}
@@ -149,6 +152,9 @@ export class AgentOrchestrator {
       // 3. Finalize
       this.options.onComplete?.({}, finalResponse);
 
+      // 4. Post-run debrief (non-blocking, non-fatal)
+      await this.maybeDebrief(agent, 'completed', history);
+
     } catch (error: any) {
       console.error('[AgentOrchestrator] Failed:', error);
       if (error instanceof AgentRuntimeCanceledError) {
@@ -157,17 +163,31 @@ export class AgentOrchestrator {
           phase: 'idle',
           reason: error.message || 'Canceled by user',
         });
-        return;
+        return; // Cancel — no debrief
       }
+
+      // Determine exit reason
+      const exitReason = error?.message?.includes('Maximum iterations')
+        ? 'max_iterations' as const
+        : error?.message?.includes('Aborted by hook')
+          ? 'abort' as const
+          : 'error' as const;
+
       this.emitFallbackRuntimeEvent({
         type: 'error',
         phase: 'idle',
         message: error?.message || 'Unknown agent error',
       });
       this.options.onError?.(error.message || 'Unknown agent error');
+
+      // Debrief on error (non-fatal)
+      if (this.activeAgent) {
+        await this.maybeDebrief(this.activeAgent, exitReason, history);
+      }
     } finally {
         // [Cleanup] ALWAYS dispose the bridge to clear listeners and pending timers
         this.activeAgent = null;
+        this.currentProvider = null;
         ipcBridge.dispose();
     }
   }
@@ -209,11 +229,8 @@ export class AgentOrchestrator {
         promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
 
-      const skillBodies = skillRegistry.getEnabled()
-        .filter(s => s.context.injectionType === 'system')
-        .map(s => s.context.systemPromptSection || '')
-        .filter(Boolean);
-      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, skillBodies);
+      const skillMenu = skillRegistry.getSkillMenu();
+      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, skillMenu);
 
       // Dump to console
       console.log('\n' + '='.repeat(80));
@@ -221,7 +238,7 @@ export class AgentOrchestrator {
       console.log('='.repeat(80));
       console.log(`Provider: ${providerName} | Model: ${modelName} | Thinking: ${thinkingLevel}`);
       console.log(`Behavior: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}`);
-      console.log(`Skills (system-injected): ${skillBodies.length}`);
+      console.log(`Skills (menu): ${skillMenu.length}`);
       console.log(`Tools: ${tools.length} (${tools.map(t => t.name).join(', ')})`);
       console.log('-'.repeat(80));
       console.log(systemPrompt);
@@ -241,7 +258,7 @@ export class AgentOrchestrator {
       const allSkills = skillRegistry.getAll();
       for (const skill of allSkills) {
         const state = skillRegistry.getState(skill.id);
-        console.log(`  [${state?.stickyActive ? 'ACTIVE' : 'idle'}] ${skill.id} — triggers: ${skill.context.triggerPatterns?.join(', ') || 'none'}`);
+        console.log(`  [${state?.enabled ? 'ON' : 'OFF'}] ${skill.id} — ${skill.description}`);
       }
       console.log('='.repeat(80) + '\n');
       this.emitDebugComplete(`${allSkills.length} skills dumped to console.`);
@@ -288,7 +305,7 @@ export class AgentOrchestrator {
     const designSystemConfig = getActiveEngineConfig(designSystemId);
 
     // Initialize Provider
-    let provider: any;
+    let provider: LLMProvider;
     if (providerName === 'openrouter') {
       provider = new OpenRouterProvider(apiKey, modelName);
       emit('SEND_LOG', { message: `Using OpenRouter: ${modelName}`, type: 'ai' });
@@ -321,11 +338,10 @@ export class AgentOrchestrator {
     console.log(`[AgentOrchestrator] Behavior resolved: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}, thinking=${behaviorConfig.thinkingLevel}`);
 
     // Build static system prompt (set once, never changes — enables KV cache)
-    const skillBodies = skillRegistry.getEnabled()
-      .filter(s => s.context.injectionType === 'system')
-      .map(s => s.context.systemPromptSection || '')
-      .filter(Boolean);
-    const systemPrompt = buildStaticSystemPrompt(tools, provider, skillBodies);
+    const skillMenu = skillRegistry.getSkillMenu();
+    const systemPrompt = buildStaticSystemPrompt(tools, provider, skillMenu);
+
+    this.currentProvider = provider;
 
     return new AgentRuntime({
       provider,
@@ -348,6 +364,104 @@ export class AgentOrchestrator {
   }
 
   // ==========================================
+  // POST-RUN DEBRIEF
+  // ==========================================
+
+  /**
+   * After a difficult run, ask the LLM to reflect on tool usability.
+   * Non-fatal: swallows errors silently.
+   */
+  private async maybeDebrief(
+    agent: AgentRuntime,
+    exitReason: 'completed' | 'max_iterations' | 'abort' | 'error',
+    history: ChatMessage[],
+  ): Promise<void> {
+    if (!this.currentProvider) return;
+
+    const stats = agent.getRunStats();
+    const errorRate = stats.toolCallCount > 0
+      ? stats.toolErrorCount / stats.toolCallCount
+      : 0;
+
+    // Trigger conditions: any difficulty signal
+    const shouldDebrief =
+      exitReason !== 'completed' ||
+      stats.loopDetected ||
+      errorRate > 0.3;
+
+    if (!shouldDebrief) return;
+
+    try {
+      const logDigest = generateLogDigest(history);
+      const debriefPrompt = `You just completed a Figma design generation run that had difficulties. Here is a summary:
+
+${logDigest}
+
+Evaluate your experience as a tool user:
+1. **Confusing Tools**: Which tools had confusing APIs or unclear parameters?
+2. **Hard Parts**: What kept failing? What was the hardest part?
+3. **Suggestions**: What would have helped you succeed? (Better errors, different APIs, more examples?)
+
+Be specific — name exact tools, parameters, and error messages. Keep it under 200 words.`;
+
+      const response = await this.currentProvider.generate({
+        messages: [{ id: `debrief_${Date.now()}`, role: 'user', content: debriefPrompt }],
+        maxTokens: 500,
+        thinkingLevel: 'minimal',
+      });
+
+      const debriefText = response.text || '';
+      if (!debriefText) return;
+
+      // Try to parse structured feedback from the text
+      const structured = this.parseDebriefStructure(debriefText);
+
+      const totalIterations = history.filter(m => m.role === 'model' && m.iterations)
+        .reduce((acc, m) => acc + (m.iterations?.length || 0), 0);
+
+      this.emitFallbackRuntimeEvent({
+        type: 'debrief',
+        phase: 'idle' as AgentRuntimePhase,
+        exitReason,
+        totalIterations,
+        errorCount: stats.toolErrorCount,
+        loopsDetected: stats.loopDetected,
+        debrief: debriefText,
+        structured,
+      });
+
+      console.log('[AgentOrchestrator] Debrief collected:', debriefText.slice(0, 200));
+    } catch (err) {
+      console.warn('[AgentOrchestrator] Debrief failed (non-fatal):', err);
+    }
+  }
+
+  private parseDebriefStructure(text: string): {
+    confusingTools: string[];
+    hardParts: string[];
+    suggestions: string[];
+  } | undefined {
+    try {
+      // Simple heuristic extraction from numbered sections
+      const sections = text.split(/\d+\.\s*\*\*/);
+      if (sections.length < 3) return undefined;
+
+      const extractItems = (section: string): string[] =>
+        section.split(/[-•\n]/)
+          .map(s => s.replace(/\*\*/g, '').trim())
+          .filter(s => s.length > 5);
+
+      return {
+        confusingTools: extractItems(sections[1] || ''),
+        hardParts: extractItems(sections[2] || ''),
+        suggestions: extractItems(sections[3] || ''),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  // ==========================================
   // REUSABLE CALLBACK HANDLERS
   // ==========================================
 
@@ -357,7 +471,6 @@ export class AgentOrchestrator {
   }
 
   private handleToolResult(tc: any, result: any) {
-    console.log(`[Agent] Tool Result (${tc.name}):`, result);
     this.options.onToolResult?.(tc.id, result);
   }
 }

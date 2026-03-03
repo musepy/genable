@@ -115,6 +115,15 @@ function createRamblingGuardHook(state: BuiltinHookState): HookRegistration {
               reason: 'Agent stuck: multiple iterations with thinking but no actions.',
             };
           }
+          if (state.thinkingOnlyIterations === AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS - 1) {
+            return {
+              action: 'continue',
+              injectMessage: 'You have spent multiple iterations thinking without calling any tools. '
+                + 'This is your last chance: either call a tool to make progress, or call '
+                + 'signal(type="complete") explaining what difficulty you encountered. '
+                + 'The next iteration without a tool call will terminate the run.',
+            };
+          }
         }
       } else {
         state.thinkingOnlyIterations = 0;

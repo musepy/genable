@@ -40,7 +40,6 @@ const parameterExtractors: Record<string, (params: any) => string> = {
  * Extracts key information from tool results.
  */
 function extractResultInfo(tool: ToolCallRecord): string {
-  if (tool.status === 'error') return '';
   const idMap = tool.result?.data?.idMap || tool.result?.idMap;
   if (tool.name === 'build_design' && idMap) {
     const mappings = Object.entries(idMap)
@@ -142,6 +141,15 @@ export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): st
         });
       }
     });
+    lines.push('');
+  }
+
+  // Debrief section (if available from a previous difficult run)
+  const lastModel = [...history].reverse().find(m => m.role === 'model' && m.debrief);
+  if (lastModel?.debrief) {
+    lines.push('--- AGENT DEBRIEF ---');
+    lines.push(`Exit reason: ${lastModel.debrief.exitReason}`);
+    lines.push(lastModel.debrief.text);
     lines.push('');
   }
 

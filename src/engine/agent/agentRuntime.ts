@@ -9,12 +9,18 @@ import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client
 import { ToolDefinition, ToolParameter } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
-import { ContextManager } from './context/contextManager';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { CONTEXT_CONSTANTS } from './context/constants';
+import {
+  dropRedundantToolErrors,
+  truncateByTurns,
+  fixInvalidSequence,
+  validateMessageSequence,
+  groupIntoTurns,
+} from './context/contextCompression';
 import { AgentRuntimeEvent, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
@@ -74,7 +80,8 @@ export class AgentRuntimeCanceledError extends Error {
 export class AgentRuntime {
   private maxIterations: number;
   private maxContextTokens: number;
-  private context: ContextManager;
+  private messages: LLMMessage[] = [];
+  private lastPromptTokens: number = 0;
 
   private cleaner: ToolResultCleaner;
   private toolExecutionCoordinator = new ToolExecutionCoordinator();
@@ -98,6 +105,7 @@ export class AgentRuntime {
   private currentRunId = '';
   private eventSequence = 0;
   private canceledEventEmitted = false;
+  private runStats = { toolCallCount: 0, toolErrorCount: 0, loopDetected: false };
 
   constructor(private options: AgentRuntimeOptions) {
 
@@ -136,6 +144,7 @@ export class AgentRuntime {
         onToolCall: options.onToolCall,
         onToolResult: options.onToolResult,
         formatToolResults: (results) => options.provider.formatToolResults(results),
+        getRunId: () => this.currentRunId,
       },
     );
     // Seed messages: static system prompt at index 0, dynamic context at index 1
@@ -155,7 +164,7 @@ export class AgentRuntime {
     if (options.messages) {
       seedMessages.push(...options.messages);
     }
-    this.context = new ContextManager(this.maxContextTokens, seedMessages.length > 0 ? seedMessages : undefined);
+    this.messages = [...seedMessages];
 
     // Hook system — builtin hooks by default, custom hooks override
     this.hookRegistry = new HookRegistry();
@@ -190,12 +199,20 @@ export class AgentRuntime {
   private emitRuntimeEvent(event: RuntimeEventPayload): void {
     if (!this.options.onRuntimeEvent) return;
     this.eventSequence += 1;
-    this.options.onRuntimeEvent({
+    const full = {
       ...event,
       runId: this.currentRunId || 'run_unknown',
       sequence: this.eventSequence,
       timestamp: Date.now(),
-    } as AgentRuntimeEvent);
+    } as AgentRuntimeEvent;
+    if (event.type === 'tool_call') {
+      const tc = (event as any).toolCall;
+      console.log(`[RuntimeEvent] tool_call: ${tc?.name}(${JSON.stringify(tc?.args || {})})`)
+    } else if (event.type === 'tool_result') {
+      const tr = (event as any).toolResult;
+      console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${tr?.success ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)`);
+    }
+    this.options.onRuntimeEvent(full);
   }
 
   private emitCanceledEvent(iteration?: number): void {
@@ -284,37 +301,92 @@ export class AgentRuntime {
   // ─── Context management ──────────────────────────────────────
 
   private async manageContext(): Promise<void> {
-    const summarizer = async (messages: LLMMessage[]): Promise<string> => {
-      const strippedMessages = messages.map(m => {
-          let contentStr = '';
-          if (typeof m.content === 'string') {
-              contentStr = m.content.substring(0, 500) + (m.content.length > 500 ? '...' : '');
-          } else if (Array.isArray(m.content)) {
-              contentStr = m.content.map(part => {
-                  if (part.functionCall) return `[Call: ${part.functionCall.name}]`;
-                  if (part.functionResponse) return `[Result: ${part.functionResponse.name}]`;
-                  return '[Part]';
-              }).join(' ');
-          }
-          return `${m.role.toUpperCase()}: ${contentStr}`;
-      });
+    // First iteration: lastPromptTokens is 0 → skip (correct: context is small)
+    if (this.lastPromptTokens === 0) return;
 
-      const summaryPrompt = `Please summarize the following Figma plugin design steps briefly in 1-2 sentences. Focus on what was built or changed. Example: "Created the layout structure and added a submit button."\n\nHistory:\n${strippedMessages.join('\n')}`;
-      
-      try {
-        const response = await this.options.provider.generate({
-          messages: [{ id: `sum_req_${Date.now()}`, role: 'user', content: summaryPrompt }],
-          maxTokens: 150,
-          thinkingLevel: 'minimal'
-        });
-        return response.text || "Conversation summarized.";
-      } catch (error) {
-        console.warn("[AgentRuntime] Summarizer failed, using fallback summary.", error);
-        return "Several design steps completed.";
+    const threshold = this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_COMPRESSION_LIMIT_FACTOR;
+    if (this.lastPromptTokens <= threshold) return;
+
+    // 1. Drop redundant error messages
+    dropRedundantToolErrors(this.messages);
+
+    // 2. Turn-based truncation — hide oldest turns
+    const excessRatio = this.lastPromptTokens / threshold;
+    const turnsToHide = Math.max(1, Math.floor(excessRatio - 1) + 1);
+    truncateByTurns(this.messages, turnsToHide);
+
+    // 3. Validate & fix sequence
+    const validation = validateMessageSequence(this.messages);
+    if (!validation.valid) {
+      console.warn('[AgentRuntime] Invalid sequence after truncation, fixing...', validation.error);
+      fixInvalidSequence(this.messages);
+    }
+
+    // 4. Proactive summarization if still heavily over budget
+    if (this.lastPromptTokens > this.maxContextTokens) {
+      await this.summarizeConversation();
+    }
+  }
+
+  private async summarizeConversation(): Promise<void> {
+    const turns = groupIntoTurns(this.messages);
+    if (turns.length < 4) return;
+
+    const turnsToSummarize = turns.slice(0, Math.floor(turns.length / 2));
+    const allIndicesToHide: number[] = [];
+    for (const turn of turnsToSummarize) {
+      allIndicesToHide.push(...turn.indices);
+    }
+    if (allIndicesToHide.length === 0) return;
+
+    const messagesToSummarize = allIndicesToHide.map(idx => this.messages[idx]);
+
+    // Build summary prompt
+    const strippedMessages = messagesToSummarize.map(m => {
+      let contentStr = '';
+      if (typeof m.content === 'string') {
+        contentStr = m.content.substring(0, 500) + (m.content.length > 500 ? '...' : '');
+      } else if (Array.isArray(m.content)) {
+        contentStr = m.content.map((part: any) => {
+          if (part.functionCall) return `[Call: ${part.functionCall.name}]`;
+          if (part.functionResponse) return `[Result: ${part.functionResponse.name}]`;
+          return '[Part]';
+        }).join(' ');
       }
+      return `${m.role.toUpperCase()}: ${contentStr}`;
+    });
+
+    const summaryPrompt = `Please summarize the following Figma plugin design steps briefly in 1-2 sentences. Focus on what was built or changed. Example: "Created the layout structure and added a submit button."\n\nHistory:\n${strippedMessages.join('\n')}`;
+
+    let summaryText: string;
+    try {
+      const response = await this.options.provider.generate({
+        messages: [{ id: `sum_req_${Date.now()}`, role: 'user', content: summaryPrompt }],
+        maxTokens: 150,
+        thinkingLevel: 'minimal'
+      });
+      summaryText = response.text || 'Conversation summarized.';
+    } catch (error) {
+      console.warn('[AgentRuntime] Summarizer failed, using fallback summary.', error);
+      summaryText = 'Several design steps completed.';
+    }
+
+    allIndicesToHide.forEach(idx => {
+      this.messages[idx].hidden = true;
+    });
+
+    const firstHiddenIdx = this.messages.findIndex(m => m.hidden && m.role !== 'system' && !m.summaryOf);
+    const insertIdx = firstHiddenIdx !== -1 ? firstHiddenIdx : (this.messages[0]?.role === 'system' ? 1 : 0);
+
+    const summaryMessage: LLMMessage = {
+      id: `summary-${Date.now()}`,
+      role: 'user',
+      content: `[CONTEXT SUMMARY]: ${summaryText}`,
+      summaryOf: messagesToSummarize.map(m => m.id),
+      pinned: true,
     };
 
-    await this.context.manageContext(summarizer);
+    this.messages.splice(insertIdx, 0, summaryMessage);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -339,15 +411,15 @@ export class AgentRuntime {
     this.cancelReason = 'Canceled by user';
     this.originalUserRequest = userPrompt;
 
-    this.context.addMessage({
+    this.messages.push({
       id: this.generateId('usr'),
       role: 'user',
       content: userPrompt,
       pinned: this.behaviorConfig.enableInstructionAnchoring,
     });
 
-    // Proactive compression on resume
-    if (this.context.getApproximateTokens() > this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
+    // Proactive compression on resume (only if we have real token data from a previous run)
+    if (this.lastPromptTokens > this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
       await this.manageContext();
     }
 
@@ -355,6 +427,7 @@ export class AgentRuntime {
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
     this.idCounter = 0;
+    this.runStats = { toolCallCount: 0, toolErrorCount: 0, loopDetected: false };
 
     this.textOnlyCompletionRetries = 0;
 
@@ -373,12 +446,9 @@ export class AgentRuntime {
       this.throwIfCanceled(iteration + 1);
       await this.manageContext();
       this.throwIfCanceled(iteration + 1);
-      this.context.updateTokens();
-      const currentTokens = this.context.getApproximateTokens();
-      const visibleMessageCount = this.context.getAllMessages().filter(m => !m.hidden).length;
-      const hiddenMessages = this.context.getMessages(true).length;
-      console.log(`[AgentRuntime] --- Iteration ${iteration}/${this.maxIterations} ---`);
-      console.log(`[AgentRuntime] Context: ${currentTokens}/${this.maxContextTokens} tokens (${Math.round(currentTokens/this.maxContextTokens*100)}%)`);
+      const currentTokens = this.lastPromptTokens;
+      const visibleMessageCount = this.messages.filter(m => !m.hidden).length;
+      const hiddenMessages = this.messages.length;
       this.emitRuntimeEvent({
         type: 'context_usage',
         iteration: iteration + 1,
@@ -387,14 +457,14 @@ export class AgentRuntime {
         usage: {
           current: currentTokens,
           max: this.maxContextTokens,
-          percent: Math.round((currentTokens / this.maxContextTokens) * 100),
+          percent: currentTokens > 0 ? Math.round((currentTokens / this.maxContextTokens) * 100) : 0,
           visibleMessages: visibleMessageCount,
           hiddenMessages
         }
       });
 
-      // Hard stop: token budget overflow
-      if (currentTokens > this.maxContextTokens * 1.2) {
+      // Hard stop: token budget overflow (only when we have real token data)
+      if (currentTokens > 0 && currentTokens > this.maxContextTokens * 1.2) {
         console.error(`[AgentRuntime] FATAL: Context budget exceeded 120%. Aborting.`);
         throw new Error(`Agent aborted: context budget exceeded 120% (${Math.round(currentTokens/this.maxContextTokens*100)}%).`);
       }
@@ -419,7 +489,7 @@ export class AgentRuntime {
       // ──── DYNAMIC CONTEXT (KV-cache friendly) ────
       // System prompt at index 0 is NEVER touched after construction.
       // Only update the tiny dynamic context message in-place.
-      const dynMsg = this.context.getAllMessages().find(m => m.id === DYNAMIC_CONTEXT_MSG_ID);
+      const dynMsg = this.messages.find(m => m.id === DYNAMIC_CONTEXT_MSG_ID);
       if (dynMsg) {
         dynMsg.content = buildDynamicContextContent('AUTONOMOUS');
       }
@@ -432,8 +502,6 @@ export class AgentRuntime {
         abortController.abort();
       }, AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS);
 
-      console.log(`[AgentRuntime] Tools available: ${this.options.tools.length} (all)`);
-
       let toolCallsForExecution: LLMToolCall[] = [];
       let rawToolCallsForLoopDetection: LLMToolCall[] = [];
       let response: LLMResponse;
@@ -442,7 +510,7 @@ export class AgentRuntime {
         this.llmCoordinator.config.notifyIterationStart = notifyIterationStartOnce;
         const genResult = await this.llmCoordinator.generate(
           {
-            messages: this.context.getMessages(),
+            messages: this.messages.filter(m => !m.hidden),
             tools: this.options.tools,
             toolConfig: { mode: 'AUTO' as ToolCallMode },
             maxOutputTokens: this.loopPolicy.maxOutputTokens,
@@ -478,7 +546,7 @@ export class AgentRuntime {
         maxIterations: this.maxIterations,
         responseText: response.text,
         toolCalls: rawToolCallsForLoopDetection.length > 0 ? rawToolCallsForLoopDetection : toolCallsForExecution,
-        contextManager: this.context,
+        messages: this.messages,
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),
       };
@@ -491,6 +559,12 @@ export class AgentRuntime {
         // Skip this iteration (e.g. empty response retry)
         iteration = Math.max(0, iteration - 1);
         continue;
+      }
+
+      // Track loop detection in runStats
+      if (hookResult.injectMessage && typeof hookResult.injectMessage === 'string'
+        && (hookResult.injectMessage.includes('repeated') || hookResult.injectMessage.includes('consecutive iterations'))) {
+        this.runStats.loopDetected = true;
       }
 
       // Fire onIteration callback
@@ -506,25 +580,40 @@ export class AgentRuntime {
       const modelMessage = this.options.provider.formatResponse(response);
       modelMessage.id = this.generateId('mdl');
 
-      this.context.addMessage(modelMessage);
+      this.messages.push(modelMessage);
+
+      // Track real prompt tokens from LLM response
+      this.lastPromptTokens = response.usage?.promptTokens ?? this.lastPromptTokens;
 
       // ──── TOOL EXECUTION ────
       if (toolCallsForExecution.length > 0) {
+        this.runStats.toolCallCount += toolCallsForExecution.length;
         const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
+        // Count tool errors from the result message
+        if (dispatchResult.toolResultsMessage) {
+          const content = dispatchResult.toolResultsMessage.content;
+          if (Array.isArray(content)) {
+            for (const part of content) {
+              if (part.functionResponse?.response?.success === false) {
+                this.runStats.toolErrorCount++;
+              }
+            }
+          }
+        }
         if (dispatchResult.type === 'completed') {
           return dispatchResult.completionSummary!;
         }
-        this.context.addMessage(dispatchResult.toolResultsMessage!);
+        this.messages.push(dispatchResult.toolResultsMessage!);
         iteration++;
         continue;
       } else {
         // No tool calls — nudge LLM to call signal(type=complete)
         if (this.textOnlyCompletionRetries < AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES) {
           this.textOnlyCompletionRetries++;
-          this.context.addMessage({
+          this.messages.push({
             id: this.generateId('nudge'),
             role: 'user',
-            content: 'Call signal with type "complete" to finish.'
+            content: 'You responded with text but no tool calls. If you are explaining a difficulty to the user, that is fine — wrap up by calling signal(type="complete", summary="<your explanation>"). Otherwise, call the appropriate tool to continue working.'
           });
           iteration = Math.max(0, iteration - 1);
           continue;
@@ -544,6 +633,10 @@ export class AgentRuntime {
   }
 
   public getMessages(): LLMMessage[] {
-    return this.context.getAllMessages();
+    return this.messages;
+  }
+
+  public getRunStats() {
+    return { ...this.runStats };
   }
 }

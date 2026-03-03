@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import { emit } from '@create-figma-plugin/utilities'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
-import { ChatMessage, ToolCallRecord, IterationRecord } from '../../types/chat'
+import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
 import { searchDesignKnowledgeExecutor, projectUIExecutors } from '../../engine/agent/tools/unified/queryKnowledge'
 import { validateLayoutExecutor } from '../../engine/agent/tools/unified/validateDesign'
@@ -110,6 +110,8 @@ export function useChat({
         const newToolCall: ToolCallRecord = {
           id: event.toolCall.id,
           name: event.toolCall.name,
+          displayName: event.toolCall.displayName,
+          group: event.toolCall.group,
           parameters: event.toolCall.args,
           status: 'running',
           startTime: event.timestamp,
@@ -131,6 +133,38 @@ export function useChat({
               endTime: tc.startTime + event.toolResult.durationMs,
               error: event.toolResult.error,
               result: event.toolResult.raw,
+            }
+          }),
+        }))
+        break
+      }
+      case 'llm_request': {
+        const record: LLMCallRecord = {
+          llmCallId: event.llmCallId,
+          iteration: event.iteration,
+          startTime: event.timestamp,
+          messageCount: event.messageCount,
+          toolNames: event.toolNames,
+          config: event.config,
+        }
+        updateStreamingMessage(msg => ({
+          ...msg,
+          llmCalls: [...(msg.llmCalls || []), record],
+        }))
+        break
+      }
+      case 'llm_response': {
+        updateStreamingMessage(msg => ({
+          ...msg,
+          llmCalls: (msg.llmCalls || []).map(rec => {
+            if (rec.llmCallId !== event.llmCallId) return rec
+            return {
+              ...rec,
+              endTime: event.timestamp,
+              durationMs: event.durationMs,
+              usage: event.usage,
+              responseShape: event.responseShape,
+              success: event.success,
             }
           }),
         }))
@@ -194,6 +228,17 @@ export function useChat({
           runState: 'error',
           runError: event.message,
           endTime: Date.now(),
+        }))
+        break
+      }
+      case 'debrief': {
+        updateStreamingMessage(msg => ({
+          ...msg,
+          debrief: {
+            exitReason: event.exitReason,
+            text: event.debrief,
+            structured: event.structured,
+          },
         }))
         break
       }
@@ -278,6 +323,16 @@ export function useChat({
               return projectUIExecutors.listProjectComponents?.(params) ?? { success: true, data: [] }
             case 'tokens':
               return projectUIExecutors.getDesignSystemTokens?.(params) ?? { success: true, data: [] }
+            case 'skill': {
+              const { skillRegistry } = await import('../../engine/agent/skills')
+              const body = skillRegistry.getSkillBody(params.query)
+              if (!body) {
+                console.warn(`[Skill] Not found: ${params.query}`)
+                return { success: false, error: { code: 'SKILL_NOT_FOUND', message: `Skill '${params.query}' not found.` } }
+              }
+              console.log(`[Skill] Loaded: ${params.query} (${body.length} chars)`)
+              return { success: true, data: { skillId: params.query, content: body } }
+            }
             default:
               return { success: false, error: { code: 'INVALID_SOURCE', message: `Unknown source: ${params.source}` } }
           }

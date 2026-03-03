@@ -26,6 +26,7 @@ export interface LoopThresholds {
 export class LoopDetector {
   private signatureHistory: string[] = [];
   private planningHistory: boolean[] = [];
+  private identicalGraceGiven = false;
   private readonly maxHistoryLength = 10;
 
   /**
@@ -66,6 +67,7 @@ export class LoopDetector {
   reset(): void {
     this.signatureHistory = [];
     this.planningHistory = [];
+    this.identicalGraceGiven = false;
   }
 
   // ── Private helpers ──────────────────────────────────────────
@@ -161,18 +163,29 @@ export class LoopDetector {
 
   /**
    * Detect exact same signature repeated >= threshold times.
+   * First occurrence gives the agent a grace chance to explain; second is fatal.
    */
   private detectIdenticalLoop(currentSignature: string, threshold: number): LoopDetectionResult | null {
     const count = this.signatureHistory.filter(sig => sig === currentSignature).length;
-    if (count >= threshold) {
+    if (count < threshold) return null;
+
+    if (!this.identicalGraceGiven) {
+      this.identicalGraceGiven = true;
       return {
         type: 'identical',
-        message: `[LOOP DETECTED] Same action repeated ${count} times: ${currentSignature}. ` +
-          `Consider: (1) Check if previous tool succeeded (2) Try different approach (3) Call signal(type="complete") if done.`,
-        fatal: true,
+        message: `[LOOP DETECTED] Same action repeated ${count} times.`,
+        fatal: false,
+        hint: `You repeated the same action ${count} times. Stop retrying. `
+          + `Explain to the user what you were trying to do and why it's not working. `
+          + `Then call signal(type="complete") with your explanation.`,
       };
     }
-    return null;
+
+    return {
+      type: 'identical',
+      message: `[LOOP DETECTED] Same action repeated ${count} times after grace warning: ${currentSignature}. Terminating.`,
+      fatal: true,
+    };
   }
 
   /**
@@ -205,7 +218,9 @@ export class LoopDetector {
       type: 'monotone',
       message: `Monotone loop: tool pattern "${pattern}" repeated ${threshold} consecutive iterations.`,
       fatal: false,
-      hint: `⚠️ LOOP DETECTED: You have called "${pattern}" for ${threshold} consecutive iterations. The design is good enough. Call signal(type="complete") NOW with a summary. Do NOT make any more style changes.`,
+      hint: `⚠️ You have called "${pattern}" for ${threshold} consecutive iterations without resolving the issue. `
+        + `If you are stuck, explain the difficulty to the user. `
+        + `Then call signal(type="complete") with a summary of what you accomplished and what remains unresolved.`,
     };
   }
 }

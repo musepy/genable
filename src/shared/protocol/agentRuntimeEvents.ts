@@ -48,6 +48,8 @@ export interface AgentRuntimeToolCallEvent extends AgentRuntimeBaseEvent {
   toolCall: {
     id: string;
     name: string;
+    displayName?: string;
+    group?: string;
     args: any;
   };
 }
@@ -60,6 +62,8 @@ export interface AgentRuntimeToolResultEvent extends AgentRuntimeBaseEvent {
   toolResult: {
     id: string;
     name: string;
+    displayName?: string;
+    group?: string;
     success: boolean;
     durationMs: number;
     error?: string;
@@ -127,6 +131,67 @@ export interface AgentRuntimeCanceledEvent extends AgentRuntimeBaseEvent {
   reason: string;
 }
 
+/** Emitted before an LLM generation call. */
+export interface AgentRuntimeLLMRequestEvent extends AgentRuntimeBaseEvent {
+  type: 'llm_request';
+  llmCallId: string;
+  iteration: number;
+  mode: AgentMode;
+  phase: AgentRuntimePhase;
+  messages: {
+    id: string;
+    role: string;
+    contentLength: number;
+    hidden?: boolean;
+    pinned?: boolean;
+  }[];
+  messageCount: number;
+  toolNames: string[];
+  config: {
+    maxOutputTokens: number;
+    thinkingLevel: string;
+    toolMode: string;
+  };
+}
+
+/** Emitted after a difficult run to collect agent feedback on tools. */
+export interface AgentRuntimeDebriefEvent extends AgentRuntimeBaseEvent {
+  type: 'debrief';
+  phase: AgentRuntimePhase;
+  exitReason: 'completed' | 'max_iterations' | 'abort' | 'error';
+  totalIterations: number;
+  errorCount: number;
+  loopsDetected: boolean;
+  debrief: string;
+  structured?: {
+    confusingTools: string[];
+    hardParts: string[];
+    suggestions: string[];
+  };
+}
+
+/** Emitted after an LLM generation call completes or fails. */
+export interface AgentRuntimeLLMResponseEvent extends AgentRuntimeBaseEvent {
+  type: 'llm_response';
+  llmCallId: string;
+  iteration: number;
+  mode: AgentMode;
+  phase: AgentRuntimePhase;
+  durationMs: number;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  responseShape: {
+    textLength: number;
+    thoughtsLength: number;
+    toolCallCount: number;
+    toolCallNames: string[];
+  };
+  success: boolean;
+}
+
 export type AgentRuntimeEvent =
   | AgentRuntimeIterationStartEvent
   | AgentRuntimeToolCallEvent
@@ -137,7 +202,10 @@ export type AgentRuntimeEvent =
   | AgentRuntimeErrorEvent
   | AgentRuntimeCompletedEvent
   | AgentRuntimeRetryEvent
-  | AgentRuntimeCanceledEvent;
+  | AgentRuntimeCanceledEvent
+  | AgentRuntimeLLMRequestEvent
+  | AgentRuntimeLLMResponseEvent
+  | AgentRuntimeDebriefEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -149,7 +217,10 @@ export type AgentRuntimeEventType =
   | 'error'
   | 'completed'
   | 'retry'
-  | 'canceled';
+  | 'canceled'
+  | 'llm_request'
+  | 'llm_response'
+  | 'debrief';
 
 export function modeToRuntimePhase(mode: AgentMode): AgentRuntimePhase {
   switch (mode) {

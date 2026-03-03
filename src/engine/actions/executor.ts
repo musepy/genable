@@ -104,16 +104,7 @@ export class ActionExecutor {
           
           const props = (action as any).props;
           if (props) {
-            if (subCategory === ActionErrorSubCategory.LAYOUT_CONSTRAINT) {
-              delete props.layoutPositioning;
-              delete props.layoutAlign;
-              delete props.constraints;
-            } else if (subCategory === ActionErrorSubCategory.SIZING_CONFLICT) {
-              const sizingWarnings = await this.autoFixSizingConflict(action, props);
-              if (sizingWarnings.length > 0) {
-                retryWarnings.push(...sizingWarnings);
-              }
-            } else if (subCategory === ActionErrorSubCategory.NODE_TYPE_CONSTRAINT) {
+            if (subCategory === ActionErrorSubCategory.NODE_TYPE_CONSTRAINT) {
               // Cannot auto-fix node type mismatch — break to avoid infinite retry
               break;
             } else if (subCategory === ActionErrorSubCategory.FONT_UNLOADED) {
@@ -206,6 +197,15 @@ export class ActionExecutor {
       const validation = ActionValidator.validate(action, targetNode, parentNode);
       if (!validation.valid) {
         return { success: false, error: validation.error };
+      }
+
+      // Pre-execution: normalize sizing props to prevent Figma API exceptions
+      const props = (action as any).props;
+      if (props) {
+        const sizingWarnings = this.normalizeSizingInProps(props, targetNode, parentNode);
+        if (sizingWarnings.length > 0) {
+          console.warn(`[ActionExecutor] Sizing normalized for ${action.action}:`, sizingWarnings.map(w => w.message));
+        }
       }
 
       // Root node centering for newly created elements
@@ -429,54 +429,50 @@ export class ActionExecutor {
     return p;
   }
 
-  private static isAutoLayoutMode(mode: unknown): boolean {
-    return mode === 'HORIZONTAL' || mode === 'VERTICAL';
-  }
+  /**
+   * Pre-execution: normalize sizing props (HUG/FILL/FIXED) based on layout context.
+   * Prevents Figma API exceptions like "HUG can only be set on auto-layout frames".
+   */
+  private normalizeSizingInProps(
+    props: Record<string, any>,
+    targetNode: SceneNode | null,
+    parentNode: SceneNode | null,
+  ): Array<{ code: string; severity: 'warning'; message: string }> {
+    if (props.layoutSizingHorizontal === undefined && props.layoutSizingVertical === undefined) {
+      return [];
+    }
 
-  private static asSizingMode(value: unknown): SizingMode {
-    if (value === 'HUG' || value === 'FILL' || value === 'FIXED') return value;
-    return 'FIXED';
-  }
-
-  private async autoFixSizingConflict(
-    action: FigmaAction,
-    props: Record<string, any>
-  ): Promise<Array<{ code: string; severity: 'warning'; message: string }>> {
     const warnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
-    const targetNode =
-      action.action === 'updateProps'
-        ? (await figma.getNodeByIdAsync(this.resolveId(action.nodeId))) as SceneNode | null
-        : null;
-    const parentNode =
-      action.action === 'updateProps'
-        ? (targetNode?.parent || null)
-        : await this.resolveParent(action.parentId);
 
-    const nodeLayoutMode = props.layoutMode ?? ((targetNode as any)?.layoutMode as string | undefined);
-    const hasAutoLayout = ActionExecutor.isAutoLayoutMode(nodeLayoutMode);
+    const nodeLayoutMode = props.layoutMode ?? (targetNode as any)?.layoutMode;
+    const hasAutoLayout = nodeLayoutMode === 'HORIZONTAL' || nodeLayoutMode === 'VERTICAL';
     const parentLayoutMode =
       parentNode && 'layoutMode' in (parentNode as any)
         ? (parentNode as any).layoutMode
         : undefined;
-    const parentHasAutoLayout = ActionExecutor.isAutoLayoutMode(parentLayoutMode);
+    const parentHasAutoLayout = parentLayoutMode === 'HORIZONTAL' || parentLayoutMode === 'VERTICAL';
     const isRoot = !parentNode || (parentNode as any).type === 'PAGE';
 
-    const currentH = ActionExecutor.asSizingMode(
+    const toSizingMode = (v: unknown): SizingMode =>
+      (v === 'HUG' || v === 'FILL' || v === 'FIXED') ? v : 'FIXED';
+
+    const currentH = toSizingMode(
       props.layoutSizingHorizontal ?? (targetNode as any)?.layoutSizingHorizontal
     );
-    const currentV = ActionExecutor.asSizingMode(
+    const currentV = toSizingMode(
       props.layoutSizingVertical ?? (targetNode as any)?.layoutSizingVertical
     );
+
     const { h, v } = normalizeSizing(currentH, currentV, {
       hasAutoLayout,
       parentHasAutoLayout,
       isRoot,
     });
 
-    props.layoutSizingHorizontal = h;
-    props.layoutSizingVertical = v;
+    if (props.layoutSizingHorizontal !== undefined) props.layoutSizingHorizontal = h;
+    if (props.layoutSizingVertical !== undefined) props.layoutSizingVertical = v;
 
-    if (h === 'FIXED' && props.width === undefined) {
+    if (h === 'FIXED' && currentH !== 'FIXED' && props.width === undefined) {
       const fallbackWidth = Math.max(
         1,
         Math.round(
@@ -487,13 +483,13 @@ export class ActionExecutor {
       );
       props.width = fallbackWidth;
       warnings.push({
-        code: 'SIZING_AUTOFIX',
+        code: 'SIZING_NORMALIZED',
         severity: 'warning',
-        message: `layoutSizingHorizontal normalized to FIXED; width defaulted to ${fallbackWidth}px.`,
+        message: `layoutSizingHorizontal ${currentH}→FIXED; width defaulted to ${fallbackWidth}px.`,
       });
     }
 
-    if (v === 'FIXED' && props.height === undefined) {
+    if (v === 'FIXED' && currentV !== 'FIXED' && props.height === undefined) {
       const fallbackHeight = Math.max(
         1,
         Math.round(
@@ -504,9 +500,9 @@ export class ActionExecutor {
       );
       props.height = fallbackHeight;
       warnings.push({
-        code: 'SIZING_AUTOFIX',
+        code: 'SIZING_NORMALIZED',
         severity: 'warning',
-        message: `layoutSizingVertical normalized to FIXED; height defaulted to ${fallbackHeight}px.`,
+        message: `layoutSizingVertical ${currentV}→FIXED; height defaulted to ${fallbackHeight}px.`,
       });
     }
 

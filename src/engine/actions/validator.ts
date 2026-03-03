@@ -53,26 +53,7 @@ export class ActionValidator {
       }
     }
 
-    // 3. FILL sizing constraints requirements (Parent must be Auto Layout)
-    const hasFillHorizontal = props.layoutSizingHorizontal === 'FILL';
-    const hasFillVertical = props.layoutSizingVertical === 'FILL';
-    
-    if (hasFillHorizontal || hasFillVertical) {
-      let resolvedParent = parentNode;
-      if (action.action === 'updateProps' && targetNode) {
-        resolvedParent = targetNode.parent as SceneNode;
-      }
-      
-      if (resolvedParent && (!('layoutMode' in resolvedParent) || resolvedParent.layoutMode === 'NONE')) {
-        return { valid: false, error: `'FILL' sizing requires a parent with Auto Layout.` };
-      } 
-      if (!resolvedParent && action.action !== 'delete' && action.action !== 'move') {
-        // Only layout elements inside a layout frame can be FILL
-        return { valid: false, error: `'FILL' sizing requires a parent with Auto Layout.` };
-      }
-    }
-
-    // 4. itemSpacing constraints (requires layoutMode)
+    // 3. itemSpacing constraints (requires layoutMode)
     if (props.itemSpacing !== undefined) {
       const targetLayoutMode = action.action === 'updateProps' && targetNode && 'layoutMode' in targetNode 
         ? targetNode.layoutMode 

@@ -92,6 +92,11 @@ export const PROPS = {
  * Property Metadata for Unified Mapping (Figma <-> DSL)
  * This centralizes how each property is extracted and rendered.
  */
+export interface SizingConstraint {
+  readonly requiresAutoLayout: 'self' | 'parent';
+  readonly fallback: string;
+}
+
 export interface PropDefinition {
   readonly figmaKey: string;
   readonly type: 'scalar' | 'color' | 'enum' | 'object' | 'virtual' | 'array' | 'string';
@@ -100,6 +105,7 @@ export interface PropDefinition {
   // NEW: Normalization rules
   readonly min?: number;        // scalar clamp lower bound
   readonly max?: number;        // scalar clamp upper bound
+  readonly valueConstraints?: Record<string, SizingConstraint>;
 }
 
 export const PROP_METADATA: Record<string, PropDefinition> = {
@@ -117,12 +123,20 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.layoutSizingHorizontal]: {
     figmaKey: 'layoutSizingHorizontal', type: 'enum',
     enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
-    defaultValue: 'FIXED'
+    defaultValue: 'FIXED',
+    valueConstraints: {
+      HUG:  { requiresAutoLayout: 'self',   fallback: 'FIXED' },
+      FILL: { requiresAutoLayout: 'parent', fallback: 'HUG' },
+    },
   },
   [PROPS.layoutSizingVertical]: {
     figmaKey: 'layoutSizingVertical', type: 'enum',
     enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
-    defaultValue: 'FIXED'
+    defaultValue: 'FIXED',
+    valueConstraints: {
+      HUG:  { requiresAutoLayout: 'self',   fallback: 'FIXED' },
+      FILL: { requiresAutoLayout: 'parent', fallback: 'HUG' },
+    },
   },
   [PROPS.primaryAxisAlignItems]: {
     figmaKey: 'primaryAxisAlignItems', type: 'enum',

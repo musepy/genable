@@ -639,4 +639,8 @@ export class AgentRuntime {
   public getRunStats() {
     return { ...this.runStats };
   }
+
+  public getRunId(): string {
+    return this.currentRunId;
+  }
 }

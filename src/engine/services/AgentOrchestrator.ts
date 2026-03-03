@@ -22,7 +22,6 @@ import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/s
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 import { AgentRuntimeEvent, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMProvider } from '../llm-client/providers/types';
-import { generateLogDigest } from '../../features/chat/logDigest';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -153,7 +152,7 @@ export class AgentOrchestrator {
       this.options.onComplete?.({}, finalResponse);
 
       // 4. Post-run debrief (non-blocking, non-fatal)
-      await this.maybeDebrief(agent, 'completed', history);
+      await this.maybeDebrief(agent, 'completed');
 
     } catch (error: any) {
       console.error('[AgentOrchestrator] Failed:', error);
@@ -182,7 +181,7 @@ export class AgentOrchestrator {
 
       // Debrief on error (non-fatal)
       if (this.activeAgent) {
-        await this.maybeDebrief(this.activeAgent, exitReason, history);
+        await this.maybeDebrief(this.activeAgent, exitReason);
       }
     } finally {
         // [Cleanup] ALWAYS dispose the bridge to clear listeners and pending timers
@@ -370,11 +369,14 @@ export class AgentOrchestrator {
   /**
    * After a difficult run, ask the LLM to reflect on tool usability.
    * Non-fatal: swallows errors silently.
+   *
+   * Builds context from the agent's own message history (not stale UI history)
+   * and emits the debrief event with the agent's real runId so useChat routes
+   * it to the correct ChatMessage.
    */
   private async maybeDebrief(
     agent: AgentRuntime,
     exitReason: 'completed' | 'max_iterations' | 'abort' | 'error',
-    history: ChatMessage[],
   ): Promise<void> {
     if (!this.currentProvider) return;
 
@@ -392,10 +394,32 @@ export class AgentOrchestrator {
     if (!shouldDebrief) return;
 
     try {
-      const logDigest = generateLogDigest(history);
+      // Build a compact digest from the agent's own LLM conversation,
+      // which contains the actual tool calls/results from this run.
+      const agentMessages = agent.getMessages();
+      const digestLines: string[] = ['=== RUN DIGEST ==='];
+      digestLines.push(`Exit: ${exitReason} | Tools: ${stats.toolCallCount} calls, ${stats.toolErrorCount} errors | Loop: ${stats.loopDetected}`);
+      let toolIdx = 0;
+      for (const msg of agentMessages) {
+        if (!Array.isArray(msg.content)) continue;
+        for (const part of msg.content as any[]) {
+          if (part.functionCall) {
+            toolIdx++;
+            digestLines.push(`#${toolIdx} [${part.functionCall.name}] args: ${JSON.stringify(part.functionCall.args ?? {}).slice(0, 120)}`);
+          }
+          if (part.functionResponse) {
+            const ok = part.functionResponse.response?.success !== false;
+            const err = part.functionResponse.response?.error;
+            digestLines.push(`  → ${ok ? 'OK' : 'ERR'}${err ? `: ${JSON.stringify(err).slice(0, 100)}` : ''}`);
+          }
+        }
+      }
+      digestLines.push('=== END DIGEST ===');
+      const digest = digestLines.join('\n');
+
       const debriefPrompt = `You just completed a Figma design generation run that had difficulties. Here is a summary:
 
-${logDigest}
+${digest}
 
 Evaluate your experience as a tool user:
 1. **Confusing Tools**: Which tools had confusing APIs or unclear parameters?
@@ -416,19 +440,25 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
       // Try to parse structured feedback from the text
       const structured = this.parseDebriefStructure(debriefText);
 
-      const totalIterations = history.filter(m => m.role === 'model' && m.iterations)
-        .reduce((acc, m) => acc + (m.iterations?.length || 0), 0);
-
-      this.emitFallbackRuntimeEvent({
-        type: 'debrief',
-        phase: 'idle' as AgentRuntimePhase,
-        exitReason,
-        totalIterations,
-        errorCount: stats.toolErrorCount,
-        loopsDetected: stats.loopDetected,
-        debrief: debriefText,
-        structured,
-      });
+      // Emit with the agent's real runId so useChat can route it
+      // to the correct ChatMessage (not 'orchestrator_fallback').
+      const runId = agent.getRunId() || 'orchestrator_fallback';
+      if (this.options.onRuntimeEvent) {
+        this.fallbackEventSequence += 1;
+        this.options.onRuntimeEvent({
+          type: 'debrief',
+          runId,
+          sequence: this.fallbackEventSequence,
+          timestamp: Date.now(),
+          phase: 'idle' as AgentRuntimePhase,
+          exitReason,
+          totalIterations: stats.toolCallCount, // approximate from tool calls
+          errorCount: stats.toolErrorCount,
+          loopsDetected: stats.loopDetected,
+          debrief: debriefText,
+          structured,
+        } as AgentRuntimeEvent);
+      }
 
       console.log('[AgentOrchestrator] Debrief collected:', debriefText.slice(0, 200));
     } catch (err) {

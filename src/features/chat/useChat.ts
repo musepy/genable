@@ -80,6 +80,20 @@ export function useChat({
     })
   }
 
+  /** Like updateStreamingMessage but targets the last model message regardless of streaming state. */
+  const updateLastModelMessage = (updater: (msg: ChatMessage) => ChatMessage) => {
+    setHistory(prev => {
+      const next = [...prev]
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].role === 'model') {
+          next[i] = updater(next[i])
+          return next
+        }
+      }
+      return prev
+    })
+  }
+
   const handleRuntimeEvent = (event: AgentRuntimeEvent) => {
     if (!activeRunIdRef.current) {
       activeRunIdRef.current = event.runId
@@ -232,7 +246,9 @@ export function useChat({
         break
       }
       case 'debrief': {
-        updateStreamingMessage(msg => ({
+        // Debrief arrives after completed/error has set streaming=false,
+        // so we target the last model message regardless of streaming state.
+        updateLastModelMessage(msg => ({
           ...msg,
           debrief: {
             exitReason: event.exitReason,
@@ -317,10 +333,17 @@ export function useChat({
         // ── Unified tool executors ──
         query_knowledge: async (params: any) => {
           switch (params.source) {
-            case 'knowledge':
+            case 'knowledge': {
+              if (!params.domain && params.query) {
+                // No domain specified — cross-domain search
+                const { knowledgeHub } = await import('../../engine/llm-client/knowledge/knowledgeHub')
+                const results = knowledgeHub.searchAll(params.query)
+                return { success: true, data: { results, source: 'cross-domain' } }
+              }
               return searchDesignKnowledgeExecutor(params)
+            }
             case 'components':
-              return projectUIExecutors.listProjectComponents?.(params) ?? { success: true, data: [] }
+              return projectUIExecutors.getProjectUIContext?.(params) ?? { success: true, data: [] }
             case 'tokens':
               return projectUIExecutors.getDesignSystemTokens?.(params) ?? { success: true, data: [] }
             case 'skill': {

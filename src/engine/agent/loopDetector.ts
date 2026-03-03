@@ -27,6 +27,7 @@ export class LoopDetector {
   private signatureHistory: string[] = [];
   private planningHistory: boolean[] = [];
   private identicalGraceGiven = false;
+  private planningGraceGiven = false;
   private readonly maxHistoryLength = 10;
 
   /**
@@ -68,6 +69,7 @@ export class LoopDetector {
     this.signatureHistory = [];
     this.planningHistory = [];
     this.identicalGraceGiven = false;
+    this.planningGraceGiven = false;
   }
 
   // ── Private helpers ──────────────────────────────────────────
@@ -137,6 +139,7 @@ export class LoopDetector {
 
   /**
    * Detect planning signal called 3+ times consecutively.
+   * First occurrence gives a grace chance to explain; second is fatal.
    */
   private detectPlanningLoop(toolCalls: LLMToolCall[]): LoopDetectionResult | null {
     const hasPlanningCall = toolCalls.some(
@@ -150,15 +153,25 @@ export class LoopDetector {
       consecutivePlanning++;
     }
 
-    if (consecutivePlanning >= 3) {
+    if (consecutivePlanning < 3) return null;
+
+    if (!this.planningGraceGiven) {
+      this.planningGraceGiven = true;
       return {
         type: 'planning',
-        message: `Agent stuck in planning loop: planning signal emitted 3+ times consecutively. Try executing the first step instead of replanning.`,
-        fatal: true,
+        message: `Planning signal emitted ${consecutivePlanning} times consecutively.`,
+        fatal: false,
+        hint: `You have called signal(type="plan") ${consecutivePlanning} times without executing any steps. `
+          + `Stop replanning. Either execute the first step of your plan, or explain to the user `
+          + `why you cannot proceed and call signal(type="complete") with your explanation.`,
       };
     }
 
-    return null;
+    return {
+      type: 'planning',
+      message: `Agent stuck in planning loop after grace warning: planning signal emitted ${consecutivePlanning}+ times consecutively. Terminating.`,
+      fatal: true,
+    };
   }
 
   /**

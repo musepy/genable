@@ -230,6 +230,122 @@ describe('postOpValidator structured output', () => {
     });
   });
 
+  describe('HUG_FILL_CYCLE', () => {
+    it('detects HUG parent + FILL child on horizontal axis', () => {
+      const children = [
+        { id: 'child-1', name: 'FillChild', type: 'FRAME', width: 200, height: 100, layoutSizingHorizontal: 'FILL', layoutSizingVertical: 'FIXED' },
+      ];
+      const node = mockFrame({
+        id: 'hug-parent',
+        name: 'HugParent',
+        layoutMode: 'HORIZONTAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'FIXED',
+        children,
+      });
+      const anomalies = validatePostOp(node);
+
+      const cycle = anomalies.find(a => a.code === 'HUG_FILL_CYCLE');
+      expect(cycle).toBeDefined();
+      expect(cycle!.context.axis).toBe('horizontal');
+      expect(cycle!.context.parentSizing).toBe('HUG');
+      expect(cycle!.context.childSizing).toBe('FILL');
+      expect(cycle!.hints.length).toBeGreaterThan(0);
+    });
+
+    it('detects HUG parent + FILL child on vertical axis', () => {
+      const children = [
+        { id: 'child-2', name: 'FillChild', type: 'FRAME', width: 200, height: 100, layoutSizingHorizontal: 'FIXED', layoutSizingVertical: 'FILL' },
+      ];
+      const node = mockFrame({
+        id: 'hug-parent-v',
+        name: 'HugParentV',
+        layoutMode: 'VERTICAL',
+        layoutSizingHorizontal: 'FIXED',
+        layoutSizingVertical: 'HUG',
+        children,
+      });
+      const anomalies = validatePostOp(node);
+
+      const cycle = anomalies.find(a => a.code === 'HUG_FILL_CYCLE');
+      expect(cycle).toBeDefined();
+      expect(cycle!.context.axis).toBe('vertical');
+    });
+
+    it('does NOT flag when parent is FIXED', () => {
+      const children = [
+        { id: 'child-3', name: 'FillChild', type: 'FRAME', width: 200, height: 100, layoutSizingHorizontal: 'FILL', layoutSizingVertical: 'FIXED' },
+      ];
+      const node = mockFrame({
+        layoutMode: 'HORIZONTAL',
+        layoutSizingHorizontal: 'FIXED',
+        layoutSizingVertical: 'FIXED',
+        children,
+      });
+      const anomalies = validatePostOp(node);
+      expect(anomalies.find(a => a.code === 'HUG_FILL_CYCLE')).toBeUndefined();
+    });
+
+    it('does NOT flag when child is HUG (no cycle)', () => {
+      const children = [
+        { id: 'child-4', name: 'HugChild', type: 'FRAME', width: 200, height: 100, layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'FIXED' },
+      ];
+      const node = mockFrame({
+        layoutMode: 'HORIZONTAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'FIXED',
+        children,
+      });
+      const anomalies = validatePostOp(node);
+      expect(anomalies.find(a => a.code === 'HUG_FILL_CYCLE')).toBeUndefined();
+    });
+  });
+
+  describe('WHITE_ON_WHITE', () => {
+    it('detects white stroke on white fill', () => {
+      const node = mockFrame({
+        id: 'ww-1',
+        name: 'WhiteCard',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+        strokes: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+      });
+      const anomalies = validatePostOp(node);
+
+      const ww = anomalies.find(a => a.code === 'WHITE_ON_WHITE');
+      expect(ww).toBeDefined();
+      expect(ww!.context.fillColor).toBe('#FFFFFF');
+      expect(ww!.context.strokeColor).toBe('#FFFFFF');
+      expect(ww!.hints.length).toBeGreaterThan(0);
+    });
+
+    it('does NOT flag non-white stroke', () => {
+      const node = mockFrame({
+        fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+        strokes: [{ type: 'SOLID', visible: true, color: { r: 0.88, g: 0.88, b: 0.88 } }],
+      });
+      const anomalies = validatePostOp(node);
+      expect(anomalies.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
+    });
+
+    it('does NOT flag when there are no strokes', () => {
+      const node = mockFrame({
+        fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+        strokes: [],
+      });
+      const anomalies = validatePostOp(node);
+      expect(anomalies.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
+    });
+
+    it('ignores invisible (visible=false) paints', () => {
+      const node = mockFrame({
+        fills: [{ type: 'SOLID', visible: false, color: { r: 1, g: 1, b: 1 } }],
+        strokes: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+      });
+      const anomalies = validatePostOp(node);
+      expect(anomalies.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
+    });
+  });
+
   describe('SIBLING_WIDTH_MISMATCH', () => {
     it('detects inconsistent widths in VERTICAL container', () => {
       const children = [

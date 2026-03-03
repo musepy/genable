@@ -7,11 +7,10 @@ describe('ToolExecutionCoordinator', () => {
   it.each([
     ['signal', {}, 'type'],
     ['read_node', {}, 'mode'],
-    ['build_design', {}, 'instructions'],
+    ['build_design', {}, 'operations'],
     ['patch_node', {}, 'patches'],
     ['delete_node', {}, 'nodeId'],
     ['query_knowledge', {}, 'source'],
-    ['validate_design', {}, 'nodeId'],
   ])('flags missing required parameter for %s', (toolName, args, missingParam) => {
     const result = coordinator.validateToolCall(toolName as string, args, 'EXECUTION');
 
@@ -101,7 +100,7 @@ describe('ToolExecutionCoordinator', () => {
       'complete_task',
       { summary: 'done' },
       'EXECUTION',
-      ['signal', 'read_node', 'build_design', 'patch_node', 'delete_node', 'query_knowledge', 'validate_design']
+      ['signal', 'read_node', 'build_design', 'patch_node', 'delete_node', 'query_knowledge']
     );
 
     expect(result.ok).toBe(false);

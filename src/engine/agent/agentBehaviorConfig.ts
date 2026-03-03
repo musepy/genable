@@ -14,7 +14,7 @@
  * - Mode filtering (PLANNING/EXECUTION/VERIFICATION) is in tools/index.ts getToolsForMode()
  * - Runtime constants (max iterations, thresholds) are in constants.ts
  * - Feature flags (postprocessor rules, architecture toggles) are in constants/featureFlags.ts
- * - Dead tools: getSelection, getVariables, getStyles, getNodeDSL (replaced by inspectDesign)
+ * - 7 unified tools: signal, read_node, build_design, patch_node, delete_node, query_knowledge, capture_screenshot
  * - Node types limited to: FRAME, TEXT, RECTANGLE, ELLIPSE, LINE, ICON (no IMAGE/COMPONENT)
  * - Colors: hex only (#RRGGBB or #RRGGBBAA for effects)
  */
@@ -28,8 +28,8 @@ import { ThinkingLevel } from '../llm-client/config';
 export interface AgentBehaviorConfig {
   /**
    * Design strategy: how the agent approaches the task.
-   * - 'create': Generate new design from scratch (uses generateDesign)
-   * - 'refine': Modify existing design incrementally (uses inspectDesign → applyDesignPatch)
+   * - 'create': Generate new design from scratch (uses build_design)
+   * - 'refine': Modify existing design incrementally (uses read_node → patch_node)
    */
   designStrategy: 'create' | 'refine';
 
@@ -56,7 +56,7 @@ export interface AgentBehaviorConfig {
   };
 
   /**
-   * Whether to encourage effects (DROP_SHADOW, INNER_SHADOW, etc.) in generateDesign output.
+   * Whether to encourage effects (DROP_SHADOW, INNER_SHADOW, etc.) in build_design output.
    * When true, the effects schema is detailed and examples include shadows.
    * When false, effects are still available but not emphasized.
    */

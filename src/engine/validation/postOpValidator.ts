@@ -40,7 +40,7 @@ export interface ValidationAnomaly {
   nodeName: string;
   /**
    * Key properties of the node (and its parent) that explain WHY this anomaly occurred.
-   * Agent can read this to identify the root cause without extra inspectDesign calls.
+   * Agent can read this to identify the root cause without extra read_node calls.
    */
   context: Record<string, any>;
   /**
@@ -115,9 +115,15 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
     anomalies.push(...validateFrameOverflow(node as FrameNode));
     anomalies.push(...validateSiblingConsistency(node as FrameNode));
     anomalies.push(...validateMissingAutoLayout(node as FrameNode));
+    anomalies.push(...validateHugFillCycle(node as FrameNode));
   }
 
-  // 5. Sizing reverted (FILL → FIXED because parent lacks auto-layout)
+  // 5a. White-on-white border
+  if ('fills' in node && 'strokes' in node) {
+    anomalies.push(...validateWhiteOnWhite(node));
+  }
+
+  // 6. Sizing reverted (FILL → FIXED because parent lacks auto-layout)
   if (intended) {
     anomalies.push(...validateSizingRevert(node, intended));
   }
@@ -299,7 +305,7 @@ function validateSiblingConsistency(frame: FrameNode): ValidationAnomaly[] {
           },
           hints: [
             `Set layoutSizingHorizontal to "FILL" on all child frames for uniform width`,
-            `Use applyDesignPatch to batch-update: patches=[${fixedWidthChildren.slice(0, 3).map(c => `{nodeId: "${c.id}", layout: {layoutSizingHorizontal: "FILL"}}`).join(', ')}]`,
+            `Use patch_node to batch-update: patches=[${fixedWidthChildren.slice(0, 3).map(c => `{nodeId: "${c.id}", props: {layoutSizingHorizontal: "FILL"}}`).join(', ')}]`,
           ],
         });
       }
@@ -346,6 +352,128 @@ function validateMissingAutoLayout(frame: FrameNode): ValidationAnomaly[] {
   }
   
   return anomalies;
+}
+
+// ──────────────────────────────────────────────
+// HUG parent + FILL child cycle detection
+// ──────────────────────────────────────────────
+
+/**
+ * Detect HUG parent + FILL child circular dependency.
+ * A parent with HUG sizing depends on children to determine its size,
+ * but a FILL child depends on its parent's size — creating an unsolvable cycle.
+ * Figma silently falls back to FIXED, which is rarely what the Agent intended.
+ */
+function validateHugFillCycle(frame: FrameNode): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
+
+  if (!frame.layoutMode || frame.layoutMode === 'NONE') return anomalies;
+  if (!frame.children || frame.children.length === 0) return anomalies;
+
+  const parentHSizing = (frame as any).layoutSizingHorizontal;
+  const parentVSizing = (frame as any).layoutSizingVertical;
+
+  if (parentHSizing !== 'HUG' && parentVSizing !== 'HUG') return anomalies;
+
+  for (const child of frame.children) {
+    if (!('layoutSizingHorizontal' in child)) continue;
+
+    const childHSizing = (child as any).layoutSizingHorizontal;
+    const childVSizing = (child as any).layoutSizingVertical;
+
+    // Horizontal cycle: parent HUG + child FILL
+    if (parentHSizing === 'HUG' && childHSizing === 'FILL') {
+      anomalies.push({
+        code: 'HUG_FILL_CYCLE',
+        message: `'${frame.name}' has HUG horizontal sizing but child '${child.name}' uses FILL — circular dependency`,
+        nodeId: frame.id,
+        nodeName: frame.name,
+        context: {
+          axis: 'horizontal',
+          parentSizing: 'HUG',
+          childId: child.id,
+          childName: child.name,
+          childSizing: 'FILL',
+          layoutMode: frame.layoutMode,
+        },
+        hints: [
+          `Change parent layoutSizingHorizontal to "FIXED" or "FILL" (patchNode nodeId="${frame.id}" props={layoutSizingHorizontal: "FIXED", width: ${Math.round(frame.width)}})`,
+          `Or change child layoutSizingHorizontal to "HUG" or "FIXED" (patchNode nodeId="${child.id}" props={layoutSizingHorizontal: "HUG"})`,
+        ],
+      });
+    }
+
+    // Vertical cycle: parent HUG + child FILL
+    if (parentVSizing === 'HUG' && childVSizing === 'FILL') {
+      anomalies.push({
+        code: 'HUG_FILL_CYCLE',
+        message: `'${frame.name}' has HUG vertical sizing but child '${child.name}' uses FILL — circular dependency`,
+        nodeId: frame.id,
+        nodeName: frame.name,
+        context: {
+          axis: 'vertical',
+          parentSizing: 'HUG',
+          childId: child.id,
+          childName: child.name,
+          childSizing: 'FILL',
+          layoutMode: frame.layoutMode,
+        },
+        hints: [
+          `Change parent layoutSizingVertical to "FIXED" or "FILL" (patchNode nodeId="${frame.id}" props={layoutSizingVertical: "FIXED", height: ${Math.round(frame.height)}})`,
+          `Or change child layoutSizingVertical to "HUG" or "FIXED" (patchNode nodeId="${child.id}" props={layoutSizingVertical: "HUG"})`,
+        ],
+      });
+    }
+  }
+
+  return anomalies;
+}
+
+// ──────────────────────────────────────────────
+// White-on-white border detection
+// ──────────────────────────────────────────────
+
+/**
+ * Detect white stroke on white fill — invisible border that wastes visual intent.
+ */
+function validateWhiteOnWhite(node: SceneNode): ValidationAnomaly[] {
+  const anomalies: ValidationAnomaly[] = [];
+
+  const fills = (node as any).fills as Paint[] | undefined;
+  const strokes = (node as any).strokes as Paint[] | undefined;
+
+  if (!fills || !strokes || strokes.length === 0) return anomalies;
+
+  const hasWhiteFill = fills.some(
+    (f: Paint) => f.type === 'SOLID' && f.visible !== false && isWhiteColor(f.color)
+  );
+  const hasWhiteStroke = strokes.some(
+    (s: Paint) => s.type === 'SOLID' && s.visible !== false && isWhiteColor(s.color)
+  );
+
+  if (hasWhiteFill && hasWhiteStroke) {
+    anomalies.push({
+      code: 'WHITE_ON_WHITE',
+      message: `'${node.name}' has white border on white background — border is invisible`,
+      nodeId: node.id,
+      nodeName: node.name,
+      context: {
+        type: node.type,
+        fillColor: '#FFFFFF',
+        strokeColor: '#FFFFFF',
+      },
+      hints: [
+        `Change stroke color to a visible grey (e.g. patchNode nodeId="${node.id}" props={strokes: [{type: "SOLID", color: {r: 0.88, g: 0.88, b: 0.88}}]})`,
+        `Or remove the stroke entirely`,
+      ],
+    });
+  }
+
+  return anomalies;
+}
+
+function isWhiteColor(color: RGB): boolean {
+  return color.r > 0.99 && color.g > 0.99 && color.b > 0.99;
 }
 
 // ──────────────────────────────────────────────

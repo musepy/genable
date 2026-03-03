@@ -5,6 +5,5 @@
 
 export { NodeLayoutService, nodeLayoutService } from './NodeLayoutService';
 export { SettingsService, settingsService } from './SettingsService';
-export { agentToolService } from './AgentToolService';
-export type { LayoutResult, LayoutValidationError } from './NodeLayoutService';
+export type { LayoutResult } from './NodeLayoutService';
 export type { SettingsResult, SaveSettingsInput } from './SettingsService';

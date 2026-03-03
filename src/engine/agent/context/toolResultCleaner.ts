@@ -12,7 +12,7 @@ export class ToolResultCleaner {
 
   /**
    * Visual props essential for LLM to "see" the design.
-   * These are preserved in inspectDesign results instead of being stripped.
+   * These are preserved in read_node results instead of being stripped.
    */
   private static readonly INSPECT_PRESERVE_PROPS = new Set([
     'name', 'fills', 'strokes', 'layoutMode', 'gap', 'padding',
@@ -57,8 +57,8 @@ export class ToolResultCleaner {
 
     // For oversized results, attempt structural cleaning if possible
     if (dataJson.length > MAX_DATA_CHARS) {
-      // inspectDesign: use structural cleaning that preserves visual props
-      if (cleaned.name === 'inspectDesign') {
+      // read_node: use structural cleaning that preserves visual props
+      if (cleaned.name === 'read_node') {
         cleaned.data = this.cleanInspectResult(cleaned.data);
         return cleaned;
       }
@@ -92,7 +92,7 @@ export class ToolResultCleaner {
     }
 
     // Results within budget
-    if (cleaned.name === 'inspectDesign') {
+    if (cleaned.name === 'read_node') {
       cleaned.data = this.cleanInspectResult(cleaned.data);
     } else if (cleaned.data.results) {
       cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
@@ -165,7 +165,7 @@ export class ToolResultCleaner {
     // Keep parent reference
     if (data.parentId) essentialData.parentId = data.parentId;
 
-    // Keep children skeleton for inspectDesign hierarchy results
+    // Keep children skeleton for read_node hierarchy results
     if (Array.isArray(data.children)) {
       essentialData.childrenCount = data.children.length;
       const MAX_CHILDREN_SKELETON = 5;
@@ -244,12 +244,12 @@ export class ToolResultCleaner {
   }
 
   // ================================================================
-  // inspectDesign-specific cleaning — preserves visual props for LLM
+  // read_node-specific cleaning — preserves visual props for LLM
   // ================================================================
 
   /**
-   * Cleans inspectDesign results while preserving visual properties.
-   * Handles all three modes: selection, hierarchy, node.
+   * Cleans read_node results while preserving visual properties.
+   * Handles selection, hierarchy, and node modes.
    */
   private cleanInspectResult(data: any): any {
     // selection mode: { count, nodes[] }
@@ -407,18 +407,18 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
-      // Aggressive pruning for large build_design instructions
-      if (tc.name === 'build_design' && typeof tc.args?.instructions === 'string') {
-        const originalLength = tc.args.instructions.length;
-        if (originalLength > 500) {
-          const lineCount = tc.args.instructions.split('\n').filter((l: string) => l.trim() && !l.trim().startsWith('#')).length;
+      // Aggressive pruning for large build_design operations
+      if (tc.name === 'build_design' && Array.isArray(tc.args?.operations)) {
+        const opsJson = JSON.stringify(tc.args.operations);
+        if (opsJson.length > 500) {
+          const opCount = tc.args.operations.length;
           return {
             ...tc,
             args: {
               ...(tc.args?.parentId && { parentId: tc.args.parentId }),
-              instructions: `[_truncated: ${lineCount} lines, ${originalLength} chars omitted. State tracked by Figma.]`,
+              operations: `[_truncated: ${opCount} operations, ${opsJson.length} chars omitted. State tracked by Figma.]`,
               _truncated: true,
-              _originalSize: originalLength
+              _originalSize: opsJson.length
             }
           };
         }
@@ -488,33 +488,12 @@ export class ToolResultCleaner {
   }
 
   private truncateArgs(toolName: string, sanitizedArgs: any, originalLength: number): any {
-    if (toolName === 'applyDesignPatch' && Array.isArray(sanitizedArgs.patches)) {
+    if (toolName === 'patch_node' && Array.isArray(sanitizedArgs.patches)) {
       return {
         patches: sanitizedArgs.patches.map((p: any) => ({
-          nodeId: p.nodeId || p.nodeRef,
-          _hasLayout: !!p.layout,
-          _hasStyles: !!p.styles,
-          _hasProperties: !!p.properties,
+          nodeId: p.nodeId,
+          _hasProps: !!p.props,
         })),
-        _truncated: true,
-        _originalSize: originalLength
-      };
-    } else if (toolName === 'renderElement' && sanitizedArgs.element) {
-      return {
-        parentId: sanitizedArgs.parentId,
-        element: {
-          type: sanitizedArgs.element.type,
-          props: this.truncateFigmaProps(sanitizedArgs.element.props),
-          childrenCount: Array.isArray(sanitizedArgs.element.children) ? sanitizedArgs.element.children.length : 0,
-          _childrenTruncated: true
-        },
-        _truncated: true,
-        _originalSize: originalLength
-      };
-    } else if (toolName === 'patchElement') {
-      return {
-        nodeId: sanitizedArgs.nodeId,
-        fragment: this.truncateFigmaProps(sanitizedArgs.fragment),
         _truncated: true,
         _originalSize: originalLength
       };

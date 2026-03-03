@@ -109,8 +109,8 @@ export class LoopDetector {
       const nameSample = tc.args?.name ? `|name:${this.truncate(tc.args.name, 64)}` : '';
       const contextSample = parentId ? `|parent:${this.truncate(parentId, 32)}` : '';
 
-      if (tc.name === 'build_design' && typeof tc.args?.instructions === 'string') {
-        const instrHash = this.hashString(tc.args.instructions.slice(0, 256));
+      if (tc.name === 'build_design' && Array.isArray(tc.args?.operations)) {
+        const instrHash = this.hashString(JSON.stringify(tc.args.operations).slice(0, 256));
         fingerprint = `|build:${instrHash}`;
       } else if (tc.name === 'patch_node' && Array.isArray(tc.args?.patches)) {
         const patchHash = this.hashString(JSON.stringify(
@@ -121,8 +121,6 @@ export class LoopDetector {
         const mode = tc.args?.mode || 'selection';
         const depth = tc.args?.depth ?? 5;
         fingerprint = `|mode:${mode}|depth:${depth}`;
-      } else if (tc.name === 'validate_design' && tc.args?.nodeId) {
-        fingerprint = `|validate:${this.truncate(tc.args.nodeId, 32)}`;
       } else if (tc.name === 'signal' && tc.args?.type) {
         const signalType = String(tc.args.type);
         const signalSummary = tc.args?.summary || tc.args?.title || tc.args?.analysis || '';
@@ -222,7 +220,6 @@ export class LoopDetector {
 
     // Only trigger for modify-only patterns (not read tools)
     const isModifyOnly = !toolNamePatterns[0].includes('read_node') &&
-                         !toolNamePatterns[0].includes('validate_design') &&
                          !toolNamePatterns[0].includes('signal');
     if (!isModifyOnly) return null;
 

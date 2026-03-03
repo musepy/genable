@@ -45,5 +45,5 @@ This project has existing UI components defined in code. Before creating new des
 query_knowledge({ source: "components", query: "Button" })
 → { results: [...] }
 
-build_design({ instructions: "..." })
+build_design({ "operations": [...] })
 ```

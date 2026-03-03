@@ -47,7 +47,7 @@ ${phases.plan.map(formatTool).join('\n')}`);
 
     if (phases.create.length > 0 || phases.modify.length > 0) {
         sections.push(`### Phase 3: Execution (Sequential, respect dependencies)
-Parent-child createNode calls MUST be sequential. Wait for parent nodeId before creating children.
+Parent-child create commands MUST be sequential. Wait for parent nodeId before creating children.
 ${[...phases.create, ...phases.modify].map(formatTool).join('\n')}`);
     }
 

@@ -4,7 +4,6 @@ import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
 import { searchDesignKnowledgeExecutor, projectUIExecutors } from '../../engine/agent/tools/unified/queryKnowledge'
-import { validateLayoutExecutor } from '../../engine/agent/tools/unified/validateDesign'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -543,15 +542,6 @@ export function useChat({
       })
 
       queue(1950, () => {
-        setRuntimePhase('verification')
-        setRuntimeProgress({ iteration: 14, maxIterations: 40 })
-        setRuntimeContextUsage({ current: 97738, max: 200000, percent: 49, visibleMessages: 3, hiddenMessages: 8 })
-        setLoadingStatus('Verifying output')
-        calls.unshift(buildCall('tc-4', 'validate_design', 'success', 73))
-        setFlowCalls([...calls])
-      })
-
-      queue(2500, () => {
         setLoadingStatus('Patching nodes')
         calls.unshift(buildCall('tc-5', 'patch_node', 'error', 3840, '3 patches failed'))
         setFlowCalls([...calls])

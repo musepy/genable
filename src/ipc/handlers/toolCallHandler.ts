@@ -14,10 +14,10 @@ import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 
 import { ActionExecutor } from '../../engine/actions/executor';
 import { FigmaAction } from '../../engine/actions/types';
-import { tokenizeLines, parseLine } from '../../engine/actions/parsing';
+import { operationsToParsedLines } from '../../engine/actions/operationAdapter';
 import { ActionCompiler } from '../../engine/actions/compiler';
 import { IncrementalExecutor } from '../../engine/actions/incrementalExecutor';
-import { validatePostOp, collectTreeAnomalies } from '../../engine/validation/postOpValidator';
+import { collectTreeAnomalies } from '../../engine/validation/postOpValidator';
 import { logger } from '../../utils/logger';
 
 export interface ToolCallData {
@@ -45,7 +45,7 @@ async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
 
 /**
  * Handle TOOL_CALL IPC events.
- * Routes to the 7 unified tool implementations.
+ * Routes to the unified tool implementations.
  */
 export async function handleToolCall(data: ToolCallData): Promise<void> {
   let { toolName, parameters, context, requestId } = data;
@@ -101,72 +101,32 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             response = { success: true, data: nSerialized };
             break;
           }
-          case 'variables': {
-            // Use Figma API to get local variables
-            const localVars = typeof figma !== 'undefined' && figma.variables
-              ? await figma.variables.getLocalVariablesAsync()
-              : [];
-            const varsSerialized = localVars.map((v: any) => ({
-              id: v.id,
-              name: v.name,
-              resolvedType: v.resolvedType,
-            }));
-            response = { success: true, data: varsSerialized };
-            break;
-          }
-          case 'styles': {
-            const localStyles = await figma.getLocalPaintStylesAsync();
-            const stylesSerialized = localStyles.map(s => ({
-              id: s.id,
-              name: s.name,
-              paints: s.paints
-            }));
-            response = { success: true, data: stylesSerialized };
-            break;
-          }
           default:
-            response = { success: false, error: { code: 'INVALID_MODE', message: `read_node mode '${readMode}' is not valid. Use 'selection', 'hierarchy', 'node', 'variables', or 'styles'.` } };
+            response = { success: false, error: { code: 'INVALID_MODE', message: `read_node mode '${readMode}' is not valid. Use 'selection', 'hierarchy', or 'node'.` } };
         }
         break;
       }
 
       case 'build_design': {
-        const { instructions, parentId: bdParentId, onError: bdOnError = 'continue', rollbackMode = 'none' } = parameters;
+        const { operations, parentId: bdParentId, onError: bdOnError = 'continue', rollbackMode = 'none' } = parameters;
 
-        if (!instructions || typeof instructions !== 'string' || instructions.trim().length === 0) {
+        if (!operations || !Array.isArray(operations) || operations.length === 0) {
           response = {
             success: false,
-            error: { code: 'EMPTY_INSTRUCTIONS', message: 'The instructions parameter must be a non-empty string.' }
+            error: { code: 'EMPTY_OPERATIONS', message: 'The operations parameter must be a non-empty array.' }
           };
           break;
         }
 
         try {
-          // 1. Tokenize: split instruction text into logical lines
-          const tokenizedLines = tokenizeLines(instructions);
+          // 1. Convert operations to ParsedLines
+          const parsedLines = operationsToParsedLines(operations);
 
-          if (tokenizedLines.length === 0) {
-            response = {
-              success: true,
-              data: {
-                success: true,
-                hasErrors: false,
-                idMap: {},
-                lineResults: [],
-                stats: { total: 0, created: 0, failed: 0, skipped: 0, warnings: 0 }
-              }
-            };
-            break;
-          }
-
-          // 2. Parse: convert each line into a structured ParsedLine
-          const parsedLines = tokenizedLines.map(line => parseLine(line));
-
-          // 3. Compile: convert ParsedLines to FigmaActions
+          // 2. Compile: convert ParsedLines to FigmaActions
           const compiler = new ActionCompiler();
           const { actions, errors } = compiler.compile(parsedLines, bdParentId);
 
-          // 4. Execute incrementally
+          // 3. Execute incrementally
           const bdExecutor = new IncrementalExecutor();
           const bdResult = await bdExecutor.execute(actions, errors, {
             onError: bdOnError,
@@ -174,13 +134,24 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             parentId: bdParentId,
           });
 
+          // Inline post-op validation: check the root node for anomalies
+          let bdAnomalies: any[] | undefined;
+          const bdRootId = bdParentId || Object.values(bdResult.idMap)[0];
+          if (bdRootId) {
+            const bdRootResolved = await resolveSceneNode(bdRootId);
+            if (bdRootResolved.ok) {
+              const found = collectTreeAnomalies(bdRootResolved.node, 5);
+              if (found.length > 0) bdAnomalies = found;
+            }
+          }
+
           response = {
             success: bdResult.success,
-            data: bdResult,
+            data: { ...bdResult, anomalies: bdAnomalies },
             error: bdResult.hasErrors
               ? {
                   code: 'PARTIAL_FAILURE',
-                  message: `${bdResult.stats.failed} of ${bdResult.stats.total} lines failed. ${bdResult.stats.created} nodes created successfully. Use idMap to reference existing nodes and fix only the failed lines.`
+                  message: `${bdResult.stats.failed} of ${bdResult.stats.total} operations failed. ${bdResult.stats.created} nodes created successfully. Use idMap to reference existing nodes and fix only the failed operations.`
                 }
               : undefined,
           };
@@ -219,6 +190,17 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
            }
         });
 
+        // Inline post-op validation on patched nodes
+        let patchAnomalies: any[] | undefined;
+        const patchRootId = patches[0]?.nodeId;
+        if (patchRootId) {
+          const patchResolved = await resolveSceneNode(patchRootId);
+          if (patchResolved.ok) {
+            const found = collectTreeAnomalies(patchResolved.node, 3);
+            if (found.length > 0) patchAnomalies = found;
+          }
+        }
+
         if (!execResult.success && failedResults.length > 0) {
           const firstFailure = failedResults[0];
           const errorContext = firstFailure.errorContext;
@@ -244,7 +226,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               },
               failureCount: failedResults.length,
               failureActionIds: failedResults.map(r => r.nodeId || ('nodeId' in r.action ? r.action.nodeId : undefined)),
-              warnings: allWarnings.length > 0 ? allWarnings : undefined
+              warnings: allWarnings.length > 0 ? allWarnings : undefined,
+              anomalies: patchAnomalies
             }
           };
         } else {
@@ -252,7 +235,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             success: execResult.success,
             data: {
               results: execResult.results,
-              warnings: allWarnings.length > 0 ? allWarnings : undefined
+              warnings: allWarnings.length > 0 ? allWarnings : undefined,
+              anomalies: patchAnomalies
             }
           };
         }
@@ -261,23 +245,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
       case 'delete_node': {
         response = await nodeLayoutService.deleteNode(parameters.nodeId);
-        break;
-      }
-
-      case 'validate_design': {
-        const valResolved = await resolveSceneNode(parameters.nodeId);
-        if (!valResolved.ok) { response = valResolved.response; break; }
-        const valNode = valResolved.node;
-        const valResult = validatePostOp(valNode, {});
-        const anomalyResult = collectTreeAnomalies(valNode, 5);
-        response = {
-          success: true,
-          data: {
-            valid: valResult.length === 0 && anomalyResult.length === 0,
-            issues: valResult.length > 0 ? valResult : undefined,
-            anomalies: anomalyResult.length > 0 ? anomalyResult : undefined
-          }
-        };
         break;
       }
 

@@ -307,7 +307,34 @@ export class ActionExecutor {
              parentNode.appendChild(iconNode);
            }
            try {
-             const warnings = await this.applyProps(iconNode, action.props);
+             // Extract vector-specific props — these should penetrate to vector children, not the outer SVG frame
+             const iconFills = action.props.fills;
+             const iconStrokes = action.props.strokes;
+             const iconStrokeWeight = action.props.strokeWeight;
+             const propsForFrame = { ...action.props };
+             delete propsForFrame.fills;
+             delete propsForFrame.strokes;
+             delete propsForFrame.strokeWeight;
+
+             const warnings = await this.applyProps(iconNode, propsForFrame);
+
+             // Apply fills/strokes/strokeWeight to vector children
+             if (iconFills || iconStrokes || iconStrokeWeight !== undefined) {
+               const normalizedFills = iconFills ? this.normalizePaints(iconFills) : undefined;
+               const normalizedStrokes = iconStrokes ? this.normalizePaints(iconStrokes) : undefined;
+               for (const child of iconNode.findAll()) {
+                 if (normalizedFills && 'fills' in child) {
+                   (child as any).fills = normalizedFills;
+                 }
+                 if (normalizedStrokes && 'strokes' in child) {
+                   (child as any).strokes = normalizedStrokes;
+                 }
+                 if (iconStrokeWeight !== undefined && 'strokeWeight' in child) {
+                   (child as any).strokeWeight = iconStrokeWeight;
+                 }
+               }
+             }
+
              return { success: true, nodeId: iconNode.id, warnings: warnings.length ? warnings : undefined };
            } catch (e: any) {
              iconNode.remove();

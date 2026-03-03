@@ -20,7 +20,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   // REDUNDANT_ERROR_DROP_THRESHOLD moved to context/constants.ts
 
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
-  LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for inspectDesign
+  LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for read_node
 
   /** Default timeout for a single tool execution in milliseconds */
   DEFAULT_TOOL_TIMEOUT_MS: 30000,

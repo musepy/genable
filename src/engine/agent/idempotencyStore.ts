@@ -30,13 +30,13 @@ export function computeRequestHash(canonicalParams: string): string {
  * Only includes fields that affect execution outcome.
  */
 export function canonicalizeBuildDesignParams(params: {
-  instructions: string;
+  operations: any[];
   parentId?: string;
   onError?: string;
   rollbackMode?: string;
 }): string {
   return JSON.stringify({
-    instructions: params.instructions.trim(),
+    operations: params.operations,
     parentId: params.parentId ?? null,
     onError: params.onError ?? 'continue',
     rollbackMode: params.rollbackMode ?? 'none',

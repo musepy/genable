@@ -27,7 +27,7 @@ export const CONTEXT_CONSTANTS = {
 
   /**
    * Max chars for a single tool call's args when stored in history.
-   * ~375 tokens. Prevents large build_design instructions from bloating context.
+   * ~375 tokens. Prevents large build_design operations from bloating context.
    */
   MAX_HISTORY_ARGS_CHARS: 1500,
 } as const;

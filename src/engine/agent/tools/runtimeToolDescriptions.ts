@@ -58,8 +58,8 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
   {
     tool: 'build_design',
     mode: 'EXECUTION',
-    required: [{ name: 'instructions', check: 'required' }],
-    repairHint: 'provide a non-empty instructions string',
+    required: [{ name: 'operations', check: 'non_empty_array' }],
+    repairHint: 'provide a non-empty "operations" array with at least one operation object',
   },
   {
     tool: 'patch_node',
@@ -87,12 +87,6 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
       isValid: (args) => typeof args?.source === 'string' && KNOWLEDGE_SOURCES.has(args.source),
     }],
     repairHint: 'provide "source" as one of knowledge, components, tokens, or skill',
-  },
-  {
-    tool: 'validate_design',
-    mode: 'EXECUTION',
-    required: [{ name: 'nodeId', trim: true, check: 'required' }],
-    repairHint: 'provide a non-empty "nodeId"',
   },
 ];
 

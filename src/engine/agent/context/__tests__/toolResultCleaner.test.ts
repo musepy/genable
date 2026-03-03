@@ -3,7 +3,7 @@ import { ToolResultCleaner } from '../toolResultCleaner';
 
 describe('ToolResultCleaner', () => {
   const tools: any[] = [
-    { name: 'build_design', parameters: { properties: { instructions: { type: 'string' } } } }
+    { name: 'build_design', parameters: { properties: { operations: { type: 'array' } } } }
   ];
   const cleaner = new ToolResultCleaner(tools);
 
@@ -81,14 +81,14 @@ describe('ToolResultCleaner', () => {
       success: false,
       error: {
         code: 'TOOL_VALIDATION_ERROR',
-        message: 'Validation Error: build_design is missing required parameter(s): instructions.',
+        message: 'Validation Error: build_design is missing required parameter(s): operations.',
         details: {
           tool: 'build_design',
           mode: 'EXECUTION',
-          missing: ['instructions'],
+          missing: ['operations'],
           invalid: [],
           receivedKeys: ['parentId'],
-          repairHint: 'provide a non-empty instructions string',
+          repairHint: 'provide a non-empty "operations" array with at least one operation object',
           extra: 'should be dropped'
         }
       }
@@ -99,10 +99,10 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.error.details).toEqual({
       tool: 'build_design',
       mode: 'EXECUTION',
-      missing: ['instructions'],
+      missing: ['operations'],
       invalid: [],
       receivedKeys: ['parentId'],
-      repairHint: 'provide a non-empty instructions string'
+      repairHint: 'provide a non-empty "operations" array with at least one operation object'
     });
   });
 
@@ -120,10 +120,10 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.error.details).toBeUndefined();
   });
 
-  describe('inspectDesign specific cleaning', () => {
+  describe('read_node specific cleaning', () => {
     it('preserves visual properties in hierarchy mode', () => {
       const rawResult = {
-        name: 'inspectDesign',
+        name: 'read_node',
         success: true,
         data: {
           id: 'root-1',
@@ -162,9 +162,9 @@ describe('ToolResultCleaner', () => {
       expect(cleaned.data.children[0].props.characters).toBe('Hello World');
     });
 
-    it('preserves structured anomalies in inspectDesign hierarchy mode', () => {
+    it('preserves structured anomalies in read_node hierarchy mode', () => {
       const rawResult = {
-        name: 'inspectDesign',
+        name: 'read_node',
         success: true,
         data: {
           id: 'root-1',
@@ -216,7 +216,7 @@ describe('ToolResultCleaner', () => {
       }));
 
       const rawResult = {
-        name: 'inspectDesign',
+        name: 'read_node',
         success: true,
         data: {
           id: 'root-1',
@@ -250,7 +250,7 @@ describe('ToolResultCleaner', () => {
 
     it('preserves selection format (nodes array + count)', () => {
       const rawResult = {
-        name: 'inspectDesign',
+        name: 'read_node',
         success: true,
         data: {
           count: 2,

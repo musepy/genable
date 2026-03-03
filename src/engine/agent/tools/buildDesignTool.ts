@@ -2,12 +2,12 @@
  * @file buildDesignTool.ts
  * @description Tool definition and executor for the build_design tool.
  *
- * build_design accepts a multi-line instruction text where each line encodes a
- * single design command (create / update / delete / icon / image). The pipeline:
- *   1. tokenizeLines → split instructions into logical lines
- *   2. parseLine    → parse each line into structured ParsedLine
- *   3. ActionCompiler.compile → convert ParsedLines to FigmaActions
- *   4. IncrementalExecutor.execute → run actions one by one with dependency tracking
+ * build_design accepts a typed JSON array of operations where each element
+ * encodes a single design command (create / update / delete / icon / image).
+ * The pipeline:
+ *   1. operationsToParsedLines → convert operations to ParsedLine[]
+ *   2. ActionCompiler.compile   → convert ParsedLines to FigmaActions
+ *   3. IncrementalExecutor.execute → run actions one by one with dependency tracking
  */
 
 import { ToolDefinition, ToolExecutor } from './types';
@@ -15,8 +15,7 @@ import {
   BuildDesignParams,
   BuildDesignResult,
 } from '../../actions/buildDesignTypes';
-import { tokenizeLines } from '../../actions/parsing';
-import { parseLine } from '../../actions/parsing';
+import { operationsToParsedLines } from '../../actions/operationAdapter';
 import { ActionCompiler } from '../../actions/compiler';
 import { IncrementalExecutor } from '../../actions/incrementalExecutor';
 
@@ -30,21 +29,20 @@ export const buildDesignDefinition: ToolDefinition = {
   display: { displayName: 'Build Design', group: 'design' },
   executionStrategy: 'sequential',
   idempotent: true,
-  dependencies: ['planDesign'],
+  dependencies: [],
   description: `
-[BUILD] Execute a multi-line design instruction script in a single call.
+[BUILD] Execute a batch of design operations in a single call.
 
-Each line of the \`instructions\` parameter is one command. Supported commands:
-  create(TYPE, parent=ref, { props })  — Create a new node (FRAME, TEXT, RECTANGLE, ELLIPSE, LINE)
-  update(ref, { props })               — Update properties on an existing node
-  delete(ref)                          — Remove a node from the document
-  icon(parent=ref, { iconName, ... })  — Create an icon from the Iconify library
-  image(parent=ref, { width, height }) — Create an image placeholder
+The \`operations\` parameter is a JSON array where each element is one operation object with an \`op\` field:
 
-Lines beginning with '#' are comments and are ignored.
-A line may bind a symbol: \`mySymbol = create(FRAME, ...)\`
-Symbols can be referenced in subsequent lines as parent or target.
-Aliases: createFrame/createText/createShape → create, setLayout/setStyles/updateProps → update, createIcon → icon, deleteNode → delete.
+  { "op": "create", "symbol": "ref", "type": "FRAME|TEXT|RECTANGLE|ELLIPSE|LINE", "parent": "ref", "props": {...} }
+  { "op": "update", "target": "ref", "props": {...} }
+  { "op": "delete", "target": "ref" }
+  { "op": "icon",   "symbol": "ref", "parent": "ref", "props": { "iconName": "...", ... } }
+  { "op": "image",  "symbol": "ref", "parent": "ref", "props": { "width": N, "height": N } }
+
+\`symbol\` binds a name so later operations can reference it as \`parent\` or \`target\`.
+\`type\` defaults to "FRAME" if omitted on create.
 
 ## CRITICAL SIZING RULE
 Figma defaults ALL frames to 100×100px when width/height is omitted.
@@ -54,53 +52,89 @@ For auto-layout containers: set width explicitly + layoutSizingVertical: "HUG" t
 For children in auto-layout: use layoutSizingHorizontal: "FILL" to stretch to parent width.
 
 ## Example — Simple Card
-\`\`\`
-card = create(FRAME, { name: "Card", width: 400, layoutSizingVertical: "HUG", layoutMode: "VERTICAL", itemSpacing: 16, padding: 24, fills: ["#FFFFFF"], cornerRadius: 16, effects: [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":4},"radius":16}] })
-title = create(TEXT, parent=card, { characters: "Card Title", fontSize: 20, fontWeight: "Bold", fills: ["#111827"], layoutSizingHorizontal: "FILL" })
-desc = create(TEXT, parent=card, { characters: "Description text", fontSize: 14, fills: ["#6B7280"], layoutSizingHorizontal: "FILL" })
+\`\`\`json
+build_design({
+  "operations": [
+    { "op": "create", "symbol": "card", "type": "FRAME", "props": { "name": "Card", "width": 400, "layoutSizingVertical": "HUG", "layoutMode": "VERTICAL", "itemSpacing": 16, "padding": 24, "fills": ["#FFFFFF"], "cornerRadius": 16, "effects": [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":4},"radius":16}] } },
+    { "op": "create", "symbol": "title", "type": "TEXT", "parent": "card", "props": { "characters": "Card Title", "fontSize": 20, "fontWeight": "Bold", "fills": ["#111827"], "layoutSizingHorizontal": "FILL" } },
+    { "op": "create", "symbol": "desc", "type": "TEXT", "parent": "card", "props": { "characters": "Description text", "fontSize": 14, "fills": ["#6B7280"], "layoutSizingHorizontal": "FILL" } }
+  ]
+})
 \`\`\`
 
 ## Example — Login Form (Input, Button, Divider)
-\`\`\`
-root = create(FRAME, { name: "Login Card", width: 420, layoutSizingVertical: "HUG", layoutMode: "VERTICAL", itemSpacing: 24, padding: 32, fills: ["#FFFFFF"], cornerRadius: 16, effects: [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":8},"radius":24}] })
-heading = create(TEXT, parent=root, { characters: "Sign In", fontSize: 28, fontWeight: "Bold", fills: ["#111827"] })
-# Email input
-emailWrap = create(FRAME, parent=root, { name: "Email Field", layoutMode: "VERTICAL", itemSpacing: 6, layoutSizingHorizontal: "FILL", layoutSizingVertical: "HUG" })
-emailLabel = create(TEXT, parent=emailWrap, { characters: "Email", fontSize: 14, fontWeight: "Medium", fills: ["#374151"] })
-emailInput = create(FRAME, parent=emailWrap, { name: "Email Input", height: 44, layoutSizingHorizontal: "FILL", layoutMode: "HORIZONTAL", padding: 12, fills: ["#F9FAFB"], cornerRadius: 8, strokes: ["#D1D5DB"], strokeWeight: 1 })
-emailPlaceholder = create(TEXT, parent=emailInput, { characters: "you@example.com", fontSize: 14, fills: ["#9CA3AF"] })
-# Password input
-passWrap = create(FRAME, parent=root, { name: "Password Field", layoutMode: "VERTICAL", itemSpacing: 6, layoutSizingHorizontal: "FILL", layoutSizingVertical: "HUG" })
-passLabel = create(TEXT, parent=passWrap, { characters: "Password", fontSize: 14, fontWeight: "Medium", fills: ["#374151"] })
-passInput = create(FRAME, parent=passWrap, { name: "Password Input", height: 44, layoutSizingHorizontal: "FILL", layoutMode: "HORIZONTAL", padding: 12, fills: ["#F9FAFB"], cornerRadius: 8, strokes: ["#D1D5DB"], strokeWeight: 1 })
-passPlaceholder = create(TEXT, parent=passInput, { characters: "••••••••", fontSize: 14, fills: ["#9CA3AF"] })
-# Submit button
-submitBtn = create(FRAME, parent=root, { name: "Submit Button", height: 48, layoutSizingHorizontal: "FILL", layoutMode: "HORIZONTAL", primaryAxisAlignItems: "CENTER", counterAxisAlignItems: "CENTER", fills: ["#4F46E5"], cornerRadius: 10 })
-submitLabel = create(TEXT, parent=submitBtn, { characters: "Sign In", fontSize: 16, fontWeight: "Bold", fills: ["#FFFFFF"] })
-# Divider
-divider = create(RECTANGLE, parent=root, { name: "Divider", height: 1, layoutSizingHorizontal: "FILL", fills: ["#E5E7EB"] })
-footer = create(TEXT, parent=root, { characters: "Don't have an account? Sign up", fontSize: 14, fills: ["#6B7280"], layoutSizingHorizontal: "FILL" })
+\`\`\`json
+build_design({
+  "operations": [
+    { "op": "create", "symbol": "root", "type": "FRAME", "props": { "name": "Login Card", "width": 420, "layoutSizingVertical": "HUG", "layoutMode": "VERTICAL", "itemSpacing": 24, "padding": 32, "fills": ["#FFFFFF"], "cornerRadius": 16, "effects": [{"type":"DROP_SHADOW","color":"#0000001A","offset":{"x":0,"y":8},"radius":24}] } },
+    { "op": "create", "symbol": "heading", "type": "TEXT", "parent": "root", "props": { "characters": "Sign In", "fontSize": 28, "fontWeight": "Bold", "fills": ["#111827"] } },
+    { "op": "create", "symbol": "emailWrap", "type": "FRAME", "parent": "root", "props": { "name": "Email Field", "layoutMode": "VERTICAL", "itemSpacing": 6, "layoutSizingHorizontal": "FILL", "layoutSizingVertical": "HUG" } },
+    { "op": "create", "symbol": "emailLabel", "type": "TEXT", "parent": "emailWrap", "props": { "characters": "Email", "fontSize": 14, "fontWeight": "Medium", "fills": ["#374151"] } },
+    { "op": "create", "symbol": "emailInput", "type": "FRAME", "parent": "emailWrap", "props": { "name": "Email Input", "height": 44, "layoutSizingHorizontal": "FILL", "layoutMode": "HORIZONTAL", "padding": 12, "fills": ["#F9FAFB"], "cornerRadius": 8, "strokes": ["#D1D5DB"], "strokeWeight": 1 } },
+    { "op": "create", "symbol": "emailPlaceholder", "type": "TEXT", "parent": "emailInput", "props": { "characters": "you@example.com", "fontSize": 14, "fills": ["#9CA3AF"] } },
+    { "op": "create", "symbol": "passWrap", "type": "FRAME", "parent": "root", "props": { "name": "Password Field", "layoutMode": "VERTICAL", "itemSpacing": 6, "layoutSizingHorizontal": "FILL", "layoutSizingVertical": "HUG" } },
+    { "op": "create", "symbol": "passLabel", "type": "TEXT", "parent": "passWrap", "props": { "characters": "Password", "fontSize": 14, "fontWeight": "Medium", "fills": ["#374151"] } },
+    { "op": "create", "symbol": "passInput", "type": "FRAME", "parent": "passWrap", "props": { "name": "Password Input", "height": 44, "layoutSizingHorizontal": "FILL", "layoutMode": "HORIZONTAL", "padding": 12, "fills": ["#F9FAFB"], "cornerRadius": 8, "strokes": ["#D1D5DB"], "strokeWeight": 1 } },
+    { "op": "create", "symbol": "passPlaceholder", "type": "TEXT", "parent": "passInput", "props": { "characters": "••••••••", "fontSize": 14, "fills": ["#9CA3AF"] } },
+    { "op": "create", "symbol": "submitBtn", "type": "FRAME", "parent": "root", "props": { "name": "Submit Button", "height": 48, "layoutSizingHorizontal": "FILL", "layoutMode": "HORIZONTAL", "primaryAxisAlignItems": "CENTER", "counterAxisAlignItems": "CENTER", "fills": ["#4F46E5"], "cornerRadius": 10 } },
+    { "op": "create", "symbol": "submitLabel", "type": "TEXT", "parent": "submitBtn", "props": { "characters": "Sign In", "fontSize": 16, "fontWeight": "Bold", "fills": ["#FFFFFF"] } },
+    { "op": "create", "symbol": "divider", "type": "RECTANGLE", "parent": "root", "props": { "name": "Divider", "height": 1, "layoutSizingHorizontal": "FILL", "fills": ["#E5E7EB"] } },
+    { "op": "create", "symbol": "footer", "type": "TEXT", "parent": "root", "props": { "characters": "Don't have an account? Sign up", "fontSize": 14, "fills": ["#6B7280"], "layoutSizingHorizontal": "FILL" } }
+  ]
+})
 \`\`\`
 
-Returns: idMap (symbol → real Figma node ID), lineResults (per-line status), stats.
+Returns: idMap (symbol → real Figma node ID), lineResults (per-operation status), stats.
 
 ## IMPORTANT — Handling partial failures
 
-When some lines fail, the result includes idMap with all SUCCESSFUL nodes and lineResults showing exactly which lines failed and why.
+When some operations fail, the result includes idMap with all SUCCESSFUL nodes and lineResults showing exactly which operations failed and why.
 
 DO NOT regenerate the entire design on partial failure. Instead:
-1. Read the lineResults to identify which specific lines failed and their error messages.
+1. Read the lineResults to identify which specific operations failed and their error messages.
 2. Use the idMap to reference nodes that were successfully created.
-3. Call build_design again with ONLY the corrected failed lines, using real Figma IDs from idMap as parent references.
+3. Call build_design again with ONLY the corrected failed operations, using real Figma IDs from idMap as parent references.
 4. If a parent node failed, fix the parent first, then fix its children in a subsequent call.
 `,
   parameters: {
     type: 'object',
     properties: {
-      instructions: {
-        type: 'string',
+      operations: {
+        type: 'array',
         description:
-          'Multi-line instruction script. Each non-empty, non-comment line is one command. Commands: create, update, delete, icon, image. Lines may assign symbols with "$symbol = command ...".',
+          'Array of design operations. Each element has an "op" field (create/update/delete/icon/image) plus operation-specific fields.',
+        items: {
+          type: 'object',
+          description: 'A single design operation.',
+          properties: {
+            op: {
+              type: 'string',
+              enum: ['create', 'update', 'delete', 'icon', 'image'],
+              description: 'Operation type.',
+            },
+            symbol: {
+              type: 'string',
+              description: 'Bind a name for later reference as parent/target. Used with create/icon/image.',
+            },
+            type: {
+              type: 'string',
+              description: 'Node type for create: FRAME, TEXT, RECTANGLE, ELLIPSE, LINE. Defaults to FRAME.',
+            },
+            parent: {
+              type: 'string',
+              description: 'Parent reference: a symbol from an earlier op or a real Figma node ID.',
+            },
+            target: {
+              type: 'string',
+              description: 'Target reference for update/delete: a symbol or real Figma node ID.',
+            },
+            props: {
+              type: 'object',
+              description: 'Figma node properties (name, fills, width, height, layoutMode, etc.).',
+            },
+          },
+          required: ['op'],
+        },
       },
       parentId: {
         type: 'string',
@@ -111,7 +145,7 @@ DO NOT regenerate the entire design on partial failure. Instead:
         type: 'string',
         enum: ['continue', 'abort'],
         description:
-          'Strategy when a line fails. "continue" (default) skips failed lines and proceeds; "abort" stops execution immediately.',
+          'Strategy when an operation fails. "continue" (default) skips failed operations and proceeds; "abort" stops execution immediately.',
       },
       rollbackMode: {
         type: 'string',
@@ -125,11 +159,11 @@ DO NOT regenerate the entire design on partial failure. Instead:
           'Plan step ID. If provided and the call succeeds, the step is automatically marked as completed.',
       },
     },
-    required: ['instructions'],
+    required: ['operations'],
   },
   errors: {
-    EMPTY_INSTRUCTIONS: 'The instructions parameter must be a non-empty string.',
-    PARTIAL_FAILURE: 'Some lines failed during execution.',
+    EMPTY_OPERATIONS: 'The operations parameter must be a non-empty array.',
+    PARTIAL_FAILURE: 'Some operations failed during execution.',
     EXECUTION_ERROR: 'An unexpected error occurred in the build_design pipeline.',
   },
 };
@@ -141,50 +175,34 @@ DO NOT regenerate the entire design on partial failure. Instead:
 /**
  * Full executor for build_design.
  *
- * Pipeline: tokenize → parse → compile → incremental execute.
+ * Pipeline: operationsToParsedLines → compile → incremental execute.
  */
 export const buildDesignExecutor: ToolExecutor<BuildDesignParams, BuildDesignResult> = async (
   params,
   _context
 ) => {
-  const { instructions, parentId, onError = 'continue', rollbackMode = 'none' } = params;
+  const { operations, parentId, onError = 'continue', rollbackMode = 'none' } = params;
 
   // --- Input validation ---
-  if (!instructions || typeof instructions !== 'string' || instructions.trim().length === 0) {
+  if (!operations || !Array.isArray(operations) || operations.length === 0) {
     return {
       success: false,
       error: {
-        code: 'EMPTY_INSTRUCTIONS',
-        message: 'The instructions parameter must be a non-empty string.',
+        code: 'EMPTY_OPERATIONS',
+        message: 'The operations parameter must be a non-empty array.',
       },
     };
   }
 
   try {
-    // 1. Tokenize: split instruction text into logical lines
-    const tokenizedLines = tokenizeLines(instructions);
+    // 1. Convert operations to ParsedLines
+    const parsedLines = operationsToParsedLines(operations);
 
-    if (tokenizedLines.length === 0) {
-      return {
-        success: true,
-        data: {
-          success: true,
-          hasErrors: false,
-          idMap: {},
-          lineResults: [],
-          stats: { total: 0, created: 0, failed: 0, skipped: 0, warnings: 0 },
-        },
-      };
-    }
-
-    // 2. Parse: convert each line into a structured ParsedLine
-    const parsedLines = tokenizedLines.map(line => parseLine(line));
-
-    // 3. Compile: convert ParsedLines to FigmaActions
+    // 2. Compile: convert ParsedLines to FigmaActions
     const compiler = new ActionCompiler();
     const { actions, errors } = compiler.compile(parsedLines, parentId);
 
-    // 4. Execute incrementally
+    // 3. Execute incrementally
     const executor = new IncrementalExecutor();
     const result = await executor.execute(actions, errors, {
       onError,
@@ -192,7 +210,7 @@ export const buildDesignExecutor: ToolExecutor<BuildDesignParams, BuildDesignRes
       parentId,
     });
 
-    // Build detailed error message with per-line failure info
+    // Build detailed error message with per-operation failure info
     let errorInfo: { code: string; message: string } | undefined;
     if (result.hasErrors) {
       const failedLines = result.lineResults
@@ -202,10 +220,10 @@ export const buildDesignExecutor: ToolExecutor<BuildDesignParams, BuildDesignRes
           const reason = lr.error || lr.skipReason || 'unknown';
           const sym = lr.symbol ? `${lr.symbol} = ` : '';
           const cmd = lr.command || '?';
-          return `  L${lr.line} ${sym}${cmd}: ${reason}`;
+          return `  #${lr.line} ${sym}${cmd}: ${reason}`;
         });
 
-      const summary = `${result.stats.failed} of ${result.stats.total} lines failed. ${result.stats.created} nodes created successfully.`;
+      const summary = `${result.stats.failed} of ${result.stats.total} operations failed. ${result.stats.created} nodes created successfully.`;
       const details = failedLines.length > 0 ? `\nFailed:\n${failedLines.join('\n')}` : '';
       const overflow = result.lineResults.filter(lr => lr.status === 'failed' || lr.status === 'skipped').length > 10
         ? `\n  ... and ${result.lineResults.filter(lr => lr.status === 'failed' || lr.status === 'skipped').length - 10} more`
@@ -213,7 +231,7 @@ export const buildDesignExecutor: ToolExecutor<BuildDesignParams, BuildDesignRes
 
       errorInfo = {
         code: 'PARTIAL_FAILURE',
-        message: `${summary}${details}${overflow}\nUse idMap to reference existing nodes and fix only the failed lines.`,
+        message: `${summary}${details}${overflow}\nUse idMap to reference existing nodes and fix only the failed operations.`,
       };
     }
 

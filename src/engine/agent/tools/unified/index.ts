@@ -9,7 +9,6 @@ export { buildDesignDefinition as unifiedBuildDesignDefinition } from '../buildD
 export { patchNodeDefinition as unifiedPatchNodeDefinition } from './patchNode';
 export { deleteNodeDefinition as unifiedDeleteNodeDefinition } from './deleteNode';
 export { queryKnowledgeDefinition } from './queryKnowledge';
-export { validateDesignDefinition } from './validateDesign';
 export { captureScreenshotDefinition } from './captureScreenshot';
 export { signalDefinition } from './signal';
 
@@ -18,14 +17,13 @@ import { buildDesignDefinition } from '../buildDesignTool';
 import { patchNodeDefinition } from './patchNode';
 import { deleteNodeDefinition } from './deleteNode';
 import { queryKnowledgeDefinition } from './queryKnowledge';
-import { validateDesignDefinition } from './validateDesign';
 import { captureScreenshotDefinition } from './captureScreenshot';
 import { signalDefinition } from './signal';
 
 import { ToolDefinition } from '../types';
 
 /**
- * All 8 unified tool definitions.
+ * All 7 unified tool definitions.
  * Drop-in replacement for the old agentTools array.
  */
 export const unifiedTools: ToolDefinition[] = [
@@ -35,6 +33,5 @@ export const unifiedTools: ToolDefinition[] = [
   patchNodeDefinition,          // Modify existing nodes
   deleteNodeDefinition,         // Delete nodes
   queryKnowledgeDefinition,     // Query knowledge/components/tokens
-  validateDesignDefinition,     // Validate designs
   captureScreenshotDefinition,  // Visual screenshot capture
 ];

@@ -9,12 +9,12 @@ interface DigestMeta {
  */
 const parameterExtractors: Record<string, (params: any) => string> = {
   build_design: (params) => {
-    if (!params.instructions || typeof params.instructions !== 'string') {
-      return params._truncated ? '[Truncated Instructions]' : JSON.stringify(params).slice(0, 100);
+    if (!Array.isArray(params.operations)) {
+      return params._truncated ? '[Truncated Operations]' : JSON.stringify(params).slice(0, 100);
     }
-    const lines = params.instructions.split('\n').filter((l: string) => l.trim());
-    const preview = lines.slice(0, 2).join('; ').slice(0, 80);
-    return `${lines.length} lines: ${preview}${lines.length > 2 ? '...' : ''}`;
+    const count = params.operations.length;
+    const preview = params.operations.slice(0, 2).map((op: any) => `${op.op}(${op.symbol || op.target || ''})`).join(', ');
+    return `${count} ops: ${preview}${count > 2 ? '...' : ''}`;
   },
   patch_node: (params) => {
     if (!Array.isArray(params.patches)) return JSON.stringify(params).slice(0, 100);
@@ -32,7 +32,6 @@ const parameterExtractors: Record<string, (params: any) => string> = {
   },
   signal: (params) => `${params.type || 'unknown'}: ${(params.summary || params.title || '').slice(0, 80)}`,
   query_knowledge: (params) => `source: ${params.source || '?'}, query: ${(params.query || '').slice(0, 60)}`,
-  validate_design: (params) => `nodeId: ${params.nodeId || '?'}`,
   delete_node: (params) => `nodeId: ${params.nodeId || '?'}`,
 };
 

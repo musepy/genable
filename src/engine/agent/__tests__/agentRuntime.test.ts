@@ -133,11 +133,11 @@ describe('AgentRuntime', () => {
     expect(firstResponse.success).toBe(false);
     expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
     expect(firstResponse.error.message).toContain('Validation Error: build_design');
-    expect(firstResponse.error.message).toContain('instructions');
+    expect(firstResponse.error.message).toContain('operations');
     expect(firstResponse.error.details).toMatchObject({
       tool: 'build_design',
       mode: 'EXECUTION',
-      missing: ['instructions']
+      missing: ['operations']
     });
   });
 

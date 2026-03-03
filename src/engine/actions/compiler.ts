@@ -1,14 +1,11 @@
 /**
  * @file compiler.ts
- * @description ActionCompiler converts ParsedLine[] (produced by the parsing pipeline)
+ * @description ActionCompiler converts ParsedLine[] (produced by operationAdapter)
  * into FigmaAction[] that can be fed to ActionExecutor.
- *
- * TODO: Once Phase 3 is complete, replace the local ParsedLine interface below
- * with an import from './parsing' (or wherever the parsing pipeline exports it).
  */
 
 import { FigmaAction } from './types';
-import { ParsedLine } from './parsing';
+import { ParsedLine } from './buildDesignTypes';
 
 export type { ParsedLine };
 

@@ -37,5 +37,5 @@ Use `query_knowledge` BEFORE creating complex components to ensure best practice
 query_knowledge({ source: "knowledge", query: "pricing table anatomy" })
 → { results: [...] }
 
-build_design({ instructions: "..." })
+build_design({ "operations": [...] })
 ```

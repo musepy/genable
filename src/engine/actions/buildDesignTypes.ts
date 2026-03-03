@@ -2,10 +2,58 @@
  * @file buildDesignTypes.ts
  * @description Type definitions for the build_design tool.
  *
- * The build_design tool accepts a multi-line instruction text where each line
- * is a command (create/update/delete/icon/image). These types define the
- * parameter contract, per-line execution results, and overall result shape.
+ * The build_design tool accepts a typed JSON array of operations (create/update/
+ * delete/icon/image). These types define the parameter contract, internal
+ * ParsedLine representation, per-line execution results, and overall result shape.
  */
+
+// ==========================================
+// Operation (LLM-facing JSON schema)
+// ==========================================
+
+/**
+ * A single design operation in the `operations` array.
+ * Tagged union on the `op` field.
+ */
+export type Operation =
+  | { op: 'create'; symbol?: string; type?: string; parent?: string; props?: Record<string, any> }
+  | { op: 'update'; target: string; props: Record<string, any> }
+  | { op: 'delete'; target: string }
+  | { op: 'icon'; symbol?: string; parent?: string; props?: Record<string, any> }
+  | { op: 'image'; symbol?: string; parent?: string; props?: Record<string, any> };
+
+// ==========================================
+// ParsedLine (internal compiler input)
+// ==========================================
+
+/**
+ * Structured representation of a single operation, ready for ActionCompiler.
+ * Produced by operationsToParsedLines() from the Operation[] array.
+ */
+export interface ParsedLine {
+  /** 1-based operation index */
+  lineNumber: number;
+  /** JSON summary of the original operation (for diagnostics) */
+  raw: string;
+  /** Binding name (symbol), e.g. "header" */
+  symbol?: string;
+  /** Normalized command: create | update | delete | icon | image */
+  command: string;
+  /** For `create`: the Figma node type (FRAME, TEXT, RECTANGLE, ELLIPSE, LINE, etc.) */
+  nodeType?: string;
+  /** For `update` / `delete`: the target node reference (symbol or Figma ID) */
+  targetRef?: string;
+  /** The parent node reference */
+  parentRef?: string;
+  /** Properties object */
+  props?: Record<string, any>;
+  /**
+   * Auto-computed list of symbol references this line depends on.
+   * A reference is a dependency if it doesn't contain `:` (not a real Figma ID)
+   * and is not the literal keyword "root".
+   */
+  dependsOn: string[];
+}
 
 // ==========================================
 // Tool Parameters
@@ -15,8 +63,8 @@
  * Parameters accepted by the build_design tool.
  */
 export interface BuildDesignParams {
-  /** The instruction text. Each line is one command. The LLM generates this. */
-  instructions: string;
+  /** Typed array of design operations. Each element is one command. */
+  operations: Operation[];
   /** Real Figma node ID to use as the root mount point. Defaults to current page. */
   parentId?: string;
   /** Strategy when a line fails. 'continue' skips failed lines; 'abort' stops execution. Default: 'continue'. */
@@ -32,26 +80,26 @@ export interface BuildDesignParams {
 // ==========================================
 
 /**
- * Result for a single instruction line.
+ * Result for a single operation.
  */
 export interface LineResult {
-  /** 1-based line index in the original instructions string. */
+  /** 1-based operation index. */
   line: number;
-  /** The original raw text of the instruction line. */
+  /** JSON summary of the original operation. */
   raw: string;
-  /** Execution outcome for this line. */
+  /** Execution outcome for this operation. */
   status: 'ok' | 'failed' | 'skipped' | 'warning';
   /** Parsed command name (e.g. 'create', 'update', 'delete'). */
   command?: string;
-  /** Binding symbol if the line assigned a variable (e.g. '$btn'). */
+  /** Binding symbol if the operation assigned a variable (e.g. 'btn'). */
   symbol?: string;
   /** Real Figma node ID of the created or affected node, if applicable. */
   nodeId?: string;
   /** Error message if status is 'failed'. */
   error?: string;
-  /** Human-readable reason if the line was skipped (e.g. 'DEPENDENCY_FAILED'). */
+  /** Human-readable reason if the operation was skipped (e.g. 'DEPENDENCY_FAILED'). */
   skipReason?: string;
-  /** Non-fatal warnings emitted during line execution. */
+  /** Non-fatal warnings emitted during execution. */
   warnings?: Array<{ code: string; message: string }>;
 }
 
@@ -63,13 +111,13 @@ export interface LineResult {
  * Overall result returned by the build_design tool executor.
  */
 export interface BuildDesignResult {
-  /** True if all non-skipped lines succeeded. */
+  /** True if all non-skipped operations succeeded. */
   success: boolean;
-  /** True if any line produced a hard failure. */
+  /** True if any operation produced a hard failure. */
   hasErrors: boolean;
   /** Maps binding symbol → real Figma node ID for every successfully created node. */
   idMap: Record<string, string>;
-  /** Per-line execution results, in order. */
+  /** Per-operation execution results, in order. */
   lineResults: LineResult[];
   /** Aggregate statistics for the execution. */
   stats: {
@@ -86,7 +134,7 @@ export interface BuildDesignResult {
 // ==========================================
 
 /**
- * IPC event payload emitted after each line completes.
+ * IPC event payload emitted after each operation completes.
  * Allows the UI to show incremental progress while a build_design call is running.
  */
 export interface BuildDesignProgressEvent {
@@ -100,8 +148,8 @@ export interface BuildDesignProgressEvent {
 // ==========================================
 
 /**
+ * @internal
  * Maps legacy / verbose command names to their canonical short-form equivalents.
- * The parser uses this table to normalise raw instruction text before dispatch.
  */
 export const COMMAND_ALIASES: Record<string, string> = {
   createFrame: 'create',
@@ -115,7 +163,8 @@ export const COMMAND_ALIASES: Record<string, string> = {
 };
 
 /**
- * Exhaustive list of canonical commands understood by the build_design parser.
+ * @internal
+ * Exhaustive list of canonical commands understood by the build_design tool.
  */
 export const VALID_COMMANDS = ['create', 'update', 'delete', 'icon', 'image'] as const;
 

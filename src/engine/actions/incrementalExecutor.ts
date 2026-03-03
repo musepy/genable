@@ -14,7 +14,7 @@
 import { ActionExecutor } from './executor';
 import { FigmaAction } from './types';
 import { BuildDesignResult, LineResult } from './buildDesignTypes';
-import { ParsedLine } from './compiler';
+import { ParsedLine } from './buildDesignTypes';
 
 // ---------------------------------------------------------------------------
 // Re-export so callers can import everything from one place

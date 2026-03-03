@@ -39,6 +39,6 @@
 - Rule: FILL width + long text → set textAutoResize=HEIGHT to enable wrapping.
 
 ### Efficiency: Think in Trees, Not Nodes
-- Output the COMPLETE tree in one generateDesign call. Each additional iteration costs ~4000 tokens of overhead.
+- Output the COMPLETE tree in one build_design call. Each additional iteration costs ~4000 tokens of overhead.
 - Plan the full hierarchy BEFORE outputting: root > sections > components > leaves.
 - Never create a bare FRAME and style it later. Include ALL props inline.

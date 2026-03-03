@@ -22,7 +22,7 @@ describe('generateLogDigest', () => {
           {
             id: 'tc1',
             name: 'build_design',
-            parameters: { instructions: 'FRAME "Card" w=300 h=200\n  TEXT "Title" chars="Hello"' },
+            parameters: { operations: [{ op: 'create', symbol: 'Card', type: 'FRAME', props: { width: 300, height: 200 } }, { op: 'create', symbol: 'Title', type: 'TEXT', parent: 'Card', props: { characters: 'Hello' } }] },
             status: 'success',
             startTime: 1000,
             endTime: 1200,
@@ -37,7 +37,7 @@ describe('generateLogDigest', () => {
     expect(result).toContain('Prompt: "Hello"');
     expect(result).toContain('Tools: 1 ok, 0 err');
     expect(result).toContain('#1 [build_design] 200ms OK');
-    expect(result).toContain('2 lines:');
+    expect(result).toContain('2 ops:');
   });
 
   it('should handle build_design with idMap in results', () => {
@@ -52,7 +52,10 @@ describe('generateLogDigest', () => {
             id: 'tc1',
             name: 'build_design',
             parameters: {
-              instructions: 'FRAME "Header" w=400 h=60\nFRAME "Footer" w=400 h=40'
+              operations: [
+                { op: 'create', symbol: 'Header', type: 'FRAME', props: { width: 400, height: 60 } },
+                { op: 'create', symbol: 'Footer', type: 'FRAME', props: { width: 400, height: 40 } }
+              ]
             },
             status: 'success',
             startTime: 1000,
@@ -83,11 +86,11 @@ describe('generateLogDigest', () => {
           {
             id: 'tc1',
             name: 'build_design',
-            parameters: { instructions: '' },
+            parameters: { operations: [] },
             status: 'error',
             startTime: 1000,
             endTime: 1100,
-            error: 'Invalid instructions\nStack trace...'
+            error: 'Invalid operations\nStack trace...'
           }
         ]
       }
@@ -96,7 +99,7 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Tools: 0 ok, 1 err');
     expect(result).toContain('--- ERRORS ---');
-    expect(result).toContain('#1 build_design: "Invalid instructions"');
+    expect(result).toContain('#1 build_design: "Invalid operations"');
   });
 
   it('should truncate long prompts and summaries', () => {

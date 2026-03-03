@@ -1,8 +1,7 @@
 import { ToolDefinition } from '../types';
 
 /**
- * Unified read tool — replaces inspectDesign, getSelection, getNodeDSL, getVariables, getStyles.
- * Single entry point for all Figma document queries.
+ * Unified read tool — single entry point for querying the Figma document.
  */
 export const readNodeDefinition: ToolDefinition = {
   name: 'read_node',
@@ -13,16 +12,14 @@ export const readNodeDefinition: ToolDefinition = {
 Modes:
 - "selection": Get currently selected nodes (no nodeId needed)
 - "node": Get a single node's full properties (requires nodeId)
-- "hierarchy": Get a node tree with children up to a given depth (requires nodeId)
-- "variables": List all design variables defined in the document
-- "styles": List all local styles in the document`,
+- "hierarchy": Get a node tree with children up to a given depth (requires nodeId)`,
   parameters: {
     type: 'object',
     properties: {
       mode: {
         type: 'string',
-        enum: ['selection', 'node', 'hierarchy', 'variables', 'styles'],
-        description: 'What to read. "selection" for current selection, "node" for a single node, "hierarchy" for a subtree, "variables" for document variables, "styles" for document styles.'
+        enum: ['selection', 'node', 'hierarchy'],
+        description: 'What to read. "selection" for current selection, "node" for a single node, "hierarchy" for a subtree.'
       },
       nodeId: {
         type: 'string',
@@ -42,6 +39,6 @@ Modes:
     'NODE_NOT_FOUND': 'The specified nodeId does not exist.',
     'INVALID_NODE_TYPE': 'The nodeId refers to a non-scene node (e.g. Page or Document).',
     'MISSING_PARAM': 'nodeId is required for "node" and "hierarchy" modes.',
-    'INVALID_MODE': 'Mode must be one of: selection, node, hierarchy, variables, styles.'
+    'INVALID_MODE': 'Mode must be one of: selection, node, hierarchy.'
   }
 };

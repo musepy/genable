@@ -60,21 +60,13 @@ interface SkillFrontmatter {
 /**
  * Normalize legacy tool names in skill prose to unified tool names.
  * This prevents old prompts from nudging the model toward deprecated calls.
+ *
+ * NOTE: Knowledge files should use current tool names directly.
+ * This is a safety net for any remaining legacy references.
  */
 function sanitizeLegacyToolReferences(text: string): string {
   if (!text) return text;
-
-  return text
-    .replace(/\bcomplete_task\b/g, 'signal({ type: "complete", ... })')
-    .replace(/\bnew_task\b/g, 'signal({ type: "task_start", ... })')
-    .replace(/\bupdate_todo_list\b/g, 'signal({ type: "progress", ... })')
-    .replace(/\bsummarize_progress\b/g, 'signal({ type: "progress", ... })')
-    .replace(/\bsearchDesignKnowledge\b/g, 'query_knowledge(source="knowledge")')
-    .replace(/\bgetComponentAnatomy\b/g, 'query_knowledge(source="knowledge")')
-    .replace(/\bgetFigmaLayoutRules\b/g, 'query_knowledge(source="knowledge")')
-    .replace(/\bgetProjectUIContext\b/g, 'query_knowledge(source="components")')
-    .replace(/\blistProjectComponents\b/g, 'query_knowledge(source="components")')
-    .replace(/\bgetDesignSystemTokens\b/g, 'query_knowledge(source="tokens")');
+  return text;
 }
 
 /**

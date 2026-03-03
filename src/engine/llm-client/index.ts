@@ -13,8 +13,6 @@ export type { ThinkingLevel } from './config';
 // Types
 export type {
   GenerateLayoutOptions,
-  GenerateLayoutWithRetryOptions,
-  GenerateLayoutWithRetryResult,
 } from './types';
 
 // Model utilities

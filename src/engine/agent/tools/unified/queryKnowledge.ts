@@ -10,33 +10,57 @@ import {
   UIComponentMeta,
 } from '../../../../knowledge/projectUIRegistry';
 
+// ── Single source of truth: domain values ──
+const KNOWLEDGE_DOMAINS = [
+  'reasoning', 'styles', 'colors', 'typography',
+  'landing', 'charts', 'products', 'guidelines',
+  'stacks', 'figmaLayout',
+] as const;
+
+export type KnowledgeDomain = (typeof KNOWLEDGE_DOMAINS)[number];
+
+// ── Single source of truth: error codes across all sub-executors ──
+const QUERY_KNOWLEDGE_ERRORS = {
+  INVALID_SOURCE: 'Source must be one of: knowledge, components, tokens, skill.',
+  INVALID_DOMAIN: `Domain must be one of: ${KNOWLEDGE_DOMAINS.join(', ')}.`,
+  SEARCH_ERROR: 'An error occurred while searching the knowledge base.',
+  PROJECT_UI_ERROR: 'An error occurred while querying project UI context.',
+  INVALID_TOKEN_TYPE: 'Token type not found in design system.',
+  TOKEN_ERROR: 'An error occurred while querying design tokens.',
+  LIST_ERROR: 'An error occurred while listing project components.',
+} as const;
+
+export type QueryKnowledgeErrorCode = keyof typeof QUERY_KNOWLEDGE_ERRORS;
+
 /**
  * Unified knowledge query — replaces searchDesignKnowledge, getProjectUIContext, getDesignSystemTokens, listProjectComponents.
  */
 export const queryKnowledgeDefinition: ToolDefinition = {
   name: 'query_knowledge',
   category: 'knowledge',
+  display: { displayName: 'Query Knowledge', group: 'inspect' },
   description: `Query design knowledge, project components, or design tokens. This is the ONLY tool for accessing design reference information.
 
 Sources:
 - "knowledge": Search design patterns, spacing rules, typography conventions, and responsive guidelines.
 - "components": Get project UI component specifications (names, categories, usage).
-- "tokens": Get design system tokens (colors, spacing, typography scales).`,
+- "tokens": Get design system tokens (colors, spacing, typography scales).
+- "skill": Load detailed skill instructions by skill ID.`,
   parameters: {
     type: 'object',
     properties: {
       source: {
         type: 'string',
-        enum: ['knowledge', 'components', 'tokens'],
-        description: 'What to query: "knowledge" for design patterns, "components" for UI components, "tokens" for design tokens.'
+        enum: ['knowledge', 'components', 'tokens', 'skill'],
+        description: 'What to query: "knowledge" for design patterns, "components" for UI components, "tokens" for design tokens, "skill" for detailed skill instructions.'
       },
       query: {
         type: 'string',
-        description: 'Search query or filter. For "knowledge": natural language query. For "components": component name or category. For "tokens": token name or category.'
+        description: 'Search query or filter. For "knowledge": natural language query. For "components": component name or category. For "tokens": token name or category. For "skill": the skill ID to load.'
       },
       domain: {
         type: 'string',
-        enum: ['layout', 'typography', 'spacing', 'color', 'responsive', 'components', 'styles', 'effects', 'interaction', 'patterns'],
+        enum: [...KNOWLEDGE_DOMAINS],
         description: 'Optional domain filter for "knowledge" source.'
       },
       category: {
@@ -47,16 +71,13 @@ Sources:
     required: ['source']
   },
   executionStrategy: 'parallel',
-  errors: {
-    'INVALID_SOURCE': 'Source must be one of: knowledge, components, tokens.',
-    'NO_RESULTS': 'No results found for the given query.'
-  }
+  errors: { ...QUERY_KNOWLEDGE_ERRORS },
 };
 
 // ── Executor: searchDesignKnowledge ──
 
 export const searchDesignKnowledgeExecutor: ToolExecutor<{
-  domain: 'reasoning' | 'styles' | 'colors' | 'typography' | 'landing' | 'charts' | 'products' | 'guidelines' | 'stacks' | 'figmaLayout';
+  domain: KnowledgeDomain;
   query: string;
   limit?: number;
 }> = async ({ domain, query, limit = 3 }) => {
@@ -97,7 +118,7 @@ export const searchDesignKnowledgeExecutor: ToolExecutor<{
       default:
         return {
           success: false,
-          error: { code: 'INVALID_DOMAIN', message: `Domain '${domain}' is not recognized.` }
+          error: { code: 'INVALID_DOMAIN' satisfies QueryKnowledgeErrorCode, message: `Domain '${domain}' is not recognized. Valid: ${KNOWLEDGE_DOMAINS.join(', ')}` }
         };
     }
 
@@ -111,7 +132,7 @@ export const searchDesignKnowledgeExecutor: ToolExecutor<{
   } catch (err: any) {
     return {
       success: false,
-      error: { code: 'SEARCH_ERROR', message: err.message }
+      error: { code: 'SEARCH_ERROR' satisfies QueryKnowledgeErrorCode, message: err.message }
     };
   }
 };
@@ -196,7 +217,7 @@ export const getProjectUIContextExecutor: ToolExecutor<{
   } catch (err: any) {
     return {
       success: false,
-      error: { code: 'PROJECT_UI_ERROR', message: err.message },
+      error: { code: 'PROJECT_UI_ERROR' satisfies QueryKnowledgeErrorCode, message: err.message },
     };
   }
 };
@@ -217,7 +238,7 @@ export const getDesignSystemTokensExecutor: ToolExecutor<{
     if (!tokens) {
       return {
         success: false,
-        error: { code: 'INVALID_TOKEN_TYPE', message: `Token type "${tokenType}" not found.` },
+        error: { code: 'INVALID_TOKEN_TYPE' satisfies QueryKnowledgeErrorCode, message: `Token type "${tokenType}" not found.` },
       };
     }
 
@@ -225,7 +246,7 @@ export const getDesignSystemTokensExecutor: ToolExecutor<{
   } catch (err: any) {
     return {
       success: false,
-      error: { code: 'TOKEN_ERROR', message: err.message },
+      error: { code: 'TOKEN_ERROR' satisfies QueryKnowledgeErrorCode, message: err.message },
     };
   }
 };
@@ -257,7 +278,7 @@ export const listProjectComponentsExecutor: ToolExecutor<{
   } catch (err: any) {
     return {
       success: false,
-      error: { code: 'LIST_ERROR', message: err.message },
+      error: { code: 'LIST_ERROR' satisfies QueryKnowledgeErrorCode, message: err.message },
     };
   }
 };

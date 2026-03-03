@@ -1,8 +1,11 @@
 /**
  * AgentMode is retained only for event telemetry / logging.
  * It is NOT used as a control mechanism — the agent runs autonomously.
+ *
+ * Currently only 'AUTONOMOUS' is emitted at runtime.
+ * Legacy modes are kept for backward-compatible event consumers (UI, analytics).
  */
-export type AgentMode = 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION' | 'AUTONOMOUS';
+export type AgentMode = 'AUTONOMOUS' | 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION';
 
 export type AgentRuntimePhase =
   | 'planning'
@@ -222,17 +225,3 @@ export type AgentRuntimeEventType =
   | 'llm_response'
   | 'debrief';
 
-export function modeToRuntimePhase(mode: AgentMode): AgentRuntimePhase {
-  switch (mode) {
-    case 'PLANNING':
-      return 'planning';
-    case 'EXECUTION':
-      return 'execution';
-    case 'VERIFICATION':
-      return 'verification';
-    case 'RECOVERY':
-      return 'recovery';
-    default:
-      return 'idle';
-  }
-}

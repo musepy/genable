@@ -38,6 +38,22 @@ export interface ToolDefinition {
    */
   dependencies?: string[];
 
+  /** UI display metadata — not sent to LLM, only used for rendering. */
+  display?: ToolDisplayMeta;
+
+  /**
+   * Whether this tool's results should be cached for idempotent replay.
+   * When true, ToolDispatcher will cache successful results keyed by
+   * runId:toolCallId and replay them on duplicate calls.
+   */
+  idempotent?: boolean;
+}
+
+export interface ToolDisplayMeta {
+  /** Human-readable name, e.g. "Build Design" */
+  displayName: string;
+  /** UI grouping key — tools with the same group collapse together */
+  group?: string;
 }
 
 export interface ToolParameter {

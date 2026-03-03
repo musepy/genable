@@ -8,7 +8,7 @@
  * at index 0 is never touched, enabling KV-cache reuse.
  */
 
-export type AgentMode = 'PLANNING' | 'EXECUTION' | 'VERIFICATION' | 'RECOVERY' | 'AUTONOMOUS';
+import type { AgentMode } from '../../../shared/protocol/agentRuntimeEvents';
 
 /** Stable message ID used to locate and update the dynamic context message. */
 export const DYNAMIC_CONTEXT_MSG_ID = 'dynamic-ctx';

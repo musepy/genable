@@ -27,7 +27,9 @@ import { IncrementalExecutor } from '../../actions/incrementalExecutor';
 export const buildDesignDefinition: ToolDefinition = {
   name: 'build_design',
   category: 'create',
+  display: { displayName: 'Build Design', group: 'design' },
   executionStrategy: 'sequential',
+  idempotent: true,
   dependencies: ['planDesign'],
   description: `
 [BUILD] Execute a multi-line design instruction script in a single call.
@@ -127,11 +129,7 @@ DO NOT regenerate the entire design on partial failure. Instead:
   },
   errors: {
     EMPTY_INSTRUCTIONS: 'The instructions parameter must be a non-empty string.',
-    PARENT_NOT_FOUND: 'The specified parentId could not be resolved to a Figma node.',
-    LINE_PARSE_ERROR: 'A line could not be parsed as a valid command.',
-    DEPENDENCY_FAILED: 'A line was skipped because a referenced symbol failed to create.',
     PARTIAL_FAILURE: 'Some lines failed during execution.',
-    EXECUTION_ABORTED: 'Execution was stopped early because onError is set to "abort".',
     EXECUTION_ERROR: 'An unexpected error occurred in the build_design pipeline.',
   },
 };
@@ -194,15 +192,35 @@ export const buildDesignExecutor: ToolExecutor<BuildDesignParams, BuildDesignRes
       parentId,
     });
 
+    // Build detailed error message with per-line failure info
+    let errorInfo: { code: string; message: string } | undefined;
+    if (result.hasErrors) {
+      const failedLines = result.lineResults
+        .filter(lr => lr.status === 'failed' || lr.status === 'skipped')
+        .slice(0, 10) // cap to keep message reasonable
+        .map(lr => {
+          const reason = lr.error || lr.skipReason || 'unknown';
+          const sym = lr.symbol ? `${lr.symbol} = ` : '';
+          const cmd = lr.command || '?';
+          return `  L${lr.line} ${sym}${cmd}: ${reason}`;
+        });
+
+      const summary = `${result.stats.failed} of ${result.stats.total} lines failed. ${result.stats.created} nodes created successfully.`;
+      const details = failedLines.length > 0 ? `\nFailed:\n${failedLines.join('\n')}` : '';
+      const overflow = result.lineResults.filter(lr => lr.status === 'failed' || lr.status === 'skipped').length > 10
+        ? `\n  ... and ${result.lineResults.filter(lr => lr.status === 'failed' || lr.status === 'skipped').length - 10} more`
+        : '';
+
+      errorInfo = {
+        code: 'PARTIAL_FAILURE',
+        message: `${summary}${details}${overflow}\nUse idMap to reference existing nodes and fix only the failed lines.`,
+      };
+    }
+
     return {
       success: result.success,
       data: result,
-      error: result.hasErrors
-        ? {
-            code: 'PARTIAL_FAILURE',
-            message: `${result.stats.failed} of ${result.stats.total} lines failed. ${result.stats.created} nodes created successfully. Use idMap to reference existing nodes and fix only the failed lines.`,
-          }
-        : undefined,
+      error: errorInfo,
     };
   } catch (e: any) {
     return {

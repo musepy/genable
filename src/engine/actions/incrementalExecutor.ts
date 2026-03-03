@@ -313,6 +313,23 @@ export class IncrementalExecutor {
       resolved.nodeId = this.symbolMap.get(resolved.nodeId) ?? resolved.nodeId;
     }
 
+    // CreateInstance: resolve source.nodeId (component reference from a prior line)
+    if (resolved.source?.nodeId) {
+      resolved.source = { ...resolved.source };
+      resolved.source.nodeId = this.symbolMap.get(resolved.source.nodeId) ?? resolved.source.nodeId;
+    }
+
+    // SwapInstance: resolve newComponentNodeId (component reference from a prior line)
+    if (resolved.newComponentNodeId) {
+      resolved.newComponentNodeId = this.symbolMap.get(resolved.newComponentNodeId) ?? resolved.newComponentNodeId;
+    }
+
+    // Clear dependsOn — IncrementalExecutor already handles cross-line
+    // dependency checks via findFailedDependency(). Leaving unresolved
+    // symbol strings in dependsOn causes ActionExecutor to treat them as
+    // Figma node IDs, fail the lookup, and incorrectly abort the action.
+    delete resolved.dependsOn;
+
     return resolved as FigmaAction;
   }
 

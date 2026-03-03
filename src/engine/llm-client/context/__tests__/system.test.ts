@@ -35,7 +35,7 @@ describe('buildStaticSystemPrompt', () => {
     it('should include agent identity', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
         expect(prompt).toContain('You are a Figma plugin agent');
-        expect(prompt).toContain('CORE POLICIES');
+        expect(prompt).toContain('DESIGN FREEDOM PRINCIPLE');
     });
 
     it('should include autonomous behavior rules (not legacy phase blocks)', () => {
@@ -72,13 +72,15 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('PROVIDER_TOOLS_2');
     });
 
-    it('should include skill bodies when provided', () => {
+    it('should include skill menu when provided', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider, [
-            '## SKILL: Design System\nUse tokens from the design system.',
-            '## SKILL: Layout\nFollow responsive layout patterns.'
+            { id: 'design-knowledge', description: 'Search design patterns and layout rules' },
+            { id: 'project-ui-context', description: 'Query project UI components and tokens' },
         ]);
-        expect(prompt).toContain('SKILL: Design System');
-        expect(prompt).toContain('SKILL: Layout');
+        expect(prompt).toContain('## Available Skills');
+        expect(prompt).toContain('query_knowledge(source="skill", query="<skill-id>")');
+        expect(prompt).toContain('**design-knowledge**');
+        expect(prompt).toContain('**project-ui-context**');
     });
 
     it('should handle empty tool list gracefully', () => {

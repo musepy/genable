@@ -39,7 +39,7 @@ export class HookRunner {
 
         // Inject message into context immediately so subsequent hooks can see it
         if (result.injectMessage) {
-          ctx.contextManager.addMessage({
+          ctx.messages.push({
             id: ctx.generateId('hook'),
             role: 'user',
             content: result.injectMessage,

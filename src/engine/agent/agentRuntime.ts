@@ -210,7 +210,19 @@ export class AgentRuntime {
       console.log(`[RuntimeEvent] tool_call: ${tc?.name}(${JSON.stringify(tc?.args || {})})`)
     } else if (event.type === 'tool_result') {
       const tr = (event as any).toolResult;
-      console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${tr?.success ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)`);
+      const lineResults = tr?.raw?.data?.lineResults;
+      const failSuffix = !tr?.success && lineResults
+        ? (() => {
+            const lrs = lineResults as any[];
+            const failed = lrs.filter((r: any) => r.status === 'failed');
+            const skipped = lrs.filter((r: any) => r.status === 'skipped');
+            const firstErr = failed[0];
+            return ` [${failed.length}F/${skipped.length}S/${lrs.length}T] first: ${firstErr?.error ?? tr?.error ?? '?'}`;
+          })()
+        : !tr?.success && tr?.error
+          ? ` — ${typeof tr.error === 'string' ? tr.error : tr.error.message ?? JSON.stringify(tr.error)}`
+          : '';
+      console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${tr?.success ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)${failSuffix}`);
     }
     this.options.onRuntimeEvent(full);
   }

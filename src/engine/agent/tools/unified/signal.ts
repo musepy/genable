@@ -7,6 +7,7 @@ import { ToolDefinition } from '../types';
 export const signalDefinition: ToolDefinition = {
   name: 'signal',
   category: 'control',
+  display: { displayName: 'Signal', group: 'flow' },
   description: `Send a lifecycle signal to the system. This is the ONLY tool for flow control and progress reporting.
 
 Types:

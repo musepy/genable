@@ -8,8 +8,7 @@
  * middleware.
  */
 
-import { LLMToolCall } from '../../llm-client/providers/types';
-import { ContextManager } from '../context/contextManager';
+import { LLMToolCall, LLMMessage } from '../../llm-client/providers/types';
 import { AgentLoopPolicy } from '../agentLoopPolicy';
 
 // ---------------------------------------------------------------------------
@@ -71,8 +70,8 @@ export interface HookContext {
   currentToolCall?: LLMToolCall;
   /** The current tool result (afterToolExec only). */
   toolResult?: any;
-  /** Access to the context manager for reading/injecting messages. */
-  contextManager: ContextManager;
+  /** Direct access to the messages array for reading/injecting messages. */
+  messages: LLMMessage[];
   /** Current loop policy (thresholds, budgets). */
   loopPolicy: AgentLoopPolicy;
   /** ID generator. */

@@ -189,7 +189,8 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
         const shouldShowToolGroup = !isUserMessage && (
           (msg.toolCalls && msg.toolCalls.length > 0) ||
           !!thinkingStatus ||
-          !!reasoningPreview
+          !!reasoningPreview ||
+          !!msg.runState
         );
 
         return (
@@ -203,6 +204,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                 {shouldShowToolGroup && (
                   <ToolExecutionPanel
                       toolCalls={msg.toolCalls}
+                      llmCalls={msg.llmCalls}
                       thinkingStatus={thinkingStatus}
                       reasoningPreview={reasoningPreview}
                       currentTaskTitle={lastIteration?.taskTitle}

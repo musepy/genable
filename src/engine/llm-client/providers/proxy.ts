@@ -109,13 +109,28 @@ export class ProxyProvider implements LLMProvider {
   }
 
   formatToolResults(results: LLMToolResult[]): LLMMessage {
+    const content: Part[] = [];
+
+    for (const tr of results) {
+      content.push({
+        functionResponse: { name: tr.name, response: tr.response },
+        thought_signature: tr.thought_signature,
+      } as any);
+
+      if (tr.imageAttachment) {
+        content.push({
+          inlineData: {
+            mimeType: tr.imageAttachment.mimeType,
+            data: tr.imageAttachment.data,
+          },
+        });
+      }
+    }
+
     return {
       id: randomId('tol_'),
       role: 'tool',
-      content: results.map(tr => ({
-        functionResponse: { name: tr.name, response: tr.response },
-        thought_signature: tr.thought_signature,
-      } as any)),
+      content,
     };
   }
 
@@ -418,12 +433,17 @@ export class ProxyProvider implements LLMProvider {
                   ...(sig && { thoughtSignature: sig }),
                 };
               }
+              if (p.inlineData) {
+                return {
+                  inlineData: { mimeType: p.inlineData.mimeType, data: p.inlineData.data },
+                };
+              }
               if (p.text) return { text: p.text };
               return { text: '' };
             })
             .filter((p: any) => {
               if (p.text === '' && Object.keys(p).length === 1) return false;
-              return p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined;
+              return p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined || p.inlineData !== undefined;
             });
 
     return { role, parts };

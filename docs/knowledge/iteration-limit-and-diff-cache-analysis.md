@@ -8,6 +8,19 @@
 
 ## 更新日志
 
+### 2026-03-01: PrefixHash 诊断与 Token 估算热点修复
+
+**结论记录（保留项）**:
+
+1. PrefixHash 连续迭代稳定（`prefix_stable=true`），可排除“前缀漂移导致缓存机会丢失”。
+2. `iter=0` 的 `prefix_stable=false` 为基线行为（首轮无前序可比），非异常。
+3. 本地 token 估算用于趋势观察，不可用于判断服务端 cache hit。
+4. `estimateTokens` 是上下文管理热点，已完成两项优化：
+   - 消息级 token 缓存（避免重复 `JSON.stringify + 正则`）。
+   - 移除 `manageContext()` 后的重复 `updateTokens()`。
+
+**关联报告**: `docs/reports/prefix-hash-2026-03-01.md`
+
 ### 2025-02-06: inspectDesign 循环检测误触发修复
 
 **问题**: `inspectDesign` 工具被循环检测器误判为"相同操作"，导致任务提前终止。

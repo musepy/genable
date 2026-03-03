@@ -21,7 +21,7 @@ export interface RuntimeToolDescription {
 }
 
 const SIGNAL_TYPES = new Set(['plan', 'task_start', 'progress', 'complete']);
-const KNOWLEDGE_SOURCES = new Set(['knowledge', 'components', 'tokens']);
+const KNOWLEDGE_SOURCES = new Set(['knowledge', 'components', 'tokens', 'skill']);
 
 function normalizedMode(args: any): string {
   if (!args || typeof args !== 'object') return '';
@@ -83,10 +83,10 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     required: [{ name: 'source', trim: true, check: 'required' }],
     invalidRules: [{
       name: 'source',
-      reason: 'must be one of knowledge, components, tokens',
+      reason: 'must be one of knowledge, components, tokens, skill',
       isValid: (args) => typeof args?.source === 'string' && KNOWLEDGE_SOURCES.has(args.source),
     }],
-    repairHint: 'provide "source" as one of knowledge, components, or tokens',
+    repairHint: 'provide "source" as one of knowledge, components, tokens, or skill',
   },
   {
     tool: 'validate_design',

@@ -152,23 +152,6 @@ export class GeminiProvider implements LLMProvider {
     // Process history and contents
     const contents = chatMessages.map((m) => this.mapToGenAIContent(m));
 
-    // [DIAGNOSTIC] Log critical config for debugging 400 errors
-    GeminiLogger.info(`🔍 REQUEST CONFIG:`, {
-      model: this.modelName,
-      toolConfigMode: config.toolConfig?.functionCallingConfig?.mode || 'NONE',
-      toolCount: config.tools?.[0]?.functionDeclarations?.length || 0,
-      thinkingConfig: config.thinkingConfig,
-      contentsCount: contents.length,
-    });
-
-    // Privacy-safe debug summary (avoid dumping prompt/content text)
-    GeminiLogger.debug(`🔍 REQUEST SHAPE:`, {
-      model: this.modelName,
-      roleSequence: contents.map((c: any) => c.role).slice(0, 20),
-      partsPerMessage: contents.map((c: any) => Array.isArray(c.parts) ? c.parts.length : 0).slice(0, 20),
-      configKeys: Object.keys(config),
-    });
-
     if (onProgress || onThinking) {
       let result;
       const streamStartTime = Date.now();
@@ -302,20 +285,34 @@ export class GeminiProvider implements LLMProvider {
   }
 
   formatToolResults(results: LLMToolResult[]): LLMMessage {
-    const content = results.map(tr => ({
-      functionResponse: {
-        name: tr.name,
-        response: tr.response
-      },
-      // [FIX] Restore thought_signature propagation. Gemini 3 requires this
-      // in tool responses to maintain reasoning state.
-      thought_signature: tr.thought_signature
-    } as any));
+    const content: Part[] = [];
 
-    return { 
+    for (const tr of results) {
+      content.push({
+        functionResponse: {
+          name: tr.name,
+          response: tr.response
+        },
+        // [FIX] Restore thought_signature propagation. Gemini 3 requires this
+        // in tool responses to maintain reasoning state.
+        thought_signature: tr.thought_signature
+      } as any);
+
+      // Append inlineData part after the functionResponse so the LLM can "see" images
+      if (tr.imageAttachment) {
+        content.push({
+          inlineData: {
+            mimeType: tr.imageAttachment.mimeType,
+            data: tr.imageAttachment.data
+          }
+        });
+      }
+    }
+
+    return {
       id: 'tol_' + Math.random().toString(36).substring(7),
-      role: 'tool', 
-      content 
+      role: 'tool',
+      content
     };
   }
 
@@ -473,17 +470,25 @@ export class GeminiProvider implements LLMProvider {
               ...(sig && { thoughtSignature: sig })
             };
           }
+          if (p.inlineData) {
+            return {
+              inlineData: {
+                mimeType: p.inlineData.mimeType,
+                data: p.inlineData.data
+              }
+            };
+          }
           if (p.text) {
-            return { 
+            return {
               text: p.text
             };
           }
-          
+
           return { text: '' };
         }).filter((p: any) => {
            // Filter out "empty" parts
            if (p.text === '' && Object.keys(p).length === 1) return false;
-           return (p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined);
+           return (p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined || p.inlineData !== undefined);
         })
     };
   }

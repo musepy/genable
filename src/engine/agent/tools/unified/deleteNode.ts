@@ -6,6 +6,7 @@ import { ToolDefinition } from '../types';
 export const deleteNodeDefinition: ToolDefinition = {
   name: 'delete_node',
   category: 'modify',
+  display: { displayName: 'Delete Node', group: 'design' },
   dependencies: ['read_node'],
   description: `Delete a node from the Figma document. The node and all its children will be permanently removed.
 

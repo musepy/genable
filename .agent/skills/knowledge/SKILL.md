@@ -6,9 +6,7 @@ category: knowledge
 priority: 3
 injectionType: dynamic
 tools:
-  - searchDesignKnowledge
-  - getComponentAnatomy
-  - getFigmaLayoutRules
+  - query_knowledge
 triggerPatterns:
   - pattern
   - best practice
@@ -28,21 +26,16 @@ enabledByDefault: true
 
 Access design knowledge when you need guidance:
 
-- `searchDesignKnowledge`: Find UI patterns, color schemes, typography rules
-- `getComponentAnatomy`: Get structural blueprint for common components
-- `getFigmaLayoutRules`: Get specific layout Do's and Don'ts
+- `query_knowledge(source="knowledge", query="...")`: Find UI patterns, color schemes, typography rules, component anatomy, layout rules
 
-Use knowledge tools BEFORE creating complex components to ensure best practices.
+Use `query_knowledge` BEFORE creating complex components to ensure best practices.
 
 ### Examples
 
 **Create a pricing table:**
 ```
-getComponentAnatomy({componentName: "pricing table"})
-→ {layers: [...], variants: [...]}
+query_knowledge({ source: "knowledge", query: "pricing table anatomy" })
+→ { results: [...] }
 
-searchDesignKnowledge({domain: "landing", query: "pricing"})
-→ {patterns: [...]}
-
-createNode(...)
+build_design({ instructions: "..." })
 ```

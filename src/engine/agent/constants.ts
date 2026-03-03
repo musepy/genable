@@ -7,7 +7,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Default maximum number of iterations for the agentic loop */
   DEFAULT_MAX_ITERATIONS: 40,
   
-  /** Default maximum tokens before triggering context compression */
+  /** Default maximum prompt tokens before triggering context compression (real LLM token count) */
   DEFAULT_MAX_CONTEXT_TOKENS: 200000,
   
   /** Factor of max context tokens to trigger compression (e.g., 0.7 = 70%) */

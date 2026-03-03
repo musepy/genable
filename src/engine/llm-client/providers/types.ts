@@ -38,6 +38,11 @@ export interface Part {
   };
   /** Unique identifier for tool call, required for OpenAI-compatible APIs */
   tool_call_id?: string;
+  /** Inline binary data (e.g. image) for multimodal messages */
+  inlineData?: {
+    mimeType: string;  // e.g. 'image/jpeg'
+    data: string;      // base64 encoded
+  };
   /** Thought flag for Gemini 3 thinking process content */
   thought?: boolean;
   /** Thought signature for Gemini 3 function calling - must be returned in next turn */
@@ -60,6 +65,11 @@ export interface LLMToolResult {
   response: any;
   id?: string; // Original tool call ID
   thought_signature?: string;
+  /** Image attachment extracted from tool result, injected as inlineData part */
+  imageAttachment?: {
+    mimeType: string;
+    data: string;
+  };
 }
 
 export interface LLMResponse {

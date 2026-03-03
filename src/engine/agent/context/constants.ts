@@ -4,13 +4,7 @@
  */
 
 export const CONTEXT_CONSTANTS = {
-  /** Rough token estimation factor (1 token ≈ 4 characters) */
-  ESTIMATION_CHARACTERS_PER_TOKEN: 4,
-
-  /** Adjust factor for Chinese characters (actual observed ratio ~2.0 for modern LLMs) */
-  ESTIMATION_CHINESE_CHAR_MULTIPLIER: 2.0,
-
-  /** Factor of max context tokens to trigger compression (e.g., 0.8 = 80%) */
+  /** Factor of max context chars to trigger compression (e.g., 0.8 = 80%) */
   CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.8,
 
   /** Factor of max context tokens to trigger proactive compression (e.g., 0.85 = 85%) */

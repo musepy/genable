@@ -306,12 +306,15 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             constraint: { type: 'SCALE', value: exportScale }
           });
 
-          // Uint8Array → base64 (Figma main thread has no Buffer)
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
+          // Uint8Array → base64 (Figma main thread has no Buffer or btoa)
+          const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+          let base64 = '';
+          for (let i = 0; i < bytes.length; i += 3) {
+            const b0 = bytes[i], b1 = bytes[i + 1] ?? 0, b2 = bytes[i + 2] ?? 0;
+            base64 += CHARS[b0 >> 2] + CHARS[((b0 & 3) << 4) | (b1 >> 4)];
+            base64 += (i + 1 < bytes.length) ? CHARS[((b1 & 15) << 2) | (b2 >> 6)] : '=';
+            base64 += (i + 2 < bytes.length) ? CHARS[b2 & 63] : '=';
           }
-          const base64 = btoa(binary);
           const mimeType = exportFormat === 'PNG' ? 'image/png' : 'image/jpeg';
 
           response = {

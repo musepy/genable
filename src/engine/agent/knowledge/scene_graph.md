@@ -19,7 +19,7 @@
 1. FILL requires auto-layout parent: layoutSizingHorizontal: "FILL" only works if parent has layoutMode set. Otherwise Figma silently reverts to FIXED.
 2. HUG requires auto-layout on self: A FRAME with HUG sizing must also have its own layoutMode set. Without it, HUG is ignored.
 3. No HUG parent + FILL child: This creates a circular dependency. Figma silently breaks the cycle by forcing FIXED.
-4. Root must have explicit dimensions: The first node (parent: null) MUST have width and height. Without them, Figma defaults to 100x100.
+4. Root must avoid implicit defaults: the first node (parent: null) MUST set explicit width. For height, either set explicit `height` or use `layoutSizingVertical: "HUG"` with `layoutMode`. Never rely on Figma default size.
 
 ### Nesting Strategy
 - Nest when children share a layout axis (row of buttons = FRAME[HORIZONTAL] > button + button + button).

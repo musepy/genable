@@ -6,9 +6,7 @@ category: context
 priority: 2
 injectionType: dynamic
 tools:
-  - getProjectUIContext
-  - getDesignSystemTokens
-  - listProjectComponents
+  - query_knowledge
 triggerPatterns:
   - button
   - header
@@ -31,8 +29,8 @@ enabledByDefault: true
 
 This project has existing UI components defined in code. Before creating new designs:
 
-1. **Query Components First**: Use `getProjectUIContext` to understand existing component structure
-2. **Use Design Tokens**: Use `getDesignSystemTokens` to get colors, spacing, typography
+1. **Query Components First**: Use `query_knowledge(source="components")` to understand existing component structure
+2. **Use Design Tokens**: Use `query_knowledge(source="tokens")` to get colors, spacing, typography
 3. **Match Patterns**: Generated designs should match the project's established patterns
 
 **When to use these tools:**
@@ -44,15 +42,8 @@ This project has existing UI components defined in code. Before creating new des
 
 **Create button matching project style:**
 ```
-getProjectUIContext({component: "Button"})
-→ {props: [...], figmaMapping: {...}}
+query_knowledge({ source: "components", query: "Button" })
+→ { results: [...] }
 
-createNode({...based on mapping...})
-```
-
-**创建符合设计系统的卡片:**
-```
-getDesignSystemTokens({tokenType: "all"})
-getProjectUIContext({component: "Card"})
-createNode(...)
+build_design({ instructions: "..." })
 ```

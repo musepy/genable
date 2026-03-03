@@ -137,5 +137,3 @@ function extractJsonBlock(text: string): string | null {
   return null;
 }
 
-import { estimateTokens } from '../agent/context/tokenEstimator';
-export { estimateTokens };

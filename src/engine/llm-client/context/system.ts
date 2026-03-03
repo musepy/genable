@@ -6,21 +6,20 @@
  * The result never changes between iterations, enabling KV-cache
  * reuse at the LLM provider layer.
  *
- * Per-iteration mode changes go into a tiny dynamic context message
- * (see dynamicContext.ts) — NOT into the system prompt.
+ * All static prompt content comes from 3 catalog files:
+ *   CORE          — Identity, thinking protocol, design freedom
+ *   DESIGN_RULES  — Scene graph model, visual quality, conventions
+ *   WORKFLOW      — Tool calling, creation, error recovery, completion protocol
+ *   TOOL_EXAMPLES — Tool usage examples
  */
 
 import { ToolDefinition } from '../../agent/tools/types';
 import {
-    AGENT_IDENTITY,
-    AGENT_DESIGN_FREEDOM,
-    AGENT_THINKING_PROTOCOL,
-    FIGMA_MENTAL_MODEL,
+    CORE,
     DESIGN_RULES,
     WORKFLOW,
     TOOL_EXAMPLES,
-    ERROR_HANDLING,
-} from '../../agent/agentPrompts';
+} from '../../prompt/promptRegistry';
 import { serializeTools, serializeToolsByPhase } from './toolSerializer';
 
 /**
@@ -46,29 +45,24 @@ You decide when to plan, execute, and verify. Follow these invariants:
  *
  * @param tools - Available tool definitions
  * @param provider - LLM provider (for tool system instructions)
- * @param skillBodies - System-injected skill prompt sections
+ * @param skillMenu - Lightweight skill index (id + description) for system prompt
  */
 export function buildStaticSystemPrompt(
     tools: ToolDefinition[],
     provider: { getToolSystemInstruction: (tools: ToolDefinition[]) => string },
-    skillBodies: string[]
+    skillMenu: Array<{ id: string; description: string }>
 ): string {
     const parts: string[] = [];
 
-    // 1. Agent identity constants
-    parts.push(AGENT_IDENTITY.trim());
-    parts.push(AGENT_DESIGN_FREEDOM.trim());
-    parts.push(AGENT_THINKING_PROTOCOL.trim());
+    // 1. Core identity + thinking protocol + design freedom
+    parts.push(CORE.trim());
 
-    // 2. Design knowledge (scene graph model + design rules)
-    if (FIGMA_MENTAL_MODEL) {
-        parts.push(FIGMA_MENTAL_MODEL.trim());
-    }
+    // 2. Design knowledge (scene graph + visual quality + conventions)
     if (DESIGN_RULES) {
         parts.push(DESIGN_RULES.trim());
     }
 
-    // 3. Workflow rules (tool calling, creation, modification protocols)
+    // 3. Workflow (tool calling + creation + error recovery + completion protocol)
     if (WORKFLOW) {
         parts.push(WORKFLOW.trim());
     }
@@ -76,9 +70,14 @@ export function buildStaticSystemPrompt(
     // 4. Autonomous behavior rules (distilled from legacy phase guidance)
     parts.push(AUTONOMOUS_BEHAVIOR.trim());
 
-    // 5. Skill bodies (from SKILL.md files with injectionType: 'system')
-    for (const body of skillBodies) {
-        if (body) parts.push(body.trim());
+    // 5. Skill menu (lightweight index — LLM calls query_knowledge to load details)
+    if (skillMenu.length > 0) {
+        const menuLines = skillMenu.map(s => `- **${s.id}**: ${s.description}`);
+        parts.push([
+            '## Available Skills',
+            'Call `query_knowledge(source="skill", query="<skill-id>")` to load detailed instructions.',
+            ...menuLines,
+        ].join('\n'));
     }
 
     // 6. Tool definitions (serialized, with category grouping)
@@ -97,12 +96,7 @@ export function buildStaticSystemPrompt(
         parts.push(TOOL_EXAMPLES.trim());
     }
 
-    // 8. Error recovery
-    if (ERROR_HANDLING) {
-        parts.push(ERROR_HANDLING.trim());
-    }
-
-    // 9. Provider tool instructions
+    // 8. Provider tool instructions
     const providerInstructions = provider.getToolSystemInstruction(tools);
     if (providerInstructions) {
         parts.push(providerInstructions.trim());

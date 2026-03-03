@@ -1,13 +1,13 @@
 import { h } from 'preact'
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { useElapsedTime } from '../hooks/useElapsedTime'
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, PauseCircle, Terminal } from 'lucide-preact'
 import { tokens } from '../design-system/tokens'
-import { ToolCallRecord } from '../../types/chat'
+import { ToolCallRecord, LLMCallRecord } from '../../types/chat'
 import { AgentRuntimeContextUsage, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents'
 
 interface ToolExecutionPanelProps {
   toolCalls?: ToolCallRecord[]
+  llmCalls?: LLMCallRecord[]
   thinkingStatus?: string
   reasoningPreview?: string
   currentTaskTitle?: string
@@ -25,46 +25,7 @@ interface ToolExecutionPanelProps {
   queuedCount?: number
 }
 
-function getPhaseLabel(phase?: AgentRuntimePhase): string {
-  switch (phase) {
-    case 'planning':
-      return 'Planning'
-    case 'execution':
-      return 'Executing'
-    case 'verification':
-      return 'Verifying'
-    case 'recovery':
-      return 'Recovering'
-    default:
-      return 'Idle'
-  }
-}
-
-function getRunStateLabel(state?: ToolExecutionPanelProps['runState'], reconnectCount?: number, maxReconnects?: number, errorReason?: string): string {
-  switch (state) {
-    case 'running':
-      return 'Working'
-    case 'reconnecting':
-      return typeof reconnectCount === 'number' && typeof maxReconnects === 'number'
-        ? `Reconnecting ${reconnectCount}/${maxReconnects}`
-        : 'Reconnecting'
-    case 'completed':
-      return 'Completed'
-    case 'canceled':
-      return 'Stopped'
-    case 'error':
-      return errorReason || 'Failed'
-    default:
-      return 'Waiting'
-  }
-}
-
-function formatDurationMs(record: ToolCallRecord): string {
-  if (!record.endTime) return '-'
-  const durationMs = Math.max(0, record.endTime - record.startTime)
-  return `${durationMs}ms`
-}
-
+/** Fallback formatter when displayName is not available */
 function formatToolName(name: string): string {
   return name
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -73,41 +34,54 @@ function formatToolName(name: string): string {
     .trim()
 }
 
-function RunStateIcon({ runState }: { runState: ToolExecutionPanelProps['runState'] }) {
-  if (runState === 'error') return <AlertCircle size={14} color={tokens.colors.error} />
-  if (runState === 'completed') return <CheckCircle2 size={14} color={tokens.colors.success} />
-  if (runState === 'canceled') return <PauseCircle size={14} color={tokens.colors.warning} />
-  if (runState === 'reconnecting') return <Loader2 size={14} color={tokens.colors.warning} className="spin" />
-  if (runState === 'running') return <Loader2 size={14} color={tokens.colors.textSecondary} className="spin" />
-  return <Terminal size={14} color={tokens.colors.textSecondary} />
+function getDisplayName(c: ToolCallRecord): string {
+  return c.displayName || formatToolName(c.name)
 }
 
-function ToolStatusIcon({ status }: { status: ToolCallRecord['status'] }) {
-  if (status === 'error') return <AlertCircle size={12} color={tokens.colors.error} />
-  if (status === 'success') return <CheckCircle2 size={12} color={tokens.colors.success} />
-  if (status === 'running' || status === 'pending') return <Loader2 size={12} color={tokens.colors.textSecondary} />
-  return <Terminal size={12} color={tokens.colors.textSecondary} />
+/** Collapse tool calls into unique display names with counts */
+function collapseCalls(calls: ToolCallRecord[]): { name: string; count: number; errorCount: number }[] {
+  const map = new Map<string, { count: number; errorCount: number }>()
+  for (const c of calls) {
+    const key = getDisplayName(c)
+    const entry = map.get(key)
+    if (entry) {
+      entry.count++
+      if (c.status === 'error') entry.errorCount++
+    } else {
+      map.set(key, { count: 1, errorCount: c.status === 'error' ? 1 : 0 })
+    }
+  }
+  return Array.from(map, ([name, v]) => ({ name, ...v }))
 }
 
 function useRunningDots(active: boolean) {
   const [dots, setDots] = useState('')
-
   useEffect(() => {
-    if (!active) {
-      setDots('')
-      return
-    }
+    if (!active) { setDots(''); return }
     const timer = window.setInterval(() => {
       setDots(prev => (prev.length >= 3 ? '' : `${prev}.`))
-    }, 350)
+    }, 400)
     return () => window.clearInterval(timer)
   }, [active])
-
   return dots
+}
+
+/** Summarize LLM call records for display */
+function summarizeLLMCalls(calls: LLMCallRecord[]): { count: number; totalTokens: number; avgDurationMs: number } | null {
+  const completed = calls.filter(c => c.durationMs != null)
+  if (completed.length === 0) return null
+  const totalTokens = completed.reduce((sum, c) => sum + (c.usage?.totalTokens || 0), 0)
+  const totalDuration = completed.reduce((sum, c) => sum + (c.durationMs || 0), 0)
+  return {
+    count: completed.length,
+    totalTokens,
+    avgDurationMs: Math.round(totalDuration / completed.length),
+  }
 }
 
 export function ToolExecutionPanel({
   toolCalls = [],
+  llmCalls = [],
   thinkingStatus,
   reasoningPreview,
   currentTaskTitle,
@@ -124,24 +98,20 @@ export function ToolExecutionPanel({
   onContinue,
   queuedCount = 0,
 }: ToolExecutionPanelProps) {
-  const recentCalls = toolCalls.slice(-6).reverse()
   const [expanded, setExpanded] = useState(false)
-  const dots = useRunningDots(runState === 'running')
-  const reasoningSnippet = reasoningPreview ? reasoningPreview.slice(-240) : ''
-
-  const isRunning = runState === 'running' || runState === 'reconnecting'
+  const inferredRunning = !runState && !!thinkingStatus
+  const isRunning = runState === 'running' || runState === 'reconnecting' || inferredRunning
+  const dots = useRunningDots(isRunning)
   const elapsedText = useElapsedTime(taskStartTime, isRunning, taskEndTime)
+  const reasoningSnippet = reasoningPreview ? reasoningPreview.slice(-200) : ''
+  const toolCount = toolCalls.length
+  const collapsed = useMemo(() => collapseCalls(toolCalls), [toolCalls])
 
-  // Escape key handler
   useEffect(() => {
     if (isRunning && onStop) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          onStop()
-        }
-      }
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
+      const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onStop() }
+      window.addEventListener('keydown', h)
+      return () => window.removeEventListener('keydown', h)
     }
   }, [isRunning, onStop])
 
@@ -149,250 +119,144 @@ export function ToolExecutionPanel({
     if (runState === 'error') setExpanded(true)
   }, [runState])
 
-  const summaryText = useMemo(() => {
-    const base = currentTaskTitle || thinkingStatus || getPhaseLabel(phase)
-    if (runState === 'running' && progress) {
-      const queueHint = queuedCount > 0 ? ` · ${queuedCount} queued` : ''
-      return `${base} · ${progress.iteration}/${progress.maxIterations}${queueHint}${dots}`
+  const statusParts = useMemo(() => {
+    const parts: string[] = []
+    if (runState === 'error') parts.push(runError || 'Failed')
+    else if (runState === 'canceled') parts.push('Stopped')
+    else if (runState === 'reconnecting') {
+      const rc = typeof reconnectCount === 'number' && typeof maxReconnects === 'number'
+        ? ` ${reconnectCount}/${maxReconnects}` : ''
+      parts.push(`Reconnecting${rc}`)
+    } else if (runState === 'running') {
+      const task = currentTaskTitle || thinkingStatus || (phase === 'planning' ? 'Planning' : phase === 'verification' ? 'Verifying' : phase === 'recovery' ? 'Recovering' : 'Thinking')
+      parts.push(`${task}${dots}`)
+    } else if (runState === 'completed') {
+      parts.push('Completed')
+    } else if (thinkingStatus) {
+      parts.push(`${thinkingStatus}${dots}`)
+    } else {
+      parts.push('Waiting')
     }
-    if (runState === 'running') {
-      const queueHint = queuedCount > 0 ? ` · ${queuedCount} queued` : ''
-      return `${base}${queueHint}${dots}`
-    }
-    return base
-  }, [currentTaskTitle, thinkingStatus, phase, runState, progress, dots, queuedCount])
-
-  const contextPercent = contextUsage ? Math.max(0, Math.min(100, contextUsage.percent)) : 0
+    if (elapsedText) parts.push(runState === 'completed' ? `in ${elapsedText}` : elapsedText)
+    if (isRunning && progress) parts.push(`${progress.iteration}/${progress.maxIterations}`)
+    if (!isRunning && toolCount > 0) parts.push(`${toolCount} tool use${toolCount > 1 ? 's' : ''}`)
+    if (isRunning && queuedCount > 0) parts.push(`${queuedCount} queued`)
+    return parts
+  }, [runState, runError, reconnectCount, maxReconnects, currentTaskTitle, thinkingStatus, phase, dots, elapsedText, progress, toolCount, queuedCount, isRunning])
 
   if (
-    toolCalls.length === 0 &&
-    !thinkingStatus &&
-    !reasoningPreview &&
-    !contextUsage &&
-    !progress &&
-    !runState
-  ) {
-    return null
-  }
+    toolCalls.length === 0 && !thinkingStatus && !reasoningPreview &&
+    !contextUsage && !progress && !runState
+  ) return null
+
+  const dim = tokens.colors.textSecondary
+  const faint = tokens.colors.alpha[4]
+  const sz = tokens.fontSize[1]
+
+  // Hanging indent: ✻ sits in the left margin, body text aligns with message text
+  const MARKER_W = 14
 
   return (
-    <div style={{
-      border: `1px solid ${tokens.colors.alpha[3]}`,
-      borderRadius: 'var(--radius-4)',
-      background: tokens.colors.surface,
-      padding: `${tokens.space[2]}px ${tokens.space[2]}px`,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[1] }}>
-        <button
-          onClick={() => setExpanded(v => !v)}
-          aria-expanded={expanded}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.space[2],
-            border: 'none',
-            background: 'transparent',
-            padding: 0,
-            cursor: 'pointer',
-            height: 24,
-            color: tokens.colors.textPrimary,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[1], minWidth: 0 }}>
-            <RunStateIcon runState={runState} />
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.space[1],
-              fontSize: tokens.fontSize[1],
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-            }}>
-              <span style={{ 
-                fontWeight: 500, 
-                color: runState === 'error' ? tokens.colors.error : 
-                       runState === 'reconnecting' ? tokens.colors.warning : 
-                       tokens.colors.textPrimary 
-              }}>
-                {getRunStateLabel(runState, reconnectCount, maxReconnects, runError)}
-              </span>
-              {(elapsedText || isRunning || runState === 'canceled') && (
-                <span style={{ 
-                  color: tokens.colors.textSecondary, 
-                  fontVariantNumeric: 'tabular-nums', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: tokens.space[1] 
-                }}>
-                  <span style={{ color: tokens.colors.alpha[4] }}>(</span>
-                  {elapsedText && <span>{elapsedText}</span>}
-                  {elapsedText && (isRunning || runState === 'canceled') && <span style={{ color: tokens.colors.alpha[4] }}>•</span>}
-                  
-                  {isRunning && onStop && (
-                    <span 
-                      onClick={(e) => { e.stopPropagation(); onStop(); }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary; e.currentTarget.style.background = tokens.colors.surfaceHover; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = tokens.colors.textSecondary; e.currentTarget.style.background = 'transparent'; }}
-                      style={{ 
-                        cursor: 'pointer',
-                        padding: '0 4px',
-                        borderRadius: 'var(--radius-2)',
-                        transition: 'color 150ms ease, background 150ms ease'
-                      }}
-                    >
-                      esc to interrupt
-                    </span>
-                  )}
+    <div>
+      {/* Status line — hanging indent via negative text-indent */}
+      <div
+        onClick={() => setExpanded(v => !v)}
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          fontSize: sz,
+          color: dim,
+          lineHeight: '20px',
+          cursor: toolCount > 0 ? 'pointer' : 'default',
+          marginLeft: -MARKER_W,
+        }}
+      >
+        <span style={{
+          width: MARKER_W,
+          flexShrink: 0,
+          textAlign: 'center',
+          color: isRunning ? dim : faint,
+        }}>✻</span>
 
-                  {runState === 'canceled' && onContinue && (
-                    <span 
-                      onClick={(e) => { e.stopPropagation(); onContinue(); }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary; e.currentTarget.style.background = tokens.colors.surfaceHover; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = tokens.colors.textSecondary; e.currentTarget.style.background = 'transparent'; }}
-                      style={{ 
-                        cursor: 'pointer',
-                        padding: '0 4px',
-                        borderRadius: 'var(--radius-2)',
-                        transition: 'color 150ms ease, background 150ms ease'
-                      }}
-                    >
-                      continue
-                    </span>
-                  )}
-                  <span style={{ color: tokens.colors.alpha[4] }}>)</span>
-                </span>
-              )}
-            </div>
-          </div>
-          <ChevronDown
-            size={14}
-            color={tokens.colors.textSecondary}
-            style={{
-              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 150ms ease',
-              flexShrink: 0,
-              marginLeft: 'auto'
-            }}
-          />
-        </button>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: dim }}>
+          {statusParts.join(' · ')}
+        </span>
+
+        {isRunning && onStop && (
+          <span
+            onClick={(e) => { e.stopPropagation(); onStop() }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = dim }}
+            style={{ flexShrink: 0, cursor: 'pointer', marginLeft: tokens.space[2], transition: 'color 150ms ease' }}
+          >esc to stop</span>
+        )}
+
+        {runState === 'canceled' && onContinue && (
+          <span
+            onClick={(e) => { e.stopPropagation(); onContinue() }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = dim }}
+            style={{ flexShrink: 0, cursor: 'pointer', marginLeft: tokens.space[2], transition: 'color 150ms ease' }}
+          >continue</span>
+        )}
+
+        {toolCount > 0 && (
+          <span style={{ flexShrink: 0, marginLeft: tokens.space[1], color: faint, fontSize: 10, display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}>▾</span>
+        )}
       </div>
 
-      {expanded && summaryText && (
-        <div style={{
-          marginTop: 4,
-          fontSize: tokens.fontSize[1],
-          color: tokens.colors.textSecondary,
-          lineHeight: '16px',
-          paddingLeft: 20,
-        }}>
-          {summaryText}
-        </div>
-      )}
-
+      {/* Reasoning snippet — same left edge as message text (no extra indent) */}
       {reasoningSnippet && (
         <div style={{
-          marginTop: 4,
-          marginLeft: 20,
-          fontSize: 11,
-          lineHeight: '15px',
-          color: tokens.colors.textSecondary,
+          marginTop: 2,
+          fontSize: sz,
+          lineHeight: '16px',
+          color: faint,
           whiteSpace: 'pre-wrap',
-          maxHeight: 48,
+          maxHeight: 36,
           overflow: 'hidden',
         }}>
           {reasoningSnippet}
         </div>
       )}
 
-      <div style={{
-        maxHeight: expanded ? 360 : 0,
-        opacity: expanded ? 1 : 0,
-        overflow: 'hidden',
-        transition: 'max-height 180ms ease, opacity 140ms ease',
-        marginTop: expanded ? tokens.space[2] : 0,
-        paddingTop: expanded ? tokens.space[2] : 0,
-        borderTop: expanded ? `1px solid ${tokens.colors.alpha[2]}` : 'none',
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-          <div style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: tokens.colors.textPrimary }}>
-            Recent actions
-          </div>
-          {recentCalls.length === 0 ? (
-            <div style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-              No action yet.
+      {/* Expanded tool list — collapsed by name with counts */}
+      {expanded && collapsed.length > 0 && (
+        <div style={{ marginTop: tokens.space[1], display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {collapsed.map(entry => (
+            <div key={entry.name} style={{ fontSize: sz, lineHeight: '18px', color: dim }}>
+              {entry.name}{entry.count > 1 && <span style={{ color: faint }}> ×{entry.count}</span>}
+              {entry.errorCount > 0 && (
+                <span style={{ color: tokens.colors.error }}>
+                  {' '}· {entry.errorCount} error{entry.errorCount > 1 ? 's' : ''}
+                </span>
+              )}
             </div>
-          ) : (
-            recentCalls.map(record => (
-              <div key={record.id} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '12px 1fr auto',
-                  alignItems: 'center',
-                  gap: tokens.space[1],
-                  fontSize: tokens.fontSize[1],
-                  color: tokens.colors.textPrimary,
-                }}>
-                  <ToolStatusIcon status={record.status} />
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {formatToolName(record.name)}
-                  </span>
-                  <span style={{ color: tokens.colors.textSecondary, fontSize: 11 }}>
-                    {formatDurationMs(record)}
-                  </span>
-                </div>
-                {record.error && (
-                  <div style={{
-                    marginLeft: 16,
-                    fontSize: 11,
-                    color: tokens.colors.error,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {record.error}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+          ))}
         </div>
+      )}
 
-        <div style={{
-          marginTop: tokens.space[2],
-          paddingTop: tokens.space[2],
-          borderTop: `1px solid ${tokens.colors.alpha[2]}`,
-        }}>
-          <div style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: tokens.colors.textPrimary, marginBottom: 4 }}>
-            Context usage
+      {/* Context bar — inline, same level */}
+      {expanded && contextUsage && (
+        <div style={{ marginTop: tokens.space[1], display: 'flex', alignItems: 'center', gap: tokens.space[2], fontSize: sz, color: faint }}>
+          <span>ctx {contextUsage.percent}%</span>
+          <div style={{ flex: 1, maxWidth: 80, height: 3, borderRadius: 999, background: tokens.colors.alpha[2], overflow: 'hidden' }}>
+            <div style={{ width: `${Math.max(0, Math.min(100, contextUsage.percent))}%`, height: '100%', background: contextUsage.percent >= 85 ? tokens.colors.warning : faint }} />
           </div>
-          {contextUsage ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-                <span>{contextUsage.current}/{contextUsage.max}</span>
-                <span>{contextUsage.percent}%</span>
-              </div>
-              <div style={{
-                height: 4,
-                borderRadius: 999,
-                background: tokens.colors.alpha[2],
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${contextPercent}%`,
-                  height: '100%',
-                  background: contextPercent >= 85 ? tokens.colors.warning : tokens.colors.textPrimary,
-                }} />
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-              Not available yet.
-            </div>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* LLM call summary */}
+      {expanded && (() => {
+        const summary = summarizeLLMCalls(llmCalls)
+        if (!summary) return null
+        const tokenStr = summary.totalTokens > 0 ? ` · ${(summary.totalTokens / 1000).toFixed(1)}k tok` : ''
+        return (
+          <div style={{ marginTop: tokens.space[1], fontSize: sz, color: faint }}>
+            {summary.count} llm call{summary.count > 1 ? 's' : ''} · avg {summary.avgDurationMs}ms{tokenStr}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -1,6 +1,12 @@
 /**
  * @file generate-prompt-catalog.js
  * @description Build-time script to scan src/prompts/ and generate a static JSON catalog.
+ *
+ * Expected structure:
+ *   src/prompts/CORE.md          → catalog.CORE
+ *   src/prompts/DESIGN_RULES.md  → catalog.DESIGN_RULES
+ *   src/prompts/WORKFLOW.md      → catalog.WORKFLOW
+ *   src/prompts/EXAMPLES.md      → catalog.EXAMPLES
  */
 
 const fs = require('fs');
@@ -9,27 +15,13 @@ const path = require('path');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const PROMPTS_DIR = path.join(PROJECT_ROOT, 'src', 'prompts');
 const OUTPUT_DIR = path.join(PROJECT_ROOT, 'src', 'generated');
-
-function scanDirectory(dir, prefix = '') {
-  const result = {};
-  const items = fs.readdirSync(dir);
-
-  for (const item of items) {
-    const fullPath = path.join(dir, item);
-    const stat = fs.statSync(fullPath);
-
-    if (stat.isDirectory()) {
-      const subPrefix = prefix ? `${prefix}_${item.toUpperCase()}` : item.toUpperCase();
-      Object.assign(result, scanDirectory(fullPath, subPrefix));
-    } else if (item.endsWith('.md')) {
-      const key = path.parse(item).name.toUpperCase();
-      const finalKey = prefix ? `${prefix}_${key}` : key;
-      const content = fs.readFileSync(fullPath, 'utf-8').trim();
-      result[finalKey] = content;
-    }
-  }
-  return result;
-}
+const OUTPUT_FILE = path.join(OUTPUT_DIR, 'prompt-catalog.json');
+const LEGACY_TERMS = [
+  'generateDesign',
+  'batchOperations',
+  'applyDesignPatch',
+  'complete_task',
+];
 
 /**
  * [Figma Sandbox Fix] Writes JSON to file while obfuscating strings that trigger
@@ -37,13 +29,12 @@ function scanDirectory(dir, prefix = '') {
  */
 function safeJsonWrite(filePath, data) {
   const content = JSON.stringify(data, null, 2);
-  // Break sensitive patterns with a space to bypass Figma's regex-based scanner.
   const safeContent = content
     .replace(/import\s*\(/g, 'imp_ort(')
     .replace(/import\.\s*meta/g, 'imp_ort.meta')
     .replace(/eval\s*\(/g, 'ev_al(')
     .replace(/new\s*Function\s*\(/g, 'new Fun_ction(');
-  
+
   fs.writeFileSync(filePath, safeContent);
 }
 
@@ -54,31 +45,38 @@ function main() {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
 
-  const catalog = scanDirectory(PROMPTS_DIR);
+  // Scan only top-level .md files (flat structure, no subdirectories)
+  const catalog = {};
+  for (const item of fs.readdirSync(PROMPTS_DIR)) {
+    const fullPath = path.join(PROMPTS_DIR, item);
+    if (fs.statSync(fullPath).isFile() && item.endsWith('.md')) {
+      const key = path.parse(item).name.toUpperCase();
+      catalog[key] = fs.readFileSync(fullPath, 'utf-8').trim();
+    }
+  }
 
-  // Manual mapping for nested Mode Guidance to keep existing structure
-  const modeGuidance = {
-    PLANNING: catalog.MODES_PLANNING,
-    EXECUTION: catalog.MODES_EXECUTION,
-    VERIFICATION: catalog.MODES_VERIFICATION,
-    RECOVERY: catalog.MODES_RECOVERY
-  };
+  // Legacy term guard
+  const serializedCatalog = JSON.stringify(catalog);
+  const detectedLegacyTerms = LEGACY_TERMS.filter(term => serializedCatalog.includes(term));
+  if (detectedLegacyTerms.length > 0) {
+    throw new Error(
+      `Legacy prompt terms detected in catalog: ${detectedLegacyTerms.join(', ')}. ` +
+      'Please migrate prompt sources under src/prompts/ to unified tool names.'
+    );
+  }
 
-  // Nest them back for the registry
-  catalog.MODE_GUIDANCE = modeGuidance;
+  safeJsonWrite(OUTPUT_FILE, catalog);
 
-  // Remove duplicated top-level MODES_* keys (only MODE_GUIDANCE is consumed)
-  delete catalog.MODES_PLANNING;
-  delete catalog.MODES_EXECUTION;
-  delete catalog.MODES_VERIFICATION;
-  delete catalog.MODES_RECOVERY;
+  // Clean up legacy artifacts
+  const legacyFiles = [path.join(OUTPUT_DIR, 'prompt-catalog.json.bak')];
+  for (const legacyFile of legacyFiles) {
+    if (fs.existsSync(legacyFile)) {
+      fs.unlinkSync(legacyFile);
+      console.log(`🧹 Removed legacy artifact: ${path.relative(PROJECT_ROOT, legacyFile)}`);
+    }
+  }
 
-  safeJsonWrite(
-    path.join(OUTPUT_DIR, 'prompt-catalog.json'),
-    catalog
-  );
-
-  console.log(`✅ Generated prompt-catalog.json (${Object.keys(catalog).length} entries)`);
+  console.log(`✅ Generated prompt-catalog.json (${Object.keys(catalog).length} entries: ${Object.keys(catalog).join(', ')})`);
 }
 
 main();

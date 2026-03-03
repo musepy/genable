@@ -10,12 +10,7 @@ function makeCtx(overrides: Partial<HookContext> = {}): HookContext {
   return {
     iteration: 0,
     maxIterations: 10,
-    contextManager: {
-      addMessage: vi.fn(),
-      getMessages: vi.fn().mockReturnValue([]),
-      getAllMessages: vi.fn().mockReturnValue([]),
-      getApproximateTokens: vi.fn().mockReturnValue(0),
-    } as any,
+    messages: [],
     loopPolicy: {
       monotoneLoopThreshold: 8,
       maxOutputTokens: 16384,
@@ -158,8 +153,8 @@ describe('HookRunner', () => {
 
   it('should inject messages into context', async () => {
     const registry = new HookRegistry();
-    const addMessage = vi.fn();
-    const ctx = makeCtx({ contextManager: { addMessage } as any });
+    const messages: any[] = [];
+    const ctx = makeCtx({ messages });
 
     registry.register({
       id: 'injector',
@@ -170,7 +165,8 @@ describe('HookRunner', () => {
 
     const runner = new HookRunner(registry);
     await runner.run('afterLLMResponse', ctx);
-    expect(addMessage).toHaveBeenCalledWith(expect.objectContaining({
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toEqual(expect.objectContaining({
       role: 'user',
       content: 'Hello from hook',
     }));

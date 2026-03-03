@@ -12,6 +12,7 @@ import { fontBus } from '../figma-adapter/resources/FontBus'; // Assuming this e
 import { fetchIconSvg } from '../figma-adapter/assets/iconify';
 import { parseActionError } from './errorParser';
 import { ActionErrorSubCategory } from './errorTypes';
+import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
 
 export class ActionExecutor {
   private tempIdMap = new Map<string, string>(); // tempId → realFigmaId
@@ -90,6 +91,7 @@ export class ActionExecutor {
       let retryCount = 0;
       let retryTried = false;
       let subCategory = ActionErrorSubCategory.UNKNOWN;
+      const retryWarnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
 
       while (!result.success && retryCount < 2) {
         const rawError = result.error || 'Unknown error';
@@ -107,12 +109,9 @@ export class ActionExecutor {
               delete props.layoutAlign;
               delete props.constraints;
             } else if (subCategory === ActionErrorSubCategory.SIZING_CONFLICT) {
-              // Downgrade HUG/FILL to FIXED when parent context doesn't support them
-              if (props.layoutSizingHorizontal === 'HUG' || props.layoutSizingHorizontal === 'FILL') {
-                props.layoutSizingHorizontal = 'FIXED';
-              }
-              if (props.layoutSizingVertical === 'HUG' || props.layoutSizingVertical === 'FILL') {
-                props.layoutSizingVertical = 'FIXED';
+              const sizingWarnings = await this.autoFixSizingConflict(action, props);
+              if (sizingWarnings.length > 0) {
+                retryWarnings.push(...sizingWarnings);
               }
             } else if (subCategory === ActionErrorSubCategory.NODE_TYPE_CONSTRAINT) {
               // Cannot auto-fix node type mismatch — break to avoid infinite retry
@@ -138,6 +137,10 @@ export class ActionExecutor {
         } else {
           break; // Unrecoverable or unknown error
         }
+      }
+
+      if (retryWarnings.length > 0) {
+        result.warnings = [...(result.warnings || []), ...retryWarnings];
       }
 
       if (!result.success) {
@@ -212,6 +215,13 @@ export class ActionExecutor {
 
       switch (action.action) {
         case 'createFrame': {
+          // Read-before-create: if parent already has a child with same name+type, upsert
+          const existingFrame = this.findExistingChild(parentNode, action.props.name, 'FRAME');
+          if (existingFrame) {
+            const warnings = await this.applyProps(existingFrame, action.props);
+            return { success: true, nodeId: existingFrame.id, warnings: warnings.length ? warnings : undefined };
+          }
+
           const frame = figma.createFrame();
           if (parentNode && 'appendChild' in parentNode) {
             parentNode.appendChild(frame);
@@ -226,6 +236,13 @@ export class ActionExecutor {
         }
 
         case 'createText': {
+          // Read-before-create: match by characters content under same parent
+          const existingText = this.findExistingChild(parentNode, action.props.name, 'TEXT');
+          if (existingText) {
+            const warnings = await this.applyTextProps(existingText as TextNode, action.props);
+            return { success: true, nodeId: existingText.id, warnings: warnings.length ? warnings : undefined };
+          }
+
           const text = figma.createText();
           if (parentNode && 'appendChild' in parentNode) {
             parentNode.appendChild(text);
@@ -240,6 +257,20 @@ export class ActionExecutor {
         }
 
         case 'createShape': {
+          const shapeTypeMap: Record<string, string> = {
+            RECTANGLE: 'RECTANGLE',
+            ELLIPSE: 'ELLIPSE',
+            LINE: 'LINE',
+            VECTOR: 'VECTOR',
+          };
+          const existingShape = this.findExistingChild(
+            parentNode, action.props.name, shapeTypeMap[action.shapeType] || 'RECTANGLE'
+          );
+          if (existingShape) {
+            const warnings = await this.applyProps(existingShape, action.props);
+            return { success: true, nodeId: existingShape.id, warnings: warnings.length ? warnings : undefined };
+          }
+
           let shape: RectangleNode | EllipseNode | LineNode | VectorNode;
           if (action.shapeType === 'ELLIPSE') shape = figma.createEllipse();
           else if (action.shapeType === 'LINE') shape = figma.createLine();
@@ -259,6 +290,13 @@ export class ActionExecutor {
         }
 
         case 'createIcon': {
+           // Read-before-create for icons
+           const existingIcon = this.findExistingChild(parentNode, action.props.name, 'FRAME');
+           if (existingIcon) {
+             const warnings = await this.applyProps(existingIcon, action.props);
+             return { success: true, nodeId: existingIcon.id, warnings: warnings.length ? warnings : undefined };
+           }
+
            let svgData = action.props.svgData;
            if (!svgData && action.props.iconName) {
              svgData = await fetchIconSvg(action.props.iconName) || undefined;
@@ -362,6 +400,107 @@ export class ActionExecutor {
       }
     }
     return p;
+  }
+
+  private static isAutoLayoutMode(mode: unknown): boolean {
+    return mode === 'HORIZONTAL' || mode === 'VERTICAL';
+  }
+
+  private static asSizingMode(value: unknown): SizingMode {
+    if (value === 'HUG' || value === 'FILL' || value === 'FIXED') return value;
+    return 'FIXED';
+  }
+
+  private async autoFixSizingConflict(
+    action: FigmaAction,
+    props: Record<string, any>
+  ): Promise<Array<{ code: string; severity: 'warning'; message: string }>> {
+    const warnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
+    const targetNode =
+      action.action === 'updateProps'
+        ? (await figma.getNodeByIdAsync(this.resolveId(action.nodeId))) as SceneNode | null
+        : null;
+    const parentNode =
+      action.action === 'updateProps'
+        ? (targetNode?.parent || null)
+        : await this.resolveParent(action.parentId);
+
+    const nodeLayoutMode = props.layoutMode ?? ((targetNode as any)?.layoutMode as string | undefined);
+    const hasAutoLayout = ActionExecutor.isAutoLayoutMode(nodeLayoutMode);
+    const parentLayoutMode =
+      parentNode && 'layoutMode' in (parentNode as any)
+        ? (parentNode as any).layoutMode
+        : undefined;
+    const parentHasAutoLayout = ActionExecutor.isAutoLayoutMode(parentLayoutMode);
+    const isRoot = !parentNode || (parentNode as any).type === 'PAGE';
+
+    const currentH = ActionExecutor.asSizingMode(
+      props.layoutSizingHorizontal ?? (targetNode as any)?.layoutSizingHorizontal
+    );
+    const currentV = ActionExecutor.asSizingMode(
+      props.layoutSizingVertical ?? (targetNode as any)?.layoutSizingVertical
+    );
+    const { h, v } = normalizeSizing(currentH, currentV, {
+      hasAutoLayout,
+      parentHasAutoLayout,
+      isRoot,
+    });
+
+    props.layoutSizingHorizontal = h;
+    props.layoutSizingVertical = v;
+
+    if (h === 'FIXED' && props.width === undefined) {
+      const fallbackWidth = Math.max(
+        1,
+        Math.round(
+          (targetNode as any)?.width ??
+            ((parentNode as any)?.type !== 'PAGE' ? (parentNode as any)?.width : undefined) ??
+            (isRoot ? 360 : 200)
+        )
+      );
+      props.width = fallbackWidth;
+      warnings.push({
+        code: 'SIZING_AUTOFIX',
+        severity: 'warning',
+        message: `layoutSizingHorizontal normalized to FIXED; width defaulted to ${fallbackWidth}px.`,
+      });
+    }
+
+    if (v === 'FIXED' && props.height === undefined) {
+      const fallbackHeight = Math.max(
+        1,
+        Math.round(
+          (targetNode as any)?.height ??
+            ((parentNode as any)?.type !== 'PAGE' ? (parentNode as any)?.height : undefined) ??
+            (isRoot ? 240 : 120)
+        )
+      );
+      props.height = fallbackHeight;
+      warnings.push({
+        code: 'SIZING_AUTOFIX',
+        severity: 'warning',
+        message: `layoutSizingVertical normalized to FIXED; height defaulted to ${fallbackHeight}px.`,
+      });
+    }
+
+    return warnings;
+  }
+
+  /**
+   * Read-before-create: find an existing child node matching name + type under parent.
+   * Returns the existing node for upsert, or null if no match (create normally).
+   * Only matches when `name` is explicitly provided — unnamed nodes are always created fresh.
+   */
+  private findExistingChild(
+    parent: SceneNode | null,
+    name: string | undefined,
+    expectedType: string,
+  ): SceneNode | null {
+    if (!parent || !name || !('children' in parent)) return null;
+    const children = (parent as any).children as readonly SceneNode[];
+    return children.find(
+      (c: SceneNode) => c.name === name && c.type === expectedType
+    ) ?? null;
   }
 
   private resolveId(idOrTempId: string): string {
@@ -481,6 +620,23 @@ export class ActionExecutor {
         } catch (e: any) {
           console.warn(`[ActionExecutor] Failed to apply effects on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'EFFECT_INVALID', severity: 'warning', message: `Failed to apply effects: ${e.message}` });
+        }
+      } else if ((key === 'letterSpacing' || key === 'lineHeight') && typeof value === 'number') {
+        try {
+          (node as any)[key] = { value, unit: 'PIXELS' };
+        } catch (e: any) {
+          console.warn(`[ActionExecutor] Failed to apply ${key} on node ${node.id}: ${e.message}`);
+          warnings.push({ code: 'PROP_NORMALIZE_FAILED', severity: 'warning', message: `Failed to apply ${key}: ${e.message}` });
+        }
+      } else if ((key === 'width' || key === 'height') && 'resize' in node) {
+        try {
+          (node as any).resize(
+            key === 'width' ? value : node.width,
+            key === 'height' ? value : node.height
+          );
+        } catch (e: any) {
+          console.warn(`[ActionExecutor] Failed to resize node ${node.id}: ${e.message}`);
+          warnings.push({ code: 'RESIZE_FAILED', severity: 'warning', message: `Failed to resize: ${e.message}` });
         }
       } else if (key in node) {
         if (!this.canAssignProperty(node, key)) {

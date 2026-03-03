@@ -8,6 +8,7 @@ import { TEXT_PROPS_SCHEMA } from '../../../../constants/figma-api';
 export const patchNodeDefinition: ToolDefinition = {
   name: 'patch_node',
   category: 'modify',
+  display: { displayName: 'Patch Node', group: 'design' },
   dependencies: ['read_node'],
   description: `Update properties of one or more existing nodes. This is the ONLY tool for modifying existing elements.
 

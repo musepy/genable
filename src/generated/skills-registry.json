@@ -1,48 +1,4 @@
 {
-  "figma-core": {
-    "id": "figma-core",
-    "name": "Figma Core Operations",
-    "description": "Create, modify, and inspect Figma nodes",
-    "frontmatter": {
-      "id": "figma-core",
-      "name": "Figma Core Operations",
-      "description": "Create, modify, and inspect Figma nodes",
-      "category": "figma",
-      "priority": 1,
-      "injectionType": "system",
-      "tools": [
-        "build_design",
-        "patch_node",
-        "read_node",
-        "delete_node",
-        "query_knowledge",
-        "validate_design",
-        "signal"
-      ],
-      "enabledByDefault": true
-    },
-    "body": "## FIGMA OPERATIONS\n\n### PREFERRED: One-Shot Generation\n\nFor creating NEW components/layouts, use `build_design` — output ALL nodes in a single DSL script with symbol-based parent references.\n\n> [!IMPORTANT]\n> Even if your plan has multiple steps (e.g., 1. Header, 2. Form, 3. Footer), you should ideally use **ONE** `build_design` call to output the entire tree at once. This ensures consistency and is much faster.\n\n```\nbuild_design({\n  \"instructions\": \"card = create(FRAME, { name: \\\"Card\\\", layoutMode: \\\"VERTICAL\\\", itemSpacing: 12, padding: 16, width: 360, layoutSizingVertical: \\\"HUG\\\", fills: [\\\"#FFFFFF\\\"], cornerRadius: 12 })\\ntitle = create(TEXT, parent=card, { characters: \\\"Card Title\\\", fontSize: 18, fontWeight: \\\"Bold\\\", fills: [\\\"#111827\\\"], layoutSizingHorizontal: \\\"FILL\\\" })\\ndesc = create(TEXT, parent=card, { characters: \\\"Description text\\\", fontSize: 14, fills: [\\\"#6B7280\\\"], layoutSizingHorizontal: \\\"FILL\\\" })\"\n})\n```\n\nThis is faster and more reliable than creating nodes one-by-one. ALWAYS set explicit width/height or HUG sizing on FRAME nodes.\n\n### MODIFICATION (PREFERRED)\n\nFor high-level modification, use `patch_node`. This avoids atomic loops and is much more token-efficient.\n\n#### patch_node (Modify State)\nIncrementally update an element by merging properties. Preserves children automatically.\n```json\npatch_node({\n  \"patches\": [\n    {\n      \"nodeId\": \"123:456\",\n      \"props\": {\"fills\": [\"#EF4444\"], \"padding\": 16}\n    }\n  ]\n})\n```\n\n### Key Rules\n- **build_design**: First line without `parent=` creates the root. All others reference parent by symbol name.\n- **All props inline**: layoutMode, itemSpacing, fills, fontSize, cornerRadius, effects, etc. go in the create() props.\n- **TEXT nodes MUST have characters**\n- **Meaningful names**: Never use \"unnamed\" or \"frame\"\n- **Auto Layout for HUG**: Add layoutMode before using HUG sizing\n- **Effects**: Use effects for visual depth. Example:\n  ```json\n  \"effects\": [{\"type\": \"DROP_SHADOW\", \"color\": \"#0000001A\", \"offset\": {\"x\": 0, \"y\": 4}, \"blur\": 16, \"spread\": 0}]\n  ```\n  Types: DROP_SHADOW, INNER_SHADOW, LAYER_BLUR, BACKGROUND_BLUR\n- **Colors**: Use non-pure-black for text (#111827), subtle borders (#D1D5DB) for inputs\n\n### Error & Warning Recovery\n- **`PARENT_NOT_FOUND` Error** → Create parent first.\n- **`NODE_NOT_FOUND` Error** → Use `read_node` or `inspectDesign` to find valid IDs.\n- **`FONT_FALLBACK` Warning** → **DO NOT** repeat `build_design`. If it's a critical text element (e.g., Title or Button), use `patch_node` ONCE to attempt using an available `fontWeight` (like `Regular` or `Medium`). If it fails again, proceed with the task and summarize unresolved `warningsDigest` in the final `signal({ type: \"complete\", ... })` call."
-  },
-  "figma-sandbox": {
-    "id": "figma-sandbox",
-    "name": "Figma Sandbox Security",
-    "description": "Figma 插件沙盒安全限制与调试指南，包括 \"import expression rejected\" 错误的诊断与修复",
-    "frontmatter": {
-      "name": "Figma Sandbox Security",
-      "description": "Figma 插件沙盒安全限制与调试指南，包括 \"import expression rejected\" 错误的诊断与修复"
-    },
-    "body": "# Figma Sandbox Security\n\nFigma 插件运行在一个受限的沙盒环境中，该环境会在代码**加载时**进行静态安全扫描，拒绝任何可能的动态代码执行模式。\n\n## 核心限制\n\n### 1. 禁止动态 `import ()`\n\nFigma 使用正则表达式 `/import\\s*\\(/` 扫描**所有代码字符串**，包括：\n- 实际的 JavaScript 动态导入语法\n- 字符串字面量中包含 `import (` 的内容（如错误消息、代码示例）\n- JSON 数据中嵌入的代码片段\n\n**典型错误：**\n```\nSyntaxError: possible import expression rejected around line XX\n```\n\n### 2. 其他已知限制\n\n| 模式 | 状态 | 说明 |\n|------|------|------|\n| `import ()` | ❌ 禁止 | 动态导入 |\n| `eval()` | ❌ 禁止 | 代码执行 |\n| `new Function()` | ❌ 禁止 | 动态函数 |\n| `setTimeout(string)` | ❌ 禁止 | 字符串参数 |\n\n---\n\n## 诊断流程\n\n### Step 1: 定位问题文件\n```bash\n# 检查所有输出 bundle\ngrep -E 'import\\s*\\(' build/main.js build/ui.js\n```\n\n### Step 2: 查看具体上下文\n```bash\n# 显示匹配内容的上下文\ngrep -oE '.{30}import\\s*\\(.{30}' build/main.js | head -10\n```\n\n### Step 3: 追溯源头\n\n常见来源：\n1. **第三方库错误消息** - 如 `@google/genai` SDK 的 `import ('node:buffer').File`\n2. **Knowledge/JSON 数据** - 包含代码示例的教程数据\n3. **动态导入语法** - 代码中使用的 `await import ('./module')`\n\n---\n\n## 修复策略\n\n### 策略 A: 源头修复（推荐）\n\n将动态导入改为静态导入：\n\n```typescript\n// ❌ 会被拒绝\nconst { foo } = await import ('./module');\n\n// ✅ 正确方式\nimport { foo } from './module';\n```\n\n### 策略 B: 构建时 Sanitizer\n\n在 `build.js` 中添加后处理步骤：\n\n```javascript\n// build.js - injectMetaData 函数\nconst filesToProcess = ['main.js', 'ui.js'];\n\nfor (const filename of filesToProcess) {\n  let content = fs.readFileSync(path.join('build', filename), 'utf8');\n  \n  // 检测并替换所有 import ( 和 import ( 模式\n  const importPattern = /import\\s*\\(/g;\n  if (importPattern.test(content)) {\n    console.log(`⚠️ [${filename}] Sanitizing import patterns...`);\n    content = content.replace(/import\\s*\\(/g, 'imp_ort(');\n    fs.writeFileSync(path.join('build', filename), content);\n  }\n}\n```\n\n### 策略 C: 数据生成时预处理\n\n在 JSON 生成脚本中预先混淆：\n\n```javascript\n// scripts/generate-knowledge.js\nfunction safeJsonWrite(filePath, data) {\n  let content = JSON.stringify(data, null, 2);\n  // 替换所有可能的 import 调用模式\n  content = content.replace(/import\\s*\\(/g, 'imp_ort(');\n  fs.writeFileSync(filePath, content);\n}\n```\n\n---\n\n## 验证清单\n\n构建后执行验证：\n\n```bash\n# 确认无危险模式\ngrep -c 'import (' build/main.js  # 应为 0\ngrep -c 'import (' build/ui.js    # 应为 0\n\n# 确认替换生效\ngrep -c 'imp_ort(' build/main.js  # 应 > 0 如果有替换\n```\n\n---\n\n## 快速参考\n\n| 问题 | 解决方案 |\n|------|----------|\n| 代码中的 `await import ()` | 改为顶部静态 `import` |\n| 第三方库字符串中的 `import (` | build.js sanitizer |\n| Knowledge JSON 中的代码示例 | 生成脚本预处理 |\n| 确认修复 | `grep -E 'import\\s*\\(' build/*.js` 返回空 |\n\n---\n\n## 相关文件\n\n| 文件 | 作用 |\n|------|------|\n| [build.js](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/build.js) | 构建时 sanitizer |\n| [generate-knowledge.js](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/scripts/generate-knowledge.js) | Knowledge 数据生成 |\n| [generate-skills-registry.js](file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/scripts/generate-skills-registry.js) | Skills 注册表生成 |"
-  },
-  "figma-to-code": {
-    "id": "figma-to-code",
-    "name": "figma-to-code",
-    "description": "This skill should be used when generating Figma node structures from natural language descriptions. It ensures semantically correct layouts, proper sizing constraints, and accessible design patterns. Use this whenever the user asks to create, modify, or convert UI components.\n",
-    "frontmatter": {
-      "name": "figma-to-code",
-      "description": "This skill should be used when generating Figma node structures from natural language descriptions. It ensures semantically correct layouts, proper sizing constraints, and accessible design patterns. Use this whenever the user asks to create, modify, or convert UI components.\n"
-    },
-    "body": "# Figma to Code Generator\n\n> Generate production-ready Figma designs as JSON from natural language descriptions.\n\n## Decision Tree: Choosing Your Approach\n\n```\nUser prompt → Is selection provided?\n    ├─ Yes → Is it a text node?\n    │         ├─ Yes → CONVERT_TEXT mode (Level 1 context)\n    │         └─ No → Is it a container?\n    │             ├─ Yes → MODIFY_LAYOUT mode (Level 2 context)\n    │             └─ No → STYLE_CHANGE mode (Level 1 context)\n    └─ No → Is prompt about a component?\n        ├─ Yes → GENERATE_COMPONENT mode (Level 2 context)\n        │         └─ Inject component specs from references/component-specs.md\n        └─ No → Is prompt about a page/layout?\n            ├─ Yes → GENERATE_PAGE mode (Level 3 context)\n            │         └─ Inject layout rules from references/layout-rules.md\n            └─ No → SIMPLE_GENERATE mode (Level 1 context)\n\nOn failure/retry → Escalate to Level 4 (add few-shot examples)\n```\n\n---\n\n## Iron Laws (NEVER VIOLATE)\n\nThese constraints are absolute. Violation will be automatically corrected.\n\n### 1. Button Height\n```\nRule: Button height MUST be 44-48px\nNEVER: 50px, 52px, 60px or any value > 48px\nFix: Force height to 44px\n```\n\n### 2. Nested Container Sizing\n```\nRule: Nested containers MUST use \"layoutSizingHorizontal\": \"FILL\"\nNEVER: Fixed widths like 320px, 360px, 375px, 390px, 393px inside layouts\nException: Sidebar, Modal, Dialog (can be fixed)\nFix: Remove width, set layoutSizingHorizontal to FILL\n```\n\n### 3. Horizontal Child Fill\n```\nRule: Children in HORIZONTAL layout MUST use FILL sizing\nNEVER: FIXED sizing for direct children of HORIZONTAL containers\nFix: Set layoutSizingHorizontal to FILL, remove width\n```\n\n### 4. Avatar Circularity\n```\nRule: Avatars MUST be circular\nFormula: cornerRadius = MIN(width, height) / 2\nExample: 64px avatar → cornerRadius: 32\n```\n\n### 5. Shadow Opacity\n```\nRule: Shadows MUST be subtle (8-15% opacity)\nNEVER: Pure black shadows (#000000)\nFix: Use \"#00000014\" (8% opacity)\n```\n\n### 6. Dark Background Contrast\n```\nRule: Text on dark backgrounds MUST be white\nTrigger: Background luminance < 100\nFix: Set text color to #FFFFFF\n```\n\n### 7. Input Field Height\n```\nRule: Input fields MUST be 44-48px height\nNEVER: < 40px or > 56px\nFix: Set height to 48px\n```\n\n### 8. Card Minimum Padding\n```\nRule: Cards MUST have at least 16px padding\nNEVER: Padding < 12px on any side\nFix: Set minimum padding to 16px\n```\n\n### 9. Divider Lines\n```\nRule: Dividers MUST be 1px height, FILL width\nNEVER: height FILL for dividers\nMatch: Names containing \"line\", \"divider\", \"separator\", \"hr\"\nExclude: \"headline\", \"outline\", \"timeline\", etc.\n```\n\n### 10. Text Line Height\n```\nRule: Text MUST have explicit line height\nDefault: 150% of fontSize\nFix: Add lineHeight: { value: 150, unit: 'PERCENT' }\n```\n\n---\n\n## Context Levels (Progressive Disclosure)\n\n### Level 1: Minimal (Simple modifications)\n- Role and task description\n- Output schema only\n- ~200 tokens\n\n### Level 2: Standard (Component generation)\n- Level 1 + Iron Law constraints\n- Component anatomy if requested\n- ~500 tokens\n\n### Level 3: Full (Page/layout generation)\n- Level 2 + Design system context\n- Pattern insights and references\n- Few-shot examples for complex layouts\n- ~1000 tokens\n\n### Level 4: Maximum (Retry/failure recovery)\n- Level 3 + Multiple few-shot examples\n- Explicit error correction guidance\n- ~2000 tokens\n\n---\n\n## Output Schema\n\n```json\n{\n  \"type\": \"FRAME\" | \"TEXT\" | \"INSTANCE\" | \"VECTOR\",\n  \"props\": {\n    \"name\": \"string\",\n    \"layout\": \"VERTICAL\" | \"HORIZONTAL\" | \"NONE\",\n    \"gap\": \"number (multiples of 4: 4, 8, 12, 16, 24, 32)\",\n    \"padding\": { \"top\": \"number\", \"right\": \"number\", \"bottom\": \"number\", \"left\": \"number\" },\n    \"layoutSizingHorizontal\": \"FIXED\" | \"HUG\" | \"FILL\",\n    \"layoutSizingVertical\": \"FIXED\" | \"HUG\" | \"FILL\",\n    \"width\": \"number (ONLY for Root or FIXED)\",\n    \"height\": \"number (ONLY for FIXED)\",\n    \"fills\": [\"#HEX\"],\n    \"cornerRadius\": \"number\",\n    \"effects\": [{\"type\": \"DROP_SHADOW\", \"color\": \"#RRGGBBAA\", \"offset\": {\"x\": 0, \"y\": 4}, \"blur\": 16}],\n    \"content\": \"string (TEXT only)\",\n    \"fontSize\": \"number (TEXT only)\",\n    \"fontWeight\": \"Regular | Medium | SemiBold | Bold\",\n    \"color\": \"#HEX (TEXT only)\"\n  },\n  \"children\": []\n}\n```\n\n---\n\n## Style Best Practices\n\n1. **Contrast**: Light text on dark bg, Dark text on light bg\n2. **Visual Hierarchy**:\n   - H1: 24-32px Bold\n   - Body: 14-16px Regular\n   - Caption: 12px Muted\n3. **Effects**:\n   - Shadows: Soft and subtle (color: \"#00000014\", blur: 16, y: 4)\n   - Borders: Subtle 1px borders (#E5E7EB) for cards/inputs\n4. **Spacing**: Use multiples of 4 (4, 8, 12, 16, 24, 32)"
-  },
   "design-knowledge": {
     "id": "design-knowledge",
     "name": "Design Knowledge",
@@ -55,9 +11,7 @@
       "priority": 3,
       "injectionType": "dynamic",
       "tools": [
-        "searchDesignKnowledge",
-        "getComponentAnatomy",
-        "getFigmaLayoutRules"
+        "query_knowledge"
       ],
       "triggerPatterns": [
         "pattern",
@@ -74,7 +28,7 @@
       ],
       "enabledByDefault": true
     },
-    "body": "## DESIGN KNOWLEDGE\n\nAccess design knowledge when you need guidance:\n\n- `searchDesignKnowledge`: Find UI patterns, color schemes, typography rules\n- `getComponentAnatomy`: Get structural blueprint for common components\n- `getFigmaLayoutRules`: Get specific layout Do's and Don'ts\n\nUse knowledge tools BEFORE creating complex components to ensure best practices.\n\n### Examples\n\n**Create a pricing table:**\n```\ngetComponentAnatomy({componentName: \"pricing table\"})\n→ {layers: [...], variants: [...]}\n\nsearchDesignKnowledge({domain: \"landing\", query: \"pricing\"})\n→ {patterns: [...]}\n\ncreateNode(...)\n```"
+    "body": "## DESIGN KNOWLEDGE\n\nAccess design knowledge when you need guidance:\n\n- `query_knowledge(source=\"knowledge\", query=\"...\")`: Find UI patterns, color schemes, typography rules, component anatomy, layout rules\n\nUse `query_knowledge` BEFORE creating complex components to ensure best practices.\n\n### Examples\n\n**Create a pricing table:**\n```\nquery_knowledge({ source: \"knowledge\", query: \"pricing table anatomy\" })\n→ { results: [...] }\n\nbuild_design({ instructions: \"...\" })\n```"
   },
   "project-ui-context": {
     "id": "project-ui-context",
@@ -88,9 +42,7 @@
       "priority": 2,
       "injectionType": "dynamic",
       "tools": [
-        "getProjectUIContext",
-        "getDesignSystemTokens",
-        "listProjectComponents"
+        "query_knowledge"
       ],
       "triggerPatterns": [
         "button",
@@ -110,39 +62,6 @@
       ],
       "enabledByDefault": true
     },
-    "body": "## PROJECT UI CONTEXT\n\nThis project has existing UI components defined in code. Before creating new designs:\n\n1. **Query Components First**: Use `getProjectUIContext` to understand existing component structure\n2. **Use Design Tokens**: Use `getDesignSystemTokens` to get colors, spacing, typography\n3. **Match Patterns**: Generated designs should match the project's established patterns\n\n**When to use these tools:**\n- Creating buttons, headers, cards, inputs → Query the component first\n- Unsure about spacing/colors → Get design tokens\n- Need to match existing style → List and inspect components\n\n### Examples\n\n**Create button matching project style:**\n```\ngetProjectUIContext({component: \"Button\"})\n→ {props: [...], figmaMapping: {...}}\n\ncreateNode({...based on mapping...})\n```\n\n**创建符合设计系统的卡片:**\n```\ngetDesignSystemTokens({tokenType: \"all\"})\ngetProjectUIContext({component: \"Card\"})\ncreateNode(...)\n```"
-  },
-  "typed-actions-refactor": {
-    "id": "typed-actions-refactor",
-    "name": "DSL → Typed Actions Refactoring",
-    "description": "将写入协议从 DSL 中间语言迁移到直接 Figma Plugin API 操作指令。DSL 保留为只读上下文层。",
-    "frontmatter": {
-      "id": "typed-actions-refactor",
-      "name": "DSL → Typed Actions Refactoring",
-      "description": "将写入协议从 DSL 中间语言迁移到直接 Figma Plugin API 操作指令。DSL 保留为只读上下文层。",
-      "category": "architecture",
-      "priority": 0,
-      "injectionType": "manual",
-      "enabledByDefault": false
-    },
-    "body": "# DSL → Typed Actions 重构\n\n## 一句话定义\n\n> DSL 退为只读上下文层（给 Agent 理解画布状态），写入协议改为 Typed Actions（直接映射 figma.* API），消除 6 层翻译链。\n\n## 核心文件索引\n\n使用前请先阅读这些文件获取完整上下文：\n\n| 文件 | 用途 |\n|------|------|\n| `context/architecture.md` | 完整架构分析（当前 vs 目标） |\n| `context/codebase-map.md` | 受影响文件及其角色 |\n| `progress.md` | 进度跟踪 + 子任务清单 |\n| `assumptions.md` | 假设、竞争方案、置信度评估 |\n\n## 使用方式\n\n**新对话开始时**：如果任务涉及以下内容，先 `view_file` 本 SKILL.md 和相关子文件：\n- 修改 Agent 的 tool 定义（create_node, patch_node, read_node）\n- 修改渲染链（renderers, TreeReconstructor, Normalizer）\n- 修改 PropertyTransformer\n- 讨论 Agent 输出格式\n\n**完成工作后**：更新 `progress.md` 记录本次推进。\n\n## 设计原则\n\n1. **Agent 说 Figma 的语言** — 属性名直接用 Figma API 名，不再翻译\n2. **Action 是原子操作** — 每个 Action 对应一次 figma.* 调用\n3. **读写分离** — read path 做适度压缩给 Agent 看，write path 直通\n4. **渐进迁移** — Shadow Run 模式，新旧并行验证后再切换"
-  },
-  "workflow": {
-    "id": "workflow",
-    "name": "Workflow Management",
-    "description": "Task lifecycle signaling guidance",
-    "frontmatter": {
-      "id": "workflow",
-      "name": "Workflow Management",
-      "description": "Task lifecycle signaling guidance",
-      "category": "workflow",
-      "priority": 4,
-      "injectionType": "on-demand",
-      "tools": [
-        "signal"
-      ],
-      "enabledByDefault": true
-    },
-    "body": "## WORKFLOW MANAGEMENT\n\nUse `signal` for all task lifecycle updates:\n\n- `signal({ type: \"plan\", ... })`: announce the plan\n- `signal({ type: \"task_start\", ... })`: start a semantic task\n- `signal({ type: \"progress\", ... })`: report incremental progress\n- `signal({ type: \"complete\", ... })`: finish the task\n\nDo not use legacy workflow tools (`new_task`, `update_todo_list`, `summarize_progress`, `complete_task`)."
+    "body": "## PROJECT UI CONTEXT\n\nThis project has existing UI components defined in code. Before creating new designs:\n\n1. **Query Components First**: Use `query_knowledge(source=\"components\")` to understand existing component structure\n2. **Use Design Tokens**: Use `query_knowledge(source=\"tokens\")` to get colors, spacing, typography\n3. **Match Patterns**: Generated designs should match the project's established patterns\n\n**When to use these tools:**\n- Creating buttons, headers, cards, inputs → Query the component first\n- Unsure about spacing/colors → Get design tokens\n- Need to match existing style → List and inspect components\n\n### Examples\n\n**Create button matching project style:**\n```\nquery_knowledge({ source: \"components\", query: \"Button\" })\n→ { results: [...] }\n\nbuild_design({ instructions: \"...\" })\n```"
   }
 }

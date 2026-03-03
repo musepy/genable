@@ -18,12 +18,11 @@ try {
 }
 
 import { parseYamlFrontmatter } from './frontmatter';
-import { 
-  SkillDefinition, 
-  SkillCategory, 
-  SkillPriority, 
-  ContextInjectionType,
-  SkillContext 
+import {
+  SkillDefinition,
+  SkillCategory,
+  SkillPriority,
+  SkillContext
 } from './types';
 import { ToolDefinition } from '../tools/types';
 
@@ -54,9 +53,7 @@ interface SkillFrontmatter {
   description?: string;
   category?: SkillCategory;
   priority?: number;
-  injectionType?: ContextInjectionType;
   tools?: string[];
-  triggerPatterns?: string[];
   enabledByDefault?: boolean;
 }
 
@@ -184,9 +181,7 @@ export function loadSkillContent(skill: SkillMetadata): SkillDefinition | null {
       .filter((t): t is ToolDefinition => t !== undefined);
 
     const context: SkillContext = {
-      injectionType: fm.injectionType || 'dynamic',
       systemPromptSection: sanitizeLegacyToolReferences(body.trim()),
-      triggerPatterns: fm.triggerPatterns,
     };
 
     return {

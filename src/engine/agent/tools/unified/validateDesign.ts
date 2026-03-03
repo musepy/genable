@@ -8,6 +8,7 @@ import { NodeLayer } from '../../../../schema/layerSchema';
 export const validateDesignDefinition: ToolDefinition = {
   name: 'validate_design',
   category: 'validate',
+  display: { displayName: 'Validate Design', group: 'inspect' },
   dependencies: ['build_design', 'patch_node'],
   description: `Validate a node's layout and design constraints. Checks for sizing conflicts, auto-layout issues, and other structural problems.
 
@@ -24,7 +25,8 @@ Use this after creating or modifying nodes to catch issues early.`,
   },
   executionStrategy: 'parallel',
   errors: {
-    'NODE_NOT_FOUND': 'The specified nodeId does not exist.'
+    'NODE_NOT_FOUND': 'The specified nodeId does not exist.',
+    'INVALID_NODE_TYPE': 'The nodeId refers to a non-scene node (e.g. Page or Document).'
   }
 };
 

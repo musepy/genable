@@ -7,6 +7,7 @@ import { ToolDefinition } from '../types';
 export const readNodeDefinition: ToolDefinition = {
   name: 'read_node',
   category: 'read',
+  display: { displayName: 'Read Node', group: 'inspect' },
   description: `Read anything from the Figma document. This is the ONLY tool for querying the current canvas state.
 
 Modes:
@@ -39,6 +40,7 @@ Modes:
   executionStrategy: 'parallel',
   errors: {
     'NODE_NOT_FOUND': 'The specified nodeId does not exist.',
+    'INVALID_NODE_TYPE': 'The nodeId refers to a non-scene node (e.g. Page or Document).',
     'MISSING_PARAM': 'nodeId is required for "node" and "hierarchy" modes.',
     'INVALID_MODE': 'Mode must be one of: selection, node, hierarchy, variables, styles.'
   }

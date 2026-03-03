@@ -27,6 +27,22 @@ export interface ToolCallData {
   requestId: string;
 }
 
+// ── Shared node resolution (single source for getNodeByIdAsync + type guard) ──
+
+type NodeResolved = { ok: true; node: SceneNode } | { ok: false; response: ToolResponse };
+
+async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) {
+    return { ok: false, response: { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` } } };
+  }
+  // SceneNode always has 'visible'; PageNode / DocumentNode don't
+  if (!('visible' in node)) {
+    return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `Node ${nodeId} (type: ${node.type}) is not a SceneNode.` } } };
+  }
+  return { ok: true, node: node as SceneNode };
+}
+
 /**
  * Handle TOOL_CALL IPC events.
  * Routes to the 7 unified tool implementations.
@@ -61,11 +77,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             break;
           }
           case 'hierarchy': {
-            const hNode = await figma.getNodeByIdAsync(readNodeId) as SceneNode;
-            if (!hNode) {
-              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${readNodeId} not found.` } };
-              break;
-            }
+            const hResolved = await resolveSceneNode(readNodeId);
+            if (!hResolved.ok) { response = hResolved.response; break; }
+            const hNode = hResolved.node;
             const hSerialized = NodeSerializer.serializeWithCompression(hNode, {
               maxDepth: Math.min(readDepth || 5, 10),
               pruneDefaults: false
@@ -81,12 +95,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             break;
           }
           case 'node': {
-            const nNode = await figma.getNodeByIdAsync(readNodeId) as SceneNode;
-            if (!nNode) {
-              response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${readNodeId} not found.` } };
-              break;
-            }
-            const nSerialized = NodeSerializer.serialize(nNode);
+            const nResolved = await resolveSceneNode(readNodeId);
+            if (!nResolved.ok) { response = nResolved.response; break; }
+            const nSerialized = NodeSerializer.serialize(nResolved.node);
             response = { success: true, data: nSerialized };
             break;
           }
@@ -254,12 +265,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       }
 
       case 'validate_design': {
-        const valNodeId = parameters.nodeId;
-        const valNode = await figma.getNodeByIdAsync(valNodeId) as SceneNode;
-        if (!valNode) {
-          response = { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${valNodeId} not found.` } };
-          break;
-        }
+        const valResolved = await resolveSceneNode(parameters.nodeId);
+        if (!valResolved.ok) { response = valResolved.response; break; }
+        const valNode = valResolved.node;
         const valResult = validatePostOp(valNode, {});
         const anomalyResult = collectTreeAnomalies(valNode, 5);
         response = {
@@ -270,6 +278,56 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             anomalies: anomalyResult.length > 0 ? anomalyResult : undefined
           }
         };
+        break;
+      }
+
+      case 'capture_screenshot': {
+        const { nodeId: csNodeId, scale: csScale, format: csFormat } = parameters;
+        const csResolved = await resolveSceneNode(csNodeId);
+        if (!csResolved.ok) { response = csResolved.response; break; }
+        const csNode = csResolved.node;
+
+        if (!csNode.visible) {
+          response = { success: false, error: { code: 'EXPORT_FAILED', message: `Node ${csNodeId} is not visible.` } };
+          break;
+        }
+        const csWidth = csNode.width;
+        const csHeight = csNode.height;
+        if (csWidth === 0 || csHeight === 0) {
+          response = { success: false, error: { code: 'EXPORT_FAILED', message: `Node ${csNodeId} has zero dimensions (${csWidth}x${csHeight}).` } };
+          break;
+        }
+
+        try {
+          const exportFormat = (csFormat === 'png' ? 'PNG' : 'JPG') as 'PNG' | 'JPG';
+          const exportScale = Math.min(Math.max(csScale || 1, 0.5), 2);
+          const bytes = await csNode.exportAsync({
+            format: exportFormat,
+            constraint: { type: 'SCALE', value: exportScale }
+          });
+
+          // Uint8Array → base64 (Figma main thread has no Buffer)
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64 = btoa(binary);
+          const mimeType = exportFormat === 'PNG' ? 'image/png' : 'image/jpeg';
+
+          response = {
+            success: true,
+            data: {
+              nodeId: csNodeId,
+              width: Math.round(csWidth * exportScale),
+              height: Math.round(csHeight * exportScale),
+              format: exportFormat.toLowerCase(),
+              sizeBytes: bytes.length,
+              __image: { mimeType, data: base64 }
+            }
+          };
+        } catch (exportErr: any) {
+          response = { success: false, error: { code: 'EXPORT_FAILED', message: exportErr?.message || 'exportAsync failed' } };
+        }
         break;
       }
 

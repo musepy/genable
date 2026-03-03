@@ -93,6 +93,17 @@ export function operationsToParsedLines(operations: Operation[]): ParsedLine[] {
           props: op.props,
           dependsOn: computeDependsOn(op.parent),
         };
+
+      default:
+        return {
+          lineNumber,
+          raw,
+          command: 'PARSE_ERROR',
+          props: {
+            message: `Unknown operation type: '${(op as any).op}'. Valid types: create, update, delete, icon, image.`,
+          },
+          dependsOn: [],
+        };
     }
   });
 }

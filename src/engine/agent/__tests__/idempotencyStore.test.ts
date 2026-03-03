@@ -21,24 +21,30 @@ describe('computeRequestHash', () => {
 
 describe('canonicalizeBuildDesignParams', () => {
   it('normalizes defaults', () => {
-    const a = canonicalizeBuildDesignParams({ instructions: 'create(FRAME, {})' });
+    const ops = [{ op: 'create', type: 'FRAME', props: {} }];
+    const a = canonicalizeBuildDesignParams({ operations: ops });
     const b = canonicalizeBuildDesignParams({
-      instructions: 'create(FRAME, {})',
+      operations: ops,
       onError: 'continue',
       rollbackMode: 'none',
     });
     expect(a).toBe(b);
   });
 
-  it('trims instructions whitespace', () => {
-    const a = canonicalizeBuildDesignParams({ instructions: '  create(FRAME, {})  ' });
-    const b = canonicalizeBuildDesignParams({ instructions: 'create(FRAME, {})' });
-    expect(a).toBe(b);
+  it('produces different hashes for different operations', () => {
+    const a = canonicalizeBuildDesignParams({
+      operations: [{ op: 'create', type: 'FRAME', props: {} }],
+    });
+    const b = canonicalizeBuildDesignParams({
+      operations: [{ op: 'create', type: 'TEXT', props: {} }],
+    });
+    expect(a).not.toBe(b);
   });
 
   it('differentiates by parentId', () => {
-    const a = canonicalizeBuildDesignParams({ instructions: 'x', parentId: '1:2' });
-    const b = canonicalizeBuildDesignParams({ instructions: 'x', parentId: '3:4' });
+    const ops = [{ op: 'update', target: 'card', props: { width: 100 } }];
+    const a = canonicalizeBuildDesignParams({ operations: ops, parentId: '1:2' });
+    const b = canonicalizeBuildDesignParams({ operations: ops, parentId: '3:4' });
     expect(a).not.toBe(b);
   });
 });

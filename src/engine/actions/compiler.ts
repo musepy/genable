@@ -237,6 +237,9 @@ export class ActionCompiler {
     if (!line.targetRef) {
       return { line, error: "update command missing 'targetRef'" };
     }
+    if (Object.keys(props).length === 0) {
+      return { line, error: "update command has no properties to apply (empty 'props')" };
+    }
     const nodeId = this.resolveRef(line.targetRef, line.dependsOn);
     const action: FigmaAction = {
       action: 'updateProps',

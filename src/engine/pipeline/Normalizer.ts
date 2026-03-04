@@ -11,8 +11,6 @@
 import type { NodeLayer } from '../../schema/layerSchema';
 import { flowObserver, FlowPhase } from '../figma-adapter/observers/flowObserver';
 import { NODE_TYPES, PROPS, PROP_METADATA } from '../../constants/figma-api';
-// Static import for config
-import RUNTIME_CONFIG from '../../config/runtime-coercion.json';
 
 export class Normalizer {
     /**
@@ -42,17 +40,14 @@ export class Normalizer {
         // 2. Lift Props: REMOVED for strict mode
         // this.liftProps(layer);
 
-        // 3. Property Aliases (from runtime-coercion.json)
-        this.resolveAliases(layer.props);
-
-        // 4. Property Transformation (type coercion)
+        // 3. Property Transformation (type coercion)
         this.coercePropertyValues(layer.props);
-        
-        // 5. Enums: REMOVED fuzzy matching.
+
+        // 4. Enums: REMOVED fuzzy matching.
         // We can add strict validation here if we want to delete invalid enums.
         this.validateEnums(layer.props);
 
-        // 6. Recursive for children
+        // 5. Recursive for children
         if (Array.isArray(layer.children)) {
             if (layer.children.length === 0) {
                 delete (layer as any).children;
@@ -61,7 +56,7 @@ export class Normalizer {
             }
         }
 
-        // 7. Strict Sanitation: Remove legacy keys that are no longer lifted
+        // 6. Strict Sanitation: Remove legacy keys that are no longer lifted
         // [V6.2 MOD]: Removed aggressive delete. We now prefer lifting in toolCallHandler.
         // If they still exist here, we keep them as a fallback for the renderer.
         // if ('style' in layer) delete (layer as any).style;
@@ -89,24 +84,6 @@ export class Normalizer {
         }
         // Basic uppercase normalization is fine
         layer.type = layer.type.toUpperCase();
-    }
-
-    /**
-     * Resolve common property aliases from runtime-coercion.json.
-     * Moves values from alias keys to canonical keys (e.g., "spacing" → "gap").
-     * Only applies when the canonical key is NOT already set.
-     */
-    private static resolveAliases(props: any): void {
-        const aliases = RUNTIME_CONFIG.propertyAliases as Record<string, string>;
-        for (const [alias, canonical] of Object.entries(aliases)) {
-            if (props[alias] !== undefined && props[canonical] === undefined) {
-                props[canonical] = props[alias];
-                delete props[alias];
-            } else if (props[alias] !== undefined) {
-                // Canonical already set, just clean up the alias
-                delete props[alias];
-            }
-        }
     }
 
     private static coercePropertyValues(props: any): void {
@@ -189,12 +166,29 @@ export class Normalizer {
         }
     }
 
+    // Normalize: strip hyphens/underscores + uppercase
+    // "space-between", "spaceBetween", "SPACE_BETWEEN" all → "SPACEBETWEEN"
+    private static normEnum(s: string): string {
+        return s.toUpperCase().replace(/[-_]/g, '');
+    }
+
     private static validateEnums(props: any): void {
         // Data-driven: loop over all enum props in PROP_METADATA
         for (const [prop, meta] of Object.entries(PROP_METADATA)) {
             if (meta.type !== 'enum' || !meta.enumMap || props[prop] === undefined) continue;
-            const raw = String(props[prop]).toUpperCase();
-            const mapped = meta.enumMap[raw];
+            // Fast path: exact uppercase match
+            const upper = String(props[prop]).toUpperCase();
+            let mapped = meta.enumMap[upper];
+            if (!mapped) {
+                // Normalized lookup: strip hyphens/underscores from both sides
+                const norm = this.normEnum(String(props[prop]));
+                for (const [key, val] of Object.entries(meta.enumMap)) {
+                    if (this.normEnum(key) === norm) {
+                        mapped = val;
+                        break;
+                    }
+                }
+            }
             if (mapped) {
                 props[prop] = mapped;
             } else {

@@ -61,16 +61,16 @@ describe('Atomic Tools Interactions', () => {
             ]
           })
           .mockResolvedValueOnce({
-            text: 'Done', 
-            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] 
+            text: 'Done',
+            toolCalls: [] 
           })
           .mockResolvedValueOnce({
-            text: 'Really done', 
-            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Really done' } }] 
+            text: 'Really done',
+            toolCalls: [] 
           })
           .mockResolvedValue({
             text: 'Absolutely done',
-            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Absolutely done' } }]
+            toolCalls: []
           }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
@@ -101,8 +101,6 @@ describe('Atomic Tools Interactions', () => {
       tools: [
         { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
         { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Agent signal', parameters: { type: 'object', properties: {} } }
-
       ],
       ipcBridge: mockIpcBridge
     });
@@ -211,16 +209,16 @@ describe('Atomic Tools Interactions', () => {
             ]
           })
           .mockResolvedValueOnce({
-            text: 'Done', 
-            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] 
+            text: 'Done',
+            toolCalls: [] 
           })
           .mockResolvedValueOnce({
-            text: 'Really done', 
-            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Really done' } }] 
+            text: 'Really done',
+            toolCalls: [] 
           })
           .mockResolvedValue({
             text: 'Absolutely done',
-            toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Absolutely done' } }]
+            toolCalls: []
           }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
@@ -245,8 +243,6 @@ describe('Atomic Tools Interactions', () => {
       tools: [
         { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
         { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Agent signal', parameters: { type: 'object', properties: {} } }
-
       ],
       ipcBridge: (runtime as any).options.ipcBridge
     });

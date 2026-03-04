@@ -63,6 +63,10 @@ export class LLMGenerationCoordinator {
   private lastThinkingText = '';
   /** Throttle timestamp for reasoning delta events. */
   private lastNotificationTime = 0;
+  /** Throttle timestamp for text delta events. */
+  private lastTextNotificationTime = 0;
+  /** Buffered text delta not yet emitted due to throttling. */
+  private pendingTextDelta = '';
   /** Previous stable-prefix hash for cache diagnostics. */
   private lastStablePrefixHash: string | null = null;
 
@@ -78,6 +82,8 @@ export class LLMGenerationCoordinator {
   public reset(): void {
     this.lastThinkingText = '';
     this.lastNotificationTime = 0;
+    this.lastTextNotificationTime = 0;
+    this.pendingTextDelta = '';
     this.lastStablePrefixHash = null;
   }
 
@@ -138,6 +144,22 @@ export class LLMGenerationCoordinator {
             if (currentIterationText.length > this.config.ramblingThreshold) {
               console.warn(`[LLMGenCoordinator] RAMBLING DETECTED: ${currentIterationText.length} chars. Aborting stream.`);
               abortController.abort();
+            }
+            // Stream text chunks to UI for progressive "grow" effect
+            if (chunk) {
+              const now = Date.now();
+              if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
+                this.config.emitRuntimeEvent({
+                  type: 'text_delta',
+                  phase: 'execution' as AgentRuntimePhase,
+                  mode: 'AUTONOMOUS',
+                  iteration: iteration + 1,
+                  text: chunk,
+                });
+                this.lastTextNotificationTime = now;
+              } else {
+                this.pendingTextDelta += chunk;
+              }
             }
           } : undefined,
           onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
@@ -206,6 +228,18 @@ export class LLMGenerationCoordinator {
 
       if (!response) {
         response = { text: '', toolCalls: [] };
+      }
+
+      // Flush any buffered text delta
+      if (this.pendingTextDelta) {
+        this.config.emitRuntimeEvent({
+          type: 'text_delta',
+          phase: 'execution' as AgentRuntimePhase,
+          mode: 'AUTONOMOUS',
+          iteration: iteration + 1,
+          text: this.pendingTextDelta,
+        });
+        this.pendingTextDelta = '';
       }
 
       // --- Normalize & sanitize tool calls ---

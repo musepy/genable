@@ -2,16 +2,15 @@
  * @file loopDetector.ts
  * @description Extracted loop detection logic from AgentRuntime.
  *
- * Detects three types of agent loops:
+ * Detects two types of agent loops:
  * 1. Identical — exact same tool call signature repeated N times
- * 2. Planning — signal(type=plan) called 3+ times without progress
- * 3. Monotone — same tool-name pattern repeated (different args, same intent)
+ * 2. Monotone — same tool-name pattern repeated (different args, same intent)
  */
 
 import { LLMToolCall } from '../llm-client/providers/types';
 
 export interface LoopDetectionResult {
-  type: 'identical' | 'planning' | 'monotone';
+  type: 'identical' | 'monotone';
   message: string;
   /** true = throw error to terminate; false = inject hint and continue */
   fatal: boolean;
@@ -25,9 +24,7 @@ export interface LoopThresholds {
 
 export class LoopDetector {
   private signatureHistory: string[] = [];
-  private planningHistory: boolean[] = [];
   private identicalGraceGiven = false;
-  private planningGraceGiven = false;
   private readonly maxHistoryLength = 10;
 
   /**
@@ -36,28 +33,17 @@ export class LoopDetector {
    */
   detect(toolCalls: LLMToolCall[], thresholds: LoopThresholds): LoopDetectionResult | null {
     const semanticSignature = this.buildSignature(toolCalls);
-    const hasPlanningSignal = toolCalls.some(
-      tc => tc.name === 'signal' && tc.args?.type === 'plan'
-    );
 
     this.signatureHistory.push(semanticSignature);
     if (this.signatureHistory.length > this.maxHistoryLength) {
       this.signatureHistory.shift();
     }
-    this.planningHistory.push(hasPlanningSignal);
-    if (this.planningHistory.length > this.maxHistoryLength) {
-      this.planningHistory.shift();
-    }
 
-    // Check 1: Planning loop
-    const planResult = this.detectPlanningLoop(toolCalls);
-    if (planResult) return planResult;
-
-    // Check 2: Identical signature loop
+    // Check 1: Identical signature loop
     const identicalResult = this.detectIdenticalLoop(semanticSignature, thresholds.identical);
     if (identicalResult) return identicalResult;
 
-    // Check 3: Monotone tool-name pattern loop
+    // Check 2: Monotone tool-name pattern loop
     const monotoneResult = this.detectMonotoneLoop(thresholds.monotone);
     if (monotoneResult) return monotoneResult;
 
@@ -67,9 +53,7 @@ export class LoopDetector {
   /** Reset state (call at start of each run) */
   reset(): void {
     this.signatureHistory = [];
-    this.planningHistory = [];
     this.identicalGraceGiven = false;
-    this.planningGraceGiven = false;
   }
 
   // ── Private helpers ──────────────────────────────────────────
@@ -109,67 +93,22 @@ export class LoopDetector {
       const nameSample = tc.args?.name ? `|name:${this.truncate(tc.args.name, 64)}` : '';
       const contextSample = parentId ? `|parent:${this.truncate(parentId, 32)}` : '';
 
-      if (tc.name === 'build_design' && Array.isArray(tc.args?.operations)) {
-        const instrHash = this.hashString(JSON.stringify(tc.args.operations).slice(0, 256));
+      if (tc.name === 'create' && tc.args?.xml) {
+        const instrHash = this.hashString(String(tc.args.xml).slice(0, 256));
         fingerprint = `|build:${instrHash}`;
-      } else if (tc.name === 'patch_node' && Array.isArray(tc.args?.patches)) {
-        const patchHash = this.hashString(JSON.stringify(
-          tc.args.patches.map((p: any) => ({ n: p.nodeId, props: p.props }))
-        ));
-        fingerprint = `|patch:${tc.args.patches.length}|hash:${patchHash}`;
-      } else if (tc.name === 'read_node') {
-        const mode = tc.args?.mode || 'selection';
+      } else if (tc.name === 'edit' && tc.args?.xml) {
+        const editHash = this.hashString(String(tc.args.xml).slice(0, 256));
+        fingerprint = `|edit:${editHash}`;
+      } else if (tc.name === 'read') {
         const depth = tc.args?.depth ?? 5;
-        fingerprint = `|mode:${mode}|depth:${depth}`;
-      } else if (tc.name === 'signal' && tc.args?.type) {
-        const signalType = String(tc.args.type);
-        const signalSummary = tc.args?.summary || tc.args?.title || tc.args?.analysis || '';
-        fingerprint = `|signal:${signalType}|hash:${this.hashString(this.truncate(signalSummary, 128))}`;
+        fingerprint = `|depth:${depth}`;
       } else {
         fingerprint = `${nameSample}${contextSample}|args:${this.hashString(JSON.stringify(tc.args ?? {}))}`;
       }
 
-      const patchNodeId = Array.isArray(tc.args?.patches) ? tc.args.patches[0]?.nodeId : undefined;
-      const identifier = targetNodeId || patchNodeId || 'new';
+      const identifier = targetNodeId || 'new';
       return `${tc.name}[${identifier}${fingerprint}]`;
     }).join('|');
-  }
-
-  /**
-   * Detect planning signal called 3+ times consecutively.
-   * First occurrence gives a grace chance to explain; second is fatal.
-   */
-  private detectPlanningLoop(toolCalls: LLMToolCall[]): LoopDetectionResult | null {
-    const hasPlanningCall = toolCalls.some(
-      tc => tc.name === 'signal' && tc.args?.type === 'plan'
-    );
-    if (!hasPlanningCall) return null;
-
-    let consecutivePlanning = 0;
-    for (let i = this.planningHistory.length - 1; i >= 0; i--) {
-      if (!this.planningHistory[i]) break;
-      consecutivePlanning++;
-    }
-
-    if (consecutivePlanning < 3) return null;
-
-    if (!this.planningGraceGiven) {
-      this.planningGraceGiven = true;
-      return {
-        type: 'planning',
-        message: `Planning signal emitted ${consecutivePlanning} times consecutively.`,
-        fatal: false,
-        hint: `You have called signal(type="plan") ${consecutivePlanning} times without executing any steps. `
-          + `Stop replanning. Either execute the first step of your plan, or explain to the user `
-          + `why you cannot proceed and call signal(type="complete") with your explanation.`,
-      };
-    }
-
-    return {
-      type: 'planning',
-      message: `Agent stuck in planning loop after grace warning: planning signal emitted ${consecutivePlanning}+ times consecutively. Terminating.`,
-      fatal: true,
-    };
   }
 
   /**
@@ -187,8 +126,7 @@ export class LoopDetector {
         message: `[LOOP DETECTED] Same action repeated ${count} times.`,
         fatal: false,
         hint: `You repeated the same action ${count} times. Stop retrying. `
-          + `Explain to the user what you were trying to do and why it's not working. `
-          + `Then call signal(type="complete") with your explanation.`,
+          + `Explain to the user what you were trying to do and why it's not working.`,
       };
     }
 
@@ -219,8 +157,7 @@ export class LoopDetector {
     if (!allSamePattern || !toolNamePatterns[0]) return null;
 
     // Only trigger for modify-only patterns (not read tools)
-    const isModifyOnly = !toolNamePatterns[0].includes('read_node') &&
-                         !toolNamePatterns[0].includes('signal');
+    const isModifyOnly = !toolNamePatterns[0].includes('read');
     if (!isModifyOnly) return null;
 
     const pattern = toolNamePatterns[0];
@@ -228,9 +165,8 @@ export class LoopDetector {
       type: 'monotone',
       message: `Monotone loop: tool pattern "${pattern}" repeated ${threshold} consecutive iterations.`,
       fatal: false,
-      hint: `⚠️ You have called "${pattern}" for ${threshold} consecutive iterations without resolving the issue. `
-        + `If you are stuck, explain the difficulty to the user. `
-        + `Then call signal(type="complete") with a summary of what you accomplished and what remains unresolved.`,
+      hint: `You have called "${pattern}" for ${threshold} consecutive iterations without resolving the issue. `
+        + `If you are stuck, explain the difficulty to the user.`,
     };
   }
 }

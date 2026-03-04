@@ -100,6 +100,15 @@ export interface AgentRuntimeReasoningDeltaEvent extends AgentRuntimeBaseEvent {
   text: string;
 }
 
+/** Incremental text chunk from the LLM's text output (not reasoning). */
+export interface AgentRuntimeTextDeltaEvent extends AgentRuntimeBaseEvent {
+  type: 'text_delta';
+  phase: AgentRuntimePhase;
+  mode?: AgentMode;
+  iteration?: number;
+  text: string;
+}
+
 export interface AgentRuntimeErrorEvent extends AgentRuntimeBaseEvent {
   type: 'error';
   phase: AgentRuntimePhase;
@@ -202,6 +211,7 @@ export type AgentRuntimeEvent =
   | AgentRuntimeContextUsageEvent
   | AgentRuntimeStatusEvent
   | AgentRuntimeReasoningDeltaEvent
+  | AgentRuntimeTextDeltaEvent
   | AgentRuntimeErrorEvent
   | AgentRuntimeCompletedEvent
   | AgentRuntimeRetryEvent
@@ -217,6 +227,7 @@ export type AgentRuntimeEventType =
   | 'context_usage'
   | 'status'
   | 'reasoning_delta'
+  | 'text_delta'
   | 'error'
   | 'completed'
   | 'retry'

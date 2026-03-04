@@ -41,6 +41,8 @@ const messagesContainerStyle = {
 const messageItemStyle = {
   padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
   width: '100%',
+  userSelect: 'text' as const,
+  WebkitUserSelect: 'text' as const,
 };
 
 // User messages: subtle background to distinguish
@@ -49,6 +51,8 @@ const userItemStyle = {
   width: '100%',
   background: tokens.colors.alpha[2],
   borderRadius: 'var(--radius-4)',
+  userSelect: 'text' as const,
+  WebkitUserSelect: 'text' as const,
 };
 
 // ------------------------------------------------------------------

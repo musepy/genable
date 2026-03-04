@@ -8,26 +8,18 @@
  * at index 0 is never touched, enabling KV-cache reuse.
  */
 
-import type { AgentMode } from '../../../shared/protocol/agentRuntimeEvents';
-
 /** Stable message ID used to locate and update the dynamic context message. */
 export const DYNAMIC_CONTEXT_MSG_ID = 'dynamic-ctx';
 
 /**
  * Build the per-iteration dynamic context content.
  *
- * @param mode - Current agent mode (determines which mode guidance to follow)
- * @param activeStep - The currently active plan step (if any)
+ * @param iteration - Current iteration number (0-based)
+ * @param maxIterations - Maximum iteration budget
  */
 export function buildDynamicContextContent(
-    mode: AgentMode,
-    activeStep?: { title: string } | null
+    iteration: number,
+    maxIterations: number,
 ): string {
-    const lines: string[] = [`[MODE: ${mode}]`];
-
-    if (activeStep?.title) {
-        lines.push(`Active step: "${activeStep.title}"`);
-    }
-
-    return lines.join('\n');
+    return `[Iteration ${iteration + 1}/${maxIterations}]`;
 }

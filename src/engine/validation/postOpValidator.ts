@@ -40,7 +40,7 @@ export interface ValidationAnomaly {
   nodeName: string;
   /**
    * Key properties of the node (and its parent) that explain WHY this anomaly occurred.
-   * Agent can read this to identify the root cause without extra read_node calls.
+   * Agent can read this to identify the root cause without extra read calls.
    */
   context: Record<string, any>;
   /**
@@ -305,7 +305,7 @@ function validateSiblingConsistency(frame: FrameNode): ValidationAnomaly[] {
           },
           hints: [
             `Set layoutSizingHorizontal to "FILL" on all child frames for uniform width`,
-            `Use patch_node to batch-update: patches=[${fixedWidthChildren.slice(0, 3).map(c => `{nodeId: "${c.id}", props: {layoutSizingHorizontal: "FILL"}}`).join(', ')}]`,
+            `Use edit to batch-update: <frame id="${fixedWidthChildren.slice(0, 3).map(c => c.id).join('"/><frame id="')}" sizingH="FILL"/>`,
           ],
         });
       }

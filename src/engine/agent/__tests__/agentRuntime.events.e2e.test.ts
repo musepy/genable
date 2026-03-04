@@ -39,8 +39,8 @@ describe('AgentRuntime Event E2E Scenarios', () => {
         toolCalls: [{ id: 't1', name: 'mock_tool', args: { query: 'hello' } }],
       },
       {
-        text: '',
-        toolCalls: [{ id: 't2', name: 'signal', args: { type: 'complete', summary: 'Done' } }],
+        text: 'Done',
+        toolCalls: [],
       },
     ]);
 
@@ -50,7 +50,6 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       provider,
       tools: [
         { name: 'mock_tool', description: 'Mock tool', parameters: emptyParams },
-        { name: 'signal', description: 'Signal', parameters: emptyParams },
       ],
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {
@@ -79,8 +78,8 @@ describe('AgentRuntime Event E2E Scenarios', () => {
         toolCalls: [{ id: 'f2', name: 'fix_tool', args: { nodeId: 'n1' } }],
       },
       {
-        text: '',
-        toolCalls: [{ id: 'f3', name: 'signal', args: { type: 'complete', summary: 'Recovered' } }],
+        text: 'Recovered',
+        toolCalls: [],
       },
     ]);
 
@@ -91,7 +90,6 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       tools: [
         { name: 'fail_tool', description: 'Fails intentionally', parameters: emptyParams },
         { name: 'fix_tool', description: 'Fixes previous error', parameters: emptyParams },
-        { name: 'signal', description: 'Signal', parameters: emptyParams },
       ],
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {

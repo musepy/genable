@@ -1,6 +1,6 @@
 /**
  * @file idempotencyStore.ts
- * @description Run-scoped idempotency cache for non-idempotent tools (e.g. build_design).
+ * @description Run-scoped idempotency cache for idempotent tools (e.g. create).
  *
  * Key format: `${runId}:${toolCallId}`
  * Each entry stores a requestHash (normalized hash of the request params) and the cached result.
@@ -26,22 +26,21 @@ export function computeRequestHash(canonicalParams: string): string {
 }
 
 /**
- * Normalizes build_design params into a canonical string for hashing.
+ * Normalizes create params into a canonical string for hashing.
  * Only includes fields that affect execution outcome.
  */
-export function canonicalizeBuildDesignParams(params: {
-  operations: any[];
+export function canonicalizeCreateParams(params: {
+  xml: string;
   parentId?: string;
-  onError?: string;
-  rollbackMode?: string;
 }): string {
   return JSON.stringify({
-    operations: params.operations,
+    xml: params.xml,
     parentId: params.parentId ?? null,
-    onError: params.onError ?? 'continue',
-    rollbackMode: params.rollbackMode ?? 'none',
   });
 }
+
+/** @deprecated Use canonicalizeCreateParams */
+export const canonicalizeBuildDesignParams = canonicalizeCreateParams;
 
 // ---------------------------------------------------------------------------
 // Store entry

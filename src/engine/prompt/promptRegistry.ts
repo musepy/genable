@@ -3,8 +3,7 @@
  * @description Single source of truth for ALL prompt fragments.
  *
  * CATALOG KEYS (from src/prompts/*.md → prompt-catalog.json):
- *   CORE          — Identity, thinking protocol, design freedom
- *   DESIGN_RULES  — Scene graph model, visual quality, conventions
+ *   CORE          — Identity, environment, scene graph, visual quality, conventions, design freedom
  *   WORKFLOW      — Tool calling, creation, error recovery, completion protocol
  *   EXAMPLES      — Tool usage examples
  *
@@ -15,11 +14,8 @@
 
 import catalog from '../../generated/prompt-catalog.json';
 
-/** Agent identity + thinking protocol + design freedom */
+/** Agent identity + environment + scene graph + visual quality + conventions + design freedom */
 export const CORE = catalog.CORE;
-
-/** Scene graph model + visual quality + naming/content/icon conventions */
-export const DESIGN_RULES = catalog.DESIGN_RULES;
 
 /** Tool calling + design generation + parent-child + error recovery + completion protocol */
 export const WORKFLOW = catalog.WORKFLOW;

@@ -21,8 +21,8 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'build_design',
-            parameters: { operations: [{ op: 'create', symbol: 'Card', type: 'FRAME', props: { width: 300, height: 200 } }, { op: 'create', symbol: 'Title', type: 'TEXT', parent: 'Card', props: { characters: 'Hello' } }] },
+            name: 'create',
+            parameters: { xml: '<frame name="Card" w="300" h="200"><text>Hello</text></frame>' },
             status: 'success',
             startTime: 1000,
             endTime: 1200,
@@ -36,11 +36,11 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Prompt: "Hello"');
     expect(result).toContain('Tools: 1 ok, 0 err');
-    expect(result).toContain('#1 [build_design] 200ms OK');
-    expect(result).toContain('2 ops:');
+    expect(result).toContain('#1 [create] 200ms OK');
+    expect(result).toContain('xml:');
   });
 
-  it('should handle build_design with idMap in results', () => {
+  it('should handle create with idMap in results', () => {
     const history: ChatMessage[] = [
       { role: 'user', text: 'Create stuff', id: '1' },
       {
@@ -50,12 +50,9 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'build_design',
+            name: 'create',
             parameters: {
-              operations: [
-                { op: 'create', symbol: 'Header', type: 'FRAME', props: { width: 400, height: 60 } },
-                { op: 'create', symbol: 'Footer', type: 'FRAME', props: { width: 400, height: 40 } }
-              ]
+              xml: '<frame name="Header" w="400" h="60"/><frame name="Footer" w="400" h="40"/>'
             },
             status: 'success',
             startTime: 1000,
@@ -85,12 +82,12 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'build_design',
-            parameters: { operations: [] },
+            name: 'create',
+            parameters: { xml: '' },
             status: 'error',
             startTime: 1000,
             endTime: 1100,
-            error: 'Invalid operations\nStack trace...'
+            error: 'Invalid XML\nStack trace...'
           }
         ]
       }
@@ -99,10 +96,10 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Tools: 0 ok, 1 err');
     expect(result).toContain('--- ERRORS ---');
-    expect(result).toContain('#1 build_design: "Invalid operations"');
+    expect(result).toContain('#1 create: "Invalid XML"');
   });
 
-  it('should truncate long prompts and summaries', () => {
+  it('should truncate long prompts', () => {
     const longPrompt = 'A'.repeat(200);
     const history: ChatMessage[] = [
       { role: 'user', text: longPrompt, id: '1' },
@@ -113,8 +110,8 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'signal',
-            parameters: { type: 'complete', summary: 'B'.repeat(150) },
+            name: 'edit',
+            parameters: { xml: '<delete id="1:1"/>' },
             status: 'success',
             startTime: 1000,
             endTime: 1100
@@ -125,6 +122,6 @@ describe('generateLogDigest', () => {
 
     const result = generateLogDigest(history);
     expect(result).toContain('Prompt: "' + 'A'.repeat(100) + '..."');
-    expect(result).toContain('params: {complete: ' + 'B'.repeat(80) + '}');
+    expect(result).toContain('xml:');
   });
 });

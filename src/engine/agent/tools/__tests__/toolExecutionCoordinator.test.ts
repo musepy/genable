@@ -5,11 +5,9 @@ describe('ToolExecutionCoordinator', () => {
   const coordinator = new ToolExecutionCoordinator();
 
   it.each([
-    ['signal', {}, 'type'],
-    ['read_node', {}, 'mode'],
-    ['build_design', {}, 'operations'],
-    ['patch_node', {}, 'patches'],
-    ['delete_node', {}, 'nodeId'],
+    ['read', {}, 'nodeId'],
+    ['create', {}, 'xml'],
+    ['edit', {}, 'xml'],
     ['query_knowledge', {}, 'source'],
   ])('flags missing required parameter for %s', (toolName, args, missingParam) => {
     const result = coordinator.validateToolCall(toolName as string, args, 'EXECUTION');
@@ -29,7 +27,7 @@ describe('ToolExecutionCoordinator', () => {
 
   it('treats blank strings as missing required values', () => {
     const result = coordinator.validateToolCall(
-      'delete_node',
+      'read',
       { nodeId: '   ' },
       'EXECUTION'
     );
@@ -41,58 +39,18 @@ describe('ToolExecutionCoordinator', () => {
     expect(result.error.message).toContain('nodeId');
   });
 
-  it('applies conditional required validation for read_node(node)', () => {
+  it('validates edit requires non-empty xml', () => {
     const result = coordinator.validateToolCall(
-      'read_node',
-      { mode: 'node' },
+      'edit',
+      { xml: '' },
       'EXECUTION'
     );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
 
-    expect(result.error.details.missing).toContain('nodeId');
-    expect(result.error.message).toContain('read_node');
-    expect(result.error.message).toContain('nodeId');
-  });
-
-  it('validates map path requirements for patches[].nodeId and patches[].props', () => {
-    const result = coordinator.validateToolCall(
-      'patch_node',
-      {
-        patches: [
-          { nodeId: '', props: {} },
-          { props: { width: 200 } },
-        ],
-      },
-      'EXECUTION'
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-
-    expect(result.error.details.missing).toContain('patches[].nodeId');
-    expect(result.error.details.missing).toContain('patches[].props');
-    expect(result.error.message).toContain('patch_node');
-    expect(result.error.message).toContain('patches[].nodeId');
-    expect(result.error.message).toContain('Please provide non-empty "patches"');
-  });
-
-  it('returns invalid details for enum-like validation failures', () => {
-    const result = coordinator.validateToolCall(
-      'signal',
-      { type: 'invalid_type' },
-      'EXECUTION'
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-
-    expect(result.error.details.invalid).toContainEqual(
-      expect.objectContaining({ name: 'type' })
-    );
-    expect(result.error.message).toContain('has invalid parameter(s): type');
-    expect(result.error.message).toContain('Please set "type"');
+    expect(result.error.details.missing).toContain('xml');
+    expect(result.error.message).toContain('edit');
   });
 
   it('rejects unknown tool names with actionable repair hint', () => {
@@ -100,7 +58,7 @@ describe('ToolExecutionCoordinator', () => {
       'complete_task',
       { summary: 'done' },
       'EXECUTION',
-      ['signal', 'read_node', 'build_design', 'patch_node', 'delete_node', 'query_knowledge']
+      ['read', 'create', 'edit', 'query_knowledge']
     );
 
     expect(result.ok).toBe(false);
@@ -108,7 +66,6 @@ describe('ToolExecutionCoordinator', () => {
 
     expect(result.error.code).toBe('TOOL_VALIDATION_ERROR');
     expect(result.error.message).toContain('complete_task is not an available tool');
-    expect(result.error.message).toContain('call signal with type "complete"');
     expect(result.error.details.invalid).toContainEqual(
       expect.objectContaining({ name: 'toolName' })
     );

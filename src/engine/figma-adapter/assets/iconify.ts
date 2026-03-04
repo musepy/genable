@@ -14,16 +14,25 @@ const ICONIFY_API = 'https://api.iconify.design';
  */
 export const ICON_SETS = {
   mdi: 'Material Design Icons',
-  lucide: 'Lucide Icons', 
+  lucide: 'Lucide Icons',
   heroicons: 'Heroicons',
   tabler: 'Tabler Icons',
   f7: 'Framework7 Icons (SF Symbols style)',
   hugeicons: 'Hugeicons',
+  logos: 'Brand Logos (e.g., logos:google, logos:apple)',
   'heroicons-outline': 'Heroicons Outline',
   'heroicons-solid': 'Heroicons Solid',
 } as const;
 
 export type IconPrefix = keyof typeof ICON_SETS;
+
+/**
+ * Normalize icon prefix (LLM often outputs singular forms)
+ */
+const PREFIX_ALIASES: Record<string, string> = {
+  logo: 'logos',
+  heroicon: 'heroicons',
+};
 
 /**
  * Normalize icon name for different icon libraries
@@ -82,10 +91,16 @@ function normalizeIconName(prefix: string, name: any): string {
  */
 export async function fetchIconSvg(iconName: string): Promise<string | null> {
   // Parse icon name
-  const [prefix, name] = iconName.split(':');
-  if (!prefix || !name) {
+  const [rawPrefix, name] = iconName.split(':');
+  if (!rawPrefix || !name) {
     console.warn(`[Iconify] Invalid icon format: ${iconName}. Use "prefix:name" format.`);
     return null;
+  }
+
+  // Normalize prefix (e.g., "logo" → "logos")
+  const prefix = PREFIX_ALIASES[rawPrefix] || rawPrefix;
+  if (prefix !== rawPrefix) {
+    console.log(`[Iconify] Prefix normalized: ${rawPrefix} → ${prefix}`);
   }
 
   // Apply normalization for LLM output compatibility

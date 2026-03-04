@@ -95,16 +95,13 @@ export type RuntimeValidationMode = 'EXECUTION';
 
 export interface RuntimeRequiredParamSpec {
   name: string;
-  source?: 'direct' | 'map';
-  mapPath?: string;
   trim?: boolean;
-  check?: 'required' | 'non_empty_array' | 'non_empty_object';
+  check?: 'required';
 }
 
 export interface ToolValidationInvalidParam {
   name: string;
   reason: string;
-  mapPath?: string;
 }
 
 export interface ToolValidationErrorDetail {

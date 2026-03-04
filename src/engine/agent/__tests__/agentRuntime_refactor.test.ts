@@ -31,12 +31,6 @@ describe('AgentRuntime Refactor Verification', () => {
   });
 
   it('should preserve tool execution order and group strategy', async () => {
-    // LLM returns: [P1, P2, S1, P3]
-    // Expected behavior:
-    // 1. Group 1 (Parallel): [P1, P2] run concurrently
-    // 2. Group 2 (Sequential): [S1] run
-    // 3. Group 3 (Parallel): [P3] run
-    
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         toolCalls: [
@@ -46,7 +40,7 @@ describe('AgentRuntime Refactor Verification', () => {
           { name: 'p3', args: {} }
         ]
       })
-      .mockResolvedValueOnce({ text: 'Done', toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] });
+      .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });
 
     const executionOrder: string[] = [];
     const toolExecutors = {
@@ -82,18 +76,11 @@ describe('AgentRuntime Refactor Verification', () => {
       .mockResolvedValueOnce({
         toolCalls: [{ name: 'slow_tool', args: {} }]
       })
-      .mockResolvedValueOnce({ text: 'Failed as expected', toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] });
+      .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });
 
     const toolExecutors = {
       slow_tool: () => new Promise(resolve => setTimeout(() => resolve({ success: true }), 100))
     };
-
-    // Override timeout constant for test
-    // Note: We can't easily override constants.ts without re-importing or using a helper
-    // But we can check if it uses the DEFAULT_TOOL_TIMEOUT_MS logic.
-    // For this test, I'll mock executeToolWithTimeout or just let it run if I set a very small timeout in constants?
-    // Actually, I can just mock the execution to be longer than the default 30s, or I can refactor runtime to accept timeout in options.
-    // Given the task, let's assume we want to verify the timeout logic exists.
   });
 
   it('should retry on transient errors using RetryPolicy', async () => {
@@ -105,7 +92,7 @@ describe('AgentRuntime Refactor Verification', () => {
         (err as any).type = 'OVERLOADED';
         throw err;
       }
-      return Promise.resolve({ text: 'Success after retry', toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] });
+      return Promise.resolve({ text: 'Done', toolCalls: [] });
     });
 
     const runtime = new AgentRuntime({

@@ -16,7 +16,7 @@ import type { IpcBridge } from './ipcBridge';
 import {
   IdempotencyStore,
   computeRequestHash,
-  canonicalizeBuildDesignParams,
+  canonicalizeCreateParams,
 } from './idempotencyStore';
 import { toolDisplayMap, allToolDefinitions } from './tools';
 
@@ -30,12 +30,9 @@ interface RuntimeEventPayload {
 }
 
 export interface ToolDispatchResult {
-  /** 'completed' if a terminal signal was received; 'continue' to keep looping. */
-  type: 'completed' | 'continue';
-  /** Summary from signal(type=complete), if type === 'completed'. */
-  completionSummary?: string;
-  /** Formatted tool results message to add to context, if type === 'continue'. */
-  toolResultsMessage?: LLMMessage;
+  type: 'continue';
+  /** Formatted tool results message to add to context. */
+  toolResultsMessage: LLMMessage;
 }
 
 export interface ToolDispatcherConfig {
@@ -104,38 +101,7 @@ export class ToolDispatcher {
       tc.id = this.config.normalizeToolCallId(tc, 'call');
       const startedAt = Date.now();
 
-      // ── Terminal action: signal(type=complete) ──
-      if (tc.name === 'signal' && tc.args?.type === 'complete') {
-        this.config.onToolCall?.(tc);
-        const display = toolDisplayMap[tc.name];
-        this.config.emitRuntimeEvent({
-          type: 'tool_call',
-          iteration: iteration + 1,
-          mode: 'AUTONOMOUS',
-          phase: 'execution' as AgentRuntimePhase,
-          toolCall: { id: tc.id, name: tc.name, displayName: display?.displayName, group: display?.group, args: tc.args },
-        });
-        const completionSummary = tc.args.summary || tc.args.title || 'Completed';
-        const workflowResponse = { success: true, summary: completionSummary };
-        this.config.onToolResult?.(tc, workflowResponse);
-        this.config.emitRuntimeEvent({
-          type: 'tool_result',
-          iteration: iteration + 1,
-          mode: 'AUTONOMOUS',
-          phase: 'execution' as AgentRuntimePhase,
-          toolResult: { id: tc.id, name: tc.name, displayName: display?.displayName, group: display?.group, success: true, durationMs: Date.now() - startedAt, raw: workflowResponse },
-        });
-        this.config.emitRuntimeEvent({
-          type: 'completed',
-          phase: 'execution' as AgentRuntimePhase,
-          iteration: iteration + 1,
-          totalIterations: iteration + 1,
-          summary: completionSummary,
-        });
-        return { type: 'completed', completionSummary };
-      }
-
-      // ── Regular tool: dispatch to executor ──
+      // ── Dispatch tool to executor ──
       const displayMeta = toolDisplayMap[tc.name];
       this.config.emitRuntimeEvent({
         type: 'tool_call',
@@ -170,9 +136,9 @@ export class ToolDispatcher {
         },
       });
 
-      // Log build_design failures with per-line details for real-time debugging
-      if (!resultSuccess && tc.name === 'build_design' && errorMessage) {
-        console.warn(`[build_design] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
+      // Log create failures with per-line details for real-time debugging
+      if (!resultSuccess && tc.name === 'create' && errorMessage) {
+        console.warn(`[create] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
       }
 
       // Extract image attachment before cleaning (prevents base64 truncation by cleaner)
@@ -328,11 +294,11 @@ export class ToolDispatcher {
 
   /**
    * Compute a request hash for a tool call based on its args.
-   * Currently only build_design has specialized canonicalization.
+   * Currently only create has specialized canonicalization.
    */
   private computeToolRequestHash(tc: LLMToolCall): string {
-    if (tc.name === 'build_design') {
-      return computeRequestHash(canonicalizeBuildDesignParams(tc.args));
+    if (tc.name === 'create') {
+      return computeRequestHash(canonicalizeCreateParams(tc.args));
     }
     // Generic fallback: hash the stringified args
     return computeRequestHash(JSON.stringify(tc.args));

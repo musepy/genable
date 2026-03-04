@@ -202,6 +202,15 @@ export function useChat({
         setThinkingText(prev => `${prev}${delta}`.slice(-4000))
         break
       }
+      case 'text_delta': {
+        const delta = event.text || ''
+        if (!delta) break
+        updateStreamingMessage(msg => ({
+          ...msg,
+          text: (msg.text || '') + delta,
+        }))
+        break
+      }
       case 'completed': {
         setLoading(false)
         setRuntimeState('completed')
@@ -358,12 +367,6 @@ export function useChat({
             default:
               return { success: false, error: { code: 'INVALID_SOURCE', message: `Unknown source: ${params.source}` } }
           }
-        },
-        signal: async (params: any) => {
-          // signal tool: plan/task_start/progress/complete
-          // 'complete' is handled directly in agentRuntime (returns early as terminal action)
-          // Other types are informational and just succeed
-          return { success: true, type: params.type, summary: params.summary || params.title || 'Signal received' }
         },
       }
 
@@ -522,14 +525,14 @@ export function useChat({
         setRuntimePhase('execution')
         setRuntimeProgress({ iteration: 8, maxIterations: 40 })
         setLoadingStatus('Applying design patch')
-        calls.unshift(buildCall('tc-1', 'patch_node', 'success', 29))
+        calls.unshift(buildCall('tc-1', 'edit', 'success', 29))
         setFlowCalls([...calls])
       })
 
       queue(950, () => {
         setRuntimeProgress({ iteration: 10, maxIterations: 40 })
         setLoadingStatus('Reading hierarchy')
-        calls.unshift(buildCall('tc-2', 'read_node', 'success', 91))
+        calls.unshift(buildCall('tc-2', 'read', 'success', 91))
         setFlowCalls([...calls])
       })
 
@@ -537,18 +540,18 @@ export function useChat({
         setRuntimeProgress({ iteration: 12, maxIterations: 40 })
         setRuntimeContextUsage({ current: 54410, max: 200000, percent: 27, visibleMessages: 2, hiddenMessages: 3 })
         setLoadingStatus('Building design')
-        calls.unshift(buildCall('tc-3', 'build_design', 'success', 370))
+        calls.unshift(buildCall('tc-3', 'create', 'success', 370))
         setFlowCalls([...calls])
       })
 
       queue(1950, () => {
         setLoadingStatus('Patching nodes')
-        calls.unshift(buildCall('tc-5', 'patch_node', 'error', 3840, '3 patches failed'))
+        calls.unshift(buildCall('tc-5', 'edit', 'error', 3840, '3 edits failed'))
         setFlowCalls([...calls])
       })
 
       queue(2950, () => {
-        calls.unshift(buildCall('tc-6', 'read_node', 'success', 50))
+        calls.unshift(buildCall('tc-6', 'read', 'success', 50))
         setFlowCalls([...calls])
       })
 
@@ -570,8 +573,8 @@ export function useChat({
       resetPreview()
 
       const calls: ToolCallRecord[] = [
-        buildCall('err-1', 'read_node', 'success', 68),
-        buildCall('err-2', 'build_design', 'error', 2100, 'Validation failed on 2 nodes'),
+        buildCall('err-1', 'read', 'success', 68),
+        buildCall('err-2', 'create', 'error', 2100, 'Validation failed on 2 nodes'),
       ]
 
       setPrompt('@design-knowledge improve validation')

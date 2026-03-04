@@ -20,62 +20,26 @@ export interface RuntimeToolDescription {
   repairHint: string;
 }
 
-const SIGNAL_TYPES = new Set(['plan', 'task_start', 'progress', 'complete']);
 const KNOWLEDGE_SOURCES = new Set(['knowledge', 'components', 'tokens', 'skill']);
-
-function normalizedMode(args: any): string {
-  if (!args || typeof args !== 'object') return '';
-  const rawMode = args.mode;
-  if (typeof rawMode !== 'string') return '';
-  return rawMode.trim();
-}
 
 export const runtimeToolDescriptions: RuntimeToolDescription[] = [
   {
-    tool: 'signal',
-    mode: 'EXECUTION',
-    required: [{ name: 'type', trim: true, check: 'required' }],
-    invalidRules: [{
-      name: 'type',
-      reason: 'must be one of plan, task_start, progress, complete',
-      isValid: (args) => typeof args?.type === 'string' && SIGNAL_TYPES.has(args.type),
-    }],
-    repairHint: 'set "type" to one of plan, task_start, progress, or complete',
-  },
-  {
-    tool: 'read_node',
-    mode: 'EXECUTION',
-    required: [{ name: 'mode', trim: true, check: 'required' }],
-    conditionalRequired: [{
-      when: (args) => {
-        const mode = normalizedMode(args);
-        return mode === 'node' || mode === 'hierarchy';
-      },
-      required: [{ name: 'nodeId', trim: true, check: 'required' }],
-    }],
-    repairHint: 'provide "mode", and for "node"/"hierarchy" modes include a non-empty "nodeId"',
-  },
-  {
-    tool: 'build_design',
-    mode: 'EXECUTION',
-    required: [{ name: 'operations', check: 'non_empty_array' }],
-    repairHint: 'provide a non-empty "operations" array with at least one operation object',
-  },
-  {
-    tool: 'patch_node',
-    mode: 'EXECUTION',
-    required: [
-      { name: 'patches', check: 'non_empty_array' },
-      { name: 'patches[].nodeId', source: 'map', mapPath: 'patches[].nodeId', trim: true, check: 'required' },
-      { name: 'patches[].props', source: 'map', mapPath: 'patches[].props', check: 'non_empty_object' },
-    ],
-    repairHint: 'provide non-empty "patches", and for each patch include non-empty "nodeId" and non-empty "props"',
-  },
-  {
-    tool: 'delete_node',
+    tool: 'read',
     mode: 'EXECUTION',
     required: [{ name: 'nodeId', trim: true, check: 'required' }],
     repairHint: 'provide a non-empty "nodeId"',
+  },
+  {
+    tool: 'create',
+    mode: 'EXECUTION',
+    required: [{ name: 'xml', trim: true, check: 'required' }],
+    repairHint: 'provide a non-empty "xml" string with design markup',
+  },
+  {
+    tool: 'edit',
+    mode: 'EXECUTION',
+    required: [{ name: 'xml', trim: true, check: 'required' }],
+    repairHint: 'provide a non-empty "xml" string with edit markup (each tag must have an id attribute)',
   },
   {
     tool: 'query_knowledge',
@@ -89,4 +53,3 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     repairHint: 'provide "source" as one of knowledge, components, tokens, or skill',
   },
 ];
-

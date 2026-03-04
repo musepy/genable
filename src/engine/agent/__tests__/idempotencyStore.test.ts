@@ -21,30 +21,30 @@ describe('computeRequestHash', () => {
 
 describe('canonicalizeBuildDesignParams', () => {
   it('normalizes defaults', () => {
-    const ops = [{ op: 'create', type: 'FRAME', props: {} }];
-    const a = canonicalizeBuildDesignParams({ operations: ops });
+    const xml = "<frame name='Card'/>";
+    const a = canonicalizeBuildDesignParams({ xml });
     const b = canonicalizeBuildDesignParams({
-      operations: ops,
+      xml,
       onError: 'continue',
       rollbackMode: 'none',
     });
     expect(a).toBe(b);
   });
 
-  it('produces different hashes for different operations', () => {
+  it('produces different hashes for different xml', () => {
     const a = canonicalizeBuildDesignParams({
-      operations: [{ op: 'create', type: 'FRAME', props: {} }],
+      xml: "<frame name='Card'/>",
     });
     const b = canonicalizeBuildDesignParams({
-      operations: [{ op: 'create', type: 'TEXT', props: {} }],
+      xml: "<text>Hello</text>",
     });
     expect(a).not.toBe(b);
   });
 
   it('differentiates by parentId', () => {
-    const ops = [{ op: 'update', target: 'card', props: { width: 100 } }];
-    const a = canonicalizeBuildDesignParams({ operations: ops, parentId: '1:2' });
-    const b = canonicalizeBuildDesignParams({ operations: ops, parentId: '3:4' });
+    const xml = "<frame name='Card'/>";
+    const a = canonicalizeBuildDesignParams({ xml, parentId: '1:2' });
+    const b = canonicalizeBuildDesignParams({ xml, parentId: '3:4' });
     expect(a).not.toBe(b);
   });
 });

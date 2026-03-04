@@ -33,37 +33,36 @@ describe('AgentRuntime', () => {
     } as any;
   });
 
-  it('should complete in one iteration if no tool calls', async () => {
+  it('should complete in one iteration if no tool calls (implicit completion)', async () => {
     (mockProvider.generate as any).mockResolvedValue({
-      text: 'Final result',
-      toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }]
+      text: 'Done — task completed.',
+      toolCalls: []
     });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [{ name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }],
+      tools: [],
       systemPrompt: 'System',
       loopPolicy: { useSkillSystem: false } as any
     });
 
     const result = await runtime.run('User prompt');
 
-    expect(result).toBe('Done');
+    expect(result).toBe('Done — task completed.');
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
-    expect(runtime.getMessages()).toHaveLength(4); // system, dynamic-ctx, user, model(call)
   });
 
-  it('should execute tool calls and loop', async () => {
+  it('should execute tool calls and loop until text-only response', async () => {
     // Round 1: Model calls a tool
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'Thinking...',
         toolCalls: [{ name: 'get_info', args: { query: 'test' } }]
       })
-      // Round 2: Model gives final answer and signal completion
+      // Round 2: Model gives final answer (no tool calls = implicit completion)
       .mockResolvedValueOnce({
-        text: 'Final answer based on info',
-        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Task done' } }]
+        text: 'Task done',
+        toolCalls: []
       });
 
     // Mock IPC Bridge
@@ -71,14 +70,13 @@ describe('AgentRuntime', () => {
         callTool: vi.fn(),
         dispose: vi.fn()
     } as any;
-    
+
     mockIpcBridge.callTool.mockResolvedValue({ success: true, data: 'Some info' });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
         { name: 'get_info', description: 'Get info', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
       ],
       ipcBridge: mockIpcBridge,
       systemPrompt: 'System',
@@ -92,7 +90,7 @@ describe('AgentRuntime', () => {
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
 
     const messages = runtime.getMessages();
-    expect(messages).toHaveLength(6); // system, dynamic-ctx, user, model(thought+call), tool(result), model(complete)
+    expect(messages).toHaveLength(6); // system, dynamic-ctx, user, model(thought+call), tool(result), model(text)
     expect(messages[4].role).toBe('tool');
   });
 
@@ -100,11 +98,11 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'try create',
-        toolCalls: [{ name: 'build_design', args: {} }]
+        toolCalls: [{ name: 'create', args: {} }]
       })
       .mockResolvedValueOnce({
-        text: 'done',
-        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Recovered' } }]
+        text: 'Recovered',
+        toolCalls: []
       });
 
     const mockIpcBridge = {
@@ -115,8 +113,7 @@ describe('AgentRuntime', () => {
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'build_design', description: 'Create', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
+        { name: 'create', description: 'Create', parameters: { type: 'object', properties: {} } },
       ],
       ipcBridge: mockIpcBridge,
       loopPolicy: { useSkillSystem: false } as any
@@ -132,24 +129,24 @@ describe('AgentRuntime', () => {
 
     expect(firstResponse.success).toBe(false);
     expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
-    expect(firstResponse.error.message).toContain('Validation Error: build_design');
-    expect(firstResponse.error.message).toContain('operations');
+    expect(firstResponse.error.message).toContain('Validation Error: create');
+    expect(firstResponse.error.message).toContain('xml');
     expect(firstResponse.error.details).toMatchObject({
-      tool: 'build_design',
+      tool: 'create',
       mode: 'EXECUTION',
-      missing: ['operations']
+      missing: ['xml']
     });
   });
 
-  it('should reject unknown legacy tool names and guide model to signal(type)', async () => {
+  it('should reject unknown legacy tool names with actionable error', async () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'start task',
         toolCalls: [{ name: 'task_start', args: { title: 'Legacy call' } }]
       })
       .mockResolvedValueOnce({
-        text: 'done',
-        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Recovered' } }]
+        text: 'Recovered',
+        toolCalls: []
       });
 
     const mockIpcBridge = {
@@ -160,8 +157,7 @@ describe('AgentRuntime', () => {
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } },
-        { name: 'build_design', description: 'Create', parameters: { type: 'object', properties: {} } }
+        { name: 'create', description: 'Create', parameters: { type: 'object', properties: {} } }
       ],
       ipcBridge: mockIpcBridge,
       loopPolicy: { useSkillSystem: false } as any
@@ -177,7 +173,6 @@ describe('AgentRuntime', () => {
     expect(firstResponse.success).toBe(false);
     expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
     expect(firstResponse.error.message).toContain('task_start is not an available tool');
-    expect(firstResponse.error.message).toContain('signal with type "task_start"');
   });
 
   it('should throw error if max iterations reached', async () => {
@@ -201,12 +196,12 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any).mockImplementation(({ onProgress: cbP, onThinking: cbT }: any) => {
       cbP?.('Part 1');
       cbT?.('Thinking...');
-      return Promise.resolve({ text: 'Final', toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Done' } }] });
+      return Promise.resolve({ text: 'Done', toolCalls: [] });
     });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [{ name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }],
+      tools: [],
       onRuntimeEvent: (event) => events.push(event)
     });
 
@@ -231,7 +226,6 @@ describe('AgentRuntime', () => {
       provider: mockProvider,
       tools: [
         { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
       ],
       ipcBridge: mockIpcBridge,
       maxIterations: 15
@@ -240,18 +234,16 @@ describe('AgentRuntime', () => {
     await expect(runtime.run('Loop me')).rejects.toThrow();
   });
 
-  it('should accept signal complete immediately in autonomous mode', async () => {
+  it('should complete immediately with text-only response (implicit completion)', async () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
-        text: 'I am done',
-        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Finished immediately' } }]
+        text: 'Finished immediately',
+        toolCalls: []
       });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
-      ]
+      tools: []
     });
 
     const result = await runtime.run('Quick task');
@@ -259,8 +251,7 @@ describe('AgentRuntime', () => {
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
   });
 
-  it('should accept signal complete even after mutation without forced inspect (autonomous)', async () => {
-    // In autonomous mode, Runtime does not force inspect after mutation
+  it('should complete after mutation with text-only response (implicit completion)', async () => {
     const toolExecutors = {
       patchNode: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1', modified: true } }),
     };
@@ -271,15 +262,14 @@ describe('AgentRuntime', () => {
         toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
       })
       .mockResolvedValueOnce({
-        text: 'Done without inspect',
-        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Mutated and done' } }]
+        text: 'Mutated and done',
+        toolCalls: []
       });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
         { name: 'patchNode', description: 'Patch', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
       ],
       toolExecutors: toolExecutors as any
     });
@@ -306,8 +296,8 @@ describe('AgentRuntime', () => {
         toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
       })
       .mockResolvedValueOnce({
-        text: 'Looks good',
-        toolCalls: [{ name: 'signal', args: { type: 'complete', summary: 'Verified and done' } }]
+        text: 'Verified and done',
+        toolCalls: []
       });
 
     const runtime = new AgentRuntime({
@@ -315,7 +305,6 @@ describe('AgentRuntime', () => {
       tools: [
         { name: 'patchNode', description: 'Patch', parameters: { type: 'object', properties: {} } },
         { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
-        { name: 'signal', description: 'Signal', parameters: { type: 'object', properties: {} } }
       ],
       toolExecutors: toolExecutors as any
     });

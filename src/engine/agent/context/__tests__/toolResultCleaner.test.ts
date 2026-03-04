@@ -3,14 +3,14 @@ import { ToolResultCleaner } from '../toolResultCleaner';
 
 describe('ToolResultCleaner', () => {
   const tools: any[] = [
-    { name: 'build_design', parameters: { properties: { operations: { type: 'array' } } } }
+    { name: 'create', parameters: { properties: { xml: { type: 'string' } } } }
   ];
   const cleaner = new ToolResultCleaner(tools);
 
-  it('preserves rollback information in build_design failure results', () => {
+  it('preserves rollback information in create failure results', () => {
     const rawResult = {
       success: false,
-      name: 'build_design',
+      name: 'create',
       error: { code: 'PARTIAL_FAILURE', message: 'One or more lines failed.' },
       data: {
         results: [
@@ -51,10 +51,10 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.data.visibilityAutoFixed).toContain('Fixed overlap');
   });
 
-  it('preserves diff and diffInfo in build_design results', () => {
+  it('preserves diff and diffInfo in create results', () => {
     const rawResult = {
       success: false,
-      name: 'build_design',
+      name: 'create',
       data: {
         results: [
           {
@@ -81,14 +81,14 @@ describe('ToolResultCleaner', () => {
       success: false,
       error: {
         code: 'TOOL_VALIDATION_ERROR',
-        message: 'Validation Error: build_design is missing required parameter(s): operations.',
+        message: 'Validation Error: create is missing required parameter(s): xml.',
         details: {
-          tool: 'build_design',
+          tool: 'create',
           mode: 'EXECUTION',
-          missing: ['operations'],
+          missing: ['xml'],
           invalid: [],
           receivedKeys: ['parentId'],
-          repairHint: 'provide a non-empty "operations" array with at least one operation object',
+          repairHint: 'provide a non-empty "xml" string with design markup',
           extra: 'should be dropped'
         }
       }
@@ -97,12 +97,12 @@ describe('ToolResultCleaner', () => {
     const cleaned = cleaner.cleanToolResult(rawResult);
 
     expect(cleaned.error.details).toEqual({
-      tool: 'build_design',
+      tool: 'create',
       mode: 'EXECUTION',
-      missing: ['operations'],
+      missing: ['xml'],
       invalid: [],
       receivedKeys: ['parentId'],
-      repairHint: 'provide a non-empty "operations" array with at least one operation object'
+      repairHint: 'provide a non-empty "xml" string with design markup'
     });
   });
 
@@ -120,10 +120,10 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.error.details).toBeUndefined();
   });
 
-  describe('read_node specific cleaning', () => {
+  describe('read specific cleaning', () => {
     it('preserves visual properties in hierarchy mode', () => {
       const rawResult = {
-        name: 'read_node',
+        name: 'read',
         success: true,
         data: {
           id: 'root-1',
@@ -162,9 +162,9 @@ describe('ToolResultCleaner', () => {
       expect(cleaned.data.children[0].props.characters).toBe('Hello World');
     });
 
-    it('preserves structured anomalies in read_node hierarchy mode', () => {
+    it('preserves structured anomalies in read hierarchy mode', () => {
       const rawResult = {
-        name: 'read_node',
+        name: 'read',
         success: true,
         data: {
           id: 'root-1',
@@ -216,7 +216,7 @@ describe('ToolResultCleaner', () => {
       }));
 
       const rawResult = {
-        name: 'read_node',
+        name: 'read',
         success: true,
         data: {
           id: 'root-1',
@@ -250,7 +250,7 @@ describe('ToolResultCleaner', () => {
 
     it('preserves selection format (nodes array + count)', () => {
       const rawResult = {
-        name: 'read_node',
+        name: 'read',
         success: true,
         data: {
           count: 2,

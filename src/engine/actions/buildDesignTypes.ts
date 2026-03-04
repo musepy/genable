@@ -1,26 +1,11 @@
 /**
  * @file buildDesignTypes.ts
- * @description Type definitions for the build_design tool.
+ * @description Type definitions for the create/edit tools.
  *
- * The build_design tool accepts a typed JSON array of operations (create/update/
- * delete/icon/image). These types define the parameter contract, internal
- * ParsedLine representation, per-line execution results, and overall result shape.
+ * The create tool accepts XML design markup. These types define the
+ * parameter contract, internal ParsedLine representation, per-line execution
+ * results, and overall result shape.
  */
-
-// ==========================================
-// Operation (LLM-facing JSON schema)
-// ==========================================
-
-/**
- * A single design operation in the `operations` array.
- * Tagged union on the `op` field.
- */
-export type Operation =
-  | { op: 'create'; symbol?: string; type?: string; parent?: string; props?: Record<string, any> }
-  | { op: 'update'; target: string; props: Record<string, any> }
-  | { op: 'delete'; target: string }
-  | { op: 'icon'; symbol?: string; parent?: string; props?: Record<string, any> }
-  | { op: 'image'; symbol?: string; parent?: string; props?: Record<string, any> };
 
 // ==========================================
 // ParsedLine (internal compiler input)
@@ -63,16 +48,14 @@ export interface ParsedLine {
  * Parameters accepted by the build_design tool.
  */
 export interface BuildDesignParams {
-  /** Typed array of design operations. Each element is one command. */
-  operations: Operation[];
+  /** XML design markup. Nesting implies parent-child. */
+  xml: string;
   /** Real Figma node ID to use as the root mount point. Defaults to current page. */
   parentId?: string;
   /** Strategy when a line fails. 'continue' skips failed lines; 'abort' stops execution. Default: 'continue'. */
   onError?: 'continue' | 'abort';
   /** Whether to roll back created nodes on failure. Default: 'none'. */
   rollbackMode?: 'none' | 'created_nodes';
-  /** Optional step ID for plan tracking / progress reporting. */
-  stepId?: string;
 }
 
 // ==========================================
@@ -144,23 +127,8 @@ export interface BuildDesignProgressEvent {
 }
 
 // ==========================================
-// Command Aliases + Valid Commands
+// Valid Commands
 // ==========================================
-
-/**
- * @internal
- * Maps legacy / verbose command names to their canonical short-form equivalents.
- */
-export const COMMAND_ALIASES: Record<string, string> = {
-  createFrame: 'create',
-  createText: 'create',
-  createShape: 'create',
-  setLayout: 'update',
-  setStyles: 'update',
-  updateProps: 'update',
-  createIcon: 'icon',
-  deleteNode: 'delete',
-};
 
 /**
  * @internal

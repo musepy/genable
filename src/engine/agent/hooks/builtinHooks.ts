@@ -119,8 +119,8 @@ function createRamblingGuardHook(state: BuiltinHookState): HookRegistration {
             return {
               action: 'continue',
               injectMessage: 'You have spent multiple iterations thinking without calling any tools. '
-                + 'This is your last chance: either call a tool to make progress, or call '
-                + 'signal(type="complete") explaining what difficulty you encountered. '
+                + 'This is your last chance: either call a tool to make progress, or respond with '
+                + 'a text explanation of the difficulty you encountered. '
                 + 'The next iteration without a tool call will terminate the run.',
             };
           }

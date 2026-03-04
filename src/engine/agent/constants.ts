@@ -20,7 +20,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   // REDUNDANT_ERROR_DROP_THRESHOLD moved to context/constants.ts
 
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
-  LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for read_node
+  LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for read
 
   /** Default timeout for a single tool execution in milliseconds */
   DEFAULT_TOOL_TIMEOUT_MS: 30000,
@@ -40,7 +40,7 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Consecutive iterations where ALL tool calls fail before injecting planning fallback */
   CONSECUTIVE_FAILURE_THRESHOLD: 3,
 
-  /** Max retries before accepting a text-only response as completion (without signal(type="complete")) */
+  /** @deprecated No longer used — text-only response is now implicit completion. */
   MAX_TEXT_ONLY_COMPLETION_RETRIES: 2,
 } as const;
 

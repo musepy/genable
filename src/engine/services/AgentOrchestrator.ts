@@ -247,7 +247,7 @@ export class AgentOrchestrator {
       // Also emit the dynamic context
       console.log('DEBUG: DYNAMIC CONTEXT (per-iteration)');
       console.log('-'.repeat(40));
-      console.log(buildDynamicContextContent('AUTONOMOUS'));
+      console.log(buildDynamicContextContent(0, 40));
       console.log('-'.repeat(40) + '\n');
 
       this.emitDebugComplete(`System prompt dumped to console (~${Math.ceil(systemPrompt.length / 4)} tokens). Open DevTools → Console to copy.`);

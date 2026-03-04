@@ -1,37 +1,29 @@
 /**
  * @file unified/index.ts
  * @description Barrel export for all unified tool definitions.
- * These 8 tools replace the previous 21 specialized tools.
+ * These 4 tools are the complete LLM-facing API:
+ *   read | create | edit | query_knowledge
  */
 
 export { readNodeDefinition } from './readNode';
 export { buildDesignDefinition as unifiedBuildDesignDefinition } from '../buildDesignTool';
-export { patchNodeDefinition as unifiedPatchNodeDefinition } from './patchNode';
-export { deleteNodeDefinition as unifiedDeleteNodeDefinition } from './deleteNode';
+export { editDefinition } from './edit';
 export { queryKnowledgeDefinition } from './queryKnowledge';
-export { captureScreenshotDefinition } from './captureScreenshot';
-export { signalDefinition } from './signal';
 
 import { readNodeDefinition } from './readNode';
 import { buildDesignDefinition } from '../buildDesignTool';
-import { patchNodeDefinition } from './patchNode';
-import { deleteNodeDefinition } from './deleteNode';
+import { editDefinition } from './edit';
 import { queryKnowledgeDefinition } from './queryKnowledge';
-import { captureScreenshotDefinition } from './captureScreenshot';
-import { signalDefinition } from './signal';
 
 import { ToolDefinition } from '../types';
 
 /**
- * All 7 unified tool definitions.
+ * All 4 unified tool definitions.
  * Drop-in replacement for the old agentTools array.
  */
 export const unifiedTools: ToolDefinition[] = [
-  signalDefinition,             // Flow control (plan/task/progress/complete)
   readNodeDefinition,           // Read anything from Figma
-  buildDesignDefinition,        // Create designs via DSL instructions
-  patchNodeDefinition,          // Modify existing nodes
-  deleteNodeDefinition,         // Delete nodes
+  buildDesignDefinition,        // Create designs via XML markup
+  editDefinition,               // Modify/delete existing nodes via XML
   queryKnowledgeDefinition,     // Query knowledge/components/tokens
-  captureScreenshotDefinition,  // Visual screenshot capture
 ];

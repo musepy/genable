@@ -57,14 +57,14 @@ export class ToolResultCleaner {
 
     // For oversized results, attempt structural cleaning if possible
     if (dataJson.length > MAX_DATA_CHARS) {
-      // read_node: use structural cleaning that preserves visual props
-      if (cleaned.name === 'read_node') {
+      // read: use structural cleaning that preserves visual props
+      if (cleaned.name === 'read') {
         cleaned.data = this.cleanInspectResult(cleaned.data);
         return cleaned;
       }
 
-      const isSpecializedTool = cleaned.name === 'build_design' ||
-                                cleaned.name === 'patch_node';
+      const isSpecializedTool = cleaned.name === 'create' ||
+                                cleaned.name === 'edit';
       if (isSpecializedTool && cleaned.data) {
         // For these tools, use structural distillation rather than string truncation
         cleaned.data = cleaned.data.results 
@@ -92,7 +92,7 @@ export class ToolResultCleaner {
     }
 
     // Results within budget
-    if (cleaned.name === 'read_node') {
+    if (cleaned.name === 'read') {
       cleaned.data = this.cleanInspectResult(cleaned.data);
     } else if (cleaned.data.results) {
       cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
@@ -248,24 +248,35 @@ export class ToolResultCleaner {
   // ================================================================
 
   /**
-   * Cleans read_node results while preserving visual properties.
-   * Handles selection, hierarchy, and node modes.
+   * Cleans read_node results.
+   * XML string results are passed through directly (already compact).
+   * Anomalies are preserved as structured JSON.
    */
   private cleanInspectResult(data: any): any {
-    // selection mode: { count, nodes[] }
-    if (data.count !== undefined && Array.isArray(data.nodes)) {
+    // XML format: { xml: string, anomalies?: [] }
+    if (typeof data.xml === 'string') {
+      const result: any = { xml: data.xml };
+      if (Array.isArray(data.anomalies) && data.anomalies.length > 0) {
+        result.anomalies = this.cleanAnomalies(data.anomalies);
+      }
+      // Truncate XML if oversized
+      const MAX_XML_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
+      if (result.xml.length > MAX_XML_CHARS) {
+        result.xml = result.xml.substring(0, MAX_XML_CHARS) + '\n<!-- truncated -->';
+        result._truncated = true;
+      }
+      return result;
+    }
+
+    // Selection format: { count, nodes }
+    if (Array.isArray(data.nodes)) {
       return {
         count: data.count,
-        nodes: data.nodes.slice(0, 20).map((n: any) => ({
-          id: n.id,
-          name: n.name,
-          type: n.type,
-        })),
-        ...(data.nodes.length > 20 && { _moreNodes: data.nodes.length - 20 }),
+        nodes: data.nodes.map((n: any) => this.extractNodeSkeleton(n, 0)).filter(Boolean),
       };
     }
 
-    // hierarchy/node mode: NodeLayer (id, type, props, children)
+    // Legacy JSON fallback: NodeLayer (id, type, props, children)
     const cleanedNode = this.extractInspectNode(data, 0);
     if (Array.isArray(data?.anomalies) && data.anomalies.length > 0) {
       cleanedNode.anomalies = this.cleanAnomalies(data.anomalies);
@@ -407,21 +418,17 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
-      // Aggressive pruning for large build_design operations
-      if (tc.name === 'build_design' && Array.isArray(tc.args?.operations)) {
-        const opsJson = JSON.stringify(tc.args.operations);
-        if (opsJson.length > 500) {
-          const opCount = tc.args.operations.length;
-          return {
-            ...tc,
-            args: {
-              ...(tc.args?.parentId && { parentId: tc.args.parentId }),
-              operations: `[_truncated: ${opCount} operations, ${opsJson.length} chars omitted. State tracked by Figma.]`,
-              _truncated: true,
-              _originalSize: opsJson.length
-            }
-          };
-        }
+      // Aggressive pruning for large create/edit XML
+      if ((tc.name === 'create' || tc.name === 'edit') && typeof tc.args?.xml === 'string' && tc.args.xml.length > 500) {
+        return {
+          ...tc,
+          args: {
+            ...(tc.args?.parentId && { parentId: tc.args.parentId }),
+            xml: `[_truncated: ${tc.args.xml.length} chars omitted. State tracked by Figma.]`,
+            _truncated: true,
+            _originalSize: tc.args.xml.length
+          }
+        };
       }
 
       const def = this.toolMap.get(tc.name);
@@ -488,24 +495,13 @@ export class ToolResultCleaner {
   }
 
   private truncateArgs(toolName: string, sanitizedArgs: any, originalLength: number): any {
-    if (toolName === 'patch_node' && Array.isArray(sanitizedArgs.patches)) {
-      return {
-        patches: sanitizedArgs.patches.map((p: any) => ({
-          nodeId: p.nodeId,
-          _hasProps: !!p.props,
-        })),
-        _truncated: true,
-        _originalSize: originalLength
-      };
-    } else {
-      return {
-        _truncated: true,
-        _tool: toolName,
-        _originalSize: originalLength,
-        ...(sanitizedArgs.nodeId && { nodeId: sanitizedArgs.nodeId }),
-        ...(sanitizedArgs.name && { name: sanitizedArgs.name }),
-      };
-    }
+    return {
+      _truncated: true,
+      _tool: toolName,
+      _originalSize: originalLength,
+      ...(sanitizedArgs.nodeId && { nodeId: sanitizedArgs.nodeId }),
+      ...(sanitizedArgs.name && { name: sanitizedArgs.name }),
+    };
   }
 
   /**

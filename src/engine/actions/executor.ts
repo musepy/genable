@@ -215,11 +215,12 @@ export class ActionExecutor {
 
       switch (action.action) {
         case 'createFrame': {
-          // Read-before-create: if parent already has a child with same name+type, upsert
-          const existingFrame = this.findExistingChild(parentNode, action.props.name, 'FRAME');
-          if (existingFrame) {
-            const warnings = await this.applyProps(existingFrame, action.props);
-            return { success: true, nodeId: existingFrame.id, warnings: warnings.length ? warnings : undefined };
+          if (action.upsertExisting) {
+            const existingFrame = this.findExistingChild(parentNode, action.props.name, 'FRAME');
+            if (existingFrame) {
+              const warnings = await this.applyProps(existingFrame, action.props);
+              return { success: true, nodeId: existingFrame.id, warnings: warnings.length ? warnings : undefined };
+            }
           }
 
           const frame = figma.createFrame();
@@ -236,11 +237,12 @@ export class ActionExecutor {
         }
 
         case 'createText': {
-          // Read-before-create: match by characters content under same parent
-          const existingText = this.findExistingChild(parentNode, action.props.name, 'TEXT');
-          if (existingText) {
-            const warnings = await this.applyTextProps(existingText as TextNode, action.props);
-            return { success: true, nodeId: existingText.id, warnings: warnings.length ? warnings : undefined };
+          if (action.upsertExisting) {
+            const existingText = this.findExistingChild(parentNode, action.props.name, 'TEXT');
+            if (existingText) {
+              const warnings = await this.applyTextProps(existingText as TextNode, action.props);
+              return { success: true, nodeId: existingText.id, warnings: warnings.length ? warnings : undefined };
+            }
           }
 
           const text = figma.createText();
@@ -263,12 +265,14 @@ export class ActionExecutor {
             LINE: 'LINE',
             VECTOR: 'VECTOR',
           };
-          const existingShape = this.findExistingChild(
-            parentNode, action.props.name, shapeTypeMap[action.shapeType] || 'RECTANGLE'
-          );
-          if (existingShape) {
-            const warnings = await this.applyProps(existingShape, action.props);
-            return { success: true, nodeId: existingShape.id, warnings: warnings.length ? warnings : undefined };
+          if (action.upsertExisting) {
+            const existingShape = this.findExistingChild(
+              parentNode, action.props.name, shapeTypeMap[action.shapeType] || 'RECTANGLE'
+            );
+            if (existingShape) {
+              const warnings = await this.applyProps(existingShape, action.props);
+              return { success: true, nodeId: existingShape.id, warnings: warnings.length ? warnings : undefined };
+            }
           }
 
           let shape: RectangleNode | EllipseNode | LineNode | VectorNode;
@@ -290,11 +294,12 @@ export class ActionExecutor {
         }
 
         case 'createIcon': {
-           // Read-before-create for icons
-           const existingIcon = this.findExistingChild(parentNode, action.props.name, 'FRAME');
-           if (existingIcon) {
-             const warnings = await this.applyProps(existingIcon, action.props);
-             return { success: true, nodeId: existingIcon.id, warnings: warnings.length ? warnings : undefined };
+           if (action.upsertExisting) {
+             const existingIcon = this.findExistingChild(parentNode, action.props.name, 'FRAME');
+             if (existingIcon) {
+               const warnings = await this.applyProps(existingIcon, action.props);
+               return { success: true, nodeId: existingIcon.id, warnings: warnings.length ? warnings : undefined };
+             }
            }
 
            let svgData = action.props.svgData;
@@ -318,16 +323,26 @@ export class ActionExecutor {
 
              const warnings = await this.applyProps(iconNode, propsForFrame);
 
-             // Apply fills/strokes/strokeWeight to vector children
+             // Tint vector children: only recolor properties that already have values.
+             // Fill-based icons (mdi): fills exist → recolor fills. Stroke-based (lucide/tabler): strokes exist → recolor strokes.
+             // Brand logos: LLM should omit fills to preserve original colors (enforced via prompt).
              if (iconFills || iconStrokes || iconStrokeWeight !== undefined) {
-               const normalizedFills = iconFills ? this.normalizePaints(iconFills) : undefined;
-               const normalizedStrokes = iconStrokes ? this.normalizePaints(iconStrokes) : undefined;
+               const tintColor = iconFills ? this.normalizePaints(iconFills) : undefined;
+               const explicitStrokes = iconStrokes ? this.normalizePaints(iconStrokes) : undefined;
                for (const child of iconNode.findAll()) {
-                 if (normalizedFills && 'fills' in child) {
-                   (child as any).fills = normalizedFills;
-                 }
-                 if (normalizedStrokes && 'strokes' in child) {
-                   (child as any).strokes = normalizedStrokes;
+                 if ('fills' in child && 'strokes' in child) {
+                   const childFills = (child as any).fills as readonly Paint[];
+                   const childStrokes = (child as any).strokes as readonly Paint[];
+
+                   if (explicitStrokes) {
+                     (child as any).strokes = explicitStrokes;
+                   } else if (tintColor && Array.isArray(childStrokes) && childStrokes.length > 0) {
+                     (child as any).strokes = tintColor;
+                   }
+
+                   if (tintColor && Array.isArray(childFills) && childFills.length > 0) {
+                     (child as any).fills = tintColor;
+                   }
                  }
                  if (iconStrokeWeight !== undefined && 'strokeWeight' in child) {
                    (child as any).strokeWeight = iconStrokeWeight;
@@ -510,8 +525,8 @@ export class ActionExecutor {
   }
 
   /**
-   * Read-before-create: find an existing child node matching name + type under parent.
-   * Returns the existing node for upsert, or null if no match (create normally).
+   * Upsert helper: find an existing child node matching name + type under parent.
+   * Called only when action.upsertExisting=true.
    * Only matches when `name` is explicitly provided — unnamed nodes are always created fresh.
    */
   private findExistingChild(
@@ -644,9 +659,13 @@ export class ActionExecutor {
           console.warn(`[ActionExecutor] Failed to apply effects on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'EFFECT_INVALID', severity: 'warning', message: `Failed to apply effects: ${e.message}` });
         }
-      } else if ((key === 'letterSpacing' || key === 'lineHeight') && typeof value === 'number') {
+      } else if ((key === 'letterSpacing' || key === 'lineHeight') && (typeof value === 'number' || typeof value === 'string')) {
         try {
-          (node as any)[key] = { value, unit: 'PIXELS' };
+          if (typeof value === 'string' && value.endsWith('%')) {
+            (node as any)[key] = { value: parseFloat(value), unit: 'PERCENT' };
+          } else {
+            (node as any)[key] = { value: Number(value), unit: 'PIXELS' };
+          }
         } catch (e: any) {
           console.warn(`[ActionExecutor] Failed to apply ${key} on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'PROP_NORMALIZE_FAILED', severity: 'warning', message: `Failed to apply ${key}: ${e.message}` });

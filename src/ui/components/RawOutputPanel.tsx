@@ -89,6 +89,8 @@ export function RawOutputPanel({ content, isExpanded, onToggle }: RawOutputPanel
         wordBreak: 'break-all',
         lineHeight: tokens.lineHeight[2],
         color: tokens.colors.textPrimary,
+        userSelect: 'text',
+        WebkitUserSelect: 'text',
       }}>
         {content}
       </div>

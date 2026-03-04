@@ -23,7 +23,7 @@
 - Component padding: 16-24px
 - Tight groups (label+input): 8px gap
 
-### Visual Checklist (verify before signal type "complete")
+### Visual Checklist (verify before completing)
 - At least one shadow on elevated elements (cards, buttons, modals)
 - Text uses 2+ different sizes and 2+ different fill colors
 - Containers have cornerRadius (8-16px cards, 6-8px inputs, 20+ pills)

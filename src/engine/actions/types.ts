@@ -38,6 +38,13 @@ export interface ActionBase {
   
   /** Override the batch-level onError strategy for this specific action. */
   onError?: 'skip-dependents' | 'abort';
+
+  /**
+   * Opt-in upsert behavior for create actions.
+   * Default is false to avoid accidental sibling overwrite when multiple nodes
+   * share the same semantic name (e.g. repeated "Link" text items).
+   */
+  upsertExisting?: boolean;
 }
 
 export interface CreateFrameAction extends ActionBase {

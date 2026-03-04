@@ -8,31 +8,23 @@ interface DigestMeta {
  * Tool-specific parameter extractors to keep only essential info.
  */
 const parameterExtractors: Record<string, (params: any) => string> = {
-  build_design: (params) => {
-    if (!Array.isArray(params.operations)) {
-      return params._truncated ? '[Truncated Operations]' : JSON.stringify(params).slice(0, 100);
+  create: (params) => {
+    if (typeof params.xml === 'string') {
+      return `xml: ${params.xml.length} chars${params.parentId ? `, parentId: ${params.parentId}` : ''}`;
     }
-    const count = params.operations.length;
-    const preview = params.operations.slice(0, 2).map((op: any) => `${op.op}(${op.symbol || op.target || ''})`).join(', ');
-    return `${count} ops: ${preview}${count > 2 ? '...' : ''}`;
+    return params._truncated ? '[Truncated]' : JSON.stringify(params).slice(0, 100);
   },
-  patch_node: (params) => {
-    if (!Array.isArray(params.patches)) return JSON.stringify(params).slice(0, 100);
-    return params.patches
-      .map((p: any) => `${p.nodeId || '?'}{${Object.keys(p.props || {}).join(',')}}`)
-      .join(', ');
-  },
-  read_node: (params) => {
-    if (params.mode) {
-      if (params.mode === 'selection') return `mode: selection`;
-      const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
-      return `mode: ${params.mode}, nodeId: ${params.nodeId || '?'}${depthStr}`;
+  edit: (params) => {
+    if (typeof params.xml === 'string') {
+      return `xml: ${params.xml.length} chars`;
     }
-    return `nodeId: ${params.nodeId || '?'}`;
+    return JSON.stringify(params).slice(0, 100);
   },
-  signal: (params) => `${params.type || 'unknown'}: ${(params.summary || params.title || '').slice(0, 80)}`,
+  read: (params) => {
+    const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
+    return `nodeId: ${params.nodeId || '?'}${depthStr}`;
+  },
   query_knowledge: (params) => `source: ${params.source || '?'}, query: ${(params.query || '').slice(0, 60)}`,
-  delete_node: (params) => `nodeId: ${params.nodeId || '?'}`,
 };
 
 /**
@@ -40,7 +32,7 @@ const parameterExtractors: Record<string, (params: any) => string> = {
  */
 function extractResultInfo(tool: ToolCallRecord): string {
   const idMap = tool.result?.data?.idMap || tool.result?.idMap;
-  if (tool.name === 'build_design' && idMap) {
+  if (tool.name === 'create' && idMap) {
     const mappings = Object.entries(idMap)
       .map(([key, id]) => `${key}→${id}`)
       .join(', ');

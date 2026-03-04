@@ -60,18 +60,6 @@ export interface PromptDependencies {
         diffInfo?: string[];
     }>;
 
-    // [8] Active Step (Incremental Improvement #4)
-    activeStep?: {
-        stepId: string;
-        title: string;
-        description?: string;
-        action?: string;
-        nodes?: string[];
-        reasoning?: string;
-    } | null;
-
-    // [9] Plan Summary — used in VERIFICATION mode when activeStep is null
-    planSummary?: string;
 }
 
 export interface Intent {

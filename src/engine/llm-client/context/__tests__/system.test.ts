@@ -16,14 +16,14 @@ describe('buildStaticSystemPrompt', () => {
             }
         },
         {
-            name: 'build_design',
-            description: 'Create a Figma design via DSL instructions.',
+            name: 'create',
+            description: 'Create a Figma design via XML markup.',
             parameters: {
                 type: 'object',
                 properties: {
-                    instructions: { type: 'string', description: 'DSL instructions.' }
+                    xml: { type: 'string', description: 'XML markup.' }
                 },
-                required: ['instructions']
+                required: ['xml']
             }
         }
     ];
@@ -38,10 +38,8 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('DESIGN FREEDOM PRINCIPLE');
     });
 
-    it('should include autonomous behavior rules (not legacy phase blocks)', () => {
+    it('should not include legacy phase blocks', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
-        expect(prompt).toContain('AUTONOMOUS BEHAVIOR');
-        // Legacy phase-specific blocks should NOT be present
         expect(prompt).not.toContain('WHEN IN PLANNING MODE');
         expect(prompt).not.toContain('WHEN IN EXECUTION MODE');
         expect(prompt).not.toContain('WHEN IN VERIFICATION MODE');
@@ -53,8 +51,8 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('## AVAILABLE TOOLS');
         expect(prompt).toContain('**query_knowledge**');
         expect(prompt).toContain('Search for design rules.');
-        expect(prompt).toContain('**build_design**');
-        expect(prompt).toContain('Create a Figma design via DSL instructions.');
+        expect(prompt).toContain('**create**');
+        expect(prompt).toContain('Create a Figma design via XML markup.');
     });
 
     it('should include tool examples', () => {
@@ -62,9 +60,9 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('## EXAMPLES');
     });
 
-    it('should include error recovery', () => {
+    it('should include error handling', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
-        expect(prompt).toContain('ERROR RECOVERY');
+        expect(prompt).toContain('ERROR HANDLING');
     });
 
     it('should include provider tool instructions', () => {
@@ -102,20 +100,20 @@ describe('buildStaticSystemPrompt', () => {
     it('should use phase-based serialization when tools have categories', () => {
         const categorizedTools: ToolDefinition[] = [
             {
-                name: 'read_node',
+                name: 'read',
                 description: 'Read a node.',
                 category: 'read' as any,
                 parameters: { type: 'object', properties: {} }
             },
             {
-                name: 'build_design',
+                name: 'create',
                 description: 'Create a design.',
                 category: 'create' as any,
                 parameters: { type: 'object', properties: {} }
             }
         ];
         const prompt = buildStaticSystemPrompt(categorizedTools, mockProvider, []);
-        expect(prompt).toContain('Phase 1: Information Gathering');
-        expect(prompt).toContain('Phase 3: Execution');
+        expect(prompt).toContain('Information Gathering');
+        expect(prompt).toContain('Execution');
     });
 });

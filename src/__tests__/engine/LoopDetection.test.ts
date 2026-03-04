@@ -33,29 +33,20 @@ describe('AgentRuntime Loop Detection', () => {
     runtime = new AgentRuntime({
       provider: mockProvider as any,
       tools: [
-        { 
-          name: 'createNode', 
-          description: 'desc', 
-          parameters: { 
-            type: 'object',
-            properties: { 
-              name: { type: 'string' }, 
-              parentId: { type: 'string' } 
-            } 
-          } 
-        } as any,
-        { 
-          name: 'signal', 
-          description: 'desc', 
+        {
+          name: 'createNode',
+          description: 'desc',
           parameters: {
             type: 'object',
-            properties: {}
-          } 
-        } as any
+            properties: {
+              name: { type: 'string' },
+              parentId: { type: 'string' }
+            }
+          }
+        } as any,
       ],
       toolExecutors: {
         'createNode': vi.fn().mockResolvedValue({ success: true, data: { nodeId: 'new-node-id' } }),
-        'signal': vi.fn().mockResolvedValue({ success: true })
       },
       maxIterations: 10
     });
@@ -85,9 +76,9 @@ describe('AgentRuntime Loop Detection', () => {
         text: 'Thinking 3', 
         toolCalls: [toolCalls[2]]
       })
-      .mockResolvedValue({ 
-        text: 'Done', 
-        toolCalls: [{ id: '4', name: 'signal', args: { type: 'complete', summary: 'done' } }]
+      .mockResolvedValue({
+        text: 'Done',
+        toolCalls: []
       });
 
     // Run the agent. 

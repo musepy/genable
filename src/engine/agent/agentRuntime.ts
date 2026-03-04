@@ -89,7 +89,6 @@ export class AgentRuntime {
   private toolDispatcher: ToolDispatcher;
   private allowedExecutionToolNames: Set<string>;
   private idCounter: number = 0;
-  private textOnlyCompletionRetries: number = 0;
   private readonly THROTTLE_MS = 100;
   private hookRegistry: HookRegistry;
   private hookRunner: HookRunner;
@@ -161,7 +160,7 @@ export class AgentRuntime {
       seedMessages.push({
         id: DYNAMIC_CONTEXT_MSG_ID,
         role: 'system',
-        content: buildDynamicContextContent('AUTONOMOUS'),
+        content: buildDynamicContextContent(0, this.maxIterations),
       });
     }
     if (options.messages) {
@@ -447,8 +446,6 @@ export class AgentRuntime {
       tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
     };
 
-    this.textOnlyCompletionRetries = 0;
-
     this.emitRuntimeEvent({
       type: 'status',
       phase: 'execution' as AgentRuntimePhase,
@@ -509,7 +506,7 @@ export class AgentRuntime {
       // Only update the tiny dynamic context message in-place.
       const dynMsg = this.messages.find(m => m.id === DYNAMIC_CONTEXT_MSG_ID);
       if (dynMsg) {
-        dynMsg.content = buildDynamicContextContent('AUTONOMOUS');
+        dynMsg.content = buildDynamicContextContent(iteration, this.maxIterations);
       }
 
       // ──── LLM GENERATION ────
@@ -589,11 +586,6 @@ export class AgentRuntime {
       this.options.onIteration?.(iteration, response);
       this.throwIfCanceled(iteration + 1);
 
-      // Reset text-only retries on tool calls
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        this.textOnlyCompletionRetries = 0;
-      }
-
       // ──── ADD MODEL RESPONSE TO HISTORY ────
       const modelMessage = this.options.provider.formatResponse(response);
       modelMessage.id = this.generateId('mdl');
@@ -614,34 +606,20 @@ export class AgentRuntime {
         this.runStats.toolCallCount += toolCallsForExecution.length;
         const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
         // Count tool errors from the result message
-        if (dispatchResult.toolResultsMessage) {
-          const content = dispatchResult.toolResultsMessage.content;
-          if (Array.isArray(content)) {
-            for (const part of content) {
-              if (part.functionResponse?.response?.success === false) {
-                this.runStats.toolErrorCount++;
-              }
+        const content = dispatchResult.toolResultsMessage.content;
+        if (Array.isArray(content)) {
+          for (const part of content) {
+            if (part.functionResponse?.response?.success === false) {
+              this.runStats.toolErrorCount++;
             }
           }
         }
-        if (dispatchResult.type === 'completed') {
-          return dispatchResult.completionSummary!;
-        }
-        this.messages.push(dispatchResult.toolResultsMessage!);
+        this.messages.push(dispatchResult.toolResultsMessage);
         iteration++;
         continue;
       } else {
-        // No tool calls — nudge LLM to call signal(type=complete)
-        if (this.textOnlyCompletionRetries < AGENT_RUNTIME_CONSTANTS.MAX_TEXT_ONLY_COMPLETION_RETRIES) {
-          this.textOnlyCompletionRetries++;
-          this.messages.push({
-            id: this.generateId('nudge'),
-            role: 'user',
-            content: 'You responded with text but no tool calls. If you are explaining a difficulty to the user, that is fine — wrap up by calling signal(type="complete", summary="<your explanation>"). Otherwise, call the appropriate tool to continue working.'
-          });
-          iteration = Math.max(0, iteration - 1);
-          continue;
-        }
+        // Implicit completion: no tool calls = agent is done.
+        // The LLM's text response is the completion summary.
         this.emitRuntimeEvent({
           type: 'completed',
           phase: 'execution' as AgentRuntimePhase,

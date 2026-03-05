@@ -8,7 +8,7 @@ describe('ToolExecutionCoordinator', () => {
     ['read', {}, 'nodeId'],
     ['create', {}, 'xml'],
     ['edit', {}, 'xml'],
-    ['query_knowledge', {}, 'source'],
+    ['query', {}, 'source'],
   ])('flags missing required parameter for %s', (toolName, args, missingParam) => {
     const result = coordinator.validateToolCall(toolName as string, args, 'EXECUTION');
 
@@ -58,7 +58,7 @@ describe('ToolExecutionCoordinator', () => {
       'complete_task',
       { summary: 'done' },
       'EXECUTION',
-      ['read', 'create', 'edit', 'query_knowledge']
+      ['read', 'create', 'edit', 'query']
     );
 
     expect(result.ok).toBe(false);

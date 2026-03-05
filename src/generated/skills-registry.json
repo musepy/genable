@@ -29,39 +29,5 @@
       "enabledByDefault": true
     },
     "body": "## DESIGN KNOWLEDGE\n\nAccess design knowledge when you need guidance:\n\n- `query_knowledge(source=\"knowledge\", query=\"...\")`: Find UI patterns, color schemes, typography rules, component anatomy, layout rules\n\nUse `query_knowledge` BEFORE creating complex components to ensure best practices.\n\n### Examples\n\n**Create a pricing table:**\n```\nquery_knowledge({ source: \"knowledge\", query: \"pricing table anatomy\" })\n→ { results: [...] }\n\nbuild_design({ \"operations\": [...] })\n```"
-  },
-  "project-ui-context": {
-    "id": "project-ui-context",
-    "name": "Project UI Context",
-    "description": "Query project UI components and design tokens for consistent design generation",
-    "frontmatter": {
-      "id": "project-ui-context",
-      "name": "Project UI Context",
-      "description": "Query project UI components and design tokens for consistent design generation",
-      "category": "context",
-      "priority": 2,
-      "injectionType": "dynamic",
-      "tools": [
-        "query_knowledge"
-      ],
-      "triggerPatterns": [
-        "button",
-        "header",
-        "card",
-        "input",
-        "component",
-        "组件",
-        "按钮",
-        "卡片",
-        "design system",
-        "设计系统",
-        "match.*style",
-        "风格.*一致",
-        "existing.*ui",
-        "现有.*ui"
-      ],
-      "enabledByDefault": true
-    },
-    "body": "## PROJECT UI CONTEXT\n\nThis project has existing UI components defined in code. Before creating new designs:\n\n1. **Query Components First**: Use `query_knowledge(source=\"components\")` to understand existing component structure\n2. **Use Design Tokens**: Use `query_knowledge(source=\"tokens\")` to get colors, spacing, typography\n3. **Match Patterns**: Generated designs should match the project's established patterns\n\n**When to use these tools:**\n- Creating buttons, headers, cards, inputs → Query the component first\n- Unsure about spacing/colors → Get design tokens\n- Need to match existing style → List and inspect components\n\n### Examples\n\n**Create button matching project style:**\n```\nquery_knowledge({ source: \"components\", query: \"Button\" })\n→ { results: [...] }\n\nbuild_design({ \"operations\": [...] })\n```"
   }
 }

@@ -13,7 +13,7 @@
  * CURRENT TOOL & SYSTEM NOTES:
  * - Runtime constants (max iterations, thresholds) are in constants.ts
  * - Feature flags (postprocessor rules, architecture toggles) are in constants/featureFlags.ts
- * - 4 unified tools: read, create, edit, query_knowledge
+ * - 4 unified tools: read, create, edit, query
  * - Node types limited to: FRAME, TEXT, RECTANGLE, ELLIPSE, LINE, ICON (no IMAGE/COMPONENT)
  * - Colors: hex only (#RRGGBB or #RRGGBBAA for effects)
  */

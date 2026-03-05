@@ -10,9 +10,13 @@ export const readNodeDefinition: ToolDefinition = {
   display: { displayName: 'Read', group: 'inspect' },
   description: `Read a node tree from the Figma document. Returns compact XML representation.
 
-Returns the node and its children up to the specified depth as XML.
+Two detail levels:
+- **summary** — structural skeleton only (id, name, type, dimensions, layout). Fast, ~100-300 tokens. Use for navigation, discovering children, planning edits.
+- **full** (default) — complete styles (fills, fonts, effects, padding). Auto-degrades to summary + hint when the tree is large.
 
 Output format: XML with abbreviated attributes (w=width, h=height, layout=layoutMode, sizingH/sizingV, alignMain/alignCross, corner, size=fontSize, weight=fontWeight, p=padding, fill/fills, shadow=effects). Text content appears as tag body: <text size="16">Hello</text>.
+
+**Progressive reading for large trees**: Start with summary to discover structure, then read specific children with full detail.
 
 Set screenshot=true to also capture a visual screenshot of the node (bundled in the same response).`,
   parameters: {
@@ -21,6 +25,11 @@ Set screenshot=true to also capture a visual screenshot of the node (bundled in 
       nodeId: {
         type: 'string',
         description: 'Target node ID. Required.'
+      },
+      detail: {
+        type: 'string',
+        enum: ['summary', 'full'],
+        description: 'Detail level. "summary" = skeleton (id/name/type/size/layout only). "full" = complete styles (default). Use summary for large trees or navigation.'
       },
       depth: {
         type: 'number',

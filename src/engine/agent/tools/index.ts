@@ -3,7 +3,7 @@
  * @description Consolidated entry point for all Agentic Tools.
  *
  * Exports the 4 unified primitives used by the LLM:
- * read | create | edit | query_knowledge
+ * read | create | edit | query
  */
 
 // ── Unified Tools (4 primitives) ──
@@ -12,7 +12,7 @@ import { ToolDefinition, ToolDisplayMeta } from './types';
 
 /**
  * Primary tool set for LLM function calling.
- * 4 unified primitives: read, create, edit, query_knowledge.
+ * 4 unified primitives: read, create, edit, query.
  */
 export const agentTools: ToolDefinition[] = unifiedTools;
 

@@ -55,6 +55,15 @@ module.exports = function (buildOptions) {
     // through to real React, causing insertBefore errors due to vnode mismatch.
     plugins: [
       {
+        name: 'csv-text-loader',
+        setup(build) {
+          build.onLoad({ filter: /\.csv$/ }, async (args) => {
+            const text = await fs.promises.readFile(args.path, 'utf8')
+            return { contents: `export default ${JSON.stringify(text)}`, loader: 'js' }
+          })
+        }
+      },
+      {
         name: 'preact-compat-jsx-runtime',
         setup(build) {
           // Alias react/jsx-runtime → preact/compat/jsx-runtime

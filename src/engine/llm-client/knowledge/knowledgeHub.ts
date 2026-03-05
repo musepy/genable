@@ -1,7 +1,7 @@
 /**
  * @file knowledgeHub.ts
  * @description Unified knowledge retrieval service for UI Pro Max data sources
- * 
+ *
  * Provides semantic search across multiple knowledge domains:
  * - reasoning: UI category patterns and decision rules
  * - styles: Visual style definitions and guidelines
@@ -18,17 +18,219 @@ try {
 import { loadAnatomyFromDirectory, getAnatomyDir } from '../../agent/skills/knowledgeLoader';
 import { ComponentSchema } from '../../../knowledge/types';
 
-// Import generated knowledge bases
-import reasoningData from '../../../generated/reasoning.json';
-import stylesData from '../../../generated/styles.json';
-import colorsData from '../../../generated/colors.json';
-import typographyData from '../../../generated/typography.json';
-import landingData from '../../../generated/landing.json';
-import chartsData from '../../../generated/charts.json';
-import productsData from '../../../generated/products.json';
-import guidelinesData from '../../../generated/guidelines.json';
-import stacksData from '../../../generated/stacks.json';
+// Import generated CSV knowledge bases (text strings)
+import reasoningCsv from '../../../generated/reasoning.csv';
+import stylesCsv from '../../../generated/styles.csv';
+import colorsCsv from '../../../generated/colors.csv';
+import typographyCsv from '../../../generated/typography.csv';
+import landingCsv from '../../../generated/landing.csv';
+import chartsCsv from '../../../generated/charts.csv';
+import productsCsv from '../../../generated/products.csv';
+import guidelinesCsv from '../../../generated/guidelines.csv';
+import stacksCsv from '../../../generated/stacks.csv';
+// figma-layout-rules stays as JSON (hand-maintained, not from CSV source)
 import figmaLayoutData from '../../../generated/figma-layout-rules.json';
+
+// ==========================================
+// CSV Parser
+// ==========================================
+
+/**
+ * Lightweight CSV parser that handles quoted fields, escaped quotes,
+ * and multi-line values. Returns array of objects keyed by header names.
+ */
+function parseCSV(text: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n') {
+      row.push(field);
+      field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else if (ch === '\r') {
+      // skip carriage return; \n will handle the row break
+    } else {
+      field += ch;
+    }
+  }
+  // Flush last field/row
+  row.push(field);
+  if (row.length > 1 || row[0] !== '') rows.push(row);
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0];
+  return rows.slice(1).map(r => {
+    const obj: Record<string, string> = {};
+    headers.forEach((h, i) => { obj[h] = r[i] ?? ''; });
+    return obj;
+  });
+}
+
+// ==========================================
+// Per-domain transform functions
+// ==========================================
+
+function transformReasoning(records: Record<string, string>[]): ReasoningRule[] {
+  return records.map(r => ({
+    id: r.id,
+    category: r.category,
+    pattern: r.pattern,
+    stylePriority: r.stylePriority ? r.stylePriority.split('|') : [],
+    colorMood: r.colorMood,
+    typographyMood: r.typographyMood,
+    keyEffects: r.keyEffects,
+    decisionRules: r.decisionRules ? (() => { try { return JSON.parse(r.decisionRules); } catch { return {}; } })() : {},
+    antiPatterns: r.antiPatterns,
+    severity: r.severity,
+  }));
+}
+
+function transformStyles(records: Record<string, string>[]): StyleDefinition[] {
+  return records.map(r => ({
+    id: r.id,
+    category: r.category,
+    type: r.type,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    primaryColors: r.primaryColors,
+    secondaryColors: r.secondaryColors,
+    effects: r.effects,
+    bestFor: r.bestFor,
+    doNotUseFor: r.doNotUseFor,
+    lightMode: r.lightMode === 'true',
+    darkMode: r.darkMode === 'true',
+    performance: r.performance,
+    accessibility: r.accessibility,
+    complexity: r.complexity,
+  }));
+}
+
+function transformColors(records: Record<string, string>[]): ColorPalette[] {
+  return records.map(r => ({
+    id: r.id,
+    productType: r.productType,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    primary: r.primary,
+    secondary: r.secondary,
+    cta: r.cta,
+    background: r.background,
+    text: r.text,
+    border: r.border,
+    notes: r.notes,
+  }));
+}
+
+function transformTypography(records: Record<string, string>[]): TypographyPairing[] {
+  return records.map(r => ({
+    id: r.id,
+    name: r.name,
+    category: r.category,
+    headingFont: r.headingFont,
+    bodyFont: r.bodyFont,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    bestFor: r.bestFor,
+    googleFontsUrl: r.googleFontsUrl,
+    cssImport: r.cssImport,
+    tailwindConfig: r.tailwindConfig,
+    notes: r.notes,
+  }));
+}
+
+function transformLanding(records: Record<string, string>[]): LandingPagePattern[] {
+  return records.map(r => ({
+    id: r.id,
+    name: r.name,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    sections: r.sections,
+    cta: r.cta,
+    colorStrategy: r.colorStrategy,
+    effects: r.effects,
+    conversion: r.conversion,
+  }));
+}
+
+function transformCharts(records: Record<string, string>[]): ChartRecommendation[] {
+  return records.map(r => ({
+    id: r.id,
+    type: r.type,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    bestChart: r.bestChart,
+    secondaryOptions: r.secondaryOptions,
+    colors: r.colors,
+    performance: r.performance,
+    accessibility: r.accessibility,
+    library: r.library,
+    interaction: r.interaction,
+  }));
+}
+
+function transformProducts(records: Record<string, string>[]): ProductTrend[] {
+  return records.map(r => ({
+    id: r.id,
+    type: r.type,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    primaryStyle: r.primaryStyle,
+    secondaryStyles: r.secondaryStyles,
+    landingPattern: r.landingPattern,
+    dashboardStyle: r.dashboardStyle,
+    palette: r.palette,
+    considerations: r.considerations,
+  }));
+}
+
+function transformGuidelines(records: Record<string, string>[]): GuidelineRule[] {
+  return records.map(r => ({
+    id: r.id,
+    category: r.category,
+    issue: r.issue,
+    keywords: r.keywords ? r.keywords.split('|') : [],
+    platform: r.platform,
+    description: r.description,
+    do: r.do,
+    dont: r.dont,
+    codeGood: r.codeGood,
+    codeBad: r.codeBad,
+    severity: r.severity,
+    source: r.source,
+  }));
+}
+
+function transformStacks(records: Record<string, string>[]): StackRule[] {
+  return records.map(r => ({
+    id: r.id,
+    stack: r.stack,
+    category: r.category,
+    guideline: r.guideline,
+    description: r.description,
+    do: r.do,
+    dont: r.dont,
+    codeGood: r.codeGood,
+    codeBad: r.codeBad,
+    severity: r.severity,
+    docsUrl: r.docsUrl,
+  }));
+}
 
 // ==========================================
 // Type Definitions
@@ -207,16 +409,22 @@ class KnowledgeHubService {
   private anatomy: AnatomyBlueprint[];
   private figmaLayout: FigmaLayoutRule[];
 
+  // Skill documents indexed for unified search
+  private skillDocs: Array<{ id: string; name: string; description: string; body: string }> = [];
+  private skillIndex: MiniSearch<{ id: string; name: string; description: string; body: string }>;
+
   constructor() {
-    this.reasoning = reasoningData as unknown as ReasoningRule[];
-    this.styles = stylesData as unknown as StyleDefinition[];
-    this.colors = colorsData as unknown as ColorPalette[];
-    this.typography = typographyData as unknown as TypographyPairing[];
-    this.landing = landingData as unknown as LandingPagePattern[];
-    this.charts = chartsData as unknown as ChartRecommendation[];
-    this.products = productsData as unknown as ProductTrend[];
-    this.guidelines = guidelinesData as unknown as GuidelineRule[];
-    this.stacks = stacksData as unknown as StackRule[];
+    // Parse CSV text → typed arrays
+    this.reasoning = transformReasoning(parseCSV(reasoningCsv));
+    this.styles = transformStyles(parseCSV(stylesCsv));
+    this.colors = transformColors(parseCSV(colorsCsv));
+    this.typography = transformTypography(parseCSV(typographyCsv));
+    this.landing = transformLanding(parseCSV(landingCsv));
+    this.charts = transformCharts(parseCSV(chartsCsv));
+    this.products = transformProducts(parseCSV(productsCsv));
+    this.guidelines = transformGuidelines(parseCSV(guidelinesCsv));
+    this.stacks = transformStacks(parseCSV(stacksCsv));
+    // figma-layout-rules stays as JSON import
     this.figmaLayout = figmaLayoutData as unknown as FigmaLayoutRule[];
 
     // Load anatomy from .agent/knowledge/components/ (Cline-style)
@@ -252,6 +460,7 @@ class KnowledgeHubService {
     this.stacksIndex = this.createIndex(['stack', 'category', 'guideline', 'description']);
     this.figmaLayoutIndex = this.createIndex(['category', 'issue', 'keywords', 'description']);
     this.anatomyIndex = this.createIndex(['id', 'name', 'category', 'description', 'keywords']);
+    this.skillIndex = this.createIndex(['name', 'description', 'body']);
 
     this.reasoningIndex.addAll(this.reasoning);
     this.stylesIndex.addAll(this.styles);
@@ -264,6 +473,16 @@ class KnowledgeHubService {
     this.stacksIndex.addAll(this.stacks);
     this.figmaLayoutIndex.addAll(this.figmaLayout);
     this.anatomyIndex.addAll(this.anatomy);
+  }
+
+  /**
+   * Index skill bodies so they appear in unified searchAll results.
+   * Called once after skills are loaded.
+   */
+  indexSkills(skills: Array<{ id: string; name: string; description: string; body: string }>): void {
+    this.skillDocs = skills;
+    this.skillIndex.removeAll();
+    this.skillIndex.addAll(skills);
   }
 
   private createIndex<T>(fields: string[]): MiniSearch<T> {
@@ -366,59 +585,43 @@ class KnowledgeHubService {
 
 
   // ==========================================
-  // Unified Search
+  // Unified Search (all domains + skills)
   // ==========================================
 
   /**
-   * Search for aesthetic inspiration and visual directions.
-   * Aggregates reasoning patterns and style definitions.
-   * @param query - Contextual keywords (e.g., 'minimalist', 'luxury')
+   * Cross-domain search. Returns top results scored across all domains + skills.
+   * Primary entry point for `query(source="knowledge")`.
    */
-  searchAesthetics(query: string, limit = 3) {
-    const reasoning = this.searchReasoning(query, limit);
-    const styles = this.searchStyles(query, limit);
+  searchAll(query: string, limit = 5): SearchResult<any>[] {
+    const allResults: SearchResult<any>[] = [];
 
-    return {
-      patterns: reasoning.map(r => r.item),
-      visualStyles: styles.map(s => s.item)
-    };
+    const domains: Array<{ index: MiniSearch<any>; data: any[] }> = [
+      { index: this.reasoningIndex, data: this.reasoning },
+      { index: this.stylesIndex, data: this.styles },
+      { index: this.colorsIndex, data: this.colors },
+      { index: this.typographyIndex, data: this.typography },
+      { index: this.landingIndex, data: this.landing },
+      { index: this.chartsIndex, data: this.charts },
+      { index: this.productsIndex, data: this.products },
+      { index: this.guidelinesIndex, data: this.guidelines },
+      { index: this.stacksIndex, data: this.stacks },
+      { index: this.figmaLayoutIndex, data: this.figmaLayout },
+      { index: this.anatomyIndex, data: this.anatomy },
+      { index: this.skillIndex, data: this.skillDocs },
+    ];
+
+    for (const { index, data } of domains) {
+      const hits = index.search(query);
+      for (const hit of hits.slice(0, 2)) {
+        const item = data.find((d: any) => d.id === hit.id);
+        if (item) allResults.push({ item, score: hit.score });
+      }
+    }
+
+    return allResults
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
   }
-
-  /**
-   * Search all knowledge domains and return aggregated results
-   */
-  searchAll(query: string) {
-    return {
-      reasoning: this.searchReasoning(query, 1)[0]?.item,
-      style: this.searchStyles(query, 1)[0]?.item,
-      colors: this.searchColors(query, 1)[0]?.item,
-      typography: this.searchTypography(query, 1)[0]?.item,
-      landing: this.searchLanding(query, 1)[0]?.item,
-      products: this.searchProducts(query, 1)[0]?.item,
-    };
-  }
-
-  // ==========================================
-  // Direct Access Methods
-  // ==========================================
-
-  getReasoningByCategory(category: string): ReasoningRule | undefined {
-    return this.reasoning.find(r => r.category.toLowerCase() === category.toLowerCase());
-  }
-
-  getColorsByProductType(productType: string): ColorPalette | undefined {
-    return this.colors.find(c => c.productType.toLowerCase() === productType.toLowerCase());
-  }
-
-  getStyleByCategory(category: string): StyleDefinition | undefined {
-    return this.styles.find(s => s.category.toLowerCase() === category.toLowerCase());
-  }
-
-  getAllReasoning(): ReasoningRule[] { return this.reasoning; }
-  getAllStyles(): StyleDefinition[] { return this.styles; }
-  getAllColors(): ColorPalette[] { return this.colors; }
-  getAllTypography(): TypographyPairing[] { return this.typography; }
-  getAllLanding(): LandingPagePattern[] { return this.landing; }
 
   // ==========================================
   // Private Helpers
@@ -440,7 +643,3 @@ class KnowledgeHubService {
 
 // Export singleton instance
 export const knowledgeHub = new KnowledgeHubService();
-
-// Re-export for backward compatibility
-export { knowledgeHub as reasoningEngine };
-// AnatomyBlueprint is already exported as interface above

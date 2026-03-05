@@ -130,20 +130,7 @@ export const globalStyles = `
 
   /* --- Masking & Fading --- */
   .messages-mask {
-    -webkit-mask-image: linear-gradient(to bottom, 
-      transparent 0%, 
-      black 16px, 
-      black calc(100% - 16px), 
-      transparent 100%
-    );
-    mask-image: linear-gradient(to bottom, 
-      transparent 0%, 
-      black 16px, 
-      black calc(100% - 16px), 
-      transparent 100%
-    );
-    /* Ensure the mask doesn't hide the scrollbar if possible in this environment, 
-       though Chrome usually masks everything. Adjusting padding can help. */
+    /* mask removed: it fades out bottom content and blocks text selection */
   }
 
   .popover-content {

@@ -62,23 +62,6 @@ export interface SendVariablesHandler extends EventHandler {
   handler: (data: { names: string[] }) => void;
 }
 
-export interface GetLibraryResourcesHandler extends EventHandler {
-  name: 'GET_LIBRARY_RESOURCES';
-  handler: () => void;
-}
-
-export interface LibraryResource {
-  key: string;
-  name: string;
-  type: 'STYLE' | 'COMPONENT' | 'VARIABLE';
-  libraryName?: string;
-  description?: string;
-}
-
-export interface SendLibraryResourcesHandler extends EventHandler {
-  name: 'SEND_LIBRARY_RESOURCES';
-  handler: (data: { resources: LibraryResource[] }) => void;
-}
 
 export interface LoadSettingsHandler extends EventHandler {
   name: 'LOAD_SETTINGS';

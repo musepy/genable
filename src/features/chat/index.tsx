@@ -142,7 +142,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                   </Fragment>
                 )}
 
-                {safeText && <MessageRenderer content={safeText} level="L3" />}
+                {safeText && <MessageRenderer content={safeText} />}
 
                 {msg.rawOutput && (
                   <div style={{ marginTop: tokens.space[2] }}>
@@ -246,6 +246,10 @@ export function ChatFeature(props: UseChatProps) {
       onOpenSettings?.();
     },
     dismiss: () => setError(null),
+    retry: () => {
+      setError(null);
+      continueGeneration();
+    },
   };
 
   return (

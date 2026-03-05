@@ -74,6 +74,19 @@ NEVER create a bare node and style it in a separate call.
 ## read XML OUTPUT FORMAT
 `read` returns a compact XML representation of the node tree, NOT JSON. This is significantly more token-efficient. The read format is symmetric with the `create` XML write format — same tags, same attribute abbreviations.
 
+### Detail Levels
+`read` supports two detail levels via the `detail` parameter:
+
+- **`full`** (default) — complete styles: fills, fonts, effects, padding, cornerRadius, etc. Auto-degrades to summary + hint when the tree is large (>2500 chars).
+- **`summary`** — structural skeleton only: id, name, type, dimensions (w/h), layout mode. ~100-300 tokens. Text nodes show content inline if ≤30 chars, otherwise `chars="N"`.
+
+### Progressive Reading for Large Trees
+When a tree is large, `read` auto-degrades from full to summary and returns a hint. Follow this pattern:
+1. `read(rootId)` — if large, you get a skeleton + hint
+2. Identify the specific child IDs you need from the skeleton
+3. `read(childId)` — get full details for the relevant subtree
+4. Edit or create based on the detailed read
+
 **Tag mapping**: FRAME→`<frame>`, TEXT→`<text>`, RECTANGLE→`<rect>`, VECTOR→`<vector>`, LINE→`<line>`, ELLIPSE→`<ellipse>`, GROUP→`<group>`, SECTION→`<section>`, ICON→`<icon>`
 
 **Attribute abbreviations**:
@@ -90,11 +103,19 @@ NEVER create a bare node and style it in a separate call.
 
 **Screenshot bundling**: Set `screenshot=true` to get both structure XML and a visual screenshot in one call.
 
-**Example output**:
+**Example output (full)**:
 ```xml
 <frame id="1:2" name="Card" layout="V" gap="12" fill="#FFF" w="320" sizingV="HUG" p="24">
   <text id="3:4" name="Title" size="24" weight="Bold" fill="#111">Welcome</text>
   <rect id="7:8" name="Divider" h="1" fill="#E0E0E0"/>
+</frame>
+```
+
+**Example output (summary)**:
+```xml
+<frame id="1:2" name="Card" layout="V" w="320" sizingV="HUG">
+  <text id="3:4" name="Title">Welcome</text>
+  <rect id="7:8" name="Divider" h="1"/>
 </frame>
 ```
 

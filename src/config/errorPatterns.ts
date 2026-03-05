@@ -7,11 +7,12 @@
  * through the agent's status channel by AgentOrchestrator.
  */
 
-export type ErrorActionType = 'openSettings' | 'dismiss';
+export type ErrorActionType = 'openSettings' | 'dismiss' | 'retry';
 
 /**
  * Error categories that require the user to take action.
  * Everything else is handled silently by the agent loop.
+ * Order matters: first match wins.
  */
 export const ERROR_CATEGORIES = [
   {
@@ -20,8 +21,13 @@ export const ERROR_CATEGORIES = [
     handler: 'openSettings' as ErrorActionType,
   },
   {
+    id: 'rateLimited',
+    pattern: /rate.?limit|temporarily|RATE_LIMIT_EXHAUSTED/i,
+    handler: 'retry' as ErrorActionType,
+  },
+  {
     id: 'quotaExceeded',
-    pattern: /quota|429|billing|rate.?limit/i,
+    pattern: /quota|billing|insufficient.?credits/i,
     handler: 'openSettings' as ErrorActionType,
   },
 ] as const;

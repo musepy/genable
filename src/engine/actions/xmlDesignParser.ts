@@ -256,6 +256,12 @@ const ABBREV_EXPANSION: Record<string, string> = {
   bg: 'background',
   sizingH: 'layoutSizingHorizontal',
   sizingV: 'layoutSizingVertical',
+  overflow: 'clipsContent',
+  wrap: 'layoutWrap',
+  minW: 'minWidth',
+  maxW: 'maxWidth',
+  minH: 'minHeight',
+  maxH: 'maxHeight',
 };
 
 /** Properties where string values should NOT be coerced to numbers */
@@ -265,6 +271,7 @@ const STRING_VALUE_PROPS = new Set([
   'primaryAxisAlignItems', 'counterAxisAlignItems', 'textAlignHorizontal',
   'layoutPositioning', 'strokeAlign', 'iconName', 'layoutSizingHorizontal',
   'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',
+  'layoutWrap',
 ]);
 
 /** Properties that are numeric when the value is a number, but can also be "fill"/"hug" */
@@ -276,6 +283,7 @@ const NUMERIC_PROPS = new Set([
   'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'letterSpacing', 'lineHeight', 'opacity',
   'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius',
+  'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
 ]);
 
 /**
@@ -452,6 +460,14 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
         if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text')) { props.fills = expandColorList(rawValue); continue; }
         if (rawKey === 'fills') { props.fills = expandColorList(rawValue); continue; }
         if (rawKey === 'stroke' || rawKey === 'strokes') { props.strokes = expandColorList(rawValue); continue; }
+
+        // overflow → clipsContent: convert CSS semantics to boolean
+        if (expandedKey === 'clipsContent') {
+          const v = rawValue.toLowerCase();
+          props.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
+          continue;
+        }
+
         props[expandedKey] = coerceValue(expandedKey, rawValue);
       }
 
@@ -535,6 +551,13 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
 
       if (rawKey === 'stroke' || rawKey === 'strokes') {
         props.strokes = expandColorList(rawValue);
+        continue;
+      }
+
+      // overflow → clipsContent: convert CSS semantics to boolean
+      if (expandedKey === 'clipsContent') {
+        const v = rawValue.toLowerCase();
+        props.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
         continue;
       }
 

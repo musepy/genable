@@ -25,7 +25,6 @@ import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
-import { DYNAMIC_CONTEXT_MSG_ID, buildDynamicContextContent } from '../llm-client/context/dynamicContext';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,7 +116,6 @@ export class AgentRuntime {
       options.provider,
       this.cleaner,
       {
-        ramblingThreshold: AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD,
         thinkingTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
         throttleMs: this.THROTTLE_MS,
         generateId: (prefix) => this.generateId(prefix),
@@ -145,18 +143,15 @@ export class AgentRuntime {
         getRunId: () => this.currentRunId,
       },
     );
-    // Seed messages: static system prompt at index 0, dynamic context at index 1
+    // Seed messages: static system prompt at index 0
+    // No dynamic context message — keeping the prefix stable enables KV-cache
+    // reuse across iterations (every message after sys_static is append-only).
     const seedMessages: LLMMessage[] = [];
     if (options.systemPrompt) {
       seedMessages.push({
         id: 'sys_static',
         role: 'system',
         content: options.systemPrompt,
-      });
-      seedMessages.push({
-        id: DYNAMIC_CONTEXT_MSG_ID,
-        role: 'system',
-        content: buildDynamicContextContent(0, this.maxIterations),
       });
     }
     if (options.messages) {
@@ -496,14 +491,6 @@ export class AgentRuntime {
 
         phase: 'execution',
       });
-
-      // ──── DYNAMIC CONTEXT (KV-cache friendly) ────
-      // System prompt at index 0 is NEVER touched after construction.
-      // Only update the tiny dynamic context message in-place.
-      const dynMsg = this.messages.find(m => m.id === DYNAMIC_CONTEXT_MSG_ID);
-      if (dynMsg) {
-        dynMsg.content = buildDynamicContextContent(iteration, this.maxIterations);
-      }
 
       // ──── LLM GENERATION ────
       const abortController = new AbortController();

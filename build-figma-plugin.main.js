@@ -52,6 +52,15 @@ module.exports = function (buildOptions) {
   return {
     ...buildOptions,
     plugins: [
+      {
+        name: 'csv-text-loader',
+        setup(build) {
+          build.onLoad({ filter: /\.csv$/ }, async (args) => {
+            const text = await fs.promises.readFile(args.path, 'utf8')
+            return { contents: `export default ${JSON.stringify(text)}`, loader: 'js' }
+          })
+        }
+      },
       ...(buildOptions.plugins || []),
       figmaSandboxSanitizer
     ]

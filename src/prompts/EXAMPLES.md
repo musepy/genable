@@ -50,7 +50,33 @@ read({"nodeId":"200:1","depth":3,"screenshot":true})
 ```
 → Check layout looks correct, then respond with text to complete.
 
-### Example 3: Query-first edit
+### Example 3: Progressive read (large tree → summary → targeted full)
+User: "Update the header section in this complex page"
+
+**Step 1 — Read the whole page (auto-degrades for large trees)**:
+```json
+read({"nodeId":"100:1"})
+```
+→ Returns structural skeleton + hint: "Node tree is large (15 children). Use read with specific child IDs for full style details."
+
+**Step 2 — Read the specific section with full detail**:
+```json
+read({"nodeId":"100:3"})
+```
+→ Returns full XML with styles for the header section only.
+
+**Step 3 — Edit based on detailed read**:
+```json
+edit({"xml": "<text id='100:5' fill='#4F46E5' size='24'>New Header</text>"})
+```
+
+**Alternative — use summary mode explicitly for navigation**:
+```json
+read({"nodeId":"100:1","detail":"summary"})
+```
+→ Always returns skeleton regardless of size. Good for discovering node IDs before targeted reads.
+
+### Example 4: Query-first edit
 User: "Change the button in the existing card to green and add rounded corners"
 
 ```json
@@ -60,7 +86,7 @@ edit({
 })
 ```
 
-### Example 4: FONT_FALLBACK warning handling
+### Example 5: FONT_FALLBACK warning handling
 User: "Create a button with bold title"
 
 ```json
@@ -70,7 +96,7 @@ create({
 edit({"xml": "<text id='100:2' weight='Medium'/>"})
 ```
 
-### Example 5: Completion (text-only response, no tool calls)
+### Example 6: Completion (text-only response, no tool calls)
 After all design work is done, respond with text only — this ends the loop:
 
 "I've created the login form with email/password fields, a sign-in button, and proper card styling. The form uses vertical auto-layout with 16px spacing."

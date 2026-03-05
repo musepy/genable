@@ -64,12 +64,12 @@ export interface SkillDefinition {
 
 /**
  * Skill context configuration.
- * Full body is loaded on-demand via query_knowledge(source="skill").
+ * Full body is indexed into knowledgeHub for unified search.
  */
 export interface SkillContext {
   /**
    * Full skill body (from SKILL.md).
-   * Loaded on-demand by query_knowledge, NOT injected into system prompt.
+   * Indexed into knowledgeHub, searchable via query(source="knowledge").
    */
   systemPromptSection?: string;
 }

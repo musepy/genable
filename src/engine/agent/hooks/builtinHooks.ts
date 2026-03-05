@@ -7,9 +7,8 @@
  * custom hooks.
  *
  * Hooks:
- *  1. loopDetectionHook   — calls LoopDetector on tool calls (afterLLMResponse)
- *  2. ramblingGuardHook   — detects thinking-only / rambling iterations (afterLLMResponse)
- *  3. emptyResponseHook   — retries on empty LLM responses (afterLLMResponse)
+ *  1. emptyResponseHook   — retries on empty LLM responses (afterLLMResponse)
+ *  2. loopDetectionHook   — calls LoopDetector on tool calls (afterLLMResponse)
  */
 
 import { HookRegistration, HookContext, HookResult } from './hookTypes';
@@ -22,7 +21,6 @@ import { AGENT_RUNTIME_CONSTANTS } from '../constants';
 
 interface BuiltinHookState {
   loopDetector: LoopDetector;
-  thinkingOnlyIterations: number;
   emptyResponseRetries: number;
 }
 
@@ -37,13 +35,11 @@ interface BuiltinHookState {
 export function createBuiltinHooks(): HookRegistration[] {
   const state: BuiltinHookState = {
     loopDetector: new LoopDetector(),
-    thinkingOnlyIterations: 0,
     emptyResponseRetries: 0,
   };
 
   return [
     createEmptyResponseHook(state),
-    createRamblingGuardHook(state),
     createLoopDetectionHook(state),
   ];
 }
@@ -92,48 +88,7 @@ function createEmptyResponseHook(state: BuiltinHookState): HookRegistration {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Rambling Guard Hook
-// ---------------------------------------------------------------------------
-
-function createRamblingGuardHook(state: BuiltinHookState): HookRegistration {
-  return {
-    id: 'builtin:ramblingGuard',
-    event: 'afterLLMResponse',
-    priority: 20,
-    fn: async (ctx: HookContext): Promise<HookResult | void> => {
-      const hasToolCalls = ctx.toolCalls && ctx.toolCalls.length > 0;
-      const textLength = (ctx.responseText || '').length;
-      const ramblingThreshold = AGENT_RUNTIME_CONSTANTS.RAMBLING_TEXT_THRESHOLD;
-
-      if (!hasToolCalls) {
-        if (textLength > ramblingThreshold) {
-          state.thinkingOnlyIterations++;
-          console.warn(`[Hook:ramblingGuard] THINKING-ONLY iteration (${state.thinkingOnlyIterations}/${AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS})`);
-          if (state.thinkingOnlyIterations >= AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS) {
-            return {
-              action: 'abort',
-              reason: 'Agent stuck: multiple iterations with thinking but no actions.',
-            };
-          }
-          if (state.thinkingOnlyIterations === AGENT_RUNTIME_CONSTANTS.MAX_THINKING_ONLY_ITERATIONS - 1) {
-            return {
-              action: 'continue',
-              injectMessage: 'You have spent multiple iterations thinking without calling any tools. '
-                + 'This is your last chance: either call a tool to make progress, or respond with '
-                + 'a text explanation of the difficulty you encountered. '
-                + 'The next iteration without a tool call will terminate the run.',
-            };
-          }
-        }
-      } else {
-        state.thinkingOnlyIterations = 0;
-      }
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 3. Loop Detection Hook
+// 2. Loop Detection Hook
 // ---------------------------------------------------------------------------
 
 function createLoopDetectionHook(state: BuiltinHookState): HookRegistration {
@@ -188,13 +143,11 @@ export function createBuiltinHooksWithState(): {
 } {
   const state: BuiltinHookState = {
     loopDetector: new LoopDetector(),
-    thinkingOnlyIterations: 0,
     emptyResponseRetries: 0,
   };
 
   const hooks = [
     createEmptyResponseHook(state),
-    createRamblingGuardHook(state),
     createLoopDetectionHook(state),
   ];
 
@@ -202,7 +155,6 @@ export function createBuiltinHooksWithState(): {
     hooks,
     reset: () => {
       state.loopDetector.reset();
-      state.thinkingOnlyIterations = 0;
       state.emptyResponseRetries = 0;
     },
   };

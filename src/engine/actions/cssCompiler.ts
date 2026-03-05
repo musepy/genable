@@ -130,6 +130,19 @@ export function compileCssProps(props: Record<string, any>): Record<string, any>
     }
   }
 
+  // ── overflow → clipsContent (CSS semantics to boolean) ──
+  if ('clipsContent' in result && typeof result.clipsContent === 'string') {
+    const v = String(result.clipsContent).toLowerCase();
+    result.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
+  }
+
+  // ── wrap → layoutWrap (CSS semantics to Figma enum) ──
+  if ('layoutWrap' in result) {
+    const v = String(result.layoutWrap).toLowerCase();
+    if (v === 'wrap') result.layoutWrap = 'WRAP';
+    else if (v === 'nowrap' || v === 'no-wrap') result.layoutWrap = 'NO_WRAP';
+  }
+
   // ── Catch-all: normalize ALL enum values via PROP_METADATA ──
   // Handles textAlignHorizontal, strokeAlign, textAutoResize, etc.
   // that don't have explicit CSS→Figma mappings above.

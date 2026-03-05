@@ -215,9 +215,12 @@ export class ToolDispatcher {
       let result: any;
       if (toolExec) {
         result = await toolExec(tc.args);
-      } else if (this.ipcBridge) {
+      }
+      // Fall through to IPC if no local executor or local executor returned null
+      if (result == null && this.ipcBridge) {
         result = await this.ipcBridge.callTool(tc.name, tc.args);
-      } else {
+      }
+      if (result == null) {
         return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `No executor found for tool '${tc.name}'` } };
       }
 

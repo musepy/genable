@@ -28,10 +28,10 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Max time (ms) for thinking without action before timeout */
   THINKING_TIMEOUT_MS: 120000,
 
-  /** Max consecutive iterations with no tool calls before error */
+  /** @deprecated Rambling guard removed — text-only response is implicit completion. */
   MAX_THINKING_ONLY_ITERATIONS: 4,
-  
-  /** Minimum text length to consider as "rambling" (chars). Gemini streams text before tool calls, so this must be high enough to not abort before tool calls arrive. */
+
+  /** @deprecated Rambling guard removed — maxOutputTokens provides hard limit. */
   RAMBLING_TEXT_THRESHOLD: 1500,
 
   /** Maximum chars for batch operation results including idMap + results (~2500 tokens) */

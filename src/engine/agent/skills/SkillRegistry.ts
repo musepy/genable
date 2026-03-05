@@ -3,7 +3,7 @@
  * @description Central registry for agent skills.
  *
  * Skills are listed as a lightweight menu in the system prompt.
- * Full skill bodies are loaded on-demand via query_knowledge(source="skill").
+ * Full skill bodies are indexed into knowledgeHub for unified search via query(source="knowledge").
  */
 
 import {
@@ -105,7 +105,7 @@ class SkillRegistryImpl implements ISkillRegistry {
     }));
   }
 
-  /** Load full skill body on demand (called by query_knowledge source="skill"). */
+  /** Get full skill body (used by knowledgeHub indexing). */
   getSkillBody(skillId: string): string | null {
     const skill = this.skills.get(skillId);
     if (!skill) return null;

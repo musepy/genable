@@ -2,18 +2,18 @@
  * @file unified/index.ts
  * @description Barrel export for all unified tool definitions.
  * These 4 tools are the complete LLM-facing API:
- *   read | create | edit | query_knowledge
+ *   read | create | edit | query
  */
 
 export { readNodeDefinition } from './readNode';
 export { buildDesignDefinition as unifiedBuildDesignDefinition } from '../buildDesignTool';
 export { editDefinition } from './edit';
-export { queryKnowledgeDefinition } from './queryKnowledge';
+export { queryDefinition } from './query';
 
 import { readNodeDefinition } from './readNode';
 import { buildDesignDefinition } from '../buildDesignTool';
 import { editDefinition } from './edit';
-import { queryKnowledgeDefinition } from './queryKnowledge';
+import { queryDefinition } from './query';
 
 import { ToolDefinition } from '../types';
 
@@ -25,5 +25,5 @@ export const unifiedTools: ToolDefinition[] = [
   readNodeDefinition,           // Read anything from Figma
   buildDesignDefinition,        // Create designs via XML markup
   editDefinition,               // Modify/delete existing nodes via XML
-  queryKnowledgeDefinition,     // Query knowledge/components/tokens
+  queryDefinition,              // Search knowledge or canvas nodes
 ];

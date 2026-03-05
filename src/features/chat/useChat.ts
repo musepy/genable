@@ -3,7 +3,7 @@ import { emit } from '@create-figma-plugin/utilities'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
-import { searchDesignKnowledgeExecutor, getDesignSystemTokensExecutor } from '../../engine/agent/tools/unified/queryKnowledge'
+import { knowledgeHub } from '../../engine/llm-client/knowledge/knowledgeHub'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -230,6 +230,10 @@ export function useChat({
         }))
         break
       }
+      case 'retry': {
+        setLoadingStatus(`Retrying (${event.attempt}/${event.maxAttempts})...`)
+        break
+      }
       case 'error': {
         setLoading(false)
         setRuntimeState('error')
@@ -240,6 +244,7 @@ export function useChat({
           streaming: false,
           runState: 'error',
           runError: event.message,
+          runErrorCode: event.code,
           endTime: Date.now(),
         }))
         break
@@ -317,33 +322,13 @@ export function useChat({
 
     try {
       const localExecutors = {
-        // ── Unified tool executors ──
-        query_knowledge: async (params: any) => {
-          switch (params.source) {
-            case 'knowledge': {
-              if (!params.domain && params.query) {
-                // No domain specified — cross-domain search
-                const { knowledgeHub } = await import('../../engine/llm-client/knowledge/knowledgeHub')
-                const results = knowledgeHub.searchAll(params.query)
-                return { success: true, data: { results, source: 'cross-domain' } }
-              }
-              return searchDesignKnowledgeExecutor(params)
-            }
-            case 'tokens':
-              return getDesignSystemTokensExecutor(params)
-            case 'skill': {
-              const { skillRegistry } = await import('../../engine/agent/skills')
-              const body = skillRegistry.getSkillBody(params.query)
-              if (!body) {
-                console.warn(`[Skill] Not found: ${params.query}`)
-                return { success: false, error: { code: 'SKILL_NOT_FOUND', message: `Skill '${params.query}' not found.` } }
-              }
-              console.log(`[Skill] Loaded: ${params.query} (${body.length} chars)`)
-              return { success: true, data: { skillId: params.query, content: body } }
-            }
-            default:
-              return { success: false, error: { code: 'INVALID_SOURCE', message: `Unknown source: ${params.source}` } }
+        query: async (params: any) => {
+          if (params.source === 'knowledge') {
+            const results = knowledgeHub.searchAll(params.query || '')
+            return { success: true, data: { results: results.map(r => r.item) } }
           }
+          // 'nodes' source → return null to signal "not handled locally, use IPC"
+          return null
         },
       }
 
@@ -487,7 +472,7 @@ export function useChat({
       resetPreview()
 
       const calls: ToolCallRecord[] = []
-      setPrompt('Refine the flow, reduce visual noise, and mention @project-ui-context.')
+      setPrompt('Refine the flow, reduce visual noise.')
       setRuntimeState('running')
       setRuntimePhase('execution')
       setRuntimeProgress({ iteration: 1, maxIterations: 40 })

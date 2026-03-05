@@ -22,6 +22,9 @@ export const CONTEXT_CONSTANTS = {
   /** Maximum chars for standard tool result data before truncation (~750 tokens) */
   TOOL_RESULT_MAX_DATA_CHARS: 3000,
 
+  /** Char threshold for auto-degrading read full → structural + hint */
+  READ_AUTO_DEGRADE_CHARS: 2500,
+
   /** Maximum chars for build_design results including idMap + lineResults (~1250 tokens) */
   TOOL_RESULT_BATCH_BUDGET: 5000,
 

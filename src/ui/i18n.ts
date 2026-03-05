@@ -40,6 +40,11 @@ const translations = {
         message: 'Please check your API key in Settings.',
         action: 'Open Settings',
       },
+      rateLimited: {
+        title: 'Rate Limited',
+        message: 'The API is temporarily busy. You can retry or wait a moment.',
+        action: 'Retry',
+      },
       quotaExceeded: {
         title: 'Quota Exceeded',
         message: 'Your API quota has been exhausted. Check your billing or wait for reset.',
@@ -95,6 +100,11 @@ const translations = {
         title: 'API Key 无效',
         message: '请在设置中检查您的 API Key。',
         action: '打开设置',
+      },
+      rateLimited: {
+        title: '服务暂时繁忙',
+        message: 'API 暂时限流，可以重试或稍等片刻。',
+        action: '重试',
       },
       quotaExceeded: {
         title: '配额已用完',

@@ -11,7 +11,7 @@ import { ToolCallMode } from './agentLoopPolicy';
 import { classifyError, isRetryableError, AgentErrorCategory } from './retryPolicy';
 import { retryWithBackoff } from './retry';
 import { ToolResultCleaner } from './context/toolResultCleaner';
-import { AGENT_RUNTIME_CONSTANTS } from './constants';
+
 
 
 // ---------------------------------------------------------------------------
@@ -43,7 +43,6 @@ export interface LLMGenerationResult {
 }
 
 export interface LLMGenerationCoordinatorConfig {
-  ramblingThreshold: number;
   thinkingTimeoutMs: number;
   throttleMs: number;
   generateId: (prefix: string) => string;
@@ -97,7 +96,6 @@ export class LLMGenerationCoordinator {
     const { iteration, maxIterations } = request;
     const providerCapabilities = this.provider.getCapabilities?.() || DEFAULT_PROVIDER_CAPABILITIES;
 
-    let currentIterationText = '';
     let response: LLMResponse;
 
     this.config.throwIfCanceled(iteration + 1);
@@ -140,11 +138,6 @@ export class LLMGenerationCoordinator {
           streamTimeoutMs: this.config.thinkingTimeoutMs,
           onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
             this.config.notifyIterationStart?.();
-            currentIterationText += chunk;
-            if (currentIterationText.length > this.config.ramblingThreshold) {
-              console.warn(`[LLMGenCoordinator] RAMBLING DETECTED: ${currentIterationText.length} chars. Aborting stream.`);
-              abortController.abort();
-            }
             // Stream text chunks to UI for progressive "grow" effect
             if (chunk) {
               const now = Date.now();
@@ -190,7 +183,7 @@ export class LLMGenerationCoordinator {
           thinkingLevel: request.thinkingLevel,
         }),
         {
-          maxAttempts: 4,
+          maxAttempts: 5,
           initialDelayMs: 2000,
           maxDelayMs: 15000,
           jitterFactor: 0.3,
@@ -217,7 +210,7 @@ export class LLMGenerationCoordinator {
               phase: 'execution',
               iteration: iteration + 1,
               attempt,
-              maxAttempts: 4,
+              maxAttempts: 5,
               delayMs,
               errorCategory: category,
               errorMessage,

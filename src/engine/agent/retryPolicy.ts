@@ -19,10 +19,12 @@ export enum AgentErrorCategory {
   RETRYABLE_TRANSIENT = 'RETRYABLE_TRANSIENT',
   /** LLM output format issues: malformed tool call, empty response */
   RETRYABLE_MALFORMED = 'RETRYABLE_MALFORMED',
-  /** Rate limit / quota: 429, quota exceeded */
-  RETRYABLE_QUOTA = 'RETRYABLE_QUOTA',
+  /** Temporary rate limit: 429, "temporarily rate-limited" — wait and retry */
+  RETRYABLE_RATE_LIMIT = 'RETRYABLE_RATE_LIMIT',
   /** Network connectivity: ECONNRESET, ETIMEDOUT, fetch failed */
   RETRYABLE_NETWORK = 'RETRYABLE_NETWORK',
+  /** Quota/billing exhausted: user must top up or change key — no retry */
+  NON_RETRYABLE_QUOTA = 'NON_RETRYABLE_QUOTA',
   /** Invalid input: 400, context too large, token overflow */
   NON_RETRYABLE_INPUT = 'NON_RETRYABLE_INPUT',
   /** Logic errors: missing executor, code bugs */
@@ -60,8 +62,8 @@ export const RETRY_STRATEGIES: Record<string, RetryStrategy> = {
     backoffMultiplier: 1.5,
     jitterFactor: 0.2,
   },
-  /** For quota errors: longer waits to respect rate limits */
-  [AgentErrorCategory.RETRYABLE_QUOTA]: {
+  /** For rate limit errors: longer waits to respect rate limits */
+  [AgentErrorCategory.RETRYABLE_RATE_LIMIT]: {
     maxAttempts: 5,
     initialDelayMs: 5000,
     maxDelayMs: 30000,
@@ -96,15 +98,24 @@ export function classifyError(error: any): AgentErrorCategory {
     return AgentErrorCategory.RETRYABLE_NETWORK;
   }
 
-  // ── Quota / Rate limit (429) ──
+  // ── Quota exhausted (billing / credits) — NOT retryable ──
+  const lower = message.toLowerCase();
+  if (
+    (lower.includes('billing') || lower.includes('quota exceeded') || lower.includes('insufficient credits')) &&
+    !lower.includes('temporarily')
+  ) {
+    return AgentErrorCategory.NON_RETRYABLE_QUOTA;
+  }
+
+  // ── Temporary rate limit (429) — retryable ──
   if (
     type === GeminiErrorType.QUOTA_EXCEEDED ||
     statusCode === 429 ||
     message.includes('429') ||
-    message.toLowerCase().includes('quota') ||
-    message.toLowerCase().includes('rate limit')
+    lower.includes('rate limit') ||
+    lower.includes('temporarily')
   ) {
-    return AgentErrorCategory.RETRYABLE_QUOTA;
+    return AgentErrorCategory.RETRYABLE_RATE_LIMIT;
   }
 
   // ── Transient / Overloaded (503, 5xx) ──
@@ -172,7 +183,8 @@ export function categoryToErrorCode(category: AgentErrorCategory): string {
   switch (category) {
     case AgentErrorCategory.RETRYABLE_TRANSIENT: return 'TOOL_TRANSIENT_ERROR';
     case AgentErrorCategory.RETRYABLE_MALFORMED: return 'TOOL_FORMAT_ERROR';
-    case AgentErrorCategory.RETRYABLE_QUOTA: return 'TOOL_QUOTA_ERROR';
+    case AgentErrorCategory.RETRYABLE_RATE_LIMIT: return 'TOOL_RATE_LIMIT';
+    case AgentErrorCategory.NON_RETRYABLE_QUOTA: return 'TOOL_QUOTA_ERROR';
     case AgentErrorCategory.RETRYABLE_NETWORK: return 'TOOL_NETWORK_ERROR';
     case AgentErrorCategory.NON_RETRYABLE_INPUT: return 'TOOL_INVALID_INPUT';
     case AgentErrorCategory.LOCAL_TOOL_ERROR: return 'TOOL_EXECUTION_ERROR';

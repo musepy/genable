@@ -25,12 +25,10 @@ import { serializeTools, serializeToolsByPhase } from './toolSerializer';
  *
  * @param tools - Available tool definitions
  * @param provider - LLM provider (for tool system instructions)
- * @param skillMenu - Lightweight skill index (id + description) for system prompt
  */
 export function buildStaticSystemPrompt(
     tools: ToolDefinition[],
     provider: { getToolSystemInstruction: (tools: ToolDefinition[]) => string },
-    skillMenu: Array<{ id: string; description: string }>
 ): string {
     const parts: string[] = [];
 
@@ -40,16 +38,6 @@ export function buildStaticSystemPrompt(
     // 2. Workflow (tool calling + creation + error recovery + completion protocol)
     if (WORKFLOW) {
         parts.push(WORKFLOW.trim());
-    }
-
-    // 3. Skill menu (lightweight index — LLM calls query_knowledge to load details)
-    if (skillMenu.length > 0) {
-        const menuLines = skillMenu.map(s => `- **${s.id}**: ${s.description}`);
-        parts.push([
-            '## Available Skills',
-            'Call `query_knowledge(source="skill", query="<skill-id>")` to load detailed instructions.',
-            ...menuLines,
-        ].join('\n'));
     }
 
     // 6. Tool definitions (serialized, with category grouping)

@@ -101,6 +101,8 @@ export interface ChatMessage {
     runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting';
     /** Error message, if any */
     runError?: string;
+    /** Error code for routing (e.g. 'RATE_LIMIT_EXHAUSTED') */
+    runErrorCode?: string;
     /** Post-run agent debrief (collected after difficult runs) */
     debrief?: {
         exitReason: string;

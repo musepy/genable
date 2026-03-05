@@ -5,7 +5,7 @@ import { ToolDefinition } from '../../../agent/tools/types';
 describe('buildStaticSystemPrompt', () => {
     const mockTools: ToolDefinition[] = [
         {
-            name: 'query_knowledge',
+            name: 'query',
             description: 'Search for design rules.',
             parameters: {
                 type: 'object',
@@ -33,13 +33,13 @@ describe('buildStaticSystemPrompt', () => {
     };
 
     it('should include agent identity', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('You are a Figma plugin agent');
         expect(prompt).toContain('DESIGN FREEDOM PRINCIPLE');
     });
 
     it('should not include legacy phase blocks', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).not.toContain('WHEN IN PLANNING MODE');
         expect(prompt).not.toContain('WHEN IN EXECUTION MODE');
         expect(prompt).not.toContain('WHEN IN VERIFICATION MODE');
@@ -47,53 +47,42 @@ describe('buildStaticSystemPrompt', () => {
     });
 
     it('should serialize tools correctly', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('## AVAILABLE TOOLS');
-        expect(prompt).toContain('**query_knowledge**');
+        expect(prompt).toContain('**query**');
         expect(prompt).toContain('Search for design rules.');
         expect(prompt).toContain('**create**');
         expect(prompt).toContain('Create a Figma design via XML markup.');
     });
 
     it('should include tool examples', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('## EXAMPLES');
     });
 
     it('should include error handling', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('ERROR HANDLING');
     });
 
     it('should include provider tool instructions', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('PROVIDER_TOOLS_2');
     });
 
-    it('should include skill menu when provided', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, [
-            { id: 'design-knowledge', description: 'Search design patterns and layout rules' },
-            { id: 'project-ui-context', description: 'Query project UI components and tokens' },
-        ]);
-        expect(prompt).toContain('## Available Skills');
-        expect(prompt).toContain('query_knowledge(source="skill", query="<skill-id>")');
-        expect(prompt).toContain('**design-knowledge**');
-        expect(prompt).toContain('**project-ui-context**');
-    });
-
     it('should handle empty tool list gracefully', () => {
-        const prompt = buildStaticSystemPrompt([], mockProvider, []);
+        const prompt = buildStaticSystemPrompt([], mockProvider);
         expect(prompt).toContain('No specific tools are available');
         expect(prompt).toContain('PROVIDER_TOOLS_0');
     });
 
     it('should include design knowledge (scene graph model)', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('SCENE GRAPH MENTAL MODEL');
     });
 
     it('should include workflow rules', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('TOOL CALLING PROTOCOL');
     });
 
@@ -112,7 +101,7 @@ describe('buildStaticSystemPrompt', () => {
                 parameters: { type: 'object', properties: {} }
             }
         ];
-        const prompt = buildStaticSystemPrompt(categorizedTools, mockProvider, []);
+        const prompt = buildStaticSystemPrompt(categorizedTools, mockProvider);
         expect(prompt).toContain('Information Gathering');
         expect(prompt).toContain('Execution');
     });

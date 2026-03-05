@@ -302,4 +302,104 @@ describe('XmlSerializer', () => {
     expect(xml).toContain('<icon');
     expect(xml).toContain('icon="mdi:home"');
   });
+
+  // ── Structural mode ──
+
+  describe('structural mode', () => {
+    it('only outputs id, name, type, w, h, layout', () => {
+      const xml = XmlSerializer.serialize(node('FRAME', {
+        _id: '1:1', name: 'Card', layoutMode: 'VERTICAL',
+        width: 320, height: 480,
+        fills: ['#FFFFFF'], cornerRadius: 16,
+        fontSize: 14, fontWeight: 'Bold',
+        paddingTop: 16, paddingRight: 16, paddingBottom: 16, paddingLeft: 16,
+        gap: 12,
+        effects: [{ type: 'DROP_SHADOW', offset: { x: 0, y: 4 }, blur: 8, spread: 0, color: '#000' }],
+      }), { structural: true });
+
+      // Should include structural props
+      expect(xml).toContain('id="1:1"');
+      expect(xml).toContain('name="Card"');
+      expect(xml).toContain('layout="VERTICAL"');
+      expect(xml).toContain('w="320"');
+      expect(xml).toContain('h="480"');
+
+      // Should NOT include style props
+      expect(xml).not.toContain('fill=');
+      expect(xml).not.toContain('corner=');
+      expect(xml).not.toContain('size=');
+      expect(xml).not.toContain('weight=');
+      expect(xml).not.toContain(' p=');
+      expect(xml).not.toContain('gap=');
+      expect(xml).not.toContain('shadow=');
+    });
+
+    it('includes sizingH and sizingV when non-default', () => {
+      const xml = XmlSerializer.serialize(node('FRAME', {
+        _id: '1:1',
+        layoutSizingHorizontal: 'FILL',
+        layoutSizingVertical: 'HUG',
+      }), { structural: true });
+      expect(xml).toContain('sizingH="FILL"');
+      expect(xml).toContain('sizingV="HUG"');
+    });
+
+    it('text ≤30 chars → inline content', () => {
+      const xml = XmlSerializer.serialize(node('TEXT', {
+        _id: '2:1', name: 'Title', characters: 'Hello World',
+        fontSize: 24, fontWeight: 'Bold', fills: ['#111'],
+      }), { structural: true });
+
+      expect(xml).toContain('>Hello World</text>');
+      // No style props
+      expect(xml).not.toContain('size=');
+      expect(xml).not.toContain('weight=');
+      expect(xml).not.toContain('fill=');
+    });
+
+    it('text >30 chars → chars="N" attribute', () => {
+      const longText = 'This is a long paragraph of text that exceeds thirty characters';
+      const xml = XmlSerializer.serialize(node('TEXT', {
+        _id: '2:2', name: 'Body', characters: longText,
+      }), { structural: true });
+
+      expect(xml).toContain(`chars="${longText.length}"`);
+      expect(xml).not.toContain(longText);
+      expect(xml).toMatch(/<text .+\/>/); // self-closing
+    });
+
+    it('nested tree works in structural mode', () => {
+      const tree = node('FRAME', { _id: '1:1', name: 'Root', layoutMode: 'VERTICAL', width: 400 }, [
+        node('FRAME', { _id: '2:1', name: 'Header', width: 400, height: 60, fills: ['#FFF'] }),
+        node('TEXT', { _id: '2:2', name: 'Title', characters: 'Hi', fontSize: 24 }),
+      ]);
+
+      const xml = XmlSerializer.serialize(tree, { structural: true });
+      expect(xml).toContain('name="Root"');
+      expect(xml).toContain('name="Header"');
+      expect(xml).toContain('>Hi</text>');
+      // No fill in structural mode
+      expect(xml).not.toContain('fill=');
+    });
+
+    it('is significantly smaller than full mode', () => {
+      const tree = node('FRAME', {
+        _id: '1:2', name: 'Card', layoutMode: 'VERTICAL', gap: 12,
+        fills: ['#FFFFFF'], width: 320, layoutSizingVertical: 'HUG',
+        paddingTop: 24, paddingRight: 24, paddingBottom: 24, paddingLeft: 24,
+      }, [
+        node('TEXT', { _id: '3:4', name: 'Title', fontSize: 24, fontWeight: 'Bold', fills: ['#111827'], characters: 'Welcome' }),
+        node('FRAME', { _id: '5:6', name: 'Row', layoutMode: 'HORIZONTAL', gap: 8 }, [
+          node('RECTANGLE', { _id: '7:8', name: 'Avatar', width: 40, height: 40, fills: ['#E0E0E0'], cornerRadius: 20 }),
+          node('TEXT', { _id: '9:10', name: 'Desc', fontSize: 14, fills: ['#6B7280'], characters: 'Some text here' }),
+        ]),
+      ]);
+
+      const full = XmlSerializer.serialize(tree);
+      const structural = XmlSerializer.serialize(tree, { structural: true });
+
+      // Structural should be notably smaller
+      expect(structural.length).toBeLessThan(full.length * 0.75);
+    });
+  });
 });

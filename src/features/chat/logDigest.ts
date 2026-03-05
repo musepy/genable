@@ -24,7 +24,7 @@ const parameterExtractors: Record<string, (params: any) => string> = {
     const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
     return `nodeId: ${params.nodeId || '?'}${depthStr}`;
   },
-  query_knowledge: (params) => `source: ${params.source || '?'}, query: ${(params.query || '').slice(0, 60)}`,
+  query: (params) => `source: ${params.source || '?'}, query: ${(params.query || '').slice(0, 60)}`,
 };
 
 /**

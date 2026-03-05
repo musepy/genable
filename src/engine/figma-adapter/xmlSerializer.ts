@@ -23,6 +23,8 @@ const INSPECT_PROPS = new Set([
   'opacity', 'visible', 'effects', 'strokeWeight', 'strokeAlign',
   'textAlignHorizontal', 'lineHeight', 'letterSpacing',
   'layoutPositioning', 'x', 'y', 'iconName',
+  'clipsContent', 'layoutWrap',
+  'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
 ]);
 
 /** Attribute name abbreviations to shrink XML output. */
@@ -49,6 +51,12 @@ const ATTR_ABBREV: Record<string, string> = {
   lineHeight: 'leading',
   strokeAlign: 'strokeA',
   iconName: 'icon',
+  clipsContent: 'overflow',
+  layoutWrap: 'wrap',
+  minWidth: 'minW',
+  maxWidth: 'maxW',
+  minHeight: 'minH',
+  maxHeight: 'maxH',
 };
 
 /** NodeLayer type → compact XML tag name. */
@@ -85,6 +93,8 @@ const DEFAULTS: Record<string, any> = {
   y: 0,
   strokeAlign: 'INSIDE',
   letterSpacing: 0,
+  clipsContent: false,
+  layoutWrap: 'NO_WRAP',
 };
 
 // ── XML escape ──
@@ -179,7 +189,18 @@ function compactPadding(props: Record<string, any>): [string, string] | null {
 export interface XmlSerializeOptions {
   maxDepth?: number;
   maxChildren?: number;
+  /** Structural mode: only id, name, type, w, h, layout. Skips fills/fonts/effects/padding. */
+  structural?: boolean;
 }
+
+/** Properties included in structural mode (skeleton only). */
+const STRUCTURAL_PROPS = new Set([
+  'name', 'width', 'height', 'layoutMode',
+  'layoutSizingHorizontal', 'layoutSizingVertical',
+]);
+
+/** Max inline text length in structural mode before collapsing to chars="N". */
+const STRUCTURAL_TEXT_INLINE_MAX = 30;
 
 export class XmlSerializer {
   /**
@@ -188,7 +209,8 @@ export class XmlSerializer {
   static serialize(node: NodeLayer, options?: XmlSerializeOptions): string {
     const maxDepth = options?.maxDepth ?? MAX_DEPTH;
     const maxChildren = options?.maxChildren ?? MAX_CHILDREN;
-    return this.serializeNode(node, 0, maxDepth, maxChildren);
+    const structural = options?.structural ?? false;
+    return this.serializeNode(node, 0, maxDepth, maxChildren, structural);
   }
 
   private static serializeNode(
@@ -196,6 +218,7 @@ export class XmlSerializer {
     depth: number,
     maxDepth: number,
     maxChildren: number,
+    structural: boolean = false,
   ): string {
     const tag = TAG_MAP[node.type] || 'frame';
     const props = (node.props || {}) as Record<string, any>;
@@ -207,6 +230,61 @@ export class XmlSerializer {
     // id + name always first
     if (node.id) attrs.push(`id="${escapeXml(node.id)}"`);
     if (props.name) attrs.push(`name="${escapeXml(String(props.name))}"`);
+
+    // ── Structural mode: skeleton attributes only ──
+    if (structural) {
+      for (const key of STRUCTURAL_PROPS) {
+        if (key === 'name') continue; // already added
+        const value = props[key];
+        if (value === undefined || value === null) continue;
+        if (key in DEFAULTS && value === DEFAULTS[key]) continue;
+        const attrName = ATTR_ABBREV[key] || key;
+        attrs.push(`${attrName}="${escapeXml(String(value))}"`);
+      }
+
+      // Text nodes: inline if short, otherwise chars="N"
+      const characters = props.characters;
+      const layerAny = node as any;
+      if (layerAny._truncated) attrs.push('_truncated="true"');
+      if (layerAny._childCount) attrs.push(`_childCount="${layerAny._childCount}"`);
+
+      const attrStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
+
+      const children = node.children;
+      const hasChildren = children && children.length > 0 && depth < maxDepth;
+
+      if (tag === 'text' && characters) {
+        const charStr = String(characters);
+        if (charStr.length <= STRUCTURAL_TEXT_INLINE_MAX) {
+          return `${indent}<${tag}${attrStr}>${escapeXml(charStr)}</${tag}>`;
+        } else {
+          return `${indent}<${tag}${attrStr} chars="${charStr.length}"/>`;
+        }
+      }
+
+      if (!hasChildren) {
+        return `${indent}<${tag}${attrStr}/>`;
+      }
+
+      const lines: string[] = [`${indent}<${tag}${attrStr}>`];
+      const visibleChildren = children!;
+      const serialized = visibleChildren.slice(0, maxChildren);
+      const truncatedCount = visibleChildren.length - serialized.length;
+
+      for (const child of serialized) {
+        lines.push(this.serializeNode(child, depth + 1, maxDepth, maxChildren, true));
+      }
+
+      if (truncatedCount > 0 || layerAny._moreChildren) {
+        const moreCount = truncatedCount + (layerAny._moreChildren || 0);
+        lines.push(`${indent}  <!-- +${moreCount} more -->`);
+      }
+
+      lines.push(`${indent}</${tag}>`);
+      return lines.join('\n');
+    }
+
+    // ── Full mode: complete style attributes ──
 
     // Compact padding — consumes paddingTop/Right/Bottom/Left
     const hasPaddingProps = props.paddingTop !== undefined || props.paddingRight !== undefined ||
@@ -241,6 +319,13 @@ export class XmlSerializer {
 
       // Skip defaults
       if (key in DEFAULTS && value === DEFAULTS[key]) continue;
+
+      // Special serialization: clipsContent → CSS overflow semantics
+      if (key === 'clipsContent') {
+        const attrName = ATTR_ABBREV[key] || key;
+        attrs.push(`${attrName}="${value ? 'hidden' : 'visible'}"`);
+        continue;
+      }
 
       const attrName = ATTR_ABBREV[key] || key;
       attrs.push(`${attrName}="${escapeXml(String(value))}"`);
@@ -291,7 +376,7 @@ export class XmlSerializer {
         const truncatedCount = visibleChildren.length - serialized.length;
 
         for (const child of serialized) {
-          lines.push(this.serializeNode(child, depth + 1, maxDepth, maxChildren));
+          lines.push(this.serializeNode(child, depth + 1, maxDepth, maxChildren, false));
         }
 
         if (truncatedCount > 0 || layerAny._moreChildren) {

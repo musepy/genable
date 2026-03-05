@@ -206,12 +206,11 @@ describe('HookRunner', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('createBuiltinHooks', () => {
-  it('should create 3 builtin hook registrations', () => {
+  it('should create 2 builtin hook registrations', () => {
     const hooks = createBuiltinHooks();
-    expect(hooks).toHaveLength(3);
+    expect(hooks).toHaveLength(2);
     expect(hooks.map(h => h.id)).toEqual([
       'builtin:emptyResponse',
-      'builtin:ramblingGuard',
       'builtin:loopDetection',
     ]);
   });
@@ -232,7 +231,7 @@ describe('createBuiltinHooks', () => {
 describe('createBuiltinHooksWithState', () => {
   it('should provide a reset function', () => {
     const { hooks, reset } = createBuiltinHooksWithState();
-    expect(hooks).toHaveLength(3);
+    expect(hooks).toHaveLength(2);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();

@@ -2,6 +2,7 @@
  * @file generate-knowledge.js
  * @description Multi-CSV adapter for UI Pro Max knowledge base
  * Processes Tier 1 data sources: styles, colors, typography, landing, ui-reasoning
+ * Outputs CSV (not JSON) for ~40% smaller bundle size.
  */
 
 const fs = require('fs');
@@ -153,20 +154,20 @@ function processGuidelines() {
     if (!fs.existsSync(inputPath)) continue;
 
     const rawContent = fs.readFileSync(inputPath, 'utf-8');
-    const records = parse(preprocessCsv(rawContent), { 
-      columns: true, 
-      skip_empty_lines: true, 
-      trim: true, 
+    const records = parse(preprocessCsv(rawContent), {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
       relax_column_count: true,
       relax_quotes: true,
       skip_records_with_error: true
     });
     allGuidelines = allGuidelines.concat(records.map((r, i) => transformGuideline(r, i, file)));
   }
-  
-  const outputPath = path.join(OUTPUT_DIR, 'guidelines.json');
-  safeJsonWrite(outputPath, allGuidelines);
-  console.log(`✅ Generated guidelines.json (${allGuidelines.length} records from ${GUIDELINE_SOURCES.length} files)`);
+
+  const outputPath = path.join(OUTPUT_DIR, 'guidelines.csv');
+  writeCsv(outputPath, allGuidelines);
+  console.log(`✅ Generated guidelines.csv (${allGuidelines.length} records from ${GUIDELINE_SOURCES.length} files)`);
   return allGuidelines.length;
 }
 
@@ -181,11 +182,11 @@ function processStacks() {
     const stackName = file.replace('.csv', '');
     const inputPath = path.join(stacksDir, file);
     const rawContent = fs.readFileSync(inputPath, 'utf-8');
-    
-    const records = parse(preprocessCsv(rawContent), { 
-      columns: true, 
-      skip_empty_lines: true, 
-      trim: true, 
+
+    const records = parse(preprocessCsv(rawContent), {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
       relax_column_count: true,
       relax_quotes: true,
       skip_records_with_error: true
@@ -203,13 +204,13 @@ function processStacks() {
       severity: record.Severity,
       docsUrl: record['Docs URL'] || record.Docs_URL
     }));
-    
+
     allStackRules = allStackRules.concat(processed);
   }
 
-  const outputPath = path.join(OUTPUT_DIR, 'stacks.json');
-  safeJsonWrite(outputPath, allStackRules);
-  console.log(`✅ Generated stacks.json (${allStackRules.length} records from ${files.length} stacks)`);
+  const outputPath = path.join(OUTPUT_DIR, 'stacks.csv');
+  writeCsv(outputPath, allStackRules);
+  console.log(`✅ Generated stacks.csv (${allStackRules.length} records from ${files.length} stacks)`);
   return allStackRules.length;
 }
 
@@ -237,21 +238,49 @@ function preprocessCsv(content) {
   }).join('\n');
 }
 
+// ==========================================
+// CSV Output
+// ==========================================
+
 /**
- * [Figma Sandbox Fix] Writes JSON to file while obfuscating strings that trigger
- * 'possible import expression rejected'.
+ * Escape a single CSV field value. Wraps in quotes if it contains
+ * comma, quote, or newline characters.
  */
-function safeJsonWrite(filePath, data) {
-  const content = JSON.stringify(data, null, 2);
-  // Break 'import(' with a space to bypass Figma's regex-based scanner.
-  // The AI will still understand 'import (' as a dynamic import.
-  const safeContent = content.replace(/import\s*\(/g, 'import (');
-  fs.writeFileSync(filePath, safeContent);
+function escapeCsvField(value) {
+  const str = String(value ?? '');
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+/**
+ * Write an array of objects as CSV. Arrays are serialized with pipe (|) delimiter,
+ * objects as JSON strings, booleans as 'true'/'false'.
+ */
+function writeCsv(filePath, records) {
+  if (!records.length) {
+    fs.writeFileSync(filePath, '');
+    return;
+  }
+  const headers = Object.keys(records[0]);
+  const lines = [headers.join(',')];
+  for (const record of records) {
+    const values = headers.map(h => {
+      const val = record[h];
+      if (Array.isArray(val)) return escapeCsvField(val.join('|'));
+      if (val !== null && typeof val === 'object') return escapeCsvField(JSON.stringify(val));
+      if (typeof val === 'boolean') return val ? 'true' : 'false';
+      return escapeCsvField(val);
+    });
+    lines.push(values.join(','));
+  }
+  fs.writeFileSync(filePath, lines.join('\n'));
 }
 
 function processDataSource(name, config) {
   const inputPath = path.join(DATA_DIR, config.file);
-  const outputPath = path.join(OUTPUT_DIR, `${name}.json`);
+  const outputPath = path.join(OUTPUT_DIR, `${name}.csv`);
 
   if (!fs.existsSync(inputPath)) {
     console.warn(`⚠️  Skipping ${name}: file not found at ${inputPath}`);
@@ -260,7 +289,7 @@ function processDataSource(name, config) {
 
   const rawContent = fs.readFileSync(inputPath, 'utf-8');
   const fileContent = preprocessCsv(rawContent);
-  
+
   const records = parse(fileContent, {
     columns: true,
     skip_empty_lines: true,
@@ -271,10 +300,10 @@ function processDataSource(name, config) {
   });
 
   const processed = records.map((record, index) => config.transform(record, index));
-  
-  safeJsonWrite(outputPath, processed);
-  console.log(`✅ Generated ${name}.json (${processed.length} records)`);
-  
+
+  writeCsv(outputPath, processed);
+  console.log(`✅ Generated ${name}.csv (${processed.length} records)`);
+
   return processed.length;
 }
 

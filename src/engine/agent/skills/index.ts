@@ -13,6 +13,7 @@ try {
 } catch (e) {}
 import { skillRegistry } from './SkillRegistry';
 import { loadSkillsFromDirectory, getProjectSkillsDir } from './fileSkillLoader';
+import { knowledgeHub } from '../../llm-client/knowledge/knowledgeHub';
 
 // Core exports
 export * from './types';
@@ -34,8 +35,19 @@ export async function initializeSkills(): Promise<void> {
     for (const skill of skills) {
       skillRegistry.register(skill);
     }
-    
-    console.log(`[Skills] Initialized ${skills.length} skills from ${skillsDir}`);
+
+    // Index skill bodies into knowledgeHub for unified search
+    const skillDocs = skills
+      .filter(s => s.context.systemPromptSection)
+      .map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        body: s.context.systemPromptSection!,
+      }));
+    knowledgeHub.indexSkills(skillDocs);
+
+    console.log(`[Skills] Initialized ${skills.length} skills from ${skillsDir} (${skillDocs.length} indexed)`);
   } catch (error) {
     console.warn('[Skills] Failed to load skills:', error);
     console.log('[Skills] Running with no skills loaded');

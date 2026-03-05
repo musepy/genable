@@ -312,6 +312,16 @@ export class ActionExecutor {
              parentNode.appendChild(iconNode);
            }
            try {
+             // Rescale SVG proportionally to fit target size (preserves aspect ratio)
+             const targetW = action.props.width || 24;
+             const targetH = action.props.height || 24;
+             const origW = iconNode.width;
+             const origH = iconNode.height;
+             if (origW > 0 && origH > 0) {
+               const scale = Math.min(targetW / origW, targetH / origH);
+               iconNode.rescale(scale);
+             }
+
              // Extract vector-specific props — these should penetrate to vector children, not the outer SVG frame
              const iconFills = action.props.fills;
              const iconStrokes = action.props.strokes;
@@ -320,6 +330,8 @@ export class ActionExecutor {
              delete propsForFrame.fills;
              delete propsForFrame.strokes;
              delete propsForFrame.strokeWeight;
+             delete propsForFrame.width;
+             delete propsForFrame.height;
 
              const warnings = await this.applyProps(iconNode, propsForFrame);
 
@@ -595,6 +607,7 @@ export class ActionExecutor {
     layoutGrow: 4,
     layoutAlign: 4,
     layoutPositioning: 4,
+    clipsContent: 4,
     // Dimensions
     width: 5,
     height: 5,

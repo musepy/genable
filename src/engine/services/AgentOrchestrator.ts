@@ -21,7 +21,10 @@ import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/s
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMProvider } from '../llm-client/providers/types';
+import type { LLMMessage } from '../llm-client/providers/types';
 import { GeminiError, GeminiErrorType } from '../llm-client/providers/gemini/geminiErrorHandler';
+import { classifyError, AgentErrorCategory } from '../agent/retryPolicy';
+import { buildSeedMessagesFromChatHistory } from './historySeed';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -57,7 +60,6 @@ export interface OrchestratorOptions {
 import { buildStaticSystemPrompt } from '../llm-client/context/system';
 
 import { IpcBridge } from '../agent/ipcBridge';
-import { buildDynamicContextContent } from '../llm-client/context/dynamicContext';
 
 export class AgentOrchestrator {
   private static initializationPromise: Promise<void> | null = null;
@@ -112,9 +114,10 @@ export class AgentOrchestrator {
     try {
       // 0.5 Read Figma's current selection for user-intent context
       const selectionContext = await this.getSelectionContext();
+      const seedMessages = buildSeedMessagesFromChatHistory(history, prompt);
 
       // 1. Initialize Agent
-      const agent = this.createAgent(pluginData, ipcBridge, prompt, loopPolicy);
+      const agent = this.createAgent(pluginData, ipcBridge, loopPolicy, seedMessages);
       this.activeAgent = agent;
 
       // 2. Run Agentic Loop
@@ -171,8 +174,18 @@ export class AgentOrchestrator {
           ? 'abort' as const
           : 'error' as const;
 
-      // ── Error routing: user-actionable → ErrorBanner, agent-internal → status ──
-      if (AgentOrchestrator.isUserActionable(error)) {
+      // ── Error routing: rate-limit → warning banner, user-actionable → error banner, agent-internal → status ──
+      const errorCat = classifyError(error);
+      if (errorCat === AgentErrorCategory.RETRYABLE_RATE_LIMIT) {
+        // Temporary rate limit exhausted after retries → warning banner with Retry action
+        this.emitFallbackRuntimeEvent({
+          type: 'error',
+          phase: 'idle',
+          message: error?.message || 'Rate limit exceeded after retries',
+          code: 'RATE_LIMIT_EXHAUSTED',
+        });
+        this.options.onError?.(error.message || 'Rate limit exceeded after retries');
+      } else if (AgentOrchestrator.isUserActionable(error)) {
         // User must act (fix API key, check billing) → show ErrorBanner
         this.emitFallbackRuntimeEvent({
           type: 'error',
@@ -244,8 +257,7 @@ export class AgentOrchestrator {
         promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
 
-      const skillMenu = skillRegistry.getSkillMenu();
-      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, skillMenu);
+      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' });
 
       // Dump to console
       console.log('\n' + '='.repeat(80));
@@ -253,17 +265,10 @@ export class AgentOrchestrator {
       console.log('='.repeat(80));
       console.log(`Provider: ${providerName} | Model: ${modelName} | Thinking: ${thinkingLevel}`);
       console.log(`Behavior: thinking=${behaviorConfig.thinkingLevel}`);
-      console.log(`Skills (menu): ${skillMenu.length}`);
       console.log(`Tools: ${tools.length} (${tools.map(t => t.name).join(', ')})`);
       console.log('-'.repeat(80));
       console.log(systemPrompt);
       console.log('='.repeat(80) + '\n');
-
-      // Also emit the dynamic context
-      console.log('DEBUG: DYNAMIC CONTEXT (per-iteration)');
-      console.log('-'.repeat(40));
-      console.log(buildDynamicContextContent(0, 40));
-      console.log('-'.repeat(40) + '\n');
 
       this.emitDebugComplete(`System prompt dumped to console (~${Math.ceil(systemPrompt.length / 4)} tokens). Open DevTools → Console to copy.`);
     } else if (subCommand === 'skills') {
@@ -300,8 +305,8 @@ export class AgentOrchestrator {
   private createAgent(
     pluginData: AgentPluginData,
     ipcBridge: IpcBridge,
-    prompt?: string,
-    loopPolicy?: AgentLoopPolicy
+    loopPolicy?: AgentLoopPolicy,
+    seedMessages: LLMMessage[] = []
   ): AgentRuntime {
     const {
       apiKey,
@@ -346,8 +351,7 @@ export class AgentOrchestrator {
     console.log(`[AgentOrchestrator] Behavior resolved: thinking=${behaviorConfig.thinkingLevel}`);
 
     // Build static system prompt (set once, never changes — enables KV cache)
-    const skillMenu = skillRegistry.getSkillMenu();
-    const systemPrompt = buildStaticSystemPrompt(tools, provider, skillMenu);
+    const systemPrompt = buildStaticSystemPrompt(tools, provider);
 
     this.currentProvider = provider;
 
@@ -355,6 +359,7 @@ export class AgentOrchestrator {
       provider,
       tools,
       systemPrompt,
+      messages: seedMessages,
       ipcBridge,
       toolExecutors: pluginData.toolExecutors,
       behaviorConfig,
@@ -506,6 +511,10 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
    * communicates it as part of its normal status flow.
    */
   private static isUserActionable(error: any): boolean {
+    // Rate-limit errors are handled separately — don't treat as user-actionable
+    const cat = classifyError(error);
+    if (cat === AgentErrorCategory.RETRYABLE_RATE_LIMIT) return false;
+
     // GeminiError has typed categories
     if (error instanceof GeminiError) {
       return error.type === GeminiErrorType.INVALID_ARGUMENT

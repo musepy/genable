@@ -126,8 +126,9 @@ export type RuntimeToolValidationResult =
 
 /**
  * Type for a tool execution function.
+ * Return null to signal "not handled locally, fall through to IPC".
  */
 export type ToolExecutor<P = any, R = any> = (
   params: P,
   context?: ToolContext
-) => Promise<ToolResponse<R>>;
+) => Promise<ToolResponse<R> | null>;

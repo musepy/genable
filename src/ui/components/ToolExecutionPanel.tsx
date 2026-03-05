@@ -250,12 +250,16 @@ export function ToolExecutionPanel({
         const cat = categorizeError(runError)
         const content = t.errors[cat.i18nKey as keyof typeof t.errors]
         if (!content) return null
-        const showAction = cat.handler === 'openSettings' && onErrorAction
+        const showAction = (cat.handler === 'openSettings' || cat.handler === 'retry') && onErrorAction
+        const isWarning = cat.handler === 'retry'
+        const bannerBg = isWarning ? tokens.colors.warningMuted : tokens.colors.errorMuted
+        const bannerBorder = isWarning ? tokens.colors.warningBorder : tokens.colors.errorBorder
+        const bannerAccent = isWarning ? tokens.colors.warning : tokens.colors.error
         return (
           <div style={{
             marginTop: tokens.space[2],
-            background: tokens.colors.errorMuted,
-            border: `1px solid ${tokens.colors.errorBorder}`,
+            background: bannerBg,
+            border: `1px solid ${bannerBorder}`,
             borderRadius: 'var(--radius-3)',
             padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
             display: 'flex',
@@ -263,13 +267,13 @@ export function ToolExecutionPanel({
             gap: tokens.space[1],
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], minWidth: 0 }}>
-              <span style={{ fontSize: sz, fontWeight: tokens.fontWeight.medium, color: tokens.colors.error, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: sz, fontWeight: tokens.fontWeight.medium, color: bannerAccent, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {content.title}
               </span>
               {showAction && (
                 <button
                   onClick={() => onErrorAction(cat.handler)}
-                  style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap', background: 'none', border: 'none', padding: 0, color: tokens.colors.error, fontSize: sz, fontWeight: tokens.fontWeight.medium, cursor: 'pointer' }}
+                  style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap', background: 'none', border: 'none', padding: 0, color: bannerAccent, fontSize: sz, fontWeight: tokens.fontWeight.medium, cursor: 'pointer' }}
                 >
                   {content.action}
                 </button>

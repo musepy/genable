@@ -86,6 +86,16 @@ export const PROPS = {
   variant: 'variant',                     // Virtual: Design System variant
   svgContent: 'svgContent',               // Virtual: Embedded SVG data
   rotation: 'rotation',                   // New: Rotation in degrees
+
+  // ==========================
+  // Frame Clipping & Wrap
+  // ==========================
+  clipsContent: 'clipsContent',            // boolean: clip children at frame boundary
+  layoutWrap: 'layoutWrap',                // enum: WRAP | NO_WRAP (flex-wrap for auto-layout)
+  minWidth: 'minWidth',                    // number | null: min width constraint
+  maxWidth: 'maxWidth',                    // number | null: max width constraint
+  minHeight: 'minHeight',                  // number | null: min height constraint
+  maxHeight: 'maxHeight',                  // number | null: max height constraint
 } as const;
 
 /**
@@ -214,6 +224,14 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.rotation]: { figmaKey: 'rotation', type: 'scalar', defaultValue: 0, min: -360, max: 360 },
   [PROPS.strokeAlign]: { figmaKey: 'strokeAlign', type: 'enum', enumMap: { INSIDE: 'INSIDE', OUTSIDE: 'OUTSIDE', CENTER: 'CENTER' }, defaultValue: 'INSIDE' },
   [PROPS.cornerSmoothing]: { figmaKey: 'cornerSmoothing', type: 'scalar', defaultValue: 0, min: 0, max: 1 },
+
+  // Frame Clipping & Wrap
+  [PROPS.clipsContent]: { figmaKey: 'clipsContent', type: 'enum', enumMap: { 'true': 'true', 'false': 'false' }, defaultValue: false },
+  [PROPS.layoutWrap]: { figmaKey: 'layoutWrap', type: 'enum', enumMap: { WRAP: 'WRAP', NO_WRAP: 'NO_WRAP' }, defaultValue: 'NO_WRAP' },
+  [PROPS.minWidth]: { figmaKey: 'minWidth', type: 'scalar', min: 0, max: 10000 },
+  [PROPS.maxWidth]: { figmaKey: 'maxWidth', type: 'scalar', min: 0, max: 10000 },
+  [PROPS.minHeight]: { figmaKey: 'minHeight', type: 'scalar', min: 0, max: 10000 },
+  [PROPS.maxHeight]: { figmaKey: 'maxHeight', type: 'scalar', min: 0, max: 10000 },
 
   // Virtual
   [PROPS.semantic]: { figmaKey: 'semantic', type: 'virtual' },

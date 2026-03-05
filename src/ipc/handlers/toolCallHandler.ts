@@ -21,6 +21,7 @@ import { collectTreeAnomalies } from '../../engine/validation/postOpValidator';
 import { compileCssProps } from '../../engine/actions/cssCompiler';
 import { xmlToParsedLines } from '../../engine/actions/xmlDesignParser';
 import { logger } from '../../utils/logger';
+import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 
 export interface ToolCallData {
   toolName: string;
@@ -28,16 +29,6 @@ export interface ToolCallData {
   context?: ToolContext;
   requestId: string;
 }
-
-// ── Backward compatibility: old tool names → new names ──
-
-const TOOL_ALIASES: Record<string, string> = {
-  build_design: 'create',
-  read_node: 'read',
-  patch_node: 'edit',
-  delete_node: 'edit',
-  capture_screenshot: 'read',
-};
 
 // ── Shared node resolution (single source for getNodeByIdAsync + type guard) ──
 
@@ -116,20 +107,6 @@ async function exportNodeToBase64(
 export async function handleToolCall(data: ToolCallData): Promise<void> {
   let { toolName, parameters, context, requestId } = data;
 
-  // Tool Name Normalization (Handle LLM Typos/Hallucinations)
-  const normalizedName = toolName.replace(/-([a-z])/g, (g: string) => g[1].toUpperCase());
-  if (normalizedName !== toolName) {
-    logger.info(`Normalizing tool name: ${toolName} -> ${normalizedName}`);
-    toolName = normalizedName;
-  }
-
-  // Backward compatibility: alias old tool names to new ones
-  const alias = TOOL_ALIASES[toolName];
-  if (alias) {
-    logger.info(`Tool alias: ${toolName} -> ${alias}`);
-    toolName = alias;
-  }
-
   logger.info(`Tool Call: ${toolName}`, { parameters, requestId });
 
   let response: ToolResponse;
@@ -141,14 +118,15 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
 
       case 'read': {
-        const { nodeId: rawReadNodeId, depth: readDepth, screenshot: wantScreenshot } = parameters;
+        const { nodeId: rawReadNodeId, depth: readDepth, screenshot: wantScreenshot, detail: readDetail } = parameters;
         const depthClamped = Math.min(readDepth || 5, 10);
+        const isSummary = readDetail === 'summary';
 
         // Fallback: Document/Page → current page's children summary
         const readTarget = await resolveReadTarget(rawReadNodeId);
 
         if (readTarget.kind === 'page') {
-          // Page isn't a SceneNode — serialize its children as a flat list
+          // Page isn't a SceneNode — always use structural mode for page overview
           const page = readTarget.page;
           const childXmls: string[] = [];
           for (const child of page.children) {
@@ -156,13 +134,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               maxDepth: Math.min(depthClamped, 2), // shallow for page overview
               pruneDefaults: true
             });
-            childXmls.push(XmlSerializer.serialize(hSerialized, { maxDepth: Math.min(depthClamped, 2) }));
+            childXmls.push(XmlSerializer.serialize(hSerialized, { maxDepth: Math.min(depthClamped, 2), structural: true }));
           }
           response = {
             success: true,
             data: {
               xml: `<!-- Page: ${page.name} (${page.children.length} top-level nodes) -->\n${childXmls.join('\n')}`,
-              hint: 'This is a page overview. Use a specific nodeId from above for detailed inspection.',
+              hint: 'This is a page overview. Use read with a specific nodeId for detailed inspection.',
             }
           };
           break;
@@ -176,10 +154,50 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           maxDepth: depthClamped,
           pruneDefaults: true
         });
-        const xml = XmlSerializer.serialize(hSerialized, {
+
+        // Summary mode: structural skeleton only
+        if (isSummary) {
+          const xml = XmlSerializer.serialize(hSerialized, {
+            maxDepth: depthClamped,
+            structural: true,
+          });
+          const data: any = { xml };
+
+          if (wantScreenshot && readNode.visible && readNode.width > 0 && readNode.height > 0) {
+            try {
+              const ssResult = await exportNodeToBase64(readNode);
+              data.__image = ssResult.__image;
+            } catch (e: any) {
+              logger.info(`Screenshot bundling failed for ${readTarget.nodeId}: ${e?.message}`);
+            }
+          }
+
+          response = { success: true, data };
+          break;
+        }
+
+        // Full mode with auto-degradation
+        const fullXml = XmlSerializer.serialize(hSerialized, {
           maxDepth: depthClamped,
         });
-        const data: any = { xml };
+
+        const data: any = {};
+        const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
+
+        if (fullXml.length > AUTO_DEGRADE_CHARS) {
+          // Auto-degrade: return structural skeleton + hint
+          const structuralXml = XmlSerializer.serialize(hSerialized, {
+            maxDepth: depthClamped,
+            structural: true,
+          });
+          data.xml = structuralXml;
+          const childCount = readNode.type === 'FRAME' || readNode.type === 'GROUP' || readNode.type === 'SECTION'
+            ? ('children' in readNode ? (readNode as any).children.length : 0)
+            : 0;
+          data.hint = `Node tree is large (${childCount} children, ${fullXml.length} chars full XML). Showing structural skeleton. Use read with specific child IDs for full style details.`;
+        } else {
+          data.xml = fullXml;
+        }
 
         // Bundle screenshot if requested
         if (wantScreenshot && readNode.visible && readNode.width > 0 && readNode.height > 0) {
@@ -350,6 +368,48 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error in edit pipeline' }
           };
         }
+        break;
+      }
+
+      case 'query': {
+        const { source: querySource, query: queryText } = parameters;
+
+        if (querySource !== 'nodes') {
+          // 'knowledge' is handled locally in sandbox — should not arrive here
+          response = { success: false, error: { code: 'INVALID_SOURCE', message: `Source "${querySource}" should be handled locally, not via IPC.` } };
+          break;
+        }
+
+        // Search current page nodes by name or type
+        const searchQuery = (queryText || '').toLowerCase();
+        const MAX_RESULTS = 20;
+        const matches: Array<{ id: string; name: string; type: string; x: number; y: number; width: number; height: number }> = [];
+
+        const allNodes = figma.currentPage.findAll(node => {
+          return node.name.toLowerCase().includes(searchQuery)
+            || node.type.toLowerCase() === searchQuery;
+        });
+
+        for (const node of allNodes.slice(0, MAX_RESULTS)) {
+          matches.push({
+            id: node.id,
+            name: node.name,
+            type: node.type,
+            x: Math.round(node.x),
+            y: Math.round(node.y),
+            width: Math.round(node.width),
+            height: Math.round(node.height),
+          });
+        }
+
+        response = {
+          success: true,
+          data: {
+            results: matches,
+            total: allNodes.length,
+            truncated: allNodes.length > MAX_RESULTS,
+          }
+        };
         break;
       }
 

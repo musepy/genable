@@ -4,7 +4,6 @@ import { LLMProvider } from '../../llm-client/providers/types';
 
 import { resolveBehavior } from '../agentBehaviorConfig';
 import { buildStaticSystemPrompt } from '../../llm-client/context/system';
-import { DYNAMIC_CONTEXT_MSG_ID } from '../../llm-client/context/dynamicContext';
 
 describe('Agent Architecture Contract Tests', () => {
     let mockProvider: LLMProvider;
@@ -79,7 +78,7 @@ describe('Agent Architecture Contract Tests', () => {
         });
 
         // Build static system prompt (includes ALL mode guidance)
-        const systemPrompt = buildStaticSystemPrompt([], mockProvider as any, []);
+        const systemPrompt = buildStaticSystemPrompt([], mockProvider as any);
 
         const runtime2 = new AgentRuntime({
             provider: mockProvider,
@@ -90,8 +89,9 @@ describe('Agent Architecture Contract Tests', () => {
 
         await runtime2.run('execution request');
         const executionCall = (mockProvider.generate as Mock).mock.calls[0][0];
-        // Dynamic context message carries the iteration counter
-        const dynamicCtx = executionCall.messages.find((m: any) => m.id === DYNAMIC_CONTEXT_MSG_ID)?.content;
-        expect(dynamicCtx).toContain('[Iteration');
+        // System prompt should be present as the first message
+        const sysMsg = executionCall.messages.find((m: any) => m.id === 'sys_static');
+        expect(sysMsg).toBeDefined();
+        expect(sysMsg.role).toBe('system');
     });
 });

@@ -79,9 +79,10 @@ export class ToolResultCleaner {
     }
 
     // Results within budget
+    const isBatchTool = cleaned.name === 'create' || cleaned.name === 'edit';
     if (cleaned.name === 'read') {
       cleaned.data = this.cleanInspectResult(cleaned.data);
-    } else if (cleaned.data.results) {
+    } else if (isBatchTool && Array.isArray(cleaned.data.results)) {
       cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
     } else if (cleaned.success && typeof cleaned.data === 'object') {
       cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
@@ -236,13 +237,29 @@ export class ToolResultCleaner {
 
   /**
    * Cleans read results. XML string passed through directly (already compact).
-   * Anomalies preserved as structured JSON.
+   * Preserves hint/context fields from handler (auto-degradation signals).
+   * Safe truncation: cuts at last `>` or newline to avoid broken XML tags.
    */
   private cleanInspectResult(data: any): any {
     const result: any = { xml: data.xml };
+
+    // Preserve hint and context from handler (auto-degradation, page overview)
+    if (data.hint) result.hint = data.hint;
+    if (data.context) result.context = data.context;
+
     const MAX_XML_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
-    if (result.xml.length > MAX_XML_CHARS) {
-      result.xml = result.xml.substring(0, MAX_XML_CHARS) + '\n<!-- truncated -->';
+    if (result.xml && result.xml.length > MAX_XML_CHARS) {
+      // Safe truncation: find last `>` or newline before limit to avoid broken tags
+      let cutPoint = MAX_XML_CHARS;
+      const searchRegion = result.xml.substring(Math.max(0, MAX_XML_CHARS - 200), MAX_XML_CHARS);
+      const lastCloseTag = searchRegion.lastIndexOf('>');
+      const lastNewline = searchRegion.lastIndexOf('\n');
+      const bestCut = Math.max(lastCloseTag, lastNewline);
+      if (bestCut > 0) {
+        cutPoint = Math.max(0, MAX_XML_CHARS - 200) + bestCut + 1;
+      }
+
+      result.xml = result.xml.substring(0, cutPoint) + '\n<!-- truncated — use read(nodeId, detail="summary") for structural overview, or read specific child IDs for details -->';
       result._truncated = true;
     }
     return result;

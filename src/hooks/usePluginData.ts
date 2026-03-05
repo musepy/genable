@@ -3,7 +3,6 @@ import { emit, on } from '@create-figma-plugin/utilities'
 import {
   GetVariablesHandler,
   SendVariablesHandler,
-  LibraryResource,
   LocalComponent,
   GetLocalComponentsHandler,
   SendLocalComponentsHandler,
@@ -12,20 +11,17 @@ import {
 
 export interface PluginData {
   variables: string[]
-  libraryResources: LibraryResource[]
   localComponents: LocalComponent[]
   editorMode: 'figma' | 'dev'
 }
 
 export function usePluginData() {
   const [variables, setVariables] = useState<string[]>([])
-  const [libraryResources, setLibraryResources] = useState<LibraryResource[]>([])
   const [localComponents, setLocalComponents] = useState<LocalComponent[]>([])
   const [editorMode, setEditorMode] = useState<'figma' | 'dev'>('figma')
 
   useEffect(() => {
     const stopVars = on<SendVariablesHandler>('SEND_VARIABLES', (data) => setVariables(data.names))
-    const stopLibrary = on('SEND_LIBRARY_RESOURCES', (data: { resources: LibraryResource[] }) => setLibraryResources(data.resources))
 
     const stopComponents = on<SendLocalComponentsHandler>('SEND_LOCAL_COMPONENTS', (data) => setLocalComponents(data.components))
     const stopLog = on<SendLogHandler>('SEND_LOG', (data) => {
@@ -38,12 +34,10 @@ export function usePluginData() {
     });
 
     emit<GetVariablesHandler>('GET_VARIABLES')
-    emit('GET_LIBRARY_RESOURCES')
     emit<GetLocalComponentsHandler>('GET_LOCAL_COMPONENTS')
 
     return () => {
       stopVars()
-      stopLibrary()
       stopComponents()
       stopLog()
       stopEditorMode()
@@ -52,7 +46,6 @@ export function usePluginData() {
 
   return {
     variables,
-    libraryResources,
     localComponents,
     editorMode
   }

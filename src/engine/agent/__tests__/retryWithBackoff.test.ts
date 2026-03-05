@@ -213,13 +213,27 @@ describe('classifyError (retryPolicy)', () => {
     expect(classifyError(new Error('fetch failed'))).toBe(AgentErrorCategory.RETRYABLE_NETWORK);
   });
 
-  it('should classify 429 as RETRYABLE_QUOTA', () => {
-    expect(classifyError(new Error('429 Too Many Requests'))).toBe(AgentErrorCategory.RETRYABLE_QUOTA);
+  it('should classify 429 as RETRYABLE_RATE_LIMIT', () => {
+    expect(classifyError(new Error('429 Too Many Requests'))).toBe(AgentErrorCategory.RETRYABLE_RATE_LIMIT);
   });
 
-  it('should classify quota exceeded as RETRYABLE_QUOTA', () => {
-    const err = { type: 'QUOTA_EXCEEDED', message: 'quota exceeded' };
-    expect(classifyError(err)).toBe(AgentErrorCategory.RETRYABLE_QUOTA);
+  it('should classify temporarily rate-limited as RETRYABLE_RATE_LIMIT', () => {
+    expect(classifyError(new Error('temporarily rate-limited upstream'))).toBe(AgentErrorCategory.RETRYABLE_RATE_LIMIT);
+  });
+
+  it('should classify GeminiErrorType.QUOTA_EXCEEDED as RETRYABLE_RATE_LIMIT', () => {
+    const err = { type: 'QUOTA_EXCEEDED', message: 'resource exhausted' };
+    expect(classifyError(err)).toBe(AgentErrorCategory.RETRYABLE_RATE_LIMIT);
+  });
+
+  it('should classify billing/quota exhausted as NON_RETRYABLE_QUOTA', () => {
+    expect(classifyError(new Error('quota exceeded, check billing'))).toBe(AgentErrorCategory.NON_RETRYABLE_QUOTA);
+    expect(classifyError(new Error('insufficient credits'))).toBe(AgentErrorCategory.NON_RETRYABLE_QUOTA);
+    expect(classifyError(new Error('billing limit reached'))).toBe(AgentErrorCategory.NON_RETRYABLE_QUOTA);
+  });
+
+  it('should NOT classify "temporarily" quota messages as NON_RETRYABLE_QUOTA', () => {
+    expect(classifyError(new Error('temporarily quota exceeded'))).toBe(AgentErrorCategory.RETRYABLE_RATE_LIMIT);
   });
 
   it('should classify 503 as RETRYABLE_TRANSIENT', () => {
@@ -251,12 +265,13 @@ describe('classifyError (retryPolicy)', () => {
 
   it('isRetryableError should return true for retryable categories', () => {
     expect(isRetryableError(new Error('503 overloaded'))).toBe(true);
-    expect(isRetryableError(new Error('429 quota'))).toBe(true);
+    expect(isRetryableError(new Error('429 rate limit'))).toBe(true);
     expect(isRetryableError(new Error('MALFORMED_FUNCTION_CALL'))).toBe(true);
   });
 
   it('isRetryableError should return false for non-retryable categories', () => {
     expect(isRetryableError(new Error('something unknown'))).toBe(false);
+    expect(isRetryableError(new Error('quota exceeded, check billing'))).toBe(false);
   });
 });
 
@@ -266,7 +281,8 @@ describe('categoryToErrorCode', () => {
   it('should map categories to error codes', () => {
     expect(categoryToErrorCode(AgentErrorCategory.RETRYABLE_TRANSIENT)).toBe('TOOL_TRANSIENT_ERROR');
     expect(categoryToErrorCode(AgentErrorCategory.RETRYABLE_MALFORMED)).toBe('TOOL_FORMAT_ERROR');
-    expect(categoryToErrorCode(AgentErrorCategory.RETRYABLE_QUOTA)).toBe('TOOL_QUOTA_ERROR');
+    expect(categoryToErrorCode(AgentErrorCategory.RETRYABLE_RATE_LIMIT)).toBe('TOOL_RATE_LIMIT');
+    expect(categoryToErrorCode(AgentErrorCategory.NON_RETRYABLE_QUOTA)).toBe('TOOL_QUOTA_ERROR');
     expect(categoryToErrorCode(AgentErrorCategory.RETRYABLE_NETWORK)).toBe('TOOL_NETWORK_ERROR');
     expect(categoryToErrorCode(AgentErrorCategory.NON_RETRYABLE_INPUT)).toBe('TOOL_INVALID_INPUT');
     expect(categoryToErrorCode(AgentErrorCategory.LOCAL_TOOL_ERROR)).toBe('TOOL_EXECUTION_ERROR');

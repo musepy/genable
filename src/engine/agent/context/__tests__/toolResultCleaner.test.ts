@@ -120,152 +120,82 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.error.details).toBeUndefined();
   });
 
+  it('does not crash on query results with data.results field', () => {
+    const rawResult = {
+      name: 'query',
+      success: true,
+      data: {
+        results: [
+          { title: 'Dashboard layout', content: 'Use grid...', score: 0.85 },
+          { title: 'Card patterns', content: 'Cards should...', score: 0.72 }
+        ],
+        source: 'cross-domain'
+      }
+    };
+
+    // Should NOT throw "t.results.map is not a function"
+    const cleaned = cleaner.cleanToolResult(rawResult);
+    expect(cleaned.success).toBe(true);
+    // Should fall through to cleanSuccessfulResult, NOT cleanBatchResult
+    expect(cleaned.data.results).toBeUndefined(); // cleanSuccessfulResult doesn't preserve .results
+  });
+
   describe('read specific cleaning', () => {
-    it('preserves visual properties in hierarchy mode', () => {
+    it('passes through xml and preserves hint/context', () => {
       const rawResult = {
         name: 'read',
         success: true,
         data: {
-          id: 'root-1',
-          type: 'FRAME',
-          props: {
-            name: 'Main Frame',
-            layoutMode: 'VERTICAL',
-            fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }],
-            extraneousProp: 'should_be_stripped'
-          },
-          children: [
-            {
-              id: 'child-1',
-              type: 'TEXT',
-              props: {
-                name: 'Title',
-                fontSize: 16,
-                characters: 'Hello World'
-              }
-            }
-          ]
+          xml: '<frame id="root-1" layout="column"><text id="t1">Hello</text></frame>',
+          hint: 'auto-degraded to summary',
+          context: { pageNodeCount: 42 },
         }
       };
 
       const cleaned = cleaner.cleanToolResult(rawResult);
-
-      // Verify root
-      expect(cleaned.data.id).toBe('root-1');
-      expect(cleaned.data.props.layoutMode).toBe('VERTICAL');
-      expect(cleaned.data.props.fills).toBeDefined();
-      expect(cleaned.data.props.extraneousProp).toBeUndefined();
-
-      // Verify child
-      expect(cleaned.data.children[0].id).toBe('child-1');
-      expect(cleaned.data.children[0].props.fontSize).toBe(16);
-      expect(cleaned.data.children[0].props.characters).toBe('Hello World');
+      expect(cleaned.data.xml).toBe(rawResult.data.xml);
+      expect(cleaned.data.hint).toBe('auto-degraded to summary');
+      expect(cleaned.data.context.pageNodeCount).toBe(42);
     });
 
-    it('preserves structured anomalies in read hierarchy mode', () => {
+    it('truncates oversized xml at safe boundary', () => {
+      const longXml = '<frame id="root">' + '<text id="t">x</text>\n'.repeat(500) + '</frame>';
       const rawResult = {
         name: 'read',
         success: true,
-        data: {
-          id: 'root-1',
-          type: 'FRAME',
-          props: { name: 'Root', layoutMode: 'VERTICAL' },
-          anomalies: [
-            {
-              code: 'SIZING_REVERTED',
-              message: 'Child reverted from FILL to FIXED',
-              nodeId: 'child-1',
-              nodeName: 'Card Row',
-              context: {
-                'parent.layoutMode': 'NONE',
-                intended: 'FILL',
-                actual: 'FIXED',
-                veryLong: 'x'.repeat(300),
-              },
-              hints: [
-                'Set parent layoutMode first',
-                'Reapply FILL',
-              ],
-            }
-          ],
-          children: []
-        }
+        data: { xml: longXml }
       };
 
-      const cleaned = cleaner.cleanToolResult(rawResult);
+      // Ensure it's actually oversized
+      expect(longXml.length).toBeGreaterThan(6000);
 
-      expect(Array.isArray(cleaned.data.anomalies)).toBe(true);
-      expect(cleaned.data.anomalies[0].code).toBe('SIZING_REVERTED');
-      expect(cleaned.data.anomalies[0].nodeId).toBe('child-1');
-      expect(cleaned.data.anomalies[0].hints.length).toBeGreaterThan(0);
-      expect(typeof cleaned.data.anomalies[0].context.veryLong).toBe('string');
-      expect(cleaned.data.anomalies[0].context.veryLong.length).toBeLessThanOrEqual(121);
+      const cleaned = cleaner.cleanToolResult(rawResult);
+      expect(cleaned.data._truncated).toBe(true);
+      expect(cleaned.data.xml.length).toBeLessThan(longXml.length);
+      // Should not end with a broken tag
+      const lastAngleBracket = cleaned.data.xml.lastIndexOf('>');
+      const truncationComment = cleaned.data.xml.indexOf('<!-- truncated');
+      expect(truncationComment).toBeGreaterThan(0);
+      expect(lastAngleBracket).toBeGreaterThan(0);
     });
 
-    it('preserves visual properties even when result is oversized (> MAX_DATA_CHARS)', () => {
-      // Create a massive children array to exceed 6000 chars limit in stringified form
-      const massiveChildren = Array.from({ length: 20 }, (_, i) => ({
-        id: `child-${i}`,
-        type: 'FRAME',
-        props: {
-          name: `Row ${i}`,
-          layoutMode: 'HORIZONTAL',
-          padding: 16,
-          garbage: 'x'.repeat(500) // Inflate size
-        }
-      }));
-
+    it('strips unknown fields, keeps only xml/hint/context', () => {
       const rawResult = {
         name: 'read',
         success: true,
         data: {
-          id: 'root-1',
-          type: 'FRAME',
-          props: {
-            name: 'List Container',
-            layoutMode: 'VERTICAL'
-          },
-          children: massiveChildren
-        }
-      };
-
-      // Ensure raw result is actually oversized
-      expect(JSON.stringify(rawResult).length).toBeGreaterThan(6000);
-
-      const cleaned = cleaner.cleanToolResult(rawResult);
-
-      // It should still process structurally, not just truncate to text
-      expect(cleaned.data.id).toBe('root-1');
-      expect(cleaned.data.props.layoutMode).toBe('VERTICAL');
-
-      // Children should be capped at 15
-      expect(cleaned.data.children.length).toBe(15);
-      expect(cleaned.data._moreChildren).toBe(5);
-
-      // Child props should be preserved and garbage stripped
-      expect(cleaned.data.children[0].props.layoutMode).toBe('HORIZONTAL');
-      expect(cleaned.data.children[0].props.padding).toBe(16);
-      expect(cleaned.data.children[0].props.garbage).toBeUndefined();
-    });
-
-    it('preserves selection format (nodes array + count)', () => {
-      const rawResult = {
-        name: 'read',
-        success: true,
-        data: {
-          count: 2,
-          nodes: [
-            { id: '1', name: 'N1', type: 'FRAME', extraneous: true },
-            { id: '2', name: 'N2', type: 'TEXT', extraneous: true }
-          ]
+          xml: '<frame id="f1"/>',
+          hint: 'ok',
+          extraField: 'should be dropped',
+          nodes: [{ id: '1' }],
         }
       };
 
       const cleaned = cleaner.cleanToolResult(rawResult);
-      expect(cleaned.data.count).toBe(2);
-      expect(cleaned.data.nodes.length).toBe(2);
-      expect(cleaned.data.nodes[0].name).toBe('N1');
-      expect(cleaned.data.nodes[0].extraneous).toBeUndefined();
+      expect(cleaned.data.xml).toBe('<frame id="f1"/>');
+      expect(cleaned.data.hint).toBe('ok');
+      expect(cleaned.data.extraField).toBeUndefined();
+      expect(cleaned.data.nodes).toBeUndefined();
     });
   });
 });

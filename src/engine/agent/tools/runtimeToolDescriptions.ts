@@ -1,4 +1,5 @@
 import { RuntimeRequiredParamSpec, RuntimeValidationMode } from './types';
+import { QUERY_SOURCES } from './unified/query';
 
 interface RuntimeConditionalRequiredRule {
   when: (args: any) => boolean;
@@ -20,7 +21,7 @@ export interface RuntimeToolDescription {
   repairHint: string;
 }
 
-const KNOWLEDGE_SOURCES = new Set(['knowledge', 'components', 'tokens', 'skill']);
+const VALID_SOURCES = new Set<string>(QUERY_SOURCES);
 
 export const runtimeToolDescriptions: RuntimeToolDescription[] = [
   {
@@ -42,14 +43,17 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     repairHint: 'provide a non-empty "xml" string with edit markup (each tag must have an id attribute)',
   },
   {
-    tool: 'query_knowledge',
+    tool: 'query',
     mode: 'EXECUTION',
-    required: [{ name: 'source', trim: true, check: 'required' }],
+    required: [
+      { name: 'source', trim: true, check: 'required' },
+      { name: 'query', trim: true, check: 'required' },
+    ],
     invalidRules: [{
       name: 'source',
-      reason: 'must be one of knowledge, components, tokens, skill',
-      isValid: (args) => typeof args?.source === 'string' && KNOWLEDGE_SOURCES.has(args.source),
+      reason: `must be one of ${QUERY_SOURCES.join(', ')}`,
+      isValid: (args) => typeof args?.source === 'string' && VALID_SOURCES.has(args.source),
     }],
-    repairHint: 'provide "source" as one of knowledge, components, tokens, or skill',
+    repairHint: `provide "source" as one of ${QUERY_SOURCES.join(', ')} and a non-empty "query"`,
   },
 ];

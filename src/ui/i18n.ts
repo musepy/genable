@@ -32,46 +32,22 @@ const translations = {
     hideRaw: 'Hide Raw',
     newMessages: 'New messages',
 
-    // Errors - Structured Tokens
+    // Errors — only user-actionable errors get a banner.
+    // Agent-internal errors (network, stream, malformed) are shown as agent status.
     errors: {
       unauthorized: {
         title: 'Invalid API Key',
-        message: 'Please check your API key settings.',
-        action: 'Check API Key',
+        message: 'Please check your API key in Settings.',
+        action: 'Open Settings',
       },
-      notFound: {
-        title: 'Model Not Available',
-        message: 'The selected model may be offline or renamed.',
-        action: 'Change Model',
-      },
-      rateLimit: {
-        title: 'Rate Limit Exceeded',
-        message: 'You are making requests too quickly.',
-        action: 'Retry Later',
-      },
-      serverError: {
-        title: 'Server Error',
-        message: 'An internal error occurred on the server.',
-        action: 'Retry',
-      },
-      network: {
-        title: 'Network Error',
-        message: 'Please check your internet connection.',
-        action: 'Retry',
-      },
-      malformedFunctionCall: {
-        title: 'Malformed Response',
-        message: 'The AI returned an invalid response format.',
-        action: 'Retry',
-      },
-      emptyResponse: {
-        title: 'Empty Response',
-        message: 'The AI returned no content.',
-        action: 'Retry',
+      quotaExceeded: {
+        title: 'Quota Exceeded',
+        message: 'Your API quota has been exhausted. Check your billing or wait for reset.',
+        action: 'Open Settings',
       },
       unknown: {
-        title: 'Unknown Error',
-        message: 'An unexpected error occurred.',
+        title: 'Configuration Error',
+        message: 'Please check your settings.',
         action: 'Dismiss',
       },
     },
@@ -113,46 +89,21 @@ const translations = {
     hideRaw: '隐藏原始数据',
     newMessages: '新消息',
 
-    // Errors - Structured Tokens
+    // Errors — 只有需要用户操作的错误才展示 banner
     errors: {
       unauthorized: {
         title: 'API Key 无效',
-        message: '请检查您的 API Key 设置。',
-        action: '检查 API Key',
+        message: '请在设置中检查您的 API Key。',
+        action: '打开设置',
       },
-      notFound: {
-        title: '模型暂不可用',
-        message: '当前模型可能已下线或名称有误。',
-        action: '更换模型',
-      },
-      rateLimit: {
-        title: '请求过于频繁',
-        message: '请稍后再试。',
-        action: '稍后重试',
-      },
-      serverError: {
-        title: '服务器错误',
-        message: '服务器发生内部错误。',
-        action: '重试',
-      },
-      network: {
-        title: '网络连接失败',
-        message: '请检查您的网络连接。',
-        action: '重试',
-      },
-      malformedFunctionCall: {
-        title: '响应格式错误',
-        message: 'AI 返回了无效的响应格式。',
-        action: '重试',
-      },
-      emptyResponse: {
-        title: '响应内容为空',
-        message: 'AI 未返回任何内容。',
-        action: '重试',
+      quotaExceeded: {
+        title: '配额已用完',
+        message: 'API 配额已耗尽，请检查账单或等待重置。',
+        action: '打开设置',
       },
       unknown: {
-        title: '发生未知错误',
-        message: '发生了意外错误。',
+        title: '配置错误',
+        message: '请检查您的设置。',
         action: '关闭',
       },
     },

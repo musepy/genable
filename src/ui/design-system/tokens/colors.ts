@@ -18,6 +18,10 @@ export const colors = {
   panel: 'var(--color-panel)',
   overlay: 'var(--color-overlay)',
   shadow: 'var(--color-shadow)',
+  shadowSm: 'var(--shadow-sm)',
+  shadowMd: 'var(--shadow-md)',
+  shadowLg: 'var(--shadow-lg)',
+  shadowFocus: 'var(--shadow-focus)',
   disabled: 'var(--gray-a4)',
   disabledText: 'var(--gray-a11)',
 

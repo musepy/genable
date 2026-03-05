@@ -8,9 +8,7 @@
 
 import { h } from 'preact';
 import { Plus, AlignJustify, Sun, Moon, X } from 'lucide-preact';
-import { emit } from '@create-figma-plugin/utilities';
-import { ImportJsonHandler } from '../../types';
-import { tokens, componentStyles } from '../design-system/tokens';
+import { tokens } from '../design-system/tokens';
 import { t } from '../i18n';
 
 export interface HeaderProps {
@@ -50,7 +48,7 @@ export function Header({
       {isSettingsOpen && (
         <div style={{ 
           fontSize: tokens.fontSize[2],
-          fontWeight: 400,
+          fontWeight: tokens.fontWeight.regular,
           color: 'var(--gray-11)',
           paddingLeft: 'var(--space-3)'
         }}>

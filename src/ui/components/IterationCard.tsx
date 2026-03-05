@@ -21,7 +21,7 @@ export const IterationCard = memo(({ iteration, isStreaming = false }: Iteration
       marginBottom: tokens.space[1],
       padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
       borderRadius: 'var(--radius-3)',
-      transition: 'background 0.2s ease',
+      transition: 'var(--transition-normal)',
       // Subtle indentation instead of vertical border
       marginLeft: tokens.space[1],
     }}
@@ -60,7 +60,7 @@ export const IterationCard = memo(({ iteration, isStreaming = false }: Iteration
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1, overflow: 'hidden' }}>
           <span style={{ 
             fontSize: tokens.fontSize[1], 
-            fontWeight: 600,
+            fontWeight: tokens.fontWeight.semibold,
             color: isStreaming ? tokens.colors.textPrimary : tokens.colors.textSecondary,
             textTransform: 'uppercase',
             letterSpacing: '0.05em',

@@ -207,7 +207,6 @@ export function useModelSettings() {
     })
     setHasConfig(true)
     setShowSettings(false)
-    toast('Settings saved successfully', 'success')
   }
 
   const completeOnboarding = useCallback((key: string) => {

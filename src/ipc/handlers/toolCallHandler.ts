@@ -55,6 +55,20 @@ async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
   return { ok: true, node: node as SceneNode };
 }
 
+// ── Read target resolution: Document/Page → page children summary ──
+
+type ReadTarget =
+  | { kind: 'scene'; nodeId: string }
+  | { kind: 'page'; page: PageNode };
+
+async function resolveReadTarget(nodeId: string): Promise<ReadTarget> {
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) return { kind: 'scene', nodeId }; // let resolveSceneNode handle NOT_FOUND
+  if (node.type === 'DOCUMENT') return { kind: 'page', page: figma.currentPage };
+  if (node.type === 'PAGE') return { kind: 'page', page: node as PageNode };
+  return { kind: 'scene', nodeId };
+}
+
 // ── Shared screenshot helper (used by read) ──
 
 interface ScreenshotResult {
@@ -127,24 +141,45 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
 
       case 'read': {
-        const { nodeId: readNodeId, depth: readDepth, screenshot: wantScreenshot } = parameters;
+        const { nodeId: rawReadNodeId, depth: readDepth, screenshot: wantScreenshot } = parameters;
+        const depthClamped = Math.min(readDepth || 5, 10);
 
-        const resolved = await resolveSceneNode(readNodeId);
+        // Fallback: Document/Page → current page's children summary
+        const readTarget = await resolveReadTarget(rawReadNodeId);
+
+        if (readTarget.kind === 'page') {
+          // Page isn't a SceneNode — serialize its children as a flat list
+          const page = readTarget.page;
+          const childXmls: string[] = [];
+          for (const child of page.children) {
+            const hSerialized = NodeSerializer.serializeWithCompression(child, {
+              maxDepth: Math.min(depthClamped, 2), // shallow for page overview
+              pruneDefaults: true
+            });
+            childXmls.push(XmlSerializer.serialize(hSerialized, { maxDepth: Math.min(depthClamped, 2) }));
+          }
+          response = {
+            success: true,
+            data: {
+              xml: `<!-- Page: ${page.name} (${page.children.length} top-level nodes) -->\n${childXmls.join('\n')}`,
+              hint: 'This is a page overview. Use a specific nodeId from above for detailed inspection.',
+            }
+          };
+          break;
+        }
+
+        const resolved = await resolveSceneNode(readTarget.nodeId);
         if (!resolved.ok) { response = resolved.response; break; }
         const readNode = resolved.node;
 
         const hSerialized = NodeSerializer.serializeWithCompression(readNode, {
-          maxDepth: Math.min(readDepth || 5, 10),
+          maxDepth: depthClamped,
           pruneDefaults: true
         });
         const xml = XmlSerializer.serialize(hSerialized, {
-          maxDepth: Math.min(readDepth || 5, 10),
+          maxDepth: depthClamped,
         });
-        const anomalies = collectTreeAnomalies(readNode, Math.min(readDepth || 5, 10));
-        const data: any = {
-          xml,
-          anomalies: anomalies.length > 0 ? anomalies : undefined
-        };
+        const data: any = { xml };
 
         // Bundle screenshot if requested
         if (wantScreenshot && readNode.visible && readNode.width > 0 && readNode.height > 0) {
@@ -152,7 +187,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             const ssResult = await exportNodeToBase64(readNode);
             data.__image = ssResult.__image;
           } catch (e: any) {
-            logger.info(`Screenshot bundling failed for ${readNodeId}: ${e?.message}`);
+            logger.info(`Screenshot bundling failed for ${readTarget.nodeId}: ${e?.message}`);
           }
         }
 

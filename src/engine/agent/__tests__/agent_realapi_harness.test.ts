@@ -410,8 +410,6 @@ describe('Agent Real API Harness', () => {
       toolExecutors: executors as any,
       maxIterations,
       behaviorConfig: {
-        designStrategy: 'create',
-        visualQuality: 'rich',
         thinkingLevel: 'minimal',
         maxIterations,
       },
@@ -614,7 +612,7 @@ describe('Agent Real API Harness', () => {
           tools: agentTools,
           toolExecutors: executors as any,
           maxIterations: 30,
-          behaviorConfig: { designStrategy: 'create', visualQuality: 'rich', thinkingLevel: 'minimal' },
+          behaviorConfig: { thinkingLevel: 'minimal' },
           onIterationStart: (iter) => {
             iterationStartMs = Date.now();
             currentIteration = iter;

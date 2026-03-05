@@ -21,7 +21,7 @@ import {
   validateMessageSequence,
   groupIntoTurns,
 } from './context/contextCompression';
-import { AgentRuntimeEvent, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
+import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
@@ -51,11 +51,9 @@ export interface AgentRuntimeOptions {
   taskId?: string;
   taskTitle?: string;
   toolExecutors?: Record<string, import('./tools/types').ToolExecutor>;
-  designSystemId?: string;
   messages?: LLMMessage[];
   loopPolicy?: Partial<AgentLoopPolicy>;
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
-  selectionContext?: { hasSelection: boolean; nodes: any[] };
   /** Custom hooks. If omitted, builtin safety hooks are registered by default. */
   hooks?: HookRegistration[];
 }
@@ -97,7 +95,6 @@ export class AgentRuntime {
   behaviorConfig: AgentBehaviorConfig;
   loopPolicy: AgentLoopPolicy;
   private originalUserRequest: string = '';
-  private designSystemId?: string;
   private canceled = false;
   private cancelReason = 'Canceled by user';
   private activeAbortController: AbortController | null = null;
@@ -115,7 +112,6 @@ export class AgentRuntime {
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
     this.maxContextTokens = options.maxContextTokens || AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS;
-    this.designSystemId = options.designSystemId;
     this.cleaner = new ToolResultCleaner(options.tools);
     this.llmCoordinator = new LLMGenerationCoordinator(
       options.provider,
@@ -233,7 +229,7 @@ export class AgentRuntime {
     if (this.canceledEventEmitted) return;
     this.emitRuntimeEvent({
       type: 'canceled',
-      phase: 'execution' as AgentRuntimePhase,
+      phase: 'execution',
       iteration,
       reason: this.cancelReason,
     });
@@ -448,7 +444,7 @@ export class AgentRuntime {
 
     this.emitRuntimeEvent({
       type: 'status',
-      phase: 'execution' as AgentRuntimePhase,
+      phase: 'execution',
       message: 'Agent starting...',
       iteration: 0,
       maxIterations: this.maxIterations,
@@ -467,8 +463,8 @@ export class AgentRuntime {
       this.emitRuntimeEvent({
         type: 'context_usage',
         iteration: iteration + 1,
-        mode: 'AUTONOMOUS',
-        phase: 'execution' as AgentRuntimePhase,
+
+        phase: 'execution',
         usage: {
           current: currentTokens,
           max: this.maxContextTokens,
@@ -497,8 +493,8 @@ export class AgentRuntime {
         type: 'iteration_start',
         iteration: iteration + 1,
         maxIterations: this.maxIterations,
-        mode: 'AUTONOMOUS',
-        phase: 'execution' as AgentRuntimePhase,
+
+        phase: 'execution',
       });
 
       // ──── DYNAMIC CONTEXT (KV-cache friendly) ────
@@ -622,7 +618,7 @@ export class AgentRuntime {
         // The LLM's text response is the completion summary.
         this.emitRuntimeEvent({
           type: 'completed',
-          phase: 'execution' as AgentRuntimePhase,
+          phase: 'execution',
           iteration: iteration + 1,
           totalIterations: iteration + 1,
           summary: response.text || 'Completed',

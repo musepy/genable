@@ -15,10 +15,8 @@ export * from './colors';
 export * from './spacing';
 export * from './typography';
 export * from './layout';
-export * from './motion';
-export * from './components';
 
-// Main tokens object (Backwards compatibility)
+// Main tokens object
 export const tokens = {
   colors,
   space,
@@ -32,7 +30,3 @@ export const tokens = {
 } as const;
 
 export type Tokens = typeof tokens;
-export type MotionTokens = typeof import('./motion').motionTokens;
-export type InteractionTokens = typeof import('./motion').interactionTokens;
-export type LayoutTokens = typeof import('./layout').layoutTokens;
-export type ComponentStyles = typeof import('./components').componentStyles;

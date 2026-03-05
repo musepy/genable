@@ -88,7 +88,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
           borderRadius: 'var(--radius-5)',
           cursor: disabled ? 'default' : 'pointer',
           color: tokens.colors.textSecondary,
-          transition: 'background 200ms ease, transform 200ms ease',
+          transition: 'var(--transition-normal)',
           transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
           opacity: disabled ? 0.5 : 1,
           flexShrink: 0,
@@ -194,7 +194,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
                           <span style={{
                             color: tokens.colors.textPrimary,
                             fontSize: tokens.fontSize[1],
-                            fontWeight: 500,
+                            fontWeight: tokens.fontWeight.medium,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -203,7 +203,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
                           </span>
                           <span style={{
                             color: tokens.colors.textSecondary,
-                            fontSize: 11,
+                            fontSize: tokens.fontSize[1],
                             lineHeight: '14px',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',

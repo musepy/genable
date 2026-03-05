@@ -41,8 +41,8 @@ export function Card({ children, style, ...props }: CardProps) {
     background: 'var(--color-surface)',
     color: 'var(--gray-12)',
     borderRadius: 'var(--radius-3)',
-    border: `1px solid var(--gray-6)`,
-    boxShadow: 'var(--color-shadow)',
+    border: 'var(--border-default)',
+    boxShadow: tokens.colors.shadowSm,
     // Note: Removed overflow: hidden to allow Popovers to float above
     ...style,
   };

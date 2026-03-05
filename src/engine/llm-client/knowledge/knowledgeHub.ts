@@ -176,11 +176,7 @@ export interface AnatomyBlueprint {
   variants?: Record<string, any>;
 }
 
-export interface EnrichedComponent extends UIComponentMeta {
-  designAnatomy?: AnatomyBlueprint;
-}
 
-import { UIComponentMeta } from '../../../knowledge/projectUIRegistry';
 
 // ==========================================
 // KnowledgeHub Service
@@ -367,16 +363,7 @@ class KnowledgeHubService {
     return this.anatomy.find(a => a.id.toLowerCase() === key.toLowerCase());
   }
 
-  /**
-   * Associates a technical component with its design anatomy blueprint.
-   */
-  getEnrichedComponent(comp: UIComponentMeta): EnrichedComponent {
-    const anatomy = this.getAnatomyByKey(comp.name);
-    return {
-      ...comp,
-      designAnatomy: anatomy
-    };
-  }
+
 
   // ==========================================
   // Unified Search

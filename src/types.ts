@@ -13,38 +13,6 @@ export interface Settings {
   cacheTimestamp?: number;
 }
 
-export interface SelectionStyles {
-  // Aggregate styles for legacy UI compatibility (Deprecated - favor selectionNodes)
-  colors?: string[];
-  fonts?: string[];
-  cornerRadius?: number[];
-  selectedName?: string; // For UI feedback
-  // Context: The layout structure of the user's selection (if any)
-  referenceLayout?: {
-    width: number;
-    height: number;
-    layoutMode: 'VERTICAL' | 'HORIZONTAL' | 'NONE';
-    itemSpacing?: number;
-    padding?: { top: number; right: number; bottom: number; left: number };
-  };
-  // Detailed structure for LLM to learn patterns
-  selectionNodes?: NodeLayer[];
-}
-
-export interface AnalyzePatternHandler extends EventHandler {
-  name: 'ANALYZE_PATTERN';
-  handler: () => void;
-}
-
-export interface SendAnalyzedPatternHandler extends EventHandler {
-  name: 'SEND_ANALYZED_PATTERN';
-  handler: (data: {
-    nodes: NodeLayer[],
-    dna: { colors: string[], fonts: string[], radii: number[], spacing: number[] },
-    patternSummary?: string  // 新增: 模式识别摘要用于 LLM 上下文
-  }) => void;
-}
-
 export interface CreateLayersHandler extends EventHandler {
   name: 'CREATE_LAYERS';
   handler: (data: NodeLayer & { 
@@ -110,16 +78,6 @@ export interface LibraryResource {
 export interface SendLibraryResourcesHandler extends EventHandler {
   name: 'SEND_LIBRARY_RESOURCES';
   handler: (data: { resources: LibraryResource[] }) => void;
-}
-
-export interface GetSelectionStylesHandler extends EventHandler {
-  name: 'GET_SELECTION_STYLES';
-  handler: () => void;
-}
-
-export interface SendSelectionStylesHandler extends EventHandler {
-  name: 'SEND_SELECTION_STYLES';
-  handler: (styles: SelectionStyles) => void;
 }
 
 export interface LoadSettingsHandler extends EventHandler {
@@ -188,32 +146,6 @@ export interface SendLocalComponentsHandler extends EventHandler {
   handler: (data: { components: LocalComponent[] }) => void;
 }
 
-export interface ProjectTemplate {
-  id: string;
-  name: string;
-  version: string;
-  path: string;
-  data?: NodeLayer; // Legacy single-state support
-  variants?: {      // New multi-state support
-    name: string;   // e.g. "Variant=Primary, State=Default"
-    data: NodeLayer;
-  }[];
-}
-
-export interface GetProjectTemplatesHandler extends EventHandler {
-  name: 'GET_PROJECT_TEMPLATES';
-  handler: () => void;
-}
-
-export interface SendProjectTemplatesHandler extends EventHandler {
-  name: 'SEND_PROJECT_TEMPLATES';
-  handler: (data: { templates: ProjectTemplate[] }) => void;
-}
-
-export interface ImportProjectTemplateHandler extends EventHandler {
-  name: 'IMPORT_PROJECT_TEMPLATE';
-  handler: (data: { templateId: string }) => void;
-}
 
 export interface ImportJsonHandler extends EventHandler {
   name: 'IMPORT_JSON';
@@ -251,6 +183,16 @@ export interface SelectNodeHandler extends EventHandler {
   handler: (data: { nodeId: string; smooth?: boolean; durationMs?: number }) => void;
 }
 
+export interface GetSelectionHandler extends EventHandler {
+  name: 'GET_SELECTION';
+  handler: () => void;
+}
+
+export interface SendSelectionHandler extends EventHandler {
+  name: 'SEND_SELECTION';
+  handler: (data: { selection: Array<{ id: string; name: string; type: string }> }) => void;
+}
+
 export interface ImportTokensHandler extends EventHandler {
   name: 'IMPORT_TOKENS';
   handler: (data: { cssString: string, jsonString?: string }) => void;
@@ -269,15 +211,6 @@ export interface SendExportedTokensHandler extends EventHandler {
 export interface ResizeHandler extends EventHandler {
   name: 'RESIZE';
   handler: (data: { height: number }) => void;
-}
-
-export interface SelectNodeHandler extends EventHandler {
-  name: 'SELECT_NODE';
-  handler: (data: {
-    nodeId: string;
-    smooth?: boolean;   // default true
-    durationMs?: number; // optional
-  }) => void;
 }
 
 // ==========================================

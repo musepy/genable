@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState } from 'preact/hooks'
 import { useElapsedTime } from '../hooks/useElapsedTime'
 import { tokens } from '../design-system/tokens'
 import { ToolCallRecord, LLMCallRecord } from '../../types/chat'
-import { AgentRuntimeContextUsage, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents'
+import { AgentRuntimeContextUsage } from '../../shared/protocol/agentRuntimeEvents'
+import { categorizeError } from '../../engine/llm-client/errorCategorizer'
+import { t } from '../i18n'
+import type { ErrorActionType } from '../../config/errorPatterns'
 
 interface ToolExecutionPanelProps {
   toolCalls?: ToolCallRecord[]
@@ -11,7 +14,7 @@ interface ToolExecutionPanelProps {
   thinkingStatus?: string
   reasoningPreview?: string
   currentTaskTitle?: string
-  phase?: AgentRuntimePhase
+  phase?: 'execution' | 'idle'
   progress?: { iteration: number; maxIterations: number } | null
   contextUsage?: AgentRuntimeContextUsage | null
   runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting'
@@ -23,6 +26,7 @@ interface ToolExecutionPanelProps {
   onStop?: () => void
   onContinue?: () => void
   queuedCount?: number
+  onErrorAction?: (action: ErrorActionType) => void
 }
 
 /** Fallback formatter when displayName is not available */
@@ -101,6 +105,7 @@ export function ToolExecutionPanel({
   onStop,
   onContinue,
   queuedCount = 0,
+  onErrorAction,
 }: ToolExecutionPanelProps) {
   const [expanded, setExpanded] = useState(false)
   const inferredRunning = !runState && !!thinkingStatus
@@ -132,7 +137,7 @@ export function ToolExecutionPanel({
         ? ` ${reconnectCount}/${maxReconnects}` : ''
       parts.push(`Reconnecting${rc}`)
     } else if (runState === 'running') {
-      const task = currentTaskTitle || thinkingStatus || (phase === 'planning' ? 'Planning' : phase === 'verification' ? 'Verifying' : phase === 'recovery' ? 'Recovering' : 'Thinking')
+      const task = currentTaskTitle || thinkingStatus || ('Thinking')
       parts.push(`${task}${dots}`)
     } else if (runState === 'completed') {
       parts.push('Completed')
@@ -205,7 +210,7 @@ export function ToolExecutionPanel({
         )}
 
         {toolCount > 0 && (
-          <span style={{ flexShrink: 0, marginLeft: tokens.space[1], color: faint, fontSize: 10, display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}>▾</span>
+          <span style={{ flexShrink: 0, marginLeft: tokens.space[1], color: faint, fontSize: '10px', display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }}>▾</span>
         )}
       </div>
 
@@ -240,11 +245,48 @@ export function ToolExecutionPanel({
         </div>
       )}
 
+      {/* Inline error detail */}
+      {runState === 'error' && runError && (() => {
+        const cat = categorizeError(runError)
+        const content = t.errors[cat.i18nKey as keyof typeof t.errors]
+        if (!content) return null
+        const showAction = cat.handler === 'openSettings' && onErrorAction
+        return (
+          <div style={{
+            marginTop: tokens.space[2],
+            background: tokens.colors.errorMuted,
+            border: `1px solid ${tokens.colors.errorBorder}`,
+            borderRadius: 'var(--radius-3)',
+            padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: tokens.space[1],
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], minWidth: 0 }}>
+              <span style={{ fontSize: sz, fontWeight: tokens.fontWeight.medium, color: tokens.colors.error, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {content.title}
+              </span>
+              {showAction && (
+                <button
+                  onClick={() => onErrorAction(cat.handler)}
+                  style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap', background: 'none', border: 'none', padding: 0, color: tokens.colors.error, fontSize: sz, fontWeight: tokens.fontWeight.medium, cursor: 'pointer' }}
+                >
+                  {content.action}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: sz, color: tokens.colors.textSecondary, lineHeight: '16px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+              {content.message}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Context bar — inline, same level */}
       {expanded && contextUsage && (
         <div style={{ marginTop: tokens.space[1], display: 'flex', alignItems: 'center', gap: tokens.space[2], fontSize: sz, color: faint }}>
           <span>ctx {contextUsage.percent}%</span>
-          <div style={{ flex: 1, maxWidth: 80, height: 3, borderRadius: 999, background: tokens.colors.alpha[2], overflow: 'hidden' }}>
+          <div style={{ flex: 1, maxWidth: 80, height: 3, borderRadius: 'var(--radius-full)', background: tokens.colors.alpha[2], overflow: 'hidden' }}>
             <div style={{ width: `${Math.max(0, Math.min(100, contextUsage.percent))}%`, height: '100%', background: contextUsage.percent >= 85 ? tokens.colors.warning : faint }} />
           </div>
         </div>

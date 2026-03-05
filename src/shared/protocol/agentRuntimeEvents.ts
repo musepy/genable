@@ -1,18 +1,4 @@
-/**
- * AgentMode is retained only for event telemetry / logging.
- * It is NOT used as a control mechanism — the agent runs autonomously.
- *
- * Currently only 'AUTONOMOUS' is emitted at runtime.
- * Legacy modes are kept for backward-compatible event consumers (UI, analytics).
- */
-export type AgentMode = 'AUTONOMOUS' | 'PLANNING' | 'EXECUTION' | 'RECOVERY' | 'VERIFICATION';
-
-export type AgentRuntimePhase =
-  | 'planning'
-  | 'execution'
-  | 'verification'
-  | 'recovery'
-  | 'idle';
+export type AgentRuntimePhase = 'execution' | 'idle';
 
 export interface AgentRuntimeTaskInfo {
   taskId: string;
@@ -38,7 +24,7 @@ export interface AgentRuntimeIterationStartEvent extends AgentRuntimeBaseEvent {
   type: 'iteration_start';
   iteration: number;
   maxIterations: number;
-  mode: AgentMode;
+
   phase: AgentRuntimePhase;
   taskInfo?: AgentRuntimeTaskInfo;
 }
@@ -46,7 +32,7 @@ export interface AgentRuntimeIterationStartEvent extends AgentRuntimeBaseEvent {
 export interface AgentRuntimeToolCallEvent extends AgentRuntimeBaseEvent {
   type: 'tool_call';
   iteration: number;
-  mode: AgentMode;
+
   phase: AgentRuntimePhase;
   toolCall: {
     id: string;
@@ -60,7 +46,7 @@ export interface AgentRuntimeToolCallEvent extends AgentRuntimeBaseEvent {
 export interface AgentRuntimeToolResultEvent extends AgentRuntimeBaseEvent {
   type: 'tool_result';
   iteration: number;
-  mode: AgentMode;
+
   phase: AgentRuntimePhase;
   toolResult: {
     id: string;
@@ -77,7 +63,7 @@ export interface AgentRuntimeToolResultEvent extends AgentRuntimeBaseEvent {
 export interface AgentRuntimeContextUsageEvent extends AgentRuntimeBaseEvent {
   type: 'context_usage';
   iteration: number;
-  mode: AgentMode;
+
   phase: AgentRuntimePhase;
   usage: AgentRuntimeContextUsage;
 }
@@ -85,7 +71,7 @@ export interface AgentRuntimeContextUsageEvent extends AgentRuntimeBaseEvent {
 export interface AgentRuntimeStatusEvent extends AgentRuntimeBaseEvent {
   type: 'status';
   phase: AgentRuntimePhase;
-  mode?: AgentMode;
+
   iteration?: number;
   maxIterations?: number;
   taskInfo?: AgentRuntimeTaskInfo;
@@ -95,7 +81,7 @@ export interface AgentRuntimeStatusEvent extends AgentRuntimeBaseEvent {
 export interface AgentRuntimeReasoningDeltaEvent extends AgentRuntimeBaseEvent {
   type: 'reasoning_delta';
   phase: AgentRuntimePhase;
-  mode?: AgentMode;
+
   iteration?: number;
   text: string;
 }
@@ -104,7 +90,7 @@ export interface AgentRuntimeReasoningDeltaEvent extends AgentRuntimeBaseEvent {
 export interface AgentRuntimeTextDeltaEvent extends AgentRuntimeBaseEvent {
   type: 'text_delta';
   phase: AgentRuntimePhase;
-  mode?: AgentMode;
+
   iteration?: number;
   text: string;
 }
@@ -148,7 +134,7 @@ export interface AgentRuntimeLLMRequestEvent extends AgentRuntimeBaseEvent {
   type: 'llm_request';
   llmCallId: string;
   iteration: number;
-  mode: AgentMode;
+
   phase: AgentRuntimePhase;
   messages: {
     id: string;
@@ -187,7 +173,7 @@ export interface AgentRuntimeLLMResponseEvent extends AgentRuntimeBaseEvent {
   type: 'llm_response';
   llmCallId: string;
   iteration: number;
-  mode: AgentMode;
+
   phase: AgentRuntimePhase;
   durationMs: number;
   usage?: {

@@ -39,34 +39,3 @@ export const zIndex = {
   toast: 1000,
   modal: 1100,
 } as const;
-
-// Layout tokens for semantic fill/hug/fixed sizing
-// Maps Figma layout concepts to CSS flexbox
-export const layoutTokens = {
-  // Main axis sizing behavior
-  sizing: {
-    fill: { flex: 1, minWidth: 0 },           // Fill parent container
-    hug: { flex: '0 0 auto' },                // Shrink to content
-    fixed: (n: number) => ({ width: n, flexShrink: 0 }),
-  },
-  // Cross-axis alignment
-  align: {
-    start: 'flex-start' as const,
-    center: 'center' as const,
-    end: 'flex-end' as const,
-    stretch: 'stretch' as const,
-  },
-  // Main-axis distribution
-  justify: {
-    start: 'flex-start' as const,
-    center: 'center' as const,
-    end: 'flex-end' as const,
-    between: 'space-between' as const,
-  },
-  // Common flex patterns
-  patterns: {
-    row: { display: 'flex', flexDirection: 'row' as const },
-    column: { display: 'flex', flexDirection: 'column' as const },
-    center: { display: 'flex', alignItems: 'center' as const, justifyContent: 'center' as const },
-  },
-} as const;

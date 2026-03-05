@@ -393,8 +393,6 @@ describe('Agent Real API Harness', () => {
       toolExecutors: executors as any,
       maxIterations,
       behaviorConfig: {
-        designStrategy: 'create',
-        visualQuality: 'rich',
         thinkingLevel: 'minimal',
         maxIterations,
       },
@@ -412,13 +410,6 @@ describe('Agent Real API Harness', () => {
         iterationStartMs = Date.now();
         currentToolCalls = [];
 
-        // ---------------------------------------------------------------------------
-        // Hack: Force the runtime to stay in EXECUTION mode to bypass rigid phase switching
-        // ---------------------------------------------------------------------------
-        if ((runtime as any).mode !== 'EXECUTION') {
-           (runtime as any).mode = 'EXECUTION';
-           console.log('[TrueAgentHack] Forced mode to EXECUTION');
-        }
       },
 
       onIteration: (iteration, response) => {

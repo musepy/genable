@@ -170,41 +170,55 @@ export class GeminiProvider implements LLMProvider {
       const accumulator = new GeminiResponseAccumulator();
       let timedOut = false;
       let aborted = false;
+      let streamTruncated = false;
 
-      for await (const response of result) {
-        // Check for abort signal
-        if (abortSignal?.aborted) {
-          console.warn('[GeminiProvider] Stream aborted by signal');
-          aborted = true;
-          break;
+      try {
+        for await (const response of result) {
+          // Check for abort signal
+          if (abortSignal?.aborted) {
+            console.warn('[GeminiProvider] Stream aborted by signal');
+            aborted = true;
+            break;
+          }
+
+          // Check for stream timeout
+          const elapsed = Date.now() - streamStartTime;
+          if (elapsed > effectiveTimeout) {
+            console.warn(`[GeminiProvider] Stream timeout after ${elapsed}ms (limit: ${effectiveTimeout}ms). Breaking stream loop.`);
+            timedOut = true;
+            break;
+          }
+
+          const mapped = this.mapToLLMResponse(response);
+
+          if (mapped.text) onProgress?.(mapped.text);
+          if (mapped.thoughts) onThinking?.(mapped.thoughts);
+
+          accumulator.append(mapped);
         }
-
-        // Check for stream timeout
-        const elapsed = Date.now() - streamStartTime;
-        if (elapsed > effectiveTimeout) {
-          console.warn(`[GeminiProvider] Stream timeout after ${elapsed}ms (limit: ${effectiveTimeout}ms). Breaking stream loop.`);
-          timedOut = true;
-          break;
+      } catch (streamError: any) {
+        // @google/genai SDK throws "Incomplete JSON segment at the end" when the
+        // HTTP stream closes with leftover data in its SSE buffer. This is a
+        // transient network issue — use whatever chunks we already accumulated.
+        if (streamError?.message?.includes('Incomplete JSON segment')) {
+          GeminiLogger.warn(`Stream truncated (SDK SSE buffer not empty). Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
+          streamTruncated = true;
+        } else {
+          throw streamError; // Re-throw unrelated errors
         }
-
-        const mapped = this.mapToLLMResponse(response);
-
-        if (mapped.text) onProgress?.(mapped.text);
-        if (mapped.thoughts) onThinking?.(mapped.thoughts);
-
-        accumulator.append(mapped);
       }
 
-      // Only validate if we completed normally (not timed out or aborted)
-      if (!timedOut && !aborted) {
+      // Only validate if we completed normally (not timed out, aborted, or truncated)
+      if (!timedOut && !aborted && !streamTruncated) {
         GeminiErrorHandler.validateResponseContent(
           accumulator.getText(),
           accumulator.getToolCalls(),
           accumulator.getThoughts()
         );
       } else {
-        // Log what we accumulated before timeout/abort for debugging
-        GeminiLogger.warn(`Stream ${timedOut ? 'timed out' : 'aborted'}. Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
+        // Log what we accumulated before the interruption for debugging
+        const reason = timedOut ? 'timed out' : aborted ? 'aborted' : 'truncated';
+        GeminiLogger.warn(`Stream ${reason}. Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
       }
 
       return accumulator.finalize();

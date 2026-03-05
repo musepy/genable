@@ -22,6 +22,5 @@ export const space = {
   lg: 24,     // → space-5
   xl: 32,     // → space-6
   '2xl': 40,  // → space-7
-  stack: 12,  // → space-3
 } as const;
 

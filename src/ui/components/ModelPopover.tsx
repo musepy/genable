@@ -10,7 +10,40 @@
 import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { Settings, ChevronRight, Check } from 'lucide-preact';
-import { tokens, componentStyles } from '../design-system/tokens';
+import { tokens } from '../design-system/tokens';
+
+const modelSelectorGhost = {
+  display: 'inline-flex' as const,
+  alignItems: 'center' as const,
+  gap: tokens.space[1],
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  background: 'transparent',
+  border: 'none',
+  color: 'var(--gray-11)',
+  fontSize: tokens.fontSize[1],
+  fontWeight: tokens.fontWeight.regular,
+  cursor: 'pointer',
+  transition: 'var(--transition-crisp)',
+  whiteSpace: 'nowrap' as const,
+  borderRadius: 'var(--radius-5)',
+};
+const modelSelectorChip = {
+  display: 'inline-flex' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  gap: tokens.space[1],
+  padding: `0 ${tokens.space[2]}px`,
+  height: tokens.size.button.md,
+  background: 'transparent',
+  color: tokens.colors.textPrimary,
+  border: '1px solid transparent',
+  borderRadius: 'var(--radius-5)',
+  fontSize: tokens.fontSize[1],
+  fontWeight: tokens.fontWeight.regular,
+  lineHeight: tokens.lineHeight[1],
+  cursor: 'pointer',
+  transition: 'var(--transition-crisp)',
+};
 import { SUPPORTED_MODELS, sortModels } from '../constants/models';
 import { isGemini3Family } from '../../engine/llm-client/modelEngine';
 
@@ -110,9 +143,9 @@ export function ModelPopover({
   const chipText = conciseBaseText + levelLabel;
 
   // Trigger styles based on variant
-  const triggerBaseStyle = variant === 'ghost' 
-    ? componentStyles.modelSelector.ghost
-    : componentStyles.modelSelector.chip;
+  const triggerBaseStyle = variant === 'ghost'
+    ? modelSelectorGhost
+    : modelSelectorChip;
   const triggerStyle = {
     ...triggerBaseStyle,
     cursor: disabled ? 'default' : 'pointer',
@@ -138,7 +171,7 @@ export function ModelPopover({
       stroke="currentColor" 
       strokeWidth="2.5"
       style={{
-        transition: 'transform 200ms ease',
+        transition: 'var(--transition-normal)',
         transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
       }}
     >
@@ -248,7 +281,7 @@ export function ModelPopover({
           {/* Settings Section (Apple HIG: settings at bottom) */}
           <div style={{ 
             padding: tokens.space[1],
-            borderTop: hasApiKey ? `var(--border-subtle) solid var(--gray-a4)` : 'none',
+            borderTop: hasApiKey ? 'var(--border-subtle)' : 'none',
           }}>
             {hasApiKey ? (
               // API Key Settings link
@@ -279,7 +312,7 @@ export function ModelPopover({
                       padding: tokens.space[1],
                       fontSize: tokens.fontSize[1],
                       background: tokens.colors.background, // Migrated from colors.background
-                      border: `var(--border-subtle) solid var(--gray-a4)`,
+                      border: 'var(--border-subtle)',
                       borderRadius: 'var(--radius-4)',
                       outline: 'none',
                       color: tokens.colors.textPrimary,

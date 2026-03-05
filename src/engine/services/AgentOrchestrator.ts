@@ -9,19 +9,19 @@ import { GeminiProvider, OpenRouterProvider } from '../llm-client';
 import { ProxyProvider } from '../llm-client/providers/proxy';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
-import { inferBehavior, resolveBehavior } from '../agent/agentBehaviorConfig';
+import { resolveBehavior } from '../agent/agentBehaviorConfig';
 
 import { ChatMessage } from '../../types/chat';
 import { ThinkingLevel } from '../llm-client/types';
-import { SelectionStyles } from '../../types';
 import { emit } from '@create-figma-plugin/utilities';
 import { TelemetryService } from './TelemetryService';
 import { settingsService } from './SettingsService';
 
 import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
-import { AgentRuntimeEvent, AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
+import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMProvider } from '../llm-client/providers/types';
+import { GeminiError, GeminiErrorType } from '../llm-client/providers/gemini/geminiErrorHandler';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -30,9 +30,6 @@ type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   : never;
 
 export interface AgentPluginData {
-  selectionStyles?: SelectionStyles | null;
-  analyzedPattern?: any | null;
-  patternSummary?: string;
   toolExecutors?: Record<string, ToolExecutor>;
 }
 
@@ -44,7 +41,6 @@ export interface OrchestratorOptions {
   workerUrl?: string;
   /** Required when providerName === 'proxy' — user's subscription token */
   subscriptionToken?: string;
-  designSystemId?: string; // Optional: default to 'vanilla'
   tools?: ToolDefinition[]; // Optional: default to agentTools
   thinkingLevel: ThinkingLevel;
   onStatusChange?: (status: string) => void;
@@ -59,8 +55,6 @@ export interface OrchestratorOptions {
 }
 
 import { buildStaticSystemPrompt } from '../llm-client/context/system';
-import { getActiveEngineConfig } from '../engineConfig';
-import { configManager } from '../../config/configManager';
 
 import { IpcBridge } from '../agent/ipcBridge';
 import { buildDynamicContextContent } from '../llm-client/context/dynamicContext';
@@ -116,6 +110,9 @@ export class AgentOrchestrator {
     });
 
     try {
+      // 0.5 Read Figma's current selection for user-intent context
+      const selectionContext = await this.getSelectionContext();
+
       // 1. Initialize Agent
       const agent = this.createAgent(pluginData, ipcBridge, prompt, loopPolicy);
       this.activeAgent = agent;
@@ -131,8 +128,9 @@ export class AgentOrchestrator {
         console.warn('[AgentOrchestrator] Telemetry setup skipped:', telemetryError);
       }
       
+      const enrichedPrompt = selectionContext ? `${selectionContext}\n\n${prompt}` : prompt;
       const startTime = Date.now();
-      const finalResponse = await agent.run(prompt);
+      const finalResponse = await agent.run(enrichedPrompt);
       const latencyMs = Date.now() - startTime;
 
       // Log Telemetry (if usage data available from runtime)
@@ -173,12 +171,32 @@ export class AgentOrchestrator {
           ? 'abort' as const
           : 'error' as const;
 
-      this.emitFallbackRuntimeEvent({
-        type: 'error',
-        phase: 'idle',
-        message: error?.message || 'Unknown agent error',
-      });
-      this.options.onError?.(error.message || 'Unknown agent error');
+      // ── Error routing: user-actionable → ErrorBanner, agent-internal → status ──
+      if (AgentOrchestrator.isUserActionable(error)) {
+        // User must act (fix API key, check billing) → show ErrorBanner
+        this.emitFallbackRuntimeEvent({
+          type: 'error',
+          phase: 'idle',
+          message: error?.message || 'Unknown agent error',
+        });
+        this.options.onError?.(error.message || 'Unknown agent error');
+      } else {
+        // Agent-internal failure (stream truncated, network, etc.) → show as status
+        const reason = error?.message || 'Generation stopped unexpectedly';
+        this.emitFallbackRuntimeEvent({
+          type: 'status',
+          phase: 'idle',
+          message: reason,
+        });
+        // Complete with explanation instead of scary error banner
+        this.emitFallbackRuntimeEvent({
+          type: 'completed',
+          phase: 'idle',
+          iteration: 0,
+          totalIterations: 0,
+          summary: `I encountered an issue and couldn't continue: ${reason}`,
+        });
+      }
 
       // Debrief on error (non-fatal)
       if (this.activeAgent) {
@@ -217,14 +235,11 @@ export class AgentOrchestrator {
       const {
         modelName,
         thinkingLevel,
-        designSystemId = 'vanilla',
         tools = agentTools
       } = this.options;
       const providerName = this.options.providerName || 'gemini';
 
-      const hasSelection = !!pluginData.selectionStyles;
       const behaviorConfig = resolveBehavior({
-        ...inferBehavior({ hasSelection, userPrompt: '' }),
         thinkingLevel,
         promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
@@ -237,7 +252,7 @@ export class AgentOrchestrator {
       console.log('DEBUG: FULL SYSTEM PROMPT');
       console.log('='.repeat(80));
       console.log(`Provider: ${providerName} | Model: ${modelName} | Thinking: ${thinkingLevel}`);
-      console.log(`Behavior: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}`);
+      console.log(`Behavior: thinking=${behaviorConfig.thinkingLevel}`);
       console.log(`Skills (menu): ${skillMenu.length}`);
       console.log(`Tools: ${tools.length} (${tools.map(t => t.name).join(', ')})`);
       console.log('-'.repeat(80));
@@ -268,7 +283,6 @@ export class AgentOrchestrator {
       console.log('='.repeat(80));
       console.log('Loop Policy:', JSON.stringify(loopPolicy, null, 2));
       const behaviorConfig = resolveBehavior({
-        ...inferBehavior({ hasSelection: !!pluginData.selectionStyles, userPrompt: '' }),
         thinkingLevel: this.options.thinkingLevel,
         promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
@@ -289,20 +303,16 @@ export class AgentOrchestrator {
     prompt?: string,
     loopPolicy?: AgentLoopPolicy
   ): AgentRuntime {
-    const { 
-      apiKey, 
-      modelName, 
-      thinkingLevel, 
-      designSystemId = 'vanilla',
+    const {
+      apiKey,
+      modelName,
+      thinkingLevel,
       tools = agentTools
     } = this.options;
 
     // Priority: 1. Explicit providerName, 2. Default to Gemini
     // [FIX] Removed heuristic auto-detection that overrode explicit user choice (e.g. modelName having '/')
     let providerName = this.options.providerName || 'gemini';
-
-    // Resolve Engine Config
-    const designSystemConfig = getActiveEngineConfig(designSystemId);
 
     // Initialize Provider
     let provider: LLMProvider;
@@ -326,16 +336,14 @@ export class AgentOrchestrator {
     const resolvedLoopPolicy = loopPolicy || resolveAgentLoopPolicy(this.options.loopPolicy);
 
     // Unified behavior resolution (single entry point)
-    const hasSelection = !!pluginData.selectionStyles;
     const behaviorConfig = resolveBehavior({
-      ...inferBehavior({ hasSelection, userPrompt: prompt || '' }),
       thinkingLevel,
       promptPolicy: {
         useSkillSystem: resolvedLoopPolicy.useSkillSystem
       }
     });
 
-    console.log(`[AgentOrchestrator] Behavior resolved: strategy=${behaviorConfig.designStrategy}, quality=${behaviorConfig.visualQuality}, thinking=${behaviorConfig.thinkingLevel}`);
+    console.log(`[AgentOrchestrator] Behavior resolved: thinking=${behaviorConfig.thinkingLevel}`);
 
     // Build static system prompt (set once, never changes — enables KV cache)
     const skillMenu = skillRegistry.getSkillMenu();
@@ -351,10 +359,6 @@ export class AgentOrchestrator {
       toolExecutors: pluginData.toolExecutors,
       behaviorConfig,
       loopPolicy: resolvedLoopPolicy,
-      selectionContext: {
-        hasSelection,
-        nodes: [],
-      },
       onIteration: (iteration: number, response: any, taskInfo?: any) => this.options.onIteration?.(iteration, response, taskInfo),
       onToolCall: this.handleToolCall.bind(this),
       onToolResult: this.handleToolResult.bind(this),
@@ -451,7 +455,7 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
           runId,
           sequence: this.fallbackEventSequence,
           timestamp: Date.now(),
-          phase: 'idle' as AgentRuntimePhase,
+          phase: 'idle',
           exitReason,
           totalIterations: stats.toolCallCount, // approximate from tool calls
           errorCount: stats.toolErrorCount,
@@ -489,6 +493,66 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
       };
     } catch {
       return undefined;
+    }
+  }
+
+  // ==========================================
+  // ERROR CLASSIFICATION
+  // ==========================================
+
+  /**
+   * Only errors that require the USER to take action (fix API key, check billing)
+   * should show as ErrorBanner. Everything else is agent-internal — the agent
+   * communicates it as part of its normal status flow.
+   */
+  private static isUserActionable(error: any): boolean {
+    // GeminiError has typed categories
+    if (error instanceof GeminiError) {
+      return error.type === GeminiErrorType.INVALID_ARGUMENT
+          || error.type === GeminiErrorType.QUOTA_EXCEEDED;
+    }
+    // Fallback: regex match on raw message for non-Gemini providers
+    const msg = (error?.message || '').toLowerCase();
+    return /api.?key|401|unauthorized|quota|billing/.test(msg);
+  }
+
+  // ==========================================
+  // SELECTION CONTEXT
+  // ==========================================
+
+  /**
+   * Read Figma's current selection via IPC.
+   * Returns a natural language context string, or null if nothing is selected.
+   * Non-blocking: gracefully returns null on timeout.
+   */
+  private async getSelectionContext(): Promise<string | null> {
+    try {
+      const { on: onIpc, emit: emitIpc } = await import('@create-figma-plugin/utilities');
+      
+      const selection = await new Promise<Array<{ id: string; name: string; type: string }>>((resolve) => {
+        const timeout = setTimeout(() => resolve([]), 2000); // 2s timeout
+        
+        const unsub = onIpc<import('../../types').SendSelectionHandler>('SEND_SELECTION', (data) => {
+          clearTimeout(timeout);
+          unsub();
+          resolve(data.selection);
+        });
+        
+        emitIpc<import('../../types').GetSelectionHandler>('GET_SELECTION');
+      });
+      
+      if (selection.length === 0) return null;
+      
+      if (selection.length === 1) {
+        const node = selection[0];
+        return `[Context: User has selected "${node.name}" (${node.type}, ID: ${node.id}) on the Figma canvas. Apply changes to this node unless instructed otherwise.]`;
+      }
+      
+      const nodeList = selection.map(n => `"${n.name}" (${n.type}, ID: ${n.id})`).join(', ');
+      return `[Context: User has selected ${selection.length} nodes on the Figma canvas: ${nodeList}. Apply changes to these nodes unless instructed otherwise.]`;
+    } catch (err) {
+      console.warn('[AgentOrchestrator] Failed to read selection (non-fatal):', err);
+      return null;
     }
   }
 

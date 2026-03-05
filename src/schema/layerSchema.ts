@@ -11,7 +11,6 @@
 
 import * as v from 'valibot';
 import { PROPS, NODE_TYPES, getEnumInputs } from '../constants/figma-api';
-import { Normalizer } from '../engine/pipeline/Normalizer';
 
 // ==========================================
 // PRIMITIVE SCHEMAS
@@ -291,34 +290,4 @@ export function validateNodeLayerStrict(input: unknown): NodeLayer {
  */
 export function isValidNodeLayer(input: unknown): input is NodeLayer {
     return v.safeParse(NodeLayerSchema, input).success;
-}
-
-// ==========================================
-// VALIDATION FUNCTIONS
-// ==========================================
-
-/**
- * Coerce LLM output to valid schema
- * Now delegates to the centralized Normalizer service.
- */
-export function coerceNodeLayer(input: unknown, observer?: { log: (phase: string, msg: string, details?: any) => void }): NodeLayer {
-    // Normalizer handles structure, lifting, aliases and types
-    return Normalizer.normalize(input);
-}
-
-/**
- * Validate with auto-coercion
- * First tries to coerce, then validates
- */
-export function validateWithCoercion(input: unknown): ValidationResult<NodeLayer> {
-    try {
-        const coerced = coerceNodeLayer(input);
-        return validateNodeLayer(coerced);
-    } catch (e) {
-        // Handle coercion errors specifically
-        return {
-            success: false,
-            errors: [`Coercion failed: ${e}`]
-        };
-    }
 }

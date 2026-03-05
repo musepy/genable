@@ -47,12 +47,6 @@ export interface NodeStyleConfig {
   opacity?: number;
 }
 
-export interface NodeInfo {
-  id: string;
-  name: string;
-  type: string;
-}
-
 /**
  * Repository for Figma Node operations.
  * All direct figma.* node API calls go here.
@@ -63,31 +57,6 @@ export class NodeRepository {
    */
   async findById(nodeId: string): Promise<SceneNode | null> {
     return findNodeByIdAsync(nodeId);
-  }
-
-  /**
-   * Get current page selection
-   */
-  getSelection(): SceneNode[] {
-    return [...figma.currentPage.selection];
-  }
-
-  /**
-   * Get selection as simplified NodeInfo[]
-   */
-  getSelectionInfo(): NodeInfo[] {
-    return figma.currentPage.selection.map(node => ({
-      id: node.id,
-      name: node.name,
-      type: node.type
-    }));
-  }
-
-  /**
-   * Get selection count
-   */
-  getSelectionCount(): number {
-    return figma.currentPage.selection.length;
   }
 
   /**

@@ -100,7 +100,7 @@ export function SettingsPanel({
           <div style={{ 
             display: 'flex', 
             gap: tokens.space[4], 
-            borderBottom: '1px solid var(--border-subtle)',
+            borderBottom: 'var(--border-default)',
             marginBottom: tokens.space[4],
           }}>
             {['gemini', 'openrouter'].map(p => {
@@ -116,7 +116,7 @@ export function SettingsPanel({
                     background: 'transparent',
                     color: isActive ? 'var(--gray-12)' : 'var(--gray-9)',
                     fontSize: tokens.fontSize[1],
-                    fontWeight: 500,
+                    fontWeight: tokens.fontWeight.medium,
                     cursor: 'pointer',
                     position: 'relative',
                   }}
@@ -142,7 +142,7 @@ export function SettingsPanel({
             {/* Input & Link */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[1] }}>
-                <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: 'var(--gray-11)' }}>API Key</span>
+                <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>API Key</span>
                 <a 
                   href={providerMeta.keyUrl} 
                   target="_blank" 
@@ -171,7 +171,7 @@ export function SettingsPanel({
                     fontSize: tokens.fontSize[1],
                     color: 'var(--gray-9)', 
                     display: 'block',
-                    fontWeight: 400
+                    fontWeight: tokens.fontWeight.regular
                   }}>
                     available models
                   </label>
@@ -236,7 +236,7 @@ export function SettingsPanel({
 
       {/* ===== FOOTER (Pinned to Bottom) ===== */}
       <div className="settings-footer" style={{ borderTop: 'var(--border-main)', background: 'var(--color-background)', padding: '12px 0' }}>
-        <div style={{ fontWeight: 500, color: 'var(--gray-11)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+        <div style={{ fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           © 2026 Genable
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>

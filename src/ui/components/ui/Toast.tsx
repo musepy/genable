@@ -99,7 +99,7 @@ function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   return (
     <div style={{
       position: 'fixed',
-      bottom: 'var(--space-5)',
+      top: 'calc(var(--header-height) + var(--space-2))',
       left: '50%',
       transform: 'translateX(-50%)',
       display: 'flex',
@@ -209,7 +209,7 @@ function Toast({ data, onDismiss }: ToastProps) {
         padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
         borderRadius: 'var(--radius-5)',
         border: '1px solid',
-        boxShadow: '0 8px 24px var(--gray-a4)',
+        boxShadow: 'var(--shadow-lg)',
         fontSize: 'var(--font-size-1)',
         fontFamily: tokens.font.sans,
         maxWidth: 300,
@@ -217,13 +217,13 @@ function Toast({ data, onDismiss }: ToastProps) {
         pointerEvents: 'auto',
         // Animation
         opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateY(0)' : 'translateY(6px)',
+        transform: isVisible ? 'translateY(0)' : 'translateY(-6px)',
         transition: 'opacity 180ms ease-out, transform 180ms ease-out',
         ...variantStyles[data.variant],
       }}
     >
       <span style={{ fontSize: 'var(--font-size-2)' }}>{icons[data.variant]}</span>
-      <span style={{ flex: 1, whiteSpace: 'normal', wordWrap: 'break-word' }}>{data.message}</span>
+      <span style={{ flex: 1, whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{data.message}</span>
       <button
         onClick={dismissWithAnimation}
         style={{

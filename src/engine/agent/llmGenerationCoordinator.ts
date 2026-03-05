@@ -12,7 +12,7 @@ import { classifyError, isRetryableError, AgentErrorCategory } from './retryPoli
 import { retryWithBackoff } from './retry';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
-import type { AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,8 +111,8 @@ export class LLMGenerationCoordinator {
       type: 'llm_request',
       llmCallId,
       iteration: iteration + 1,
-      mode: 'AUTONOMOUS',
-      phase: 'execution' as AgentRuntimePhase,
+
+      phase: 'execution',
       messages: request.messages.map(m => ({
         id: m.id,
         role: m.role,
@@ -151,8 +151,8 @@ export class LLMGenerationCoordinator {
               if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
                 this.config.emitRuntimeEvent({
                   type: 'text_delta',
-                  phase: 'execution' as AgentRuntimePhase,
-                  mode: 'AUTONOMOUS',
+                  phase: 'execution',
+            
                   iteration: iteration + 1,
                   text: chunk,
                 });
@@ -169,16 +169,16 @@ export class LLMGenerationCoordinator {
               if (now - this.lastNotificationTime >= this.config.throttleMs) {
                 this.config.emitRuntimeEvent({
                   type: 'status',
-                  phase: 'execution' as AgentRuntimePhase,
-                  mode: 'AUTONOMOUS',
+                  phase: 'execution',
+            
                   iteration: iteration + 1,
                   maxIterations,
                   message: 'Working...',
                 });
                 this.config.emitRuntimeEvent({
                   type: 'reasoning_delta',
-                  phase: 'execution' as AgentRuntimePhase,
-                  mode: 'AUTONOMOUS',
+                  phase: 'execution',
+            
                   iteration: iteration + 1,
                   text: thought,
                 });
@@ -214,7 +214,7 @@ export class LLMGenerationCoordinator {
             console.warn(`[LLMGenCoordinator] ${category} error (attempt ${attempt}). Retrying after ${delayMs}ms...`);
             this.config.emitRuntimeEvent({
               type: 'retry',
-              phase: 'execution' as AgentRuntimePhase,
+              phase: 'execution',
               iteration: iteration + 1,
               attempt,
               maxAttempts: 4,
@@ -234,8 +234,8 @@ export class LLMGenerationCoordinator {
       if (this.pendingTextDelta) {
         this.config.emitRuntimeEvent({
           type: 'text_delta',
-          phase: 'execution' as AgentRuntimePhase,
-          mode: 'AUTONOMOUS',
+          phase: 'execution',
+    
           iteration: iteration + 1,
           text: this.pendingTextDelta,
         });
@@ -259,8 +259,8 @@ export class LLMGenerationCoordinator {
         type: 'llm_response',
         llmCallId,
         iteration: iteration + 1,
-        mode: 'AUTONOMOUS',
-        phase: 'execution' as AgentRuntimePhase,
+  
+        phase: 'execution',
         durationMs: Date.now() - llmStartMs,
         usage: response.usage,
         responseShape: {
@@ -283,8 +283,8 @@ export class LLMGenerationCoordinator {
         type: 'llm_response',
         llmCallId,
         iteration: iteration + 1,
-        mode: 'AUTONOMOUS',
-        phase: 'execution' as AgentRuntimePhase,
+  
+        phase: 'execution',
         durationMs: Date.now() - llmStartMs,
         usage: undefined,
         responseShape: { textLength: 0, thoughtsLength: 0, toolCallCount: 0, toolCallNames: [] },

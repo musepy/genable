@@ -51,7 +51,7 @@ const skipButtonStyle: JSX.CSSProperties = {
   fontSize: tokens.fontSize[1], // was 10
   cursor: 'pointer',
   padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-  transition: 'opacity 0.2s ease',
+  transition: 'var(--transition-normal)',
   opacity: 0.6,
 };
 

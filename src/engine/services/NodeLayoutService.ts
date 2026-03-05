@@ -28,16 +28,6 @@ export class NodeLayoutService {
   private repository = nodeRepository;
 
   /**
-   * Get current selection info.
-   */
-  getSelection(): { count: number; nodes: Array<{ id: string; name: string; type: string }> } {
-    return {
-      count: this.repository.getSelectionCount(),
-      nodes: this.repository.getSelectionInfo()
-    };
-  }
-
-  /**
    * Delete a node by ID.
    */
   async deleteNode(nodeId: string): Promise<ToolResponse> {

@@ -81,7 +81,7 @@ export function OnboardingView({
       boxSizing: 'border-box',
     }}>
       <div style={{ marginBottom: tokens.space[5] }}>
-        <h2 style={{ fontSize: tokens.fontSize[2], fontWeight: 500, margin: 0, color: 'var(--gray-12)' }}>
+        <h2 style={{ fontSize: tokens.fontSize[2], fontWeight: tokens.fontWeight.medium, margin: 0, color: 'var(--gray-12)' }}>
           Setup Connection
         </h2>
       </div>
@@ -89,7 +89,7 @@ export function OnboardingView({
       <div style={{ 
         display: 'flex', 
         gap: tokens.space[4], 
-        borderBottom: '1px solid var(--border-subtle)',
+        borderBottom: 'var(--border-default)',
         marginBottom: tokens.space[4],
       }}>
         {['gemini', 'openrouter'].map(p => {
@@ -105,7 +105,7 @@ export function OnboardingView({
                 background: 'transparent',
                 color: isActive ? 'var(--gray-12)' : 'var(--gray-9)',
                 fontSize: tokens.fontSize[1],
-                fontWeight: 500,
+                fontWeight: tokens.fontWeight.medium,
                 cursor: 'pointer',
                 position: 'relative',
               }}
@@ -129,7 +129,7 @@ export function OnboardingView({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: 'var(--gray-11)' }}>API Key</span>
+          <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>API Key</span>
           <a 
             href={providerMeta.keyUrl} 
             target="_blank" 

@@ -29,16 +29,6 @@ export const lineHeight = {
   4: '26px',  // fontSize[4]: 18px
   5: '28px',  // fontSize[5]: 20px
   6: '32px',  // fontSize[6]: 24px
-  
-  // Deprecated ratio-based (avoid)
-  /** @deprecated Use lineHeight[N] numeric tokens instead */
-  tight: '1.1',
-  /** @deprecated Use lineHeight[N] numeric tokens instead */
-  snug: '1.25',
-  /** @deprecated Use lineHeight[N] numeric tokens instead */
-  normal: '1.4',
-  /** @deprecated Use lineHeight[N] numeric tokens instead */
-  relaxed: '1.5',
 } as const;
 
 export const fontWeight = {

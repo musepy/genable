@@ -12,9 +12,6 @@
 import { h, JSX } from 'preact';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { emit } from '@create-figma-plugin/utilities';
-import { Button } from './Button';
-import { ImportJsonHandler } from '../../types';
 import { tokens } from '../design-system/tokens';
 
 // ============================================
@@ -91,7 +88,7 @@ const tableStyle: JSX.CSSProperties = {
 };
 
 const thStyle: JSX.CSSProperties = {
-  border: `1px solid ${tokens.colors.grayBorder}`,
+  border: 'var(--border-default)',
   padding: tokens.space[2],
   background: tokens.colors.surface,
   textAlign: 'left',
@@ -99,7 +96,7 @@ const thStyle: JSX.CSSProperties = {
 };
 
 const tdStyle: JSX.CSSProperties = {
-  border: `1px solid ${tokens.colors.grayBorder}`,
+  border: 'var(--border-default)',
   padding: tokens.space[2],
 };
 
@@ -154,45 +151,12 @@ function renderL3(content: string) {
 
           const codeContent = String(children).replace(/\n$/, '');
           const trimmed = codeContent.trim();
-          const isJson = trimmed.startsWith('[') || trimmed.startsWith('{');
           const isSingleLine = !codeContent.includes('\n');
           const isShort = trimmed.length > 0 && trimmed.length <= 24;
           const compactBlock = isSingleLine && isShort;
-          
-          const handleImport = () => {
-             emit<ImportJsonHandler>('IMPORT_JSON', { jsonString: codeContent });
-          };
 
           return (
             <div style={{ position: 'relative', margin: `${compactBlock ? tokens.space[1] : tokens.space[2]}px 0` }}>
-              {isJson && (
-                <div style={{ 
-                  position: 'absolute', 
-                  top: tokens.space[2], 
-                  right: tokens.space[2], 
-                  zIndex: tokens.zIndex.base + 10
-                }}>
-                  <Button 
-                    variant="secondary" 
-                    size="sm" 
-                    onClick={handleImport}
-                    style={{ 
-                      height: 24, 
-                      padding: '0 8px', 
-                      fontSize: tokens.fontSize[1],
-                      background: tokens.colors.surface,
-                      borderColor: tokens.colors.grayBorder
-                    }}
-                    leftIcon={
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
-                    }
-                  >
-                    导入 Figma
-                  </Button>
-                </div>
-              )}
               <pre style={{ 
                 ...codeBlockStyle, 
                 margin: 0,

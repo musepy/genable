@@ -136,7 +136,7 @@ export function ModelSelector({
             <span style={{ 
               fontSize: tokens.fontSize[1],
               color: 'var(--gray-11)',
-              fontWeight: 400,
+              fontWeight: tokens.fontWeight.regular,
               lineHeight: '16px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',

@@ -104,13 +104,10 @@ Your goal is to complete the user's request immediately using the tools provided
       tools: trueAgentTools, // ONLY 4 Tools
       toolExecutors: executors as any,
       maxIterations,
-      behaviorConfig: { designStrategy: 'create', visualQuality: 'rich', thinkingLevel: 'low', maxIterations },
+      behaviorConfig: { thinkingLevel: 'low', maxIterations },
       loopPolicy: { useSkillSystem: false, verificationFixLimit: 3 },
 
-      onIterationStart: () => {
-        // Force AgentRuntime into EXECUTION mode so it doesn't trigger Phase constraints
-        if ((runtime as any).mode !== 'EXECUTION') (runtime as any).mode = 'EXECUTION';
-      },
+      onIterationStart: () => {},
       onToolCall: (toolCall: LLMToolCall) => {
         toolHistory.push(toolCall.name);
         console.log(`[Tool Called] -> ${toolCall.name}`);

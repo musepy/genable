@@ -10,7 +10,7 @@ import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { classifyError, categoryToErrorCode } from './retryPolicy';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
-import type { AgentRuntimePhase } from '../../shared/protocol/agentRuntimeEvents';
+
 import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
 import {
@@ -106,8 +106,8 @@ export class ToolDispatcher {
       this.config.emitRuntimeEvent({
         type: 'tool_call',
         iteration: iteration + 1,
-        mode: 'AUTONOMOUS',
-        phase: 'execution' as AgentRuntimePhase,
+
+        phase: 'execution',
         toolCall: { id: tc.id, name: tc.name, displayName: displayMeta?.displayName, group: displayMeta?.group, args: tc.args },
       });
       this.config.onToolCall?.(tc);
@@ -122,8 +122,8 @@ export class ToolDispatcher {
       this.config.emitRuntimeEvent({
         type: 'tool_result',
         iteration: iteration + 1,
-        mode: 'AUTONOMOUS',
-        phase: 'execution' as AgentRuntimePhase,
+
+        phase: 'execution',
         toolResult: {
           id: tc.id,
           name: tc.name,

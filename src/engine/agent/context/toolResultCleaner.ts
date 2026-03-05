@@ -10,19 +10,6 @@ import { CONTEXT_CONSTANTS } from './constants';
 export class ToolResultCleaner {
   private toolMap: Map<string, ToolDefinition>;
 
-  /**
-   * Visual props essential for LLM to "see" the design.
-   * These are preserved in read_node results instead of being stripped.
-   */
-  private static readonly INSPECT_PRESERVE_PROPS = new Set([
-    'name', 'fills', 'strokes', 'layoutMode', 'gap', 'padding',
-    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-    'fontSize', 'fontWeight', 'characters', 'cornerRadius',
-    'width', 'height', 'layoutSizingHorizontal', 'layoutSizingVertical',
-    'primaryAxisAlignItems', 'counterAxisAlignItems',
-    'opacity', 'visible', 'effects', 'strokeWeight',
-  ]);
-
   constructor(tools: ToolDefinition[]) {
     this.toolMap = new Map(tools.map(tool => [tool.name, tool]));
   }
@@ -248,40 +235,17 @@ export class ToolResultCleaner {
   // ================================================================
 
   /**
-   * Cleans read_node results.
-   * XML string results are passed through directly (already compact).
-   * Anomalies are preserved as structured JSON.
+   * Cleans read results. XML string passed through directly (already compact).
+   * Anomalies preserved as structured JSON.
    */
   private cleanInspectResult(data: any): any {
-    // XML format: { xml: string, anomalies?: [] }
-    if (typeof data.xml === 'string') {
-      const result: any = { xml: data.xml };
-      if (Array.isArray(data.anomalies) && data.anomalies.length > 0) {
-        result.anomalies = this.cleanAnomalies(data.anomalies);
-      }
-      // Truncate XML if oversized
-      const MAX_XML_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
-      if (result.xml.length > MAX_XML_CHARS) {
-        result.xml = result.xml.substring(0, MAX_XML_CHARS) + '\n<!-- truncated -->';
-        result._truncated = true;
-      }
-      return result;
+    const result: any = { xml: data.xml };
+    const MAX_XML_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
+    if (result.xml.length > MAX_XML_CHARS) {
+      result.xml = result.xml.substring(0, MAX_XML_CHARS) + '\n<!-- truncated -->';
+      result._truncated = true;
     }
-
-    // Selection format: { count, nodes }
-    if (Array.isArray(data.nodes)) {
-      return {
-        count: data.count,
-        nodes: data.nodes.map((n: any) => this.extractNodeSkeleton(n, 0)).filter(Boolean),
-      };
-    }
-
-    // Legacy JSON fallback: NodeLayer (id, type, props, children)
-    const cleanedNode = this.extractInspectNode(data, 0);
-    if (Array.isArray(data?.anomalies) && data.anomalies.length > 0) {
-      cleanedNode.anomalies = this.cleanAnomalies(data.anomalies);
-    }
-    return cleanedNode;
+    return result;
   }
 
   private cleanValidationErrorDetails(details: any): any | undefined {
@@ -370,47 +334,6 @@ export class ToolResultCleaner {
       out[key] = '{…}';
     }
     return out;
-  }
-
-  /**
-   * Recursively extracts a node while preserving visual props.
-   * Deeper and richer than extractNodeSkeleton — enables LLM "vision".
-   */
-  private extractInspectNode(node: any, depth: number): any {
-    const MAX_INSPECT_DEPTH = 4;
-    const MAX_INSPECT_CHILDREN = 15;
-
-    const result: any = {
-      id: node.id,
-      type: node.type,
-    };
-
-    // Preserve visual props from the props bag
-    if (node.props && typeof node.props === 'object') {
-      const kept: Record<string, any> = {};
-      for (const [key, value] of Object.entries(node.props)) {
-        if (ToolResultCleaner.INSPECT_PRESERVE_PROPS.has(key)) {
-          kept[key] = value;
-        }
-      }
-      if (Object.keys(kept).length > 0) {
-        result.props = kept;
-      }
-    }
-
-    // Recurse children with depth control
-    if (Array.isArray(node.children) && node.children.length > 0 && depth < MAX_INSPECT_DEPTH) {
-      result.children = node.children
-        .slice(0, MAX_INSPECT_CHILDREN)
-        .map((c: any) => this.extractInspectNode(c, depth + 1));
-      if (node.children.length > MAX_INSPECT_CHILDREN) {
-        result._moreChildren = node.children.length - MAX_INSPECT_CHILDREN;
-      }
-    } else if (Array.isArray(node.children)) {
-      result.childrenCount = node.children.length;
-    }
-
-    return result;
   }
 
   /**
@@ -504,17 +427,4 @@ export class ToolResultCleaner {
     };
   }
 
-  /**
-   * Truncates Figma properties to only keep essential visual cues in history.
-   */
-  private truncateFigmaProps(props: any): any {
-    if (!props || typeof props !== 'object') return props;
-    const essentialKeys = ['name', 'fills', 'width', 'height', 'layoutMode', 'characters', 'semantic'];
-    const truncated: Record<string, any> = {};
-    for (const key of essentialKeys) {
-      if (props[key] !== undefined) truncated[key] = props[key];
-    }
-    truncated._othersTruncated = true;
-    return truncated;
-  }
 }

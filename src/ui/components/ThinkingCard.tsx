@@ -62,7 +62,7 @@ const headerStyle: JSX.CSSProperties = {
   cursor: 'pointer',
   color: tokens.colors.textSecondary, // Already reduced via gray-11
   fontSize: 'var(--font-size-1)',
-  transition: 'color 0.2s ease',
+  transition: 'var(--transition-normal)',
   // P3: Removed opacity - textSecondary provides sufficient contrast reduction
 };
 
@@ -92,7 +92,7 @@ const gridContentStyle: JSX.CSSProperties = {
 
 const innerContentStyle: JSX.CSSProperties = {
   padding: `${tokens.space[2]}px ${tokens.space[1]}px`,
-  borderTop: `1px solid ${tokens.colors.grayBorder}`,
+  borderTop: 'var(--border-default)',
   fontSize: 'var(--font-size-1)',
   color: tokens.colors.textSecondary,
   lineHeight: tokens.lineHeight[3],

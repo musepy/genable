@@ -3,11 +3,10 @@ import { emit } from '@create-figma-plugin/utilities'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
-import { searchDesignKnowledgeExecutor, projectUIExecutors } from '../../engine/agent/tools/unified/queryKnowledge'
+import { searchDesignKnowledgeExecutor, getDesignSystemTokensExecutor } from '../../engine/agent/tools/unified/queryKnowledge'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
-  AgentRuntimePhase,
 } from '../../shared/protocol/agentRuntimeEvents'
 
 interface UseChatProps {
@@ -41,7 +40,7 @@ export function useChat({
   const [error, setError] = useState<string | null>(null)
   const [thinkingText, setThinkingText] = useState<string>('')
   const [runtimeState, setRuntimeState] = useState<RunState>('idle')
-  const [runtimePhase, setRuntimePhase] = useState<AgentRuntimePhase>('idle')
+  const [runtimePhase, setRuntimePhase] = useState<'execution' | 'idle'>('idle')
   const [runtimeProgress, setRuntimeProgress] = useState<{ iteration: number; maxIterations: number } | null>(null)
   const [runtimeContextUsage, setRuntimeContextUsage] = useState<AgentRuntimeContextUsage | null>(null)
 
@@ -52,15 +51,7 @@ export function useChat({
   const lastPromptRef = useRef<string>('')
   const queueDispatchingRef = useRef(false)
 
-  function isDirectImportJson(input: string): boolean {
-    const trimmed = input.trim()
-    if (!(trimmed.startsWith('[') && trimmed.endsWith(']'))) return false
-    try {
-      return Array.isArray(JSON.parse(trimmed))
-    } catch {
-      return false
-    }
-  }
+
 
   const findLastStreamingIndex = (messages: ChatMessage[]) => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -290,19 +281,7 @@ export function useChat({
     activeRunIdRef.current = null
     lastPromptRef.current = normalizedPrompt
 
-    if (isDirectImportJson(normalizedPrompt)) {
-      emit<import('../../types').ImportJsonHandler>('IMPORT_JSON', { jsonString: normalizedPrompt })
-      setHistory(prev => [
-        ...prev,
-        { role: 'user', text: '(Imported JSON Data)', id: `u-${Date.now()}` },
-        { role: 'model', text: 'Detected JSON layout data. Importing directly into Figma...', id: `m-${Date.now() + 1}` },
-      ])
-      setPrompt('')
-      setLoading(false)
-      setRuntimeState('completed')
-      setLoadingStatus('Completed')
-      return
-    }
+
 
     const modelMsgId = `m-${Date.now() + 1}`
 
@@ -350,10 +329,8 @@ export function useChat({
               }
               return searchDesignKnowledgeExecutor(params)
             }
-            case 'components':
-              return projectUIExecutors.getProjectUIContext?.(params) ?? { success: true, data: [] }
             case 'tokens':
-              return projectUIExecutors.getDesignSystemTokens?.(params) ?? { success: true, data: [] }
+              return getDesignSystemTokensExecutor(params)
             case 'skill': {
               const { skillRegistry } = await import('../../engine/agent/skills')
               const body = skillRegistry.getSkillBody(params.query)
@@ -370,9 +347,12 @@ export function useChat({
         },
       }
 
-      await orchestrator.generate(normalizedPrompt, { ...pluginData, toolExecutors: localExecutors }, history)
+      await orchestrator.generate(normalizedPrompt, { toolExecutors: localExecutors }, history)
     } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred during generation.')
+      // Errors that escape the orchestrator are truly unexpected — log but don't
+      // show a scary ErrorBanner. The orchestrator already routes user-actionable
+      // errors (API key, quota) via 'error' events.
+      console.error('[useChat] Unhandled generation error:', e)
       setRuntimeState('error')
     } finally {
       setLoading(false)
@@ -509,7 +489,7 @@ export function useChat({
       const calls: ToolCallRecord[] = []
       setPrompt('Refine the flow, reduce visual noise, and mention @project-ui-context.')
       setRuntimeState('running')
-      setRuntimePhase('planning')
+      setRuntimePhase('execution')
       setRuntimeProgress({ iteration: 1, maxIterations: 40 })
       setRuntimeContextUsage({ current: 11872, max: 200000, percent: 6, visibleMessages: 2, hiddenMessages: 0 })
       setLoadingStatus('Planning interaction flow')
@@ -559,7 +539,7 @@ export function useChat({
         setLoading(false)
         setThinkingText('')
         setRuntimeState('completed')
-        setRuntimePhase('verification')
+        setRuntimePhase('idle')
         setLoadingStatus('Completed')
         setFlowCalls(
           [...calls],
@@ -599,7 +579,7 @@ export function useChat({
       queue(1800, () => {
         setLoading(false)
         setRuntimeState('error')
-        setRuntimePhase('recovery')
+        setRuntimePhase('idle')
         setLoadingStatus('Error')
         setError('Validation failed. Please revise the latest instruction.')
         setHistory(prev =>

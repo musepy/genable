@@ -85,14 +85,13 @@ describe('Agent Architecture Contract Tests', () => {
             provider: mockProvider,
             tools: [],
             behaviorConfig,
-            systemPrompt,
-            designSystemId: 'test-ds'
+            systemPrompt
         });
 
         await runtime2.run('execution request');
         const executionCall = (mockProvider.generate as Mock).mock.calls[0][0];
-        // Dynamic context message (index 1) carries the mode, not the static system prompt (index 0)
+        // Dynamic context message carries the iteration counter
         const dynamicCtx = executionCall.messages.find((m: any) => m.id === DYNAMIC_CONTEXT_MSG_ID)?.content;
-        expect(dynamicCtx).toContain('MODE: AUTONOMOUS');
+        expect(dynamicCtx).toContain('[Iteration');
     });
 });

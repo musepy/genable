@@ -30,7 +30,7 @@ export function Input({
     fontFamily: tokens.font.sans,
     background: 'transparent', // Transparent to avoid dark mode issues
     color: tokens.colors.textPrimary,
-    border: `1px solid ${tokens.colors.grayBorder}`,
+    border: 'var(--border-default)',
     borderRadius: 'var(--radius-3)', // Flatter design
     outline: 'none',
     transition: 'border-color var(--duration-normal) var(--ease-default)',

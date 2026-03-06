@@ -32,8 +32,7 @@ export interface SettingsPanelProps {
   settingsError: string | null;
   onFetchModels: () => void;
   onSave: () => void;
-  onSimulateLogout?: () => void;
-  onSimulateEmptyState?: () => void;
+  onLogout?: () => void;
   onRestoreSession?: () => void;
   onClose?: () => void;
   localComponents?: LocalComponent[];
@@ -51,8 +50,7 @@ export function SettingsPanel({
   settingsError,
   onFetchModels,
   onSave,
-  onSimulateLogout,
-  onSimulateEmptyState,
+  onLogout,
   onRestoreSession,
   onClose,
   localComponents = []
@@ -225,8 +223,7 @@ export function SettingsPanel({
           {showDeveloper && (
             <div style={{ marginTop: tokens.space[3] }}>
               <DeveloperPanel
-                onSimulateLogout={onSimulateLogout}
-                onSimulateEmptyState={onSimulateEmptyState}
+                onLogout={onLogout}
                 onRestoreSession={onRestoreSession}
               />
             </div>

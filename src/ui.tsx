@@ -61,7 +61,7 @@ function PluginContent() {
     suggestedModels, fetchStatus, settingsError,
     hasConfig, isInitialized, showSettings, setShowSettings,
     handleSaveSettings, completeOnboarding, handleFetchModels,
-    simulateLogout, simulateEmptyState, restoreSavedSession
+    logout, restoreSavedSession
   } = settings
 
   // Key for remounting ChatFeature (replaces window.location.reload)
@@ -179,8 +179,7 @@ function PluginContent() {
           settingsError={settingsError}
           onFetchModels={() => handleFetchModels()}
           onSave={handleSaveSettings}
-          onSimulateLogout={simulateLogout}
-          onSimulateEmptyState={simulateEmptyState}
+          onLogout={logout}
           onRestoreSession={restoreSavedSession}
           localComponents={pluginData.localComponents}
         />
@@ -199,7 +198,7 @@ function PluginContent() {
     } else if (captureTarget === 'button') {
       content = <Button>Capture Candidate</Button>;
     } else if (captureTarget === 'developer-panel') {
-      content = <DeveloperPanel onSimulateLogout={() => {}} onSimulateEmptyState={() => {}} onRestoreSession={() => {}} />;
+      content = <DeveloperPanel onLogout={() => {}} onRestoreSession={() => {}} />;
     } else if (captureTarget === 'prompt-input') {
       content = (
         <PromptInput 
@@ -259,8 +258,7 @@ function PluginContent() {
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={mainContentStyle}>
             <DeveloperPanel
-              onSimulateLogout={simulateLogout}
-              onSimulateEmptyState={simulateEmptyState}
+              onLogout={logout}
               onRestoreSession={restoreSavedSession}
             />
             <VerticalSpace space="large" />
@@ -355,8 +353,7 @@ function PluginContent() {
             settingsError={settingsError}
             onFetchModels={() => handleFetchModels()}
             onSave={handleSaveSettings}
-            onSimulateLogout={simulateLogout}
-            onSimulateEmptyState={simulateEmptyState}
+            onLogout={logout}
             onRestoreSession={restoreSavedSession}
             onClose={() => {
               handleSaveSettings();

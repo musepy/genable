@@ -15,16 +15,14 @@ import { ChatMessage } from '../../types/chat';
 import { ThinkingLevel } from '../llm-client/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { TelemetryService } from './TelemetryService';
-import { settingsService } from './SettingsService';
 
 import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMProvider } from '../llm-client/providers/types';
-import type { LLMMessage } from '../llm-client/providers/types';
 import { GeminiError, GeminiErrorType } from '../llm-client/providers/gemini/geminiErrorHandler';
 import { classifyError, AgentErrorCategory } from '../agent/retryPolicy';
-import { buildSeedMessagesFromChatHistory } from './historySeed';
+import { buildBriefing } from './briefing';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -112,26 +110,18 @@ export class AgentOrchestrator {
     });
 
     try {
-      // 0.5 Read Figma's current selection for user-intent context
-      const selectionContext = await this.getSelectionContext();
-      const seedMessages = buildSeedMessagesFromChatHistory(history, prompt);
+      // 0.5 Build cross-turn context (idMap + last response + selection)
+      const selection = await this.readSelection();
+      const briefing = buildBriefing(history, selection);
 
       // 1. Initialize Agent
-      const agent = this.createAgent(pluginData, ipcBridge, loopPolicy, seedMessages);
+      const agent = this.createAgent(pluginData, ipcBridge, loopPolicy);
       this.activeAgent = agent;
 
       // 2. Run Agentic Loop
       this.options.onStatusChange?.('Agent starting...');
-      try {
-        const settings = await settingsService.loadSettings();
-        if (settings.telemetryEndpoint) {
-          TelemetryService.configure(settings.telemetryEndpoint, settings.telemetryApiKey);
-        }
-      } catch (telemetryError) {
-        console.warn('[AgentOrchestrator] Telemetry setup skipped:', telemetryError);
-      }
-      
-      const enrichedPrompt = selectionContext ? `${selectionContext}\n\n${prompt}` : prompt;
+
+      const enrichedPrompt = briefing ? `${briefing}\n\n${prompt}` : prompt;
       const startTime = Date.now();
       const finalResponse = await agent.run(enrichedPrompt);
       const latencyMs = Date.now() - startTime;
@@ -306,7 +296,6 @@ export class AgentOrchestrator {
     pluginData: AgentPluginData,
     ipcBridge: IpcBridge,
     loopPolicy?: AgentLoopPolicy,
-    seedMessages: LLMMessage[] = []
   ): AgentRuntime {
     const {
       apiKey,
@@ -359,7 +348,7 @@ export class AgentOrchestrator {
       provider,
       tools,
       systemPrompt,
-      messages: seedMessages,
+      messages: [],
       ipcBridge,
       toolExecutors: pluginData.toolExecutors,
       behaviorConfig,
@@ -526,43 +515,26 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
   }
 
   // ==========================================
-  // SELECTION CONTEXT
+  // SELECTION
   // ==========================================
 
   /**
    * Read Figma's current selection via IPC.
-   * Returns a natural language context string, or null if nothing is selected.
-   * Non-blocking: gracefully returns null on timeout.
+   * Returns raw node data for buildBriefing(). Non-blocking: returns [] on timeout.
    */
-  private async getSelectionContext(): Promise<string | null> {
+  private async readSelection(): Promise<{id: string; name: string; type: string}[]> {
     try {
       const { on: onIpc, emit: emitIpc } = await import('@create-figma-plugin/utilities');
-      
-      const selection = await new Promise<Array<{ id: string; name: string; type: string }>>((resolve) => {
-        const timeout = setTimeout(() => resolve([]), 2000); // 2s timeout
-        
+      return new Promise(resolve => {
+        const timeout = setTimeout(() => resolve([]), 2000);
         const unsub = onIpc<import('../../types').SendSelectionHandler>('SEND_SELECTION', (data) => {
           clearTimeout(timeout);
           unsub();
           resolve(data.selection);
         });
-        
         emitIpc<import('../../types').GetSelectionHandler>('GET_SELECTION');
       });
-      
-      if (selection.length === 0) return null;
-      
-      if (selection.length === 1) {
-        const node = selection[0];
-        return `[Context: User has selected "${node.name}" (${node.type}, ID: ${node.id}) on the Figma canvas. Apply changes to this node unless instructed otherwise.]`;
-      }
-      
-      const nodeList = selection.map(n => `"${n.name}" (${n.type}, ID: ${n.id})`).join(', ');
-      return `[Context: User has selected ${selection.length} nodes on the Figma canvas: ${nodeList}. Apply changes to these nodes unless instructed otherwise.]`;
-    } catch (err) {
-      console.warn('[AgentOrchestrator] Failed to read selection (non-fatal):', err);
-      return null;
-    }
+    } catch { return []; }
   }
 
   // ==========================================

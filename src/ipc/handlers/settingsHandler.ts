@@ -1,52 +1,92 @@
 /**
  * @file settingsHandler.ts
- * @description IPC handlers for settings-related events.
+ * @description IPC handlers for settings. Direct figma.clientStorage — no service/repo layers.
  */
 
-import { Settings, SettingsLoadedHandler, SendLogHandler, ResetSettingsHandler } from '../../types';
-import { settingsService } from '../../engine/services';
+import { Settings, SettingsLoadedHandler, SendLogHandler } from '../../types';
 import { emit } from '@create-figma-plugin/utilities';
 
-/**
- * Handle LOAD_SETTINGS event.
- */
+// ── Storage keys ──
+const K = {
+  LEGACY:     'GEMINI_API_KEY',
+  GEMINI:     'GEMINI_API_KEY_GEMINI',
+  OPENROUTER: 'GEMINI_API_KEY_OPENROUTER',
+  MODEL:      'GEMINI_MODEL_NAME',
+  PROVIDER:   'GEMINI_PROVIDER_NAME',
+} as const;
+
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+// ── Helpers ──
+
+/** Set or delete a clientStorage key based on whether value is truthy. */
+function upsert(key: string, value: string | undefined): Promise<void> {
+  return value
+    ? figma.clientStorage.setAsync(key, value)
+    : figma.clientStorage.deleteAsync(key);
+}
+
+// ── Handlers ──
+
 export async function handleLoadSettings(): Promise<void> {
   try {
-    const settings = await settingsService.loadSettings();
-    emit<SettingsLoadedHandler>('SETTINGS_LOADED', settings);
+    const [legacy, gemini, openrouter, model, provider] = await Promise.all([
+      figma.clientStorage.getAsync(K.LEGACY),
+      figma.clientStorage.getAsync(K.GEMINI),
+      figma.clientStorage.getAsync(K.OPENROUTER),
+      figma.clientStorage.getAsync(K.MODEL),
+      figma.clientStorage.getAsync(K.PROVIDER),
+    ]);
+
+    const providerName = provider ?? 'gemini';
+    // ?? (not ||) — empty string means "explicitly cleared", not "missing"
+    const geminiKey   = gemini   ?? legacy ?? '';
+    const openrouterKey = openrouter ?? '';
+    const activeKey = providerName === 'openrouter' ? openrouterKey : geminiKey;
+
+    emit<SettingsLoadedHandler>('SETTINGS_LOADED', {
+      apiKey: activeKey,
+      apiKeys: { gemini: geminiKey, openrouter: openrouterKey },
+      modelName: model ?? DEFAULT_MODEL,
+      providerName,
+    });
   } catch (e: any) {
     console.error('Error loading settings', e);
     emit<SendLogHandler>('SEND_LOG', { message: `Failed to load settings: ${e.message}`, type: 'warn' });
   }
 }
 
-/**
- * Handle SAVE_SETTINGS event.
- */
 export async function handleSaveSettings(settings: Settings): Promise<void> {
   try {
-    await settingsService.saveSettings(settings);
+    const geminiKey     = settings.apiKeys?.gemini;
+    const openrouterKey = settings.apiKeys?.openrouter;
+
+    await Promise.all([
+      // Provider-specific keys
+      geminiKey     !== undefined ? upsert(K.GEMINI, geminiKey)         : Promise.resolve(),
+      openrouterKey !== undefined ? upsert(K.OPENROUTER, openrouterKey) : Promise.resolve(),
+      // Legacy key — always synced with gemini key (or cleaned up)
+      upsert(K.LEGACY, geminiKey ?? settings.apiKey),
+      // Model & provider
+      upsert(K.MODEL, settings.modelName),
+      upsert(K.PROVIDER, settings.providerName),
+    ]);
   } catch (e: any) {
     console.error('Error saving settings', e);
     emit<SendLogHandler>('SEND_LOG', { message: `Failed to save settings: ${e.message}`, type: 'warn' });
   }
 }
 
-/**
- * Handle RESET_SETTINGS event.
- */
 export async function handleResetSettings(): Promise<void> {
   try {
-    console.log('[IPC] Resetting settings...');
-    await settingsService.clearSettings();
-    
-    // Load default settings (which will now be empty/defaults)
-    const freshSettings = await settingsService.loadSettings();
-    
-    // Notify UI to update state (should trigger onboarding)
-    emit<SettingsLoadedHandler>('SETTINGS_LOADED', freshSettings);
-    
-    emit<SendLogHandler>('SEND_LOG', { message: 'Settings reset successfully. Returning to onboarding.', type: 'success' });
+    await Promise.all(Object.values(K).map(k => figma.clientStorage.deleteAsync(k)));
+
+    emit<SettingsLoadedHandler>('SETTINGS_LOADED', {
+      apiKey: '',
+      apiKeys: { gemini: '', openrouter: '' },
+      modelName: DEFAULT_MODEL,
+      providerName: 'gemini',
+    });
   } catch (e: any) {
     console.error('Error resetting settings', e);
     emit<SendLogHandler>('SEND_LOG', { message: `Failed to reset settings: ${e.message}`, type: 'warn' });

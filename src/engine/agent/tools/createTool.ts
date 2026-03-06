@@ -1,5 +1,5 @@
 /**
- * @file buildDesignTool.ts
+ * @file createTool.ts
  * @description Tool definition and executor for the create tool.
  *
  * create accepts XML design markup and converts it to Figma nodes.
@@ -10,22 +10,16 @@
  */
 
 import { ToolDefinition, ToolExecutor } from './types';
-import {
-  BuildDesignParams as CreateParams,
-  BuildDesignResult,
-} from '../../actions/buildDesignTypes';
+import { CreateParams } from '../../actions/createTypes';
 import { ActionCompiler } from '../../actions/compiler';
 import { IncrementalExecutor } from '../../actions/incrementalExecutor';
 import { xmlToParsedLines } from '../../actions/xmlDesignParser';
-
-/** @deprecated Use CreateParams instead */
-export type BuildDesignParams = CreateParams;
 
 // ==========================================
 // Tool Definition (LLM function-calling schema)
 // ==========================================
 
-export const buildDesignDefinition: ToolDefinition = {
+export const createDefinition: ToolDefinition = {
   name: 'create',
   category: 'create',
   display: { displayName: 'Create', group: 'design' },
@@ -57,12 +51,12 @@ Frames default to 100×100px when width/height is omitted — almost NEVER corre
 ALWAYS set explicit dimensions or use height="hug" / width="fill".
 Common sizes: Card root 360-480px wide, Input height 44px, Button height 44-48px, Icon 20-24px.
 
-Returns: idMap (symbol → real Figma node ID), lineResults (per-operation status), stats.
+Returns: idMap (symbol → real Figma node ID) and count of created/failed nodes.
 
 ## Handling partial failures
 
 DO NOT regenerate the entire design on partial failure. Instead:
-1. Read the lineResults to identify which specific operations failed and their error messages.
+1. Check the errors array to identify which specific operations failed.
 2. Use the idMap to reference nodes that were successfully created.
 3. Call create again with ONLY the corrected failed operations, using real Figma IDs from idMap as parent references.
 `,
@@ -97,9 +91,9 @@ DO NOT regenerate the entire design on partial failure. Instead:
 /**
  * Full executor for create.
  *
- * Pipeline: xmlToParsedLines → compile → incremental execute.
+ * Pipeline: xmlToParsedLines → compile → incremental execute → compact receipt.
  */
-export const buildDesignExecutor: ToolExecutor<CreateParams, BuildDesignResult> = async (
+export const createExecutor: ToolExecutor<CreateParams> = async (
   params,
   _context
 ) => {
@@ -129,12 +123,9 @@ export const buildDesignExecutor: ToolExecutor<CreateParams, BuildDesignResult> 
   }
 
   try {
-
-    // 2. Compile: convert ParsedLines to FigmaActions
     const compiler = new ActionCompiler();
     const { actions, errors } = compiler.compile(parsedLines, parentId);
 
-    // 3. Execute incrementally
     const executor = new IncrementalExecutor();
     const result = await executor.execute(actions, errors, {
       onError,
@@ -142,34 +133,38 @@ export const buildDesignExecutor: ToolExecutor<CreateParams, BuildDesignResult> 
       parentId,
     });
 
-    // Build detailed error message with per-operation failure info
+    // Build compact receipt — this is what the LLM sees in context.
+    const receipt: Record<string, any> = {
+      idMap: result.idMap,
+      created: result.stats.created,
+    };
+
     let errorInfo: { code: string; message: string } | undefined;
     if (result.hasErrors) {
-      const failedLines = result.lineResults
-        .filter(lr => lr.status === 'failed' || lr.status === 'skipped')
-        .slice(0, 10) // cap to keep message reasonable
-        .map(lr => {
-          const reason = lr.error || lr.skipReason || 'unknown';
-          const sym = lr.symbol ? `${lr.symbol} = ` : '';
-          const cmd = lr.command || '?';
-          return `  #${lr.line} ${sym}${cmd}: ${reason}`;
-        });
+      const failures = result.lineResults
+        .filter(lr => lr.status === 'failed')
+        .slice(0, 8)
+        .map(lr => ({
+          op: lr.symbol || `line${lr.line}`,
+          error: lr.error || 'unknown',
+        }));
 
-      const summary = `${result.stats.failed} of ${result.stats.total} operations failed. ${result.stats.created} nodes created successfully.`;
-      const details = failedLines.length > 0 ? `\nFailed:\n${failedLines.join('\n')}` : '';
-      const overflow = result.lineResults.filter(lr => lr.status === 'failed' || lr.status === 'skipped').length > 10
-        ? `\n  ... and ${result.lineResults.filter(lr => lr.status === 'failed' || lr.status === 'skipped').length - 10} more`
-        : '';
+      receipt.failed = result.stats.failed;
+      if (failures.length > 0) receipt.errors = failures;
 
       errorInfo = {
         code: 'PARTIAL_FAILURE',
-        message: `${summary}${details}${overflow}\nUse idMap to reference existing nodes and fix only the failed operations.`,
+        message: `${result.stats.failed} of ${result.stats.total} failed. ${result.stats.created} created. Use idMap to fix only the failed operations.`,
       };
+    }
+
+    if (Array.isArray((result as any).anomalies) && (result as any).anomalies.length > 0) {
+      receipt.anomalies = (result as any).anomalies.slice(0, 5);
     }
 
     return {
       success: result.success,
-      data: result,
+      data: receipt,
       error: errorInfo,
     };
   } catch (e: any) {

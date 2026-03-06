@@ -259,13 +259,34 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             }
           }
 
+          // Build compact receipt at source
+          const receipt: Record<string, any> = {
+            idMap: bdResult.idMap,
+            created: bdResult.stats.created,
+          };
+
+          if (bdResult.hasErrors) {
+            const failures = bdResult.lineResults
+              .filter(lr => lr.status === 'failed')
+              .slice(0, 8)
+              .map(lr => ({
+                op: lr.symbol || `line${lr.line}`,
+                error: lr.error || 'unknown',
+              }));
+            receipt.failed = bdResult.stats.failed;
+            if (failures.length > 0) receipt.errors = failures;
+          }
+          if (bdAnomalies && bdAnomalies.length > 0) {
+            receipt.anomalies = bdAnomalies.slice(0, 5);
+          }
+
           response = {
             success: bdResult.success,
-            data: { ...bdResult, anomalies: bdAnomalies },
+            data: receipt,
             error: bdResult.hasErrors
               ? {
                   code: 'PARTIAL_FAILURE',
-                  message: `${bdResult.stats.failed} of ${bdResult.stats.total} operations failed. ${bdResult.stats.created} nodes created successfully. Use idMap to reference existing nodes and fix only the failed operations.`
+                  message: `${bdResult.stats.failed} of ${bdResult.stats.total} failed. ${bdResult.stats.created} created. Use idMap to fix only the failed operations.`,
                 }
               : undefined,
           };
@@ -340,27 +361,34 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             }
           }
 
+          // Build compact receipt at source — no downstream cleaning needed
+          const editedCount = allResults.filter(r => r.success).length;
+          const idMap: Record<string, string> = {};
+          for (const r of allResults) {
+            if (r.success && r.nodeId) idMap[r.nodeId] = r.nodeId;
+          }
+
+          const receipt: Record<string, any> = { edited: editedCount, idMap };
+          if (editAnomalies && editAnomalies.length > 0) {
+            receipt.anomalies = editAnomalies.slice(0, 5);
+          }
+
           if (failedResults.length > 0) {
-            const firstFailure = failedResults[0];
+            receipt.failed = failedResults.length;
+            receipt.errors = failedResults.slice(0, 8).map(r => ({
+              op: r.nodeId || '?',
+              error: r.error || 'unknown',
+            }));
             response = {
               success: false,
               error: {
                 code: 'APPLY_ERROR',
-                message: `Failed to edit ${failedResults.length} node(s): ${firstFailure.error || 'unknown error'}`
+                message: `Failed to edit ${failedResults.length} node(s). ${editedCount} succeeded.`,
               },
-              data: {
-                results: allResults,
-                anomalies: editAnomalies
-              }
+              data: receipt,
             };
           } else {
-            response = {
-              success: true,
-              data: {
-                results: allResults,
-                anomalies: editAnomalies
-              }
-            };
+            response = { success: true, data: receipt };
           }
         } catch (e: any) {
           response = {

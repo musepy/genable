@@ -6,20 +6,14 @@
  *
  * It wraps ActionExecutor (which handles the low-level Figma API calls, retry
  * logic, and topological sorting within a batch). IncrementalExecutor adds the
- * outer dependency-skip layer and accumulates the BuildDesignResult.
- *
- * Types imported from buildDesignTypes.ts (Phase 2) and compiler.ts (re-exporting Phase 3 ParsedLine).
+ * outer dependency-skip layer and accumulates the CreateExecutionResult.
  */
 
 import { ActionExecutor } from './executor';
 import { FigmaAction } from './types';
-import { BuildDesignResult, LineResult } from './buildDesignTypes';
-import { ParsedLine } from './buildDesignTypes';
+import { CreateExecutionResult, LineResult, ParsedLine } from './createTypes';
 
-// ---------------------------------------------------------------------------
-// Re-export so callers can import everything from one place
-// ---------------------------------------------------------------------------
-export type { LineResult, BuildDesignResult };
+export type { LineResult, CreateExecutionResult };
 
 // ---------------------------------------------------------------------------
 // CompiledEntry / CompilationError stubs
@@ -105,7 +99,7 @@ export class IncrementalExecutor {
     compiledActions: CompiledEntry[],
     parseErrors: CompilationError[],
     options: IncrementalExecutorOptions,
-  ): Promise<BuildDesignResult> {
+  ): Promise<CreateExecutionResult> {
     // Reset state for a fresh run
     this.symbolMap.clear();
     this.statusMap.clear();
@@ -357,7 +351,7 @@ export class IncrementalExecutor {
   /**
    * Compute aggregate statistics from the collected LineResult array.
    */
-  private computeStats(lineResults: LineResult[]): BuildDesignResult['stats'] {
+  private computeStats(lineResults: LineResult[]): CreateExecutionResult['stats'] {
     let created = 0;
     let failed = 0;
     let skipped = 0;

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   IdempotencyStore,
   computeRequestHash,
-  canonicalizeBuildDesignParams,
+  canonicalizeCreateParams,
 } from '../idempotencyStore';
 
 describe('computeRequestHash', () => {
@@ -19,11 +19,11 @@ describe('computeRequestHash', () => {
   });
 });
 
-describe('canonicalizeBuildDesignParams', () => {
+describe('canonicalizeCreateParams', () => {
   it('normalizes defaults', () => {
     const xml = "<frame name='Card'/>";
-    const a = canonicalizeBuildDesignParams({ xml });
-    const b = canonicalizeBuildDesignParams({
+    const a = canonicalizeCreateParams({ xml });
+    const b = canonicalizeCreateParams({
       xml,
       onError: 'continue',
       rollbackMode: 'none',
@@ -32,10 +32,10 @@ describe('canonicalizeBuildDesignParams', () => {
   });
 
   it('produces different hashes for different xml', () => {
-    const a = canonicalizeBuildDesignParams({
+    const a = canonicalizeCreateParams({
       xml: "<frame name='Card'/>",
     });
-    const b = canonicalizeBuildDesignParams({
+    const b = canonicalizeCreateParams({
       xml: "<text>Hello</text>",
     });
     expect(a).not.toBe(b);
@@ -43,8 +43,8 @@ describe('canonicalizeBuildDesignParams', () => {
 
   it('differentiates by parentId', () => {
     const xml = "<frame name='Card'/>";
-    const a = canonicalizeBuildDesignParams({ xml, parentId: '1:2' });
-    const b = canonicalizeBuildDesignParams({ xml, parentId: '3:4' });
+    const a = canonicalizeCreateParams({ xml, parentId: '1:2' });
+    const b = canonicalizeCreateParams({ xml, parentId: '3:4' });
     expect(a).not.toBe(b);
   });
 });

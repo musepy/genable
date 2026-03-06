@@ -9,16 +9,14 @@ interface DigestMeta {
  */
 const parameterExtractors: Record<string, (params: any) => string> = {
   create: (params) => {
-    if (typeof params.xml === 'string') {
-      return `xml: ${params.xml.length} chars${params.parentId ? `, parentId: ${params.parentId}` : ''}`;
-    }
-    return params._truncated ? '[Truncated]' : JSON.stringify(params).slice(0, 100);
+    const parts: string[] = [];
+    if (typeof params.xml === 'string') parts.push(`xml: ${params.xml.length} chars`);
+    if (params.parentId) parts.push(`parentId: ${params.parentId}`);
+    return parts.join(', ') || 'empty';
   },
   edit: (params) => {
-    if (typeof params.xml === 'string') {
-      return `xml: ${params.xml.length} chars`;
-    }
-    return JSON.stringify(params).slice(0, 100);
+    if (typeof params.xml === 'string') return `xml: ${params.xml.length} chars`;
+    return params.nodeId ? `nodeId: ${params.nodeId}` : 'empty';
   },
   read: (params) => {
     const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
@@ -97,7 +95,7 @@ export function generateLogDigest(history: ChatMessage[], meta?: DigestMeta): st
         lines.push(`#${toolIndex} [${tool.name}] ${toolDuration} ${status}`);
 
         const extractor = parameterExtractors[tool.name];
-        const paramsStr = extractor ? extractor(tool.parameters) : JSON.stringify(tool.parameters).slice(0, 100);
+        const paramsStr = extractor ? extractor(tool.parameters) : Object.keys(tool.parameters || {}).join(', ') || 'empty';
         lines.push(`   params: {${paramsStr}}`);
 
         const resultInfo = extractResultInfo(tool);

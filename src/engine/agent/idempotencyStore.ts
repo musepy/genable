@@ -39,8 +39,6 @@ export function canonicalizeCreateParams(params: {
   });
 }
 
-/** @deprecated Use canonicalizeCreateParams */
-export const canonicalizeBuildDesignParams = canonicalizeCreateParams;
 
 // ---------------------------------------------------------------------------
 // Store entry

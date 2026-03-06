@@ -13,7 +13,7 @@
  * Attributes accept CSS-semantic, read-path abbreviation, and Figma-native property names.
  */
 
-import { ParsedLine } from './buildDesignTypes';
+import { ParsedLine } from './createTypes';
 import { compileCssProps } from './cssCompiler';
 
 // ==========================================
@@ -126,7 +126,17 @@ export function parseXml(xml: string): XmlNode[] {
       const attrNameStart = pos;
       while (pos < len && /[a-zA-Z0-9_-]/.test(xml[pos])) pos++;
       const attrName = xml.substring(attrNameStart, pos);
-      if (!attrName) throw new XmlParseError('Empty attribute name', attrNameStart);
+      if (!attrName) {
+        // Detect LLM truncation patterns: '…' (U+2026) or '...'
+        const rest = xml.substring(attrNameStart, Math.min(attrNameStart + 10, len));
+        if (rest.includes('…') || rest.startsWith('...')) {
+          throw new XmlParseError(
+            'Your XML is truncated (contains "…"). Write the COMPLETE xml without abbreviating or omitting tags.',
+            attrNameStart
+          );
+        }
+        throw new XmlParseError('Empty attribute name', attrNameStart);
+      }
 
       skipWhitespace();
       if (xml[pos] !== '=') {

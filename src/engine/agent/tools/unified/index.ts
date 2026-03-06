@@ -6,12 +6,12 @@
  */
 
 export { readNodeDefinition } from './readNode';
-export { buildDesignDefinition as unifiedBuildDesignDefinition } from '../buildDesignTool';
+export { createDefinition } from '../createTool';
 export { editDefinition } from './edit';
 export { queryDefinition } from './query';
 
 import { readNodeDefinition } from './readNode';
-import { buildDesignDefinition } from '../buildDesignTool';
+import { createDefinition } from '../createTool';
 import { editDefinition } from './edit';
 import { queryDefinition } from './query';
 
@@ -19,11 +19,10 @@ import { ToolDefinition } from '../types';
 
 /**
  * All 4 unified tool definitions.
- * Drop-in replacement for the old agentTools array.
  */
 export const unifiedTools: ToolDefinition[] = [
   readNodeDefinition,           // Read anything from Figma
-  buildDesignDefinition,        // Create designs via XML markup
+  createDefinition,             // Create designs via XML markup
   editDefinition,               // Modify/delete existing nodes via XML
   queryDefinition,              // Search knowledge or canvas nodes
 ];

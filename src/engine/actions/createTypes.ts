@@ -1,5 +1,5 @@
 /**
- * @file buildDesignTypes.ts
+ * @file createTypes.ts
  * @description Type definitions for the create/edit tools.
  *
  * The create tool accepts XML design markup. These types define the
@@ -45,9 +45,9 @@ export interface ParsedLine {
 // ==========================================
 
 /**
- * Parameters accepted by the build_design tool.
+ * Parameters accepted by the create tool.
  */
-export interface BuildDesignParams {
+export interface CreateParams {
   /** XML design markup. Nesting implies parent-child. */
   xml: string;
   /** Real Figma node ID to use as the root mount point. Defaults to current page. */
@@ -87,13 +87,14 @@ export interface LineResult {
 }
 
 // ==========================================
-// Overall Result
+// Overall Result (internal — not exposed to LLM context)
 // ==========================================
 
 /**
- * Overall result returned by the build_design tool executor.
+ * Overall result returned by IncrementalExecutor.
+ * The tool executor distills this into a compact receipt before returning.
  */
-export interface BuildDesignResult {
+export interface CreateExecutionResult {
   /** True if all non-skipped operations succeeded. */
   success: boolean;
   /** True if any operation produced a hard failure. */
@@ -113,28 +114,24 @@ export interface BuildDesignResult {
 }
 
 // ==========================================
-// Progress Event (incremental UI feedback)
-// ==========================================
-
-/**
- * IPC event payload emitted after each operation completes.
- * Allows the UI to show incremental progress while a build_design call is running.
- */
-export interface BuildDesignProgressEvent {
-  type: 'BUILD_DESIGN_PROGRESS';
-  lineResult: LineResult;
-  stats: { completed: number; total: number };
-}
-
-// ==========================================
 // Valid Commands
 // ==========================================
 
 /**
  * @internal
- * Exhaustive list of canonical commands understood by the build_design tool.
+ * Exhaustive list of canonical commands understood by the create tool.
  */
 export const VALID_COMMANDS = ['create', 'update', 'delete', 'icon', 'image'] as const;
 
-/** Union type of all valid build_design commands. */
-export type BuildDesignCommand = typeof VALID_COMMANDS[number];
+/** Union type of all valid create commands. */
+export type CreateCommand = typeof VALID_COMMANDS[number];
+
+// ==========================================
+// Legacy aliases (for gradual migration)
+// ==========================================
+/** @deprecated Use CreateParams */
+export type BuildDesignParams = CreateParams;
+/** @deprecated Use CreateExecutionResult */
+export type BuildDesignResult = CreateExecutionResult;
+/** @deprecated Use CreateCommand */
+export type BuildDesignCommand = CreateCommand;

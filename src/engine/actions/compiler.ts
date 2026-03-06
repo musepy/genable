@@ -5,7 +5,7 @@
  */
 
 import { FigmaAction } from './types';
-import { ParsedLine } from './buildDesignTypes';
+import { ParsedLine } from './createTypes';
 
 export type { ParsedLine };
 

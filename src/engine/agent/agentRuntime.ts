@@ -14,13 +14,6 @@ import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { CONTEXT_CONSTANTS } from './context/constants';
-import {
-  dropRedundantToolErrors,
-  truncateByTurns,
-  fixInvalidSequence,
-  validateMessageSequence,
-  groupIntoTurns,
-} from './context/contextCompression';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
@@ -203,18 +196,9 @@ export class AgentRuntime {
       console.log(`[RuntimeEvent] tool_call: ${tc?.name}(${JSON.stringify(tc?.args || {})})`)
     } else if (event.type === 'tool_result') {
       const tr = (event as any).toolResult;
-      const lineResults = tr?.raw?.data?.lineResults;
-      const failSuffix = !tr?.success && lineResults
-        ? (() => {
-            const lrs = lineResults as any[];
-            const failed = lrs.filter((r: any) => r.status === 'failed');
-            const skipped = lrs.filter((r: any) => r.status === 'skipped');
-            const firstErr = failed[0];
-            return ` [${failed.length}F/${skipped.length}S/${lrs.length}T] first: ${firstErr?.error ?? tr?.error ?? '?'}`;
-          })()
-        : !tr?.success && tr?.error
-          ? ` — ${typeof tr.error === 'string' ? tr.error : tr.error.message ?? JSON.stringify(tr.error)}`
-          : '';
+      const failSuffix = !tr?.success && tr?.error
+        ? ` — ${typeof tr.error === 'string' ? tr.error : tr.error.message ?? JSON.stringify(tr.error)}`
+        : '';
       console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${tr?.success ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)${failSuffix}`);
     }
     this.options.onRuntimeEvent(full);
@@ -305,93 +289,24 @@ export class AgentRuntime {
 
   // ─── Context management ──────────────────────────────────────
 
-  private async manageContext(): Promise<void> {
-    // First iteration: lastPromptTokens is 0 → skip (correct: context is small)
+  private manageContext(): void {
     if (this.lastPromptTokens === 0) return;
-
     const threshold = this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_COMPRESSION_LIMIT_FACTOR;
     if (this.lastPromptTokens <= threshold) return;
 
-    // 1. Drop redundant error messages
-    dropRedundantToolErrors(this.messages);
-
-    // 2. Turn-based truncation — hide oldest turns
+    // Hide oldest model+tool pairs. The message sequence is naturally
+    // [sys, user(pinned), model₁, tool₁, model₂, tool₂, ...], so iterating
+    // forward hides them in order without breaking role alternation.
     const excessRatio = this.lastPromptTokens / threshold;
-    const turnsToHide = Math.max(1, Math.floor(excessRatio - 1) + 1);
-    truncateByTurns(this.messages, turnsToHide);
+    const pairsToHide = Math.max(1, Math.floor(excessRatio));
 
-    // 3. Validate & fix sequence
-    const validation = validateMessageSequence(this.messages);
-    if (!validation.valid) {
-      console.warn('[AgentRuntime] Invalid sequence after truncation, fixing...', validation.error);
-      fixInvalidSequence(this.messages);
+    let hidden = 0;
+    for (const msg of this.messages) {
+      if (hidden >= pairsToHide) break;
+      if (msg.hidden || msg.pinned || msg.role === 'system' || msg.role === 'user') continue;
+      msg.hidden = true;
+      if (msg.role === 'model') hidden++;
     }
-
-    // 4. Proactive summarization if still heavily over budget
-    if (this.lastPromptTokens > this.maxContextTokens) {
-      await this.summarizeConversation();
-    }
-  }
-
-  private async summarizeConversation(): Promise<void> {
-    const turns = groupIntoTurns(this.messages);
-    if (turns.length < 4) return;
-
-    const turnsToSummarize = turns.slice(0, Math.floor(turns.length / 2));
-    const allIndicesToHide: number[] = [];
-    for (const turn of turnsToSummarize) {
-      allIndicesToHide.push(...turn.indices);
-    }
-    if (allIndicesToHide.length === 0) return;
-
-    const messagesToSummarize = allIndicesToHide.map(idx => this.messages[idx]);
-
-    // Build summary prompt
-    const strippedMessages = messagesToSummarize.map(m => {
-      let contentStr = '';
-      if (typeof m.content === 'string') {
-        contentStr = m.content.substring(0, 500) + (m.content.length > 500 ? '...' : '');
-      } else if (Array.isArray(m.content)) {
-        contentStr = m.content.map((part: any) => {
-          if (part.functionCall) return `[Call: ${part.functionCall.name}]`;
-          if (part.functionResponse) return `[Result: ${part.functionResponse.name}]`;
-          return '[Part]';
-        }).join(' ');
-      }
-      return `${m.role.toUpperCase()}: ${contentStr}`;
-    });
-
-    const summaryPrompt = `Please summarize the following Figma plugin design steps briefly in 1-2 sentences. Focus on what was built or changed. Example: "Created the layout structure and added a submit button."\n\nHistory:\n${strippedMessages.join('\n')}`;
-
-    let summaryText: string;
-    try {
-      const response = await this.options.provider.generate({
-        messages: [{ id: `sum_req_${Date.now()}`, role: 'user', content: summaryPrompt }],
-        maxTokens: 150,
-        thinkingLevel: 'minimal'
-      });
-      summaryText = response.text || 'Conversation summarized.';
-    } catch (error) {
-      console.warn('[AgentRuntime] Summarizer failed, using fallback summary.', error);
-      summaryText = 'Several design steps completed.';
-    }
-
-    allIndicesToHide.forEach(idx => {
-      this.messages[idx].hidden = true;
-    });
-
-    const firstHiddenIdx = this.messages.findIndex(m => m.hidden && m.role !== 'system' && !m.summaryOf);
-    const insertIdx = firstHiddenIdx !== -1 ? firstHiddenIdx : (this.messages[0]?.role === 'system' ? 1 : 0);
-
-    const summaryMessage: LLMMessage = {
-      id: `summary-${Date.now()}`,
-      role: 'user',
-      content: `[CONTEXT SUMMARY]: ${summaryText}`,
-      summaryOf: messagesToSummarize.map(m => m.id),
-      pinned: true,
-    };
-
-    this.messages.splice(insertIdx, 0, summaryMessage);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -423,10 +338,8 @@ export class AgentRuntime {
       pinned: this.behaviorConfig.enableInstructionAnchoring,
     });
 
-    // Proactive compression on resume (only if we have real token data from a previous run)
-    if (this.lastPromptTokens > this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_PROACTIVE_COMPRESSION_FACTOR) {
-      await this.manageContext();
-    }
+    // Proactive compression on resume
+    this.manageContext();
 
     let iteration = 0;
     this.resetBuiltinState?.();
@@ -450,7 +363,7 @@ export class AgentRuntime {
     // ════════════════════════════════════════════
     while (iteration < this.maxIterations) {
       this.throwIfCanceled(iteration + 1);
-      await this.manageContext();
+      this.manageContext();
       this.throwIfCanceled(iteration + 1);
       const currentTokens = this.lastPromptTokens;
       const visibleMessageCount = this.messages.filter(m => !m.hidden).length;

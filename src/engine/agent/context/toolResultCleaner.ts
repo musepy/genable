@@ -39,201 +39,26 @@ export class ToolResultCleaner {
 
     if (!cleaned.data) return cleaned;
 
-    const dataJson = JSON.stringify(cleaned.data);
-    const MAX_DATA_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
-
-    // For oversized results, attempt structural cleaning if possible
-    if (dataJson.length > MAX_DATA_CHARS) {
-      // read: use structural cleaning that preserves visual props
-      if (cleaned.name === 'read') {
-        cleaned.data = this.cleanInspectResult(cleaned.data);
-        return cleaned;
-      }
-
-      const isSpecializedTool = cleaned.name === 'create' ||
-                                cleaned.name === 'edit';
-      if (isSpecializedTool && cleaned.data) {
-        // For these tools, use structural distillation rather than string truncation
-        cleaned.data = cleaned.data.results 
-          ? this.cleanBatchResult(cleaned.data, dataJson.length) 
-          : this.cleanSuccessfulResult(cleaned.data, dataJson.length);
-        return cleaned;
-      }
-      
-      if (cleaned.success && typeof cleaned.data === 'object') {
-        // Attempt structural cleaning for oversized successful objects
-        cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
-        return cleaned;
-      }
-
-      // Final fallback for non-object, failures, or non-specialized large data
-      const idMap = cleaned.data?.idMap;
-      cleaned.data = {
-        _truncated: true,
-        _originalSize: dataJson.length,
-        summary: dataJson.substring(0, 500) + '...',
-        // Always preserve idMap if it exists at the top level of data
-        ...(idMap && { idMap })
-      };
+    // read: truncate oversized XML at safe boundary
+    if (cleaned.name === 'read') {
+      cleaned.data = this.cleanInspectResult(cleaned.data);
       return cleaned;
     }
 
-    // Results within budget
-    const isBatchTool = cleaned.name === 'create' || cleaned.name === 'edit';
-    if (cleaned.name === 'read') {
-      cleaned.data = this.cleanInspectResult(cleaned.data);
-    } else if (isBatchTool && Array.isArray(cleaned.data.results)) {
-      cleaned.data = this.cleanBatchResult(cleaned.data, dataJson.length);
-    } else if (cleaned.success && typeof cleaned.data === 'object') {
-      cleaned.data = this.cleanSuccessfulResult(cleaned.data, dataJson.length);
+    // create/edit: data is already a compact receipt from executor — pass through
+    if (cleaned.name === 'create' || cleaned.name === 'edit') {
+      return cleaned;
+    }
+
+    // Generic fallback: cap oversized data for other tools
+    const dataJson = JSON.stringify(cleaned.data);
+    if (dataJson.length > CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS) {
+      const idMap = cleaned.data?.idMap;
+      cleaned.data = { ...(idMap && { idMap }) };
     }
 
     return cleaned;
   }
-
-  private cleanBatchResult(data: any, originalSize: number): any {
-    const essentialData: any = {
-      ...(data.idMap && { idMap: data.idMap }),
-      results: data.results.map((r: any) => ({
-        opId: r.opId || (r.action && r.action.tempId),
-        action: typeof r.action === 'string' ? r.action : (r.action && r.action.action),
-        success: r.success,
-        ...(r.nodeId && { nodeId: r.nodeId }),
-        ...(r.name && { name: r.name }),
-        // TIER 1: Feedback signals
-        ...(r.diff && { diff: r.diff }),
-        ...(r.diffInfo && { diffInfo: r.diffInfo }),
-        ...(r.error && {
-          error: typeof r.error === 'string' ? r.error : {
-            code: r.error.code,
-            message: r.error.message,
-            ...(r.error.semanticFeedback && { semanticFeedback: r.error.semanticFeedback })
-          }
-        }),
-        // Post-op anomalies (zero-cost when empty — only present if issues detected)
-        ...(Array.isArray(r.anomalies) && r.anomalies.length > 0 && {
-          anomalies: this.cleanAnomalies(r.anomalies, 5)
-        }),
-        ...(Array.isArray(r.children) && {
-          children: r.children.map((c: any) => ({
-            opId: c.opId,
-            success: c.success,
-            ...(c.nodeId && { nodeId: c.nodeId }),
-            ...(c.name && { name: c.name }),
-          }))
-        }),
-      })),
-      // TIER 0: Critical signals
-      ...(data.rollback && { rollback: data.rollback }),
-      ...(data.firstFailure && { firstFailure: data.firstFailure }),
-      ...(data.failureCount && { failureCount: data.failureCount }),
-      ...(data.failureActionIds && { failureActionIds: data.failureActionIds }),
-      _truncated: true,
-      _originalSize: originalSize,
-    };
-
-    if (data.layoutSnapshots && typeof data.layoutSnapshots === 'object') {
-      essentialData.layoutSnapshots = this.cleanLayoutSnapshots(data.layoutSnapshots, 10);
-    }
-
-    return essentialData;
-  }
-
-  private cleanSuccessfulResult(data: any, originalSize: number): any {
-    const essentialData: any = {};
-
-    // Keep nodeId - essential for chaining operations
-    if (data.nodeId) essentialData.nodeId = data.nodeId;
-    if (data.id) essentialData.id = data.id;
-
-    // Keep node name and type for context
-    if (data.name) essentialData.name = data.name;
-    if (data.type) essentialData.type = data.type;
-
-    // Keep parent reference
-    if (data.parentId) essentialData.parentId = data.parentId;
-
-    // Keep children skeleton for read_node hierarchy results
-    if (Array.isArray(data.children)) {
-      essentialData.childrenCount = data.children.length;
-      const MAX_CHILDREN_SKELETON = 5;
-      essentialData.children = data.children
-        .slice(0, MAX_CHILDREN_SKELETON)
-        .map((c: any) => this.extractNodeSkeleton(c, 1))
-        .filter(Boolean);
-
-      if (data.children.length > MAX_CHILDREN_SKELETON) {
-        essentialData._moreChildren = data.children.length - MAX_CHILDREN_SKELETON;
-      }
-    }
-
-    // TIER 1: Feedback signals
-    if (data.diff) essentialData.diff = data.diff;
-    if (data.diffInfo) essentialData.diffInfo = data.diffInfo;
-    if (data.visibilityWarnings) essentialData.visibilityWarnings = data.visibilityWarnings;
-    if (data.visibilityAutoFixed) essentialData.visibilityAutoFixed = data.visibilityAutoFixed;
-    // Post-op anomalies (zero-cost when empty — only present if issues detected)
-    if (Array.isArray(data.anomalies) && data.anomalies.length > 0) {
-      essentialData.anomalies = this.cleanAnomalies(data.anomalies);
-    }
-
-    // Preserve idMap and layoutSnapshots
-    if (data.idMap && typeof data.idMap === 'object') {
-      essentialData.idMap = data.idMap;
-    }
-    if (data.layoutSnapshots && typeof data.layoutSnapshots === 'object') {
-      essentialData.layoutSnapshots = this.cleanLayoutSnapshots(data.layoutSnapshots);
-    }
-
-    essentialData._truncated = true;
-    essentialData._originalSize = originalSize;
-
-    return essentialData;
-  }
-
-  private cleanLayoutSnapshots(snapshots: Record<string, any>, limit?: number): Record<string, any> {
-    const entries = Object.entries(snapshots);
-    const sliced = limit ? entries.slice(0, limit) : entries;
-    
-    return Object.fromEntries(
-      sliced.map(([opId, snap]: [string, any]) => [
-        opId,
-        {
-          id: snap?.id || snap?.nodeId,
-          name: snap?.name,
-          type: snap?.type,
-          x: snap?.x,
-          y: snap?.y,
-          width: snap?.width,
-          height: snap?.height,
-        }
-      ])
-    );
-  }
-
-  private extractNodeSkeleton(node: any, depth: number): any {
-    if (!node || depth > 2) return null;
-    const skeleton: any = {
-      id: node.id,
-      name: node.props?.name || node.name,
-      type: node.type
-    };
-    if (Array.isArray(node.children) && node.children.length > 0 && depth < 2) {
-      const MAX_CHILDREN_SKELETON = 20;
-      skeleton.children = node.children
-        .slice(0, MAX_CHILDREN_SKELETON)
-        .map((c: any) => this.extractNodeSkeleton(c, depth + 1))
-        .filter(Boolean);
-      if (node.children.length > MAX_CHILDREN_SKELETON) {
-        skeleton._more = node.children.length - MAX_CHILDREN_SKELETON;
-      }
-    }
-    return skeleton;
-  }
-
-  // ================================================================
-  // read_node-specific cleaning — preserves visual props for LLM
-  // ================================================================
 
   /**
    * Cleans read results. XML string passed through directly (already compact).
@@ -259,8 +84,7 @@ export class ToolResultCleaner {
         cutPoint = Math.max(0, MAX_XML_CHARS - 200) + bestCut + 1;
       }
 
-      result.xml = result.xml.substring(0, cutPoint) + '\n<!-- truncated — use read(nodeId, detail="summary") for structural overview, or read specific child IDs for details -->';
-      result._truncated = true;
+      result.xml = result.xml.substring(0, cutPoint);
     }
     return result;
   }
@@ -358,15 +182,13 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
-      // Aggressive pruning for large create/edit XML
+      // Strip XML from create/edit history — tool result already has success/idMap feedback.
+      // Never leave placeholder text; weak models copy it verbatim as new tool calls.
       if ((tc.name === 'create' || tc.name === 'edit') && typeof tc.args?.xml === 'string' && tc.args.xml.length > 500) {
         return {
           ...tc,
           args: {
             ...(tc.args?.parentId && { parentId: tc.args.parentId }),
-            xml: `[_truncated: ${tc.args.xml.length} chars omitted. State tracked by Figma.]`,
-            _truncated: true,
-            _originalSize: tc.args.xml.length
           }
         };
       }
@@ -434,11 +256,8 @@ export class ToolResultCleaner {
     }
   }
 
-  private truncateArgs(toolName: string, sanitizedArgs: any, originalLength: number): any {
+  private truncateArgs(_toolName: string, sanitizedArgs: any, _originalLength: number): any {
     return {
-      _truncated: true,
-      _tool: toolName,
-      _originalSize: originalLength,
       ...(sanitizedArgs.nodeId && { nodeId: sanitizedArgs.nodeId }),
       ...(sanitizedArgs.name && { name: sanitizedArgs.name }),
     };

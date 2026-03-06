@@ -7,73 +7,75 @@ describe('ToolResultCleaner', () => {
   ];
   const cleaner = new ToolResultCleaner(tools);
 
-  it('preserves rollback information in create failure results', () => {
+  // create/edit data is now a compact receipt from the executor — cleaner passes it through.
+  it('passes through create receipt unchanged', () => {
     const rawResult = {
-      success: false,
       name: 'create',
-      error: { code: 'PARTIAL_FAILURE', message: 'One or more lines failed.' },
-      data: {
-        results: [
-          { opId: 'op1', action: 'createFrame', success: true, nodeId: 'node-1' },
-          { opId: 'op2', action: 'createFrame', success: false, error: { code: 'APPLY_ERROR', message: 'failed' } }
-        ],
-        idMap: { op1: 'node-1' },
-        rollback: {
-          attempted: 1,
-          removed: 1,
-          failed: []
-        }
-      }
+      success: true,
+      data: { created: 2, idMap: { header: 'node-1', btn: 'node-2' } },
     };
-
     const cleaned = cleaner.cleanToolResult(rawResult);
-
-    expect(cleaned.data.rollback).toBeDefined();
-    expect(cleaned.data.rollback.removed).toBe(1);
-    expect(cleaned.data.idMap).toBeDefined();
-    expect(cleaned.data.results.length).toBe(2);
+    expect(cleaned.data).toEqual({ created: 2, idMap: { header: 'node-1', btn: 'node-2' } });
   });
 
-  it('preserves visibilityWarnings and visibilityAutoFixed in successful results', () => {
+  it('passes through create receipt with errors unchanged', () => {
     const rawResult = {
+      name: 'create',
+      success: false,
+      error: { code: 'PARTIAL_FAILURE', message: '1 of 2 failed' },
+      data: {
+        idMap: { header: 'node-1' },
+        created: 1,
+        failed: 1,
+        errors: [{ op: 'icon', error: 'Unknown node type' }],
+      },
+    };
+    const cleaned = cleaner.cleanToolResult(rawResult);
+    expect(cleaned.data.created).toBe(1);
+    expect(cleaned.data.failed).toBe(1);
+    expect(cleaned.data.errors[0]).toEqual({ op: 'icon', error: 'Unknown node type' });
+  });
+
+  it('passes through edit receipt unchanged', () => {
+    const rawResult = {
+      name: 'edit',
+      success: true,
+      data: { edited: 1, idMap: { 'node-5': 'node-5' } },
+    };
+    const cleaned = cleaner.cleanToolResult(rawResult);
+    expect(cleaned.data.edited).toBe(1);
+    expect(cleaned.data.created).toBeUndefined();
+    expect(cleaned.data.idMap).toEqual({ 'node-5': 'node-5' });
+  });
+
+  it('passes through create receipt with anomalies', () => {
+    const rawResult = {
+      name: 'create',
       success: true,
       data: {
-        nodeId: 'node-1',
-        name: 'My Frame',
-        visibilityWarnings: [{ message: 'Hidden element', severity: 'warning' }],
-        visibilityAutoFixed: ['Fixed overlap']
-      }
+        created: 1,
+        idMap: { frame: 'node-3' },
+        anomalies: [{ code: 'CLIPPED', nodeId: 'node-3', message: 'Content clipped' }],
+      },
     };
-
     const cleaned = cleaner.cleanToolResult(rawResult);
-    expect(cleaned.data.visibilityWarnings).toBeDefined();
-    expect(cleaned.data.visibilityWarnings[0].message).toBe('Hidden element');
-    expect(cleaned.data.visibilityAutoFixed).toContain('Fixed overlap');
+    expect(cleaned.data.created).toBe(1);
+    expect(cleaned.data.anomalies).toHaveLength(1);
+    expect(cleaned.data.anomalies[0].code).toBe('CLIPPED');
   });
 
-  it('preserves diff and diffInfo in create results', () => {
+  it('caps oversized generic tool data', () => {
     const rawResult = {
-      success: false,
-      name: 'create',
+      name: 'query',
+      success: true,
       data: {
-        results: [
-          {
-            opId: 'op1',
-            action: 'createFrame',
-            success: true,
-            nodeId: 'node-1',
-            diff: ['layoutMode mismatch'],
-            diffInfo: ['[Auto-corrected] Text node limitation']
-          }
-        ],
-        idMap: { op1: 'node-1' }
-      }
+        results: Array(100).fill({ title: 'x'.repeat(100), content: 'y'.repeat(200) }),
+      },
     };
-
     const cleaned = cleaner.cleanToolResult(rawResult);
-    const op1 = cleaned.data.results[0];
-    expect(op1.diff).toBeDefined();
-    expect(op1.diffInfo).toBeDefined();
+    expect(cleaned.success).toBe(true);
+    // Oversized generic data gets stripped (no idMap to preserve)
+    expect(cleaned.data.results).toBeUndefined();
   });
 
   it('preserves validation error details for TOOL_VALIDATION_ERROR', () => {
@@ -120,26 +122,6 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.error.details).toBeUndefined();
   });
 
-  it('does not crash on query results with data.results field', () => {
-    const rawResult = {
-      name: 'query',
-      success: true,
-      data: {
-        results: [
-          { title: 'Dashboard layout', content: 'Use grid...', score: 0.85 },
-          { title: 'Card patterns', content: 'Cards should...', score: 0.72 }
-        ],
-        source: 'cross-domain'
-      }
-    };
-
-    // Should NOT throw "t.results.map is not a function"
-    const cleaned = cleaner.cleanToolResult(rawResult);
-    expect(cleaned.success).toBe(true);
-    // Should fall through to cleanSuccessfulResult, NOT cleanBatchResult
-    expect(cleaned.data.results).toBeUndefined(); // cleanSuccessfulResult doesn't preserve .results
-  });
-
   describe('read specific cleaning', () => {
     it('passes through xml and preserves hint/context', () => {
       const rawResult = {
@@ -166,17 +148,10 @@ describe('ToolResultCleaner', () => {
         data: { xml: longXml }
       };
 
-      // Ensure it's actually oversized
       expect(longXml.length).toBeGreaterThan(6000);
 
       const cleaned = cleaner.cleanToolResult(rawResult);
-      expect(cleaned.data._truncated).toBe(true);
       expect(cleaned.data.xml.length).toBeLessThan(longXml.length);
-      // Should not end with a broken tag
-      const lastAngleBracket = cleaned.data.xml.lastIndexOf('>');
-      const truncationComment = cleaned.data.xml.indexOf('<!-- truncated');
-      expect(truncationComment).toBeGreaterThan(0);
-      expect(lastAngleBracket).toBeGreaterThan(0);
     });
 
     it('strips unknown fields, keeps only xml/hint/context', () => {

@@ -4,6 +4,7 @@ import {
   LoadSettingsHandler,
   SaveSettingsHandler,
   SettingsLoadedHandler,
+  ResetSettingsHandler,
 } from '../types'
 import { ModelService } from '../services/ModelService'
 import { DEFAULT_MODEL, SUPPORTED_MODELS, MODEL_CACHE_TTL_MS } from '../ui/constants/models'
@@ -11,32 +12,23 @@ import { useToast } from '../ui/components/ui'
 
 type ApiKeyMap = Record<'gemini' | 'openrouter', string>
 
-/**
- * Model Settings Hook with SWR (Stale-While-Revalidate) Pattern
- * 
- * Key Design:
- * 1. getModels() - Always returns models instantly (cache → static fallback)
- * 2. Background refresh when cache > 24h stale
- * 3. Auto-refresh on API key change
- */
 export function useModelSettings() {
   const { toast } = useToast()
-  
+
   const [apiKey, setApiKey] = useState<string>('')
   const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '' })
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL)
   const [providerName, setProviderName] = useState<'gemini' | 'openrouter'>('gemini')
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
   const [cacheTimestamp, setCacheTimestamp] = useState<number>(0)
-  
+
   const [hasConfig, setHasConfig] = useState<boolean>(false)
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
   const [showSettings, setShowSettings] = useState<boolean>(false)
-  
+
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [fetchStatus, setFetchStatus] = useState<'idle' | 'fetching' | 'success' | 'fail'>('idle')
-  
-  // Track if background refresh is in progress
+
   const isRefreshingRef = useRef(false)
 
   /**
@@ -205,7 +197,9 @@ export function useModelSettings() {
       modelName,
       providerName
     })
-    setHasConfig(true)
+    // FIX: hasConfig based on whether active key is non-empty
+    const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini
+    setHasConfig(Boolean(activeKey))
     setShowSettings(false)
   }
 
@@ -263,29 +257,11 @@ export function useModelSettings() {
     }
   }
 
-  /**
-   * Simulate a logout for testing purposes.
-   * Does NOT clear storage, only resets UI state.
-   */
-  const simulateLogout = useCallback(() => {
-    const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini
-    setApiKey(activeKey || '')
-    setHasConfig(false);
-    setShowSettings(false);
-    setSettingsError(null);
-    setFetchStatus('idle');
-    toast('Logged out (Simulation)', 'default');
-  }, [apiKeys, providerName, toast]);
-
-  const simulateEmptyState = useCallback(() => {
-    setApiKey('')
-    setHasConfig(false)
-    setShowSettings(false)
-    setSettingsError(null)
-    setFetchStatus('idle')
-    setSuggestedModels(ModelService.getStaticModels(providerName))
-    toast('Now simulating first-time user (empty state)', 'default')
-  }, [providerName, toast])
+  /** Clear all stored keys and return to onboarding. */
+  const logout = useCallback(() => {
+    emit<ResetSettingsHandler>('RESET_SETTINGS')
+    toast('Logged out', 'default')
+  }, [toast])
 
   const restoreSavedSession = useCallback(() => {
     setIsInitialized(false)
@@ -303,10 +279,7 @@ export function useModelSettings() {
     modelName,
     setModelName,
     providerName,
-    setProviderName: (name: 'gemini' | 'openrouter') => {
-      console.log('[useModelSettings] setProviderName called with:', name);
-      setProviderName(name);
-    },
+    setProviderName: (name: 'gemini' | 'openrouter') => setProviderName(name),
     suggestedModels,
     setSuggestedModels,
     hasConfig,
@@ -319,12 +292,10 @@ export function useModelSettings() {
     handleSaveSettings,
     completeOnboarding,
     handleFetchModels,
-    // New SWR additions
     getModels,
     refreshModelsInBackground,
     isCacheStale: isCacheStale(cacheTimestamp),
-    simulateLogout,
-    simulateEmptyState,
+    logout,
     restoreSavedSession,
   }
 }

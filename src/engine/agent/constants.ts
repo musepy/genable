@@ -10,15 +10,6 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Default maximum prompt tokens before triggering context compression (real LLM token count) */
   DEFAULT_MAX_CONTEXT_TOKENS: 200000,
   
-  /** Factor of max context tokens to trigger compression (e.g., 0.7 = 70%) */
-  // CONTEXT_COMPRESSION_LIMIT_FACTOR moved to context/constants.ts
-  
-  /** Factor of max context tokens to trigger proactive compression (e.g., 0.75 = 75%) */
-  // CONTEXT_PROACTIVE_COMPRESSION_FACTOR moved to context/constants.ts
-  
-  /** Minimum number of messages before redundant error cleanup is allowed */
-  // REDUNDANT_ERROR_DROP_THRESHOLD moved to context/constants.ts
-
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
   LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for read
 
@@ -33,9 +24,6 @@ export const AGENT_RUNTIME_CONSTANTS = {
 
   /** @deprecated Rambling guard removed — maxOutputTokens provides hard limit. */
   RAMBLING_TEXT_THRESHOLD: 1500,
-
-  /** Maximum chars for batch operation results including idMap + results (~2500 tokens) */
-  // TOOL_RESULT_BATCH_BUDGET moved to context/constants.ts
 
   /** Consecutive iterations where ALL tool calls fail before injecting planning fallback */
   CONSECUTIVE_FAILURE_THRESHOLD: 3,

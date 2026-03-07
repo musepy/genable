@@ -182,7 +182,7 @@ export class IncrementalExecutor {
 
       // ---- 2e. Map the single-action result into a LineResult ----
       const actionResult = executionResult.results[0];
-      const succeeded = actionResult?.success ?? false;
+      let succeeded = actionResult?.success ?? false;
 
       // Merge compiler warnings (sizing defaults) with executor warnings (font fallback, etc.)
       const executorWarnings = actionResult?.warnings?.map(w => ({ code: w.code, message: w.message })) ?? [];
@@ -203,6 +203,23 @@ export class IncrementalExecutor {
       // Promote to 'warning' if succeeded but has warnings
       if (succeeded && lr.warnings && lr.warnings.length > 0) {
         lr.status = 'warning';
+      }
+
+      // ---- 2e′. Degraded fallback: if a frame failed, create a minimal
+      //      placeholder so children aren't cascade-skipped. ----
+      if (!succeeded && line.symbol && resolvedAction.action === 'createFrame') {
+        const fallbackId = await this.tryDegradedFallback(resolvedAction);
+        if (fallbackId) {
+          succeeded = true;
+          lr.status = 'warning';
+          lr.nodeId = fallbackId;
+          const origError = lr.error || 'unknown';
+          lr.error = undefined;
+          lr.warnings = [
+            ...(lr.warnings || []),
+            { code: 'DEGRADED_FALLBACK', message: `Created as minimal frame (original: ${origError}). Use edit to apply styles.` },
+          ];
+        }
       }
 
       // ---- 2f. Update symbolMap and statusMap ----
@@ -325,6 +342,40 @@ export class IncrementalExecutor {
     delete resolved.dependsOn;
 
     return resolved as FigmaAction;
+  }
+
+  /**
+   * Attempt to create a minimal fallback frame when the original createFrame
+   * action failed (e.g. due to an invalid property). This prevents the entire
+   * subtree from being cascade-skipped.
+   *
+   * The fallback frame keeps only `name` from the original props — just enough
+   * to serve as a valid parent for child nodes.
+   *
+   * Returns the real Figma node ID on success, or null if even the fallback fails.
+   */
+  private async tryDegradedFallback(
+    originalAction: FigmaAction,
+  ): Promise<string | null> {
+    const origProps = 'props' in originalAction ? (originalAction as any).props : {};
+    const fallbackAction: FigmaAction = {
+      action: 'createFrame',
+      tempId: originalAction.tempId,
+      parentId: originalAction.parentId,
+      props: { name: origProps?.name || 'Fallback' },
+    };
+
+    try {
+      const executor = new ActionExecutor({ onError: 'skip-dependents' });
+      const result = await executor.execute([fallbackAction]);
+      const ar = result.results[0];
+      if (ar?.success && ar.nodeId) {
+        return ar.nodeId;
+      }
+    } catch {
+      // Fallback also failed (parent doesn't exist, etc.) — give up
+    }
+    return null;
   }
 
   /**

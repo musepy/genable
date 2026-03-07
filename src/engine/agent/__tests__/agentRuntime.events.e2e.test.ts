@@ -64,7 +64,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     expect(events.some(e => e.type === 'iteration_start')).toBe(true);
     expect(events.some(e => e.type === 'tool_call' && e.toolCall.name === 'mock_tool')).toBe(true);
     expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'mock_tool' && e.toolResult.success)).toBe(true);
-    expect(events.some(e => e.type === 'completed' && e.summary === 'Done')).toBe(true);
+    expect(events.some(e => e.type === 'turn_end' && e.summary === 'Done')).toBe(true);
   });
 
   it('Scenario 2: tool error then recovery keeps visible error trail and still completes', async () => {
@@ -107,7 +107,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     expect(result).toBe('Recovered');
     expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'fail_tool' && !e.toolResult.success)).toBe(true);
     expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'fail_tool' && (e.toolResult.error || '').includes('Intentional failure'))).toBe(true);
-    expect(events.some(e => e.type === 'completed' && e.summary === 'Recovered')).toBe(true);
+    expect(events.some(e => e.type === 'turn_end' && e.summary === 'Recovered')).toBe(true);
   });
 
   it('Scenario 3: user cancel stops issuing new tool calls and ends with canceled status', async () => {

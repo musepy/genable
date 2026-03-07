@@ -87,21 +87,29 @@ export function compileCssProps(props: Record<string, any>): Record<string, any>
     delete result.alignItems;
   }
 
-  // ── width: "fill"/"hug" → layoutSizingHorizontal ──
+  // ── width: "fill"/"hug"/"100%" → layoutSizingHorizontal ──
   if ('width' in result && typeof result.width === 'string') {
-    const w = result.width.toLowerCase();
+    const w = result.width.toLowerCase().trim();
     if (w === 'fill' || w === 'hug') {
       result.layoutSizingHorizontal = w.toUpperCase();
+      delete result.width;
+    } else if (w === '100%') {
+      // CSS "100%" → Figma FILL (stretch to parent)
+      result.layoutSizingHorizontal = 'FILL';
       delete result.width;
     }
     // else: non-numeric string left as-is (pass-through for edge cases)
   }
 
-  // ── height: "fill"/"hug" → layoutSizingVertical ──
+  // ── height: "fill"/"hug"/"100%" → layoutSizingVertical ──
   if ('height' in result && typeof result.height === 'string') {
-    const h = result.height.toLowerCase();
+    const h = result.height.toLowerCase().trim();
     if (h === 'fill' || h === 'hug') {
       result.layoutSizingVertical = h.toUpperCase();
+      delete result.height;
+    } else if (h === '100%') {
+      // CSS "100%" → Figma FILL (stretch to parent)
+      result.layoutSizingVertical = 'FILL';
       delete result.height;
     }
   }

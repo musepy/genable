@@ -43,7 +43,6 @@ export interface LLMGenerationResult {
 }
 
 export interface LLMGenerationCoordinatorConfig {
-  thinkingTimeoutMs: number;
   throttleMs: number;
   generateId: (prefix: string) => string;
   normalizeToolCallId: (tc: LLMToolCall, fallbackPrefix: string) => string;
@@ -66,8 +65,8 @@ export class LLMGenerationCoordinator {
   private lastTextNotificationTime = 0;
   /** Buffered text delta not yet emitted due to throttling. */
   private pendingTextDelta = '';
-  /** Previous stable-prefix hash for cache diagnostics. */
-  private lastStablePrefixHash: string | null = null;
+  /** Per-message content hashes from the previous LLM call, for cache prefix comparison. */
+  private previousMessageHashes: number[] = [];
 
   constructor(
     private provider: LLMProvider,
@@ -83,7 +82,9 @@ export class LLMGenerationCoordinator {
     this.lastNotificationTime = 0;
     this.lastTextNotificationTime = 0;
     this.pendingTextDelta = '';
-    this.lastStablePrefixHash = null;
+    // NOTE: previousMessageHashes is intentionally NOT reset here.
+    // Messages accumulate across runs (this.messages persists), so the
+    // hash chain must also persist for accurate KV-cache diagnostics.
   }
 
   /**
@@ -99,8 +100,8 @@ export class LLMGenerationCoordinator {
     let response: LLMResponse;
 
     this.config.throwIfCanceled(iteration + 1);
-    this.logPrefixHashDiagnostics(request.messages, iteration);
 
+    const cache = this.computeCacheDiagnostics(request.messages);
     const llmCallId = this.config.generateId('llm');
     const llmStartMs = Date.now();
 
@@ -125,6 +126,7 @@ export class LLMGenerationCoordinator {
         thinkingLevel: request.thinkingLevel,
         toolMode: request.toolConfig.mode,
       },
+      cache,
     });
 
     try {
@@ -135,7 +137,6 @@ export class LLMGenerationCoordinator {
           toolConfig: request.toolConfig,
           maxTokens: request.maxOutputTokens,
           abortSignal: abortController.signal,
-          streamTimeoutMs: this.config.thinkingTimeoutMs,
           onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
             this.config.notifyIterationStart?.();
             // Stream text chunks to UI for progressive "grow" effect
@@ -247,6 +248,11 @@ export class LLMGenerationCoordinator {
       const historyToolCalls = this.cleaner.sanitizeToolCallsForHistory(rawToolCalls);
       response.toolCalls = historyToolCalls;
 
+      // Log provider-reported cache hit
+      if (response.usage?.cachedTokens) {
+        console.log(`[KVCache] Provider reported ${response.usage.cachedTokens} cached tokens out of ${response.usage.promptTokens} prompt tokens`);
+      }
+
       // Emit llm_response (success)
       this.config.emitRuntimeEvent({
         type: 'llm_response',
@@ -287,54 +293,46 @@ export class LLMGenerationCoordinator {
     }
   }
 
-  private logPrefixHashDiagnostics(messages: LLMMessage[], iteration: number): void {
-    const systemMessages = messages.filter(m => m.role === 'system');
-    const firstUserMessage = messages.find(m => m.role === 'user');
+  /**
+   * Compare current message sequence with the previous call to find the
+   * longest identical prefix — the portion a provider can serve from KV cache.
+   */
+  private computeCacheDiagnostics(messages: LLMMessage[]): {
+    cacheableMessages: number;
+    totalMessages: number;
+    cacheableTokensEstimate: number;
+  } {
+    const currentHashes = messages.map(m => {
+      const raw = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      return this.fnv1a(raw);
+    });
 
-    const stablePrefixMessages = firstUserMessage
-      ? [...systemMessages, firstUserMessage]
-      : [...systemMessages];
-
-    const stablePrefixSignature = stablePrefixMessages
-      .map(m => `${m.role}:${this.normalizeContent(m.content)}`)
-      .join('\n---\n');
-
-    const systemSignature = systemMessages
-      .map(m => this.normalizeContent(m.content))
-      .join('\n---\n');
-
-    const firstUserSignature = firstUserMessage
-      ? this.normalizeContent(firstUserMessage.content)
-      : '';
-
-    const stablePrefixHash = this.hashString(stablePrefixSignature);
-    const systemHash = this.hashString(systemSignature);
-    const firstUserHash = this.hashString(firstUserSignature);
-    const sameAsPrevious = this.lastStablePrefixHash === stablePrefixHash;
-    this.lastStablePrefixHash = stablePrefixHash;
-
-    const headRoles = messages.slice(0, 6).map(m => m.role).join('>');
-    console.log(
-      `[LLMGenCoordinator] PrefixHash iter=${iteration} prefix_stable=${sameAsPrevious} stable_hash=${stablePrefixHash} system_hash=${systemHash} first_user_hash=${firstUserHash} systems=${systemMessages.length} messages=${messages.length} headRoles=${headRoles}`
-    );
-  }
-
-  private normalizeContent(content: LLMMessage['content']): string {
-    if (typeof content === 'string') return content;
-    try {
-      return JSON.stringify(content);
-    } catch {
-      return '[unserializable-content]';
+    let cacheableMessages = 0;
+    let cacheableChars = 0;
+    for (let i = 0; i < Math.min(currentHashes.length, this.previousMessageHashes.length); i++) {
+      if (currentHashes[i] !== this.previousMessageHashes[i]) break;
+      cacheableMessages++;
+      const c = messages[i].content;
+      cacheableChars += typeof c === 'string' ? c.length : JSON.stringify(c).length;
     }
+
+    this.previousMessageHashes = currentHashes;
+
+    const cacheableTokensEstimate = Math.round(cacheableChars / 4);
+    console.log(
+      `[KVCache] ${cacheableMessages}/${messages.length} msgs cacheable (~${cacheableTokensEstimate} tokens)`
+    );
+
+    return { cacheableMessages, totalMessages: messages.length, cacheableTokensEstimate };
   }
 
-  private hashString(value: string): string {
-    // FNV-1a 32-bit: small and stable enough for runtime diagnostics.
+  /** FNV-1a 32-bit hash — small and stable for runtime diagnostics. */
+  private fnv1a(value: string): number {
     let hash = 0x811c9dc5;
     for (let i = 0; i < value.length; i++) {
       hash ^= value.charCodeAt(i);
       hash = (hash * 0x01000193) >>> 0;
     }
-    return hash.toString(36);
+    return hash;
   }
 }

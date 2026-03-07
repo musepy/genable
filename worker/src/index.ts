@@ -269,6 +269,50 @@ async function handleUsage(request: Request, env: Env): Promise<Response> {
   });
 }
 
+// ─── DashScope CORS Proxy ────────────────────────────────────────────────────
+
+const DASHSCOPE_BASE = 'https://coding.dashscope.aliyuncs.com/v1';
+
+/** Generic CORS proxy for DashScope — forwards client's own API key, adds UA */
+async function handleDashScopeProxy(request: Request, stream: boolean): Promise<Response> {
+  let body: any;
+  try { body = await request.json(); } catch { return errorResponse('Invalid JSON body', 400); }
+
+  const apiKey = request.headers.get('Authorization') || '';
+  if (!apiKey) return errorResponse('Missing Authorization header', 401);
+
+  if (stream) body.stream = true;
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${DASHSCOPE_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+        'User-Agent': 'anthropic-python/0.42.0',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e: any) {
+    return errorResponse(`DashScope upstream unreachable: ${e.message}`, 502);
+  }
+
+  if (!upstream.ok) {
+    const errText = await upstream.text();
+    return new Response(errText, {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
+  }
+
+  const contentType = stream ? 'text/event-stream' : 'application/json';
+  return new Response(upstream.body, {
+    status: 200,
+    headers: { 'Content-Type': contentType, 'Cache-Control': 'no-cache', ...corsHeaders() },
+  });
+}
+
 // ─── Main fetch handler ───────────────────────────────────────────────────────
 
 export default {
@@ -279,6 +323,14 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // DashScope CORS proxy (client provides own API key)
+    if (path === '/api/dashscope/generate' && request.method === 'POST') {
+      return handleDashScopeProxy(request, true);
+    }
+    if (path === '/api/dashscope/generate-sync' && request.method === 'POST') {
+      return handleDashScopeProxy(request, false);
+    }
 
     if (path === '/api/generate' && request.method === 'POST') {
       return handleGenerateStream(request, env);

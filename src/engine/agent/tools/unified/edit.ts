@@ -14,9 +14,11 @@ export const editDefinition: ToolDefinition = {
   dependencies: ['read'],
   description: `Modify or delete existing nodes using XML markup. Same CSS/abbreviation syntax as create.
 
+CANNOT create new nodes — only modify or delete existing ones. To add new nodes, use \`create\` instead.
 Every tag MUST have an \`id\` attribute referencing a real Figma node ID (from \`read\` or previous \`create\` idMap).
 Only include properties you want to CHANGE — unspecified properties remain unchanged.
 Use \`<delete id="xxx"/>\` to remove a node and all its children.
+To REPLACE a node: \`edit\` to delete the old one, then \`create\` to add the new one.
 
 IMPORTANT: Always use \`read\` first to get real nodeIds before editing.
 

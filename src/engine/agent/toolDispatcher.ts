@@ -86,6 +86,11 @@ export class ToolDispatcher {
     private config: ToolDispatcherConfig,
   ) {}
 
+  /** Merge additional executors (e.g. when reusing runtime across turns). */
+  public mergeExecutors(executors: Record<string, ToolExecutor>): void {
+    Object.assign(this.toolExecutors, executors);
+  }
+
   /**
    * Dispatch an array of tool calls — handles terminal signals, execution,
    * timeout, error classification, and result cleaning.

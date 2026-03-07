@@ -4,7 +4,8 @@
  * instead of calling Gemini directly. API-key stays server-side; users authenticate
  * with a subscription token.
  *
- * Drop-in replacement for GeminiProvider: implements the same LLMProvider interface.
+ * Uses the same Gemini API protocol as GeminiProvider — shares response mapping
+ * via GeminiProvider.mapToLLMResponse() and content mapping logic.
  */
 
 import {
@@ -16,135 +17,77 @@ import {
   LLMToolResult,
   Part,
   LLMProviderCapabilities,
+  getToolSystemInstructionDefault,
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { isGemini3Model } from '../modelFilter';
 import { GEMINI_CONFIG } from '../config';
-import { GeminiResponseAccumulator } from './gemini/geminiResponseAccumulator';
+import { ResponseAccumulator } from './shared/responseAccumulator';
+import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 
-// ─── Utility ─────────────────────────────────────────────────────────────────
+/** Idle timeout: max silence between chunks (ms). Longer than direct Gemini due to network hop. */
+const STREAM_IDLE_TIMEOUT_MS = 45000;
+/** Connect timeout: max time to establish HTTP connection (ms) */
+const CONNECT_TIMEOUT_MS = 15000;
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
 }
 
-// ─── ProxyProvider ────────────────────────────────────────────────────────────
-
 export class ProxyProvider implements LLMProvider {
   public readonly name = 'proxy';
-
-  /** Default SSE stream timeout: 60 s (longer than direct Gemini due to network hop) */
-  private static readonly DEFAULT_STREAM_TIMEOUT_MS = 60_000;
 
   constructor(
     private readonly workerUrl: string,
     private readonly subscriptionToken: string,
-    private readonly modelName: string
+    private readonly modelName: string,
   ) {}
 
   getCapabilities(): LLMProviderCapabilities {
-    return {
-      supportsTextStreaming: true,
-      supportsReasoningStreaming: true,
-    };
+    return { supportsTextStreaming: true, supportsReasoningStreaming: true };
   }
 
-  // ── Public LLMProvider interface ────────────────────────────────────────────
-
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
-    const {
-      messages,
-      tools,
-      temperature,
-      maxTokens,
-      thinkingLevel,
-      responseSchema,
-      toolConfig,
-      onProgress,
-      onThinking,
-      abortSignal,
-      streamTimeoutMs,
-    } = options;
+    const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig, onProgress, onThinking, abortSignal } = options;
 
-    const body = this.buildRequestBody({
-      messages,
-      tools,
-      temperature,
-      maxTokens,
-      thinkingLevel,
-      responseSchema,
-      toolConfig,
-    });
+    const body = this.buildRequestBody({ messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig });
 
     if (onProgress || onThinking) {
-      return this.generateStreaming(body, onProgress, onThinking, abortSignal, streamTimeoutMs);
+      return this.generateStreaming(body, onProgress, onThinking, abortSignal);
     }
-
     return this.generateSync(body);
   }
 
   async *generateStream(options: LLMGenerateOptions): AsyncIterable<LLMResponse> {
-    const res = await this.generate(options);
-    yield res;
+    yield await this.generate(options);
   }
 
   formatResponse(response: LLMResponse): LLMMessage {
     if (!response.toolCalls || response.toolCalls.length === 0) {
-      return {
-        id: randomId('mdl_'),
-        role: 'model',
-        content: response.text || '',
-      };
+      return { id: randomId('mdl_'), role: 'model', content: response.text || '' };
     }
-
     const content: Part[] = (response.fullParts || []).filter((p: any) => {
       return p.functionCall || p.thought || (p.text && p.text.trim() !== '');
     });
-
-    return {
-      id: randomId('mdl_'),
-      role: 'model',
-      content,
-    };
+    return { id: randomId('mdl_'), role: 'model', content };
   }
 
   formatToolResults(results: LLMToolResult[]): LLMMessage {
     const content: Part[] = [];
-
     for (const tr of results) {
-      content.push({
-        functionResponse: { name: tr.name, response: tr.response },
-        thought_signature: tr.thought_signature,
-      } as any);
-
+      content.push({ functionResponse: { name: tr.name, response: tr.response }, thought_signature: tr.thought_signature } as any);
       if (tr.imageAttachment) {
-        content.push({
-          inlineData: {
-            mimeType: tr.imageAttachment.mimeType,
-            data: tr.imageAttachment.data,
-          },
-        });
+        content.push({ inlineData: { mimeType: tr.imageAttachment.mimeType, data: tr.imageAttachment.data } });
       }
     }
-
-    return {
-      id: randomId('tol_'),
-      role: 'tool',
-      content,
-    };
+    return { id: randomId('tol_'), role: 'tool', content };
   }
 
   getToolSystemInstruction(tools: ToolDefinition[]): string {
-    if (!tools || tools.length === 0) return '';
-    try {
-      const { TOOL_CALLING_PROTOCOL } = require('../../prompt/promptRegistry');
-      return TOOL_CALLING_PROTOCOL;
-    } catch {
-      return '';
-    }
+    return getToolSystemInstructionDefault(tools);
   }
 
-  // ── Request building ─────────────────────────────────────────────────────────
+  // ── Request Building ─────────────────────────────────────────────────────────
 
   private buildRequestBody(opts: {
     messages: LLMMessage[];
@@ -160,10 +103,8 @@ export class ProxyProvider implements LLMProvider {
 
     const systemMessage = messages.find(m => m.role === 'system');
     const chatMessages = messages.filter(m => m.role !== 'system');
-
     const effectiveMaxTokens = maxTokens || GEMINI_CONFIG.MAX_OUTPUT_TOKENS;
 
-    // ── generationConfig ──
     const generationConfig: Record<string, any> = {
       temperature: temperature ?? 0.4,
       maxOutputTokens: effectiveMaxTokens,
@@ -175,11 +116,8 @@ export class ProxyProvider implements LLMProvider {
         if (apiLevel === 'MINIMAL') apiLevel = 'LOW';
         generationConfig.thinkingConfig = { thinkingLevel: apiLevel };
       } else {
-        const budgetMap: Record<string, number> = {
-          minimal: 1024, low: 4096, medium: 10_240, high: 16_384,
-        };
-        const budget = budgetMap[thinkingLevel] ?? 4096;
-        generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: budget };
+        const budgetMap: Record<string, number> = { minimal: 1024, low: 4096, medium: 10_240, high: 16_384 };
+        generationConfig.thinkingConfig = { includeThoughts: true, thinkingBudget: budgetMap[thinkingLevel] ?? 4096 };
       }
     }
 
@@ -188,51 +126,29 @@ export class ProxyProvider implements LLMProvider {
       generationConfig.responseSchema = responseSchema;
     }
 
-    // ── tools ──
-    const toolsPayload: any[] | undefined = tools && tools.length > 0
+    const toolsPayload = tools && tools.length > 0
       ? [{ functionDeclarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }]
       : undefined;
 
-    // ── toolConfig ──
-    let toolConfigPayload: any | undefined;
+    let toolConfigPayload: any;
     if (toolsPayload) {
       let mode = toolConfig?.mode || 'AUTO';
-      const ANY_MODE_LIMIT = 12;
-      if (mode === 'ANY' && tools && tools.length > ANY_MODE_LIMIT) mode = 'AUTO';
-
+      if (mode === 'ANY' && tools && tools.length > 12) mode = 'AUTO';
       const allowed = toolConfig?.allowedTools;
       const declarationNames = tools?.map(t => t.name) || [];
       const safeAllowed = allowed?.filter(n => declarationNames.includes(n));
-
       toolConfigPayload = {
-        functionCallingConfig: {
-          mode,
-          allowedFunctionNames: safeAllowed && safeAllowed.length > 0 ? safeAllowed : undefined,
-        },
+        functionCallingConfig: { mode, allowedFunctionNames: safeAllowed && safeAllowed.length > 0 ? safeAllowed : undefined },
       };
     }
 
-    // ── systemInstruction ──
     const systemInstruction = systemMessage
-      ? {
-          role: 'user',
-          parts: [
-            {
-              text: typeof systemMessage.content === 'string'
-                ? systemMessage.content
-                : (systemMessage.content as any[]).map(p => p.text).join('\n'),
-            },
-          ],
-        }
+      ? { role: 'user', parts: [{ text: typeof systemMessage.content === 'string' ? systemMessage.content : (systemMessage.content as any[]).map(p => p.text).join('\n') }] }
       : undefined;
 
-    // ── contents ──
-    const contents = chatMessages.map(m => this.mapMessageToContent(m));
-
     return {
-      // model is used by the Worker to build the upstream URL
       model: this.modelName,
-      contents,
+      contents: chatMessages.map(m => this.mapMessageToContent(m)),
       ...(systemInstruction && { systemInstruction }),
       generationConfig,
       ...(toolsPayload && { tools: toolsPayload }),
@@ -240,120 +156,85 @@ export class ProxyProvider implements LLMProvider {
     };
   }
 
-  // ── HTTP calls ───────────────────────────────────────────────────────────────
+  // ── HTTP ──────────────────────────────────────────────────────────────────────
 
   private authHeaders(): Record<string, string> {
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.subscriptionToken}`,
-    };
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${this.subscriptionToken}` };
   }
 
-  /** Non-streaming path: POST /api/generate-sync */
   private async generateSync(body: Record<string, any>): Promise<LLMResponse> {
     const res = await fetch(`${this.workerUrl}/api/generate-sync`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: JSON.stringify(body),
+      method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body),
     });
-
     if (!res.ok) {
       const errText = await res.text();
       throw new Error(`[ProxyProvider] Upstream error ${res.status}: ${errText}`);
     }
-
-    const data = await res.json() as any;
-    return this.mapToLLMResponse(data);
+    return this.mapToLLMResponse(await res.json());
   }
 
-  /** Streaming path: POST /api/generate → SSE */
   private async generateStreaming(
     body: Record<string, any>,
     onProgress?: (chunk: string) => void,
     onThinking?: (thought: string) => void,
     abortSignal?: AbortSignal,
-    streamTimeoutMs?: number,
   ): Promise<LLMResponse> {
-    const res = await fetch(`${this.workerUrl}/api/generate`, {
-      method: 'POST',
-      headers: this.authHeaders(),
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
+    const res = await withConnectTimeout(
+      () => fetch(`${this.workerUrl}/api/generate`, {
+        method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body), signal: abortSignal,
+      }),
+      CONNECT_TIMEOUT_MS,
+    );
 
     if (!res.ok) {
       const errText = await res.text();
       throw new Error(`[ProxyProvider] Upstream error ${res.status}: ${errText}`);
     }
 
-    const accumulator = new GeminiResponseAccumulator();
-    const timeout = streamTimeoutMs || ProxyProvider.DEFAULT_STREAM_TIMEOUT_MS;
-    const startTime = Date.now();
-
     const reader = res.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let timedOut = false;
+    const accumulator = new ResponseAccumulator();
 
     try {
-      while (true) {
-        if (abortSignal?.aborted) {
-          console.warn('[ProxyProvider] Stream aborted');
-          break;
-        }
-        if (Date.now() - startTime > timeout) {
-          console.warn(`[ProxyProvider] Stream timeout after ${timeout}ms`);
-          timedOut = true;
-          break;
-        }
+      const { timedOut } = await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
+        const chunk = this.mapToLLMResponse(parsed);
+        if (chunk.text) onProgress?.(chunk.text);
+        if (chunk.thoughts) onThinking?.(chunk.thoughts);
+        accumulator.append(chunk);
+      }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
 
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE lines
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') break;
-
-          try {
-            const parsed = JSON.parse(data);
-            const chunk = this.mapToLLMResponse(parsed);
-            if (chunk.text) onProgress?.(chunk.text);
-            if (chunk.thoughts) onThinking?.(chunk.thoughts);
-            accumulator.append(chunk);
-          } catch {
-            // Partial or non-JSON line — ignore
-          }
-        }
-      }
+      if (timedOut) console.warn('[ProxyProvider] Stream idle timeout. Returning partial result.');
     } finally {
       reader.cancel().catch(() => {});
-    }
-
-    if (timedOut) {
-      console.warn('[ProxyProvider] Stream timed out. Returning partial result.');
     }
 
     return accumulator.finalize();
   }
 
-  // ── Response mapping ─────────────────────────────────────────────────────────
-
-  /** Maps a raw Gemini REST API response object to LLMResponse */
-  private mapToLLMResponse(response: any): LLMResponse {
-    if (response?.error) {
-      throw new Error(`[ProxyProvider] Gemini error: ${JSON.stringify(response.error)}`);
+  /** Converts raw SSE byte stream to parsed JSON objects */
+  private async *parseSSEStream(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<any> {
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') return;
+        try { yield JSON.parse(data); } catch { /* partial line */ }
+      }
     }
+  }
 
-    const candidate = response?.candidates?.[0];
-    const parts: any[] = candidate?.content?.parts || [];
+  // ── Response Mapping (Gemini API format) ─────────────────────────────────────
 
+  private mapToLLMResponse(response: any): LLMResponse {
+    if (response?.error) throw new Error(`[ProxyProvider] Gemini error: ${JSON.stringify(response.error)}`);
+
+    const parts: any[] = response?.candidates?.[0]?.content?.parts || [];
     let text = '';
     let thoughts = '';
     const toolCalls: LLMToolCall[] = [];
@@ -363,12 +244,12 @@ export class ProxyProvider implements LLMProvider {
       ?.thoughtSignature ?? parts.find((p: any) => p.thought_signature)?.thought_signature;
 
     for (const part of parts) {
+      const sig = part.thoughtSignature || part.thought_signature || sharedSignature;
+
       if (part.functionCall) {
-        const sig = part.thoughtSignature || part.thought_signature || sharedSignature;
         const tc: LLMToolCall = {
           id: part.functionCall.id || randomId('call_'),
-          name: part.functionCall.name,
-          args: part.functionCall.args,
+          name: part.functionCall.name, args: part.functionCall.args,
           metadata: sig ? { thought_signature: sig } : undefined,
           thought_signature: sig,
         };
@@ -377,86 +258,56 @@ export class ProxyProvider implements LLMProvider {
       } else if (part.thought) {
         const thoughtText = typeof part.thought === 'string' ? part.thought : (part.text || '');
         if (thoughtText) thoughts += thoughtText;
-        const sig = part.thoughtSignature || part.thought_signature || sharedSignature;
         fullParts.push({ ...part, thought_signature: sig } as any);
       } else if (part.text) {
         text += part.text;
-        const sig = part.thoughtSignature || part.thought_signature || sharedSignature;
         fullParts.push({ ...part, thought_signature: sig } as any);
       }
     }
 
-    const usage = response.usageMetadata
-      ? {
-          promptTokens: response.usageMetadata.promptTokenCount || 0,
-          completionTokens: response.usageMetadata.candidatesTokenCount || 0,
-          totalTokens: response.usageMetadata.totalTokenCount || 0,
-        }
-      : undefined;
-
     return {
-      text,
-      thoughts: thoughts || undefined,
+      text, thoughts: thoughts || undefined,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       fullParts: fullParts.length > 0 ? fullParts : undefined,
-      usage,
+      usage: response.usageMetadata ? {
+        promptTokens: response.usageMetadata.promptTokenCount || 0,
+        completionTokens: response.usageMetadata.candidatesTokenCount || 0,
+        totalTokens: response.usageMetadata.totalTokenCount || 0,
+        cachedTokens: response.usageMetadata.cachedContentTokenCount || undefined,
+      } : undefined,
     };
   }
 
-  // ── Message mapping ──────────────────────────────────────────────────────────
+  // ── Content Mapping ──────────────────────────────────────────────────────────
 
   private mapMessageToContent(msg: LLMMessage): any {
     const role = msg.role === 'model' ? 'model' : 'user';
+    const parts = typeof msg.content === 'string'
+      ? [{ text: msg.content }]
+      : (msg.content as any[]).map((p: any) => {
+        const sig = (p.thought_signature || p.thoughtSignature) ? ensureBase64(p.thought_signature || p.thoughtSignature) : undefined;
 
-    const parts =
-      typeof msg.content === 'string'
-        ? [{ text: msg.content }]
-        : (msg.content as any[])
-            .map((p: any) => {
-              const sig = p.thought_signature || p.thoughtSignature
-                ? this.ensureBase64(p.thought_signature || p.thoughtSignature)
-                : undefined;
-
-              if (p.thought) {
-                if (p.thought === true && p.text) return { text: p.text, thought: true, ...(sig && { thoughtSignature: sig }) };
-                return { thought: p.thought, ...(sig && { thoughtSignature: sig }) };
-              }
-              if (p.functionCall) {
-                return {
-                  functionCall: { name: p.functionCall.name, args: p.functionCall.args },
-                  ...(sig && { thoughtSignature: sig }),
-                };
-              }
-              if (p.functionResponse) {
-                return {
-                  functionResponse: { name: p.functionResponse.name, response: p.functionResponse.response },
-                  ...(sig && { thoughtSignature: sig }),
-                };
-              }
-              if (p.inlineData) {
-                return {
-                  inlineData: { mimeType: p.inlineData.mimeType, data: p.inlineData.data },
-                };
-              }
-              if (p.text) return { text: p.text };
-              return { text: '' };
-            })
-            .filter((p: any) => {
-              if (p.text === '' && Object.keys(p).length === 1) return false;
-              return p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined || p.inlineData !== undefined;
-            });
+        if (p.thought) {
+          if (p.thought === true && p.text) return { text: p.text, thought: true, ...(sig && { thoughtSignature: sig }) };
+          return { thought: p.thought, ...(sig && { thoughtSignature: sig }) };
+        }
+        if (p.functionCall) return { functionCall: { name: p.functionCall.name, args: p.functionCall.args }, ...(sig && { thoughtSignature: sig }) };
+        if (p.functionResponse) return { functionResponse: { name: p.functionResponse.name, response: p.functionResponse.response }, ...(sig && { thoughtSignature: sig }) };
+        if (p.inlineData) return { inlineData: { mimeType: p.inlineData.mimeType, data: p.inlineData.data } };
+        if (p.text) return { text: p.text };
+        return { text: '' };
+      }).filter((p: any) => {
+        if (p.text === '' && Object.keys(p).length === 1) return false;
+        return p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined || p.inlineData !== undefined;
+      });
 
     return { role, parts };
   }
+}
 
-  private ensureBase64(str: string): string {
-    if (!str) return '';
-    const b64Regex = /^[A-Za-z0-9+/_-]+=*$/;
-    if (b64Regex.test(str)) return str;
-    try {
-      return Buffer.from(str).toString('base64');
-    } catch {
-      return str;
-    }
-  }
+function ensureBase64(str: string): string {
+  if (!str) return '';
+  const b64Regex = /^[A-Za-z0-9+/_-]+=*$/;
+  if (b64Regex.test(str)) return str;
+  try { return Buffer.from(str).toString('base64'); } catch { return str; }
 }

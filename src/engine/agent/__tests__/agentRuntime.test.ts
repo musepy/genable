@@ -90,8 +90,8 @@ describe('AgentRuntime', () => {
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
 
     const messages = runtime.getMessages();
-    expect(messages).toHaveLength(5); // system, user, model(thought+call), tool(result), model(text)
-    expect(messages[3].role).toBe('tool');
+    expect(messages).toHaveLength(4); // user, model(thought+call), tool(result), model(text)
+    expect(messages[2].role).toBe('tool');
   });
 
   it('should short-circuit unified validation errors and keep actionable details in tool result history', async () => {

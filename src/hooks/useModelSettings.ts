@@ -10,15 +10,15 @@ import { ModelService } from '../services/ModelService'
 import { DEFAULT_MODEL, SUPPORTED_MODELS, MODEL_CACHE_TTL_MS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
 
-type ApiKeyMap = Record<'gemini' | 'openrouter', string>
+type ApiKeyMap = Record<'gemini' | 'openrouter' | 'dashscope', string>
 
 export function useModelSettings() {
   const { toast } = useToast()
 
   const [apiKey, setApiKey] = useState<string>('')
-  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '' })
+  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '', dashscope: '' })
   const [modelName, setModelName] = useState<string>(DEFAULT_MODEL)
-  const [providerName, setProviderName] = useState<'gemini' | 'openrouter'>('gemini')
+  const [providerName, setProviderName] = useState<'gemini' | 'openrouter' | 'dashscope'>('gemini')
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
   const [cacheTimestamp, setCacheTimestamp] = useState<number>(0)
 
@@ -80,7 +80,7 @@ export function useModelSettings() {
     apiKey: string;
     apiKeys: ApiKeyMap;
     modelName: string;
-    providerName: 'gemini' | 'openrouter';
+    providerName: 'gemini' | 'openrouter' | 'dashscope';
   }) => {
     emit<SaveSettingsHandler>('SAVE_SETTINGS', {
       apiKey: next.apiKey,
@@ -102,6 +102,7 @@ export function useModelSettings() {
       const nextApiKeys: ApiKeyMap = {
         gemini: s.apiKeys?.gemini || '',
         openrouter: s.apiKeys?.openrouter || '',
+        dashscope: s.apiKeys?.dashscope || '',
       }
 
       // Legacy single key support
@@ -109,8 +110,8 @@ export function useModelSettings() {
         nextApiKeys[nextProvider] = s.apiKey
       }
 
-      const activeKey = nextProvider === 'openrouter' ? nextApiKeys.openrouter : nextApiKeys.gemini
-      const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || s.apiKey)
+      const activeKey = nextApiKeys[nextProvider] || ''
+      const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || nextApiKeys.dashscope || s.apiKey)
 
       setApiKeys(nextApiKeys)
 
@@ -164,7 +165,7 @@ export function useModelSettings() {
    * Sync active apiKey when providerName changes
    */
   useEffect(() => {
-    const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini;
+    const activeKey = apiKeys[providerName] || '';
     setApiKey(activeKey || '');
     
     // [FIX] Show static models first when switching providers to prevent flicker
@@ -198,7 +199,7 @@ export function useModelSettings() {
       providerName
     })
     // FIX: hasConfig based on whether active key is non-empty
-    const activeKey = providerName === 'openrouter' ? apiKeys.openrouter : apiKeys.gemini
+    const activeKey = apiKeys[providerName] || ''
     setHasConfig(Boolean(activeKey))
     setShowSettings(false)
   }
@@ -279,7 +280,7 @@ export function useModelSettings() {
     modelName,
     setModelName,
     providerName,
-    setProviderName: (name: 'gemini' | 'openrouter') => setProviderName(name),
+    setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope') => setProviderName(name),
     suggestedModels,
     setSuggestedModels,
     hasConfig,

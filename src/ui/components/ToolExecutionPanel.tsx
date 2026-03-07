@@ -25,7 +25,6 @@ interface ToolExecutionPanelProps {
   runError?: string
   onStop?: () => void
   onContinue?: () => void
-  queuedCount?: number
   onErrorAction?: (action: ErrorActionType) => void
 }
 
@@ -104,7 +103,6 @@ export function ToolExecutionPanel({
   runError,
   onStop,
   onContinue,
-  queuedCount = 0,
   onErrorAction,
 }: ToolExecutionPanelProps) {
   const [expanded, setExpanded] = useState(false)
@@ -139,19 +137,16 @@ export function ToolExecutionPanel({
     } else if (runState === 'running') {
       const task = currentTaskTitle || thinkingStatus || ('Thinking')
       parts.push(`${task}${dots}`)
-    } else if (runState === 'completed') {
-      parts.push('Completed')
     } else if (thinkingStatus) {
       parts.push(`${thinkingStatus}${dots}`)
     } else {
       parts.push('Waiting')
     }
-    if (elapsedText) parts.push(runState === 'completed' ? `in ${elapsedText}` : elapsedText)
+    if (elapsedText) parts.push(elapsedText)
     if (isRunning && progress) parts.push(`${progress.iteration}/${progress.maxIterations}`)
     if (!isRunning && toolCount > 0) parts.push(`${toolCount} tool use${toolCount > 1 ? 's' : ''}`)
-    if (isRunning && queuedCount > 0) parts.push(`${queuedCount} queued`)
     return parts
-  }, [runState, runError, reconnectCount, maxReconnects, currentTaskTitle, thinkingStatus, phase, dots, elapsedText, progress, toolCount, queuedCount, isRunning])
+  }, [runState, runError, reconnectCount, maxReconnects, currentTaskTitle, thinkingStatus, phase, dots, elapsedText, progress, toolCount, isRunning])
 
   if (
     toolCalls.length === 0 && !thinkingStatus && !reasoningPreview &&

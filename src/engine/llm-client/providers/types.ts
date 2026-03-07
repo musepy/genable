@@ -79,6 +79,8 @@ export interface LLMResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** Tokens served from provider KV cache (if reported). */
+    cachedTokens?: number;
   };
   thoughts?: string;
   /** Full original parts from the provider to ensure exact history reconstruction */
@@ -198,4 +200,14 @@ export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
       // thought_signature intentionally omitted - not allowed in functionResponse
     }))
   };
+}
+
+/**
+ * Default implementation for getToolSystemInstruction.
+ * All providers currently use the same centralized TOOL_CALLING_PROTOCOL.
+ */
+export function getToolSystemInstructionDefault(tools: ToolDefinition[]): string {
+  if (!tools || tools.length === 0) return '';
+  const { TOOL_CALLING_PROTOCOL } = require('../../prompt/promptRegistry');
+  return TOOL_CALLING_PROTOCOL;
 }

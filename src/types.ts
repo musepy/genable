@@ -7,7 +7,7 @@ export interface Settings {
   apiKey: string; // Active/Default key for backward compatibility
   apiKeys?: Record<string, string>; // [NEW] Map of provider -> key
   modelName: string;
-  providerName?: 'gemini' | 'openrouter';
+  providerName?: 'gemini' | 'openrouter' | 'dashscope';
   availableModels?: { name: string; displayName: string }[];
   /** Timestamp when models were last fetched (for SWR cache) */
   cacheTimestamp?: number;
@@ -215,6 +215,23 @@ export interface ToolResultHandler extends EventHandler {
   handler: (data: {
     requestId: string,
     response: import('./engine/agent/tools/types').ToolResponse
+  }) => void;
+}
+
+// ==========================================
+// Dev Bridge: Node Tree + Screenshot Export
+// ==========================================
+
+export interface DevBridgeExportHandler extends EventHandler {
+  name: 'DEV_BRIDGE_EXPORT';
+  handler: (data: { rootNodeIds?: string[] }) => void;
+}
+
+export interface DevBridgeExportResultHandler extends EventHandler {
+  name: 'DEV_BRIDGE_EXPORT_RESULT';
+  handler: (data: {
+    nodeTree: any;
+    screenshot: string | null; // base64 PNG
   }) => void;
 }
 

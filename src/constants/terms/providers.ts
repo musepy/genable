@@ -1,11 +1,13 @@
 export const PROVIDER_NAMES = {
   GEMINI: 'Gemini',
-  OPENROUTER: 'OpenRouter'
+  OPENROUTER: 'OpenRouter',
+  DASHSCOPE: 'DashScope',
 } as const;
 
 export const PROVIDER_IDS = {
   GEMINI: 'gemini',
-  OPENROUTER: 'openrouter'
+  OPENROUTER: 'openrouter',
+  DASHSCOPE: 'dashscope',
 } as const;
 
 export const MODEL_FAMILIES = {

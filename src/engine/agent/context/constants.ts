@@ -4,9 +4,6 @@
  */
 
 export const CONTEXT_CONSTANTS = {
-  /** Factor of max context tokens to trigger compression (0.8 = 80%) */
-  CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.8,
-
   /** Maximum chars for standard tool result data before truncation (~750 tokens) */
   TOOL_RESULT_MAX_DATA_CHARS: 3000,
 

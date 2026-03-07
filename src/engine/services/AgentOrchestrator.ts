@@ -5,13 +5,12 @@
  */
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
-import { GeminiProvider, OpenRouterProvider } from '../llm-client';
+import { GeminiProvider, OpenRouterProvider, DashScopeProvider } from '../llm-client';
 import { ProxyProvider } from '../llm-client/providers/proxy';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
 import { resolveBehavior } from '../agent/agentBehaviorConfig';
 
-import { ChatMessage } from '../../types/chat';
 import { ThinkingLevel } from '../llm-client/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { TelemetryService } from './TelemetryService';
@@ -22,7 +21,6 @@ import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMProvider } from '../llm-client/providers/types';
 import { GeminiError, GeminiErrorType } from '../llm-client/providers/gemini/geminiErrorHandler';
 import { classifyError, AgentErrorCategory } from '../agent/retryPolicy';
-import { buildBriefing } from './briefing';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -53,6 +51,7 @@ export interface OrchestratorOptions {
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string, taskTitle: string }) => void;
   loopPolicy?: Partial<AgentLoopPolicy>;
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
+  requireToolApproval?: boolean;
 }
 
 import { buildStaticSystemPrompt } from '../llm-client/context/system';
@@ -63,6 +62,7 @@ export class AgentOrchestrator {
   private static initializationPromise: Promise<void> | null = null;
   private activeAgent: AgentRuntime | null = null;
   private currentProvider: LLMProvider | null = null;
+  private ipcBridge: IpcBridge | null = null;
   private fallbackEventSequence = 0;
 
   constructor(private options: OrchestratorOptions) {}
@@ -92,45 +92,51 @@ export class AgentOrchestrator {
     this.activeAgent?.cancel(reason);
   }
 
-  async generate(prompt: string, pluginData: AgentPluginData, history: ChatMessage[]) {
+  public endSession(): void {
+    // Cancel any in-flight run (including pending approval) before clearing
+    this.activeAgent?.cancel('Session ended');
+    this.activeAgent = null;
+    this.currentProvider = null;
+    this.ipcBridge?.dispose();
+    this.ipcBridge = null;
+  }
+
+  public approveTools(approved: boolean): void {
+    this.activeAgent?.resolveApproval(approved);
+  }
+
+  async generate(prompt: string, pluginData: AgentPluginData) {
     const loopPolicy = resolveAgentLoopPolicy(this.options.loopPolicy);
-    // 0. Ensure skills are fully loaded before starting
     await AgentOrchestrator.ensureSkillsInitialized(loopPolicy.useSkillSystem);
 
-    // ── Debug command: /debug prompt ──
     if (prompt.trim().startsWith('/debug')) {
       this.handleDebugCommand(prompt.trim(), pluginData, loopPolicy);
       return;
     }
 
-    // [DI] Instantiate IpcBridge for this session
-    const ipcBridge = new IpcBridge({
-        logger: console,
-        defaultTimeoutMs: 30000
-    });
+    // First turn: create agent + bridge; subsequent turns: reuse
+    if (!this.activeAgent) {
+      this.ipcBridge = new IpcBridge({ logger: console, defaultTimeoutMs: 30000 });
+      this.activeAgent = this.createAgent(pluginData, this.ipcBridge, loopPolicy);
+    } else if (pluginData.toolExecutors) {
+      // Update executors on existing runtime (e.g. refreshed knowledge search)
+      this.activeAgent.mergeToolExecutors(pluginData.toolExecutors);
+    }
 
     try {
-      // 0.5 Build cross-turn context (idMap + last response + selection)
+      // Read selection every turn (user may select different nodes)
       const selection = await this.readSelection();
-      const briefing = buildBriefing(history, selection);
+      const selPrefix = selection.length > 0
+        ? `[Selected] ${selection.slice(0, 10).map(n => `"${n.name}"(${n.type},${n.id})`).join(' ')}`
+        : '';
 
-      // 1. Initialize Agent
-      const agent = this.createAgent(pluginData, ipcBridge, loopPolicy);
-      this.activeAgent = agent;
-
-      // 2. Run Agentic Loop
       this.options.onStatusChange?.('Agent starting...');
-
-      const enrichedPrompt = briefing ? `${briefing}\n\n${prompt}` : prompt;
+      const enrichedPrompt = selPrefix ? `${selPrefix}\n\n${prompt}` : prompt;
       const startTime = Date.now();
-      const finalResponse = await agent.run(enrichedPrompt);
+      const finalResponse = await this.activeAgent.run(enrichedPrompt);
       const latencyMs = Date.now() - startTime;
 
-      // Log Telemetry (if usage data available from runtime)
-      // NOTE: agent.run() returns a string summary. Usage data is tracked
-      // per-iteration inside AgentRuntime via TokenRecorder (dev tool).
-      // Production telemetry here is a placeholder for future integration.
-      const { tokenUsage } = agent.getRunStats();
+      const { tokenUsage } = this.activeAgent.getRunStats();
       TelemetryService.logLLMCall({
         provider: this.options.providerName || 'gemini',
         modelName: this.options.modelName,
@@ -140,11 +146,8 @@ export class AgentOrchestrator {
         promptText: prompt
       });
 
-      // 3. Finalize
       this.options.onComplete?.({}, finalResponse);
-
-      // 4. Post-run debrief (non-blocking, non-fatal)
-      await this.maybeDebrief(agent, 'completed');
+      await this.maybeDebrief(this.activeAgent, 'completed');
 
     } catch (error: any) {
       console.error('[AgentOrchestrator] Failed:', error);
@@ -154,20 +157,17 @@ export class AgentOrchestrator {
           phase: 'idle',
           reason: error.message || 'Canceled by user',
         });
-        return; // Cancel — no debrief
+        return;
       }
 
-      // Determine exit reason
       const exitReason = error?.message?.includes('Maximum iterations')
         ? 'max_iterations' as const
         : error?.message?.includes('Aborted by hook')
           ? 'abort' as const
           : 'error' as const;
 
-      // ── Error routing: rate-limit → warning banner, user-actionable → error banner, agent-internal → status ──
       const errorCat = classifyError(error);
       if (errorCat === AgentErrorCategory.RETRYABLE_RATE_LIMIT) {
-        // Temporary rate limit exhausted after retries → warning banner with Retry action
         this.emitFallbackRuntimeEvent({
           type: 'error',
           phase: 'idle',
@@ -176,7 +176,6 @@ export class AgentOrchestrator {
         });
         this.options.onError?.(error.message || 'Rate limit exceeded after retries');
       } else if (AgentOrchestrator.isUserActionable(error)) {
-        // User must act (fix API key, check billing) → show ErrorBanner
         this.emitFallbackRuntimeEvent({
           type: 'error',
           phase: 'idle',
@@ -184,16 +183,14 @@ export class AgentOrchestrator {
         });
         this.options.onError?.(error.message || 'Unknown agent error');
       } else {
-        // Agent-internal failure (stream truncated, network, etc.) → show as status
         const reason = error?.message || 'Generation stopped unexpectedly';
         this.emitFallbackRuntimeEvent({
           type: 'status',
           phase: 'idle',
           message: reason,
         });
-        // Complete with explanation instead of scary error banner
         this.emitFallbackRuntimeEvent({
-          type: 'completed',
+          type: 'turn_end',
           phase: 'idle',
           iteration: 0,
           totalIterations: 0,
@@ -201,21 +198,15 @@ export class AgentOrchestrator {
         });
       }
 
-      // Debrief on error (non-fatal)
       if (this.activeAgent) {
         await this.maybeDebrief(this.activeAgent, exitReason);
       }
-    } finally {
-        // [Cleanup] ALWAYS dispose the bridge to clear listeners and pending timers
-        this.activeAgent = null;
-        this.currentProvider = null;
-        ipcBridge.dispose();
     }
   }
 
   private emitDebugComplete(summary: string): void {
     this.emitFallbackRuntimeEvent({
-      type: 'completed',
+      type: 'turn_end',
       phase: 'idle',
       iteration: 0,
       totalIterations: 0,
@@ -313,6 +304,24 @@ export class AgentOrchestrator {
     if (providerName === 'openrouter') {
       provider = new OpenRouterProvider(apiKey, modelName);
       emit('SEND_LOG', { message: `Using OpenRouter: ${modelName}`, type: 'ai' });
+    } else if (providerName === 'dashscope') {
+      const workerUrl = this.options.workerUrl;
+      let fetchProxy;
+      if (workerUrl) {
+        // Sync fallback: Route through Worker CORS proxy (sandbox fetch → Worker → DashScope)
+        fetchProxy = async (_url: string, init: any) => {
+          const res = await fetch(`${workerUrl}/api/dashscope/generate-sync`, {
+            method: 'POST',
+            headers: init.headers,
+            body: init.body,
+          });
+          const body = await res.text();
+          return { ok: res.ok, status: res.status, body };
+        };
+      }
+      // workerUrl enables streaming (SSE via /api/dashscope/generate); fetchProxy is sync fallback
+      provider = new DashScopeProvider(apiKey, modelName, fetchProxy, workerUrl);
+      emit('SEND_LOG', { message: `Using DashScope: ${modelName}`, type: 'ai' });
     } else if (providerName === 'proxy') {
       const workerUrl = this.options.workerUrl;
       const subscriptionToken = this.options.subscriptionToken;
@@ -348,7 +357,6 @@ export class AgentOrchestrator {
       provider,
       tools,
       systemPrompt,
-      messages: [],
       ipcBridge,
       toolExecutors: pluginData.toolExecutors,
       behaviorConfig,
@@ -358,6 +366,7 @@ export class AgentOrchestrator {
       onToolResult: this.handleToolResult.bind(this),
       onIterationStart: (iteration: number, taskInfo?: any) => this.options.onIterationStart?.(iteration, taskInfo),
       onRuntimeEvent: (event) => this.options.onRuntimeEvent?.(event),
+      requireToolApproval: this.options.requireToolApproval,
     });
   }
 
@@ -519,8 +528,7 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
   // ==========================================
 
   /**
-   * Read Figma's current selection via IPC.
-   * Returns raw node data for buildBriefing(). Non-blocking: returns [] on timeout.
+   * Read Figma's current selection via IPC. Non-blocking: returns [] on timeout.
    */
   private async readSelection(): Promise<{id: string; name: string; type: string}[]> {
     try {

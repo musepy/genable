@@ -277,8 +277,47 @@ describe('xmlToParsedLines', () => {
     expect(lines[0].nodeType).toBe('RECTANGLE');
   });
 
-  it('throws on unknown tag', () => {
-    expect(() => xmlToParsedLines("<div/>")).toThrow(/Unknown tag/);
+  // ── Unknown/HTML tag tolerance (whitelist defense) ──
+
+  it('silently strips unknown tags like <div> without crashing', () => {
+    const lines = xmlToParsedLines("<frame><div/></frame>");
+    // <div/> is stripped, only the frame remains
+    expect(lines).toHaveLength(1);
+    expect(lines[0].nodeType).toBe('FRAME');
+  });
+
+  it('strips unknown wrapper tags but preserves valid children', () => {
+    const lines = xmlToParsedLines("<frame><div><text>Hello</text></div></frame>");
+    expect(lines).toHaveLength(2);
+    expect(lines[0].nodeType).toBe('FRAME');
+    expect(lines[1].nodeType).toBe('TEXT');
+    expect(lines[1].props!.characters).toBe('Hello');
+    expect(lines[1].parentRef).toBe(lines[0].symbol);
+  });
+
+  it('converts <br> inside <text> to newline character', () => {
+    const nodes = parseXml("<text>Line 1<br/>Line 2</text>");
+    expect(nodes[0].textContent).toBe('Line 1\nLine 2');
+  });
+
+  it('handles <br> in text nodes end-to-end', () => {
+    const lines = xmlToParsedLines("<text name='Address'>123 Main St<br/>Apt 4B<br/>New York</text>");
+    expect(lines).toHaveLength(1);
+    expect(lines[0].props!.characters).toBe('123 Main St\nApt 4B\nNew York');
+  });
+
+  it('strips <span> but keeps its text content as a text node', () => {
+    const lines = xmlToParsedLines("<frame><span>Bold text</span></frame>");
+    expect(lines).toHaveLength(2);
+    expect(lines[1].nodeType).toBe('TEXT');
+    expect(lines[1].props!.characters).toBe('Bold text');
+  });
+
+  it('handles deeply nested unknown HTML tags', () => {
+    const lines = xmlToParsedLines("<frame><div><p><text>Deep</text></p></div></frame>");
+    expect(lines).toHaveLength(2);
+    expect(lines[1].props!.characters).toBe('Deep');
+    expect(lines[1].parentRef).toBe(lines[0].symbol);
   });
 
   it('handles text with fill attribute for text color', () => {
@@ -295,6 +334,28 @@ describe('xmlToParsedLines', () => {
       </frame>
     `);
     expect(lines.map(l => l.lineNumber)).toEqual([1, 2, 3]);
+  });
+
+  it('maps icon size to width+height (not fontSize)', () => {
+    const lines = xmlToParsedLines("<icon name='Star' icon='mdi:star' size='20'/>");
+    expect(lines[0].command).toBe('icon');
+    expect(lines[0].props!.width).toBe(20);
+    expect(lines[0].props!.height).toBe(20);
+    expect(lines[0].props!.fontSize).toBeUndefined();
+  });
+
+  it('merges family + icon into prefix:name format', () => {
+    const lines = xmlToParsedLines("<icon name='Google' family='logos' icon='google-icon' size='24'/>");
+    expect(lines[0].command).toBe('icon');
+    expect(lines[0].props!.iconName).toBe('logos:google-icon');
+    expect(lines[0].props!.width).toBe(24);
+    expect(lines[0].props!.height).toBe(24);
+    expect(lines[0].props!._iconFamily).toBeUndefined();
+  });
+
+  it('does not merge family when icon already has prefix', () => {
+    const lines = xmlToParsedLines("<icon name='Search' family='mdi' icon='lucide:search'/>");
+    expect(lines[0].props!.iconName).toBe('lucide:search');
   });
 
   it('handles icon operations with parent dependency', () => {

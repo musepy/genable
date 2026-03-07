@@ -11,7 +11,7 @@
 import { fetchModels, LLMModel } from '../engine/llm-client/modelFilter';
 import { SUPPORTED_MODELS, MODEL_CACHE_TTL_MS, ModelConfig } from '../ui/constants/models';
 
-export type ProviderName = 'gemini' | 'openrouter';
+export type ProviderName = 'gemini' | 'openrouter' | 'dashscope';
 
 export interface ModelFetchResult {
   success: boolean;
@@ -140,6 +140,7 @@ class ModelServiceImpl {
     return configs.map(c => ({
       name: c.name,
       displayName: c.displayName,
+      isFree: c.isFree,
     }));
   }
 

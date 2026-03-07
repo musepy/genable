@@ -192,7 +192,13 @@ export function parseXml(xml: string): XmlNode[] {
 
       // Child element
       if (xml[pos] === '<') {
-        children.push(parseElement());
+        const child = parseElement();
+        // <br> inside a text-like parent → inject newline into textContent instead of adding as child
+        if (child.tag === 'br') {
+          textContent += '\n';
+        } else {
+          children.push(child);
+        }
         continue;
       }
 
@@ -305,7 +311,9 @@ const NUMERIC_PROPS = new Set([
 function coerceValue(key: string, value: string): string | number {
   if (STRING_VALUE_PROPS.has(key)) return value;
   if (MIXED_VALUE_PROPS.has(key)) {
-    // width/height: coerce "100" to 100, but keep "fill"/"hug" as strings
+    // width/height: coerce "100" to 100, but keep "fill"/"hug"/percentage as strings
+    // parseFloat("100%") returns 100 (not NaN!), so check for % suffix first
+    if (value.endsWith('%')) return value;
     const n = parseFloat(value);
     return isNaN(n) ? value : n;
   }
@@ -429,7 +437,26 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
     const tag = node.tag;
     const figmaType = TAG_TO_TYPE[tag];
     if (!figmaType) {
-      throw new XmlParseError(`Unknown tag <${tag}>. Valid: ${Object.keys(TAG_TO_TYPE).join(', ')}`, 0);
+      // Unknown tag (e.g. HTML <br>, <div>, <span>) — skip the tag, but process children.
+      // This gracefully handles LLM "HTML muscle memory" without crashing the entire parse.
+      // Special case: <br> → newline in text content (common LLM habit for multi-line text).
+      if (tag === 'br') {
+        // Append newline to the preceding text sibling — handled by caller via textContent merge
+        return;
+      }
+      if (node.textContent && parentSymbol) {
+        const textNode: XmlNode = {
+          tag: 'text',
+          attrs: {},
+          children: [],
+          textContent: node.textContent,
+        };
+        processNode(textNode, parentSymbol);
+      }
+      for (const child of node.children) {
+        processNode(child, parentSymbol);
+      }
+      return;
     }
 
     // ── Edit mode: all tags require id attr, <delete> maps to 'delete' command ──
@@ -455,7 +482,7 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
 
       // Non-delete tags in edit mode must have id
       if (!nodeId) {
-        throw new XmlParseError(`In edit mode, <${tag}> must have an 'id' attribute referencing an existing node`, 0);
+        throw new XmlParseError(`In edit mode, <${tag}> must have an 'id' attribute referencing an existing node. edit() can only modify existing nodes — to add NEW nodes, use create() instead.`, 0);
       }
 
       // Build props from attributes (skip 'id')
@@ -535,6 +562,20 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
         continue;
       }
 
+      // Icon: `size` → width + height (not fontSize)
+      if (rawKey === 'size' && isIcon) {
+        const s = coerceValue('width', rawValue);
+        props.width = s;
+        props.height = s;
+        continue;
+      }
+
+      // Icon: capture `family` for later merge with iconName
+      if (rawKey === 'family' && isIcon) {
+        props._iconFamily = rawValue;
+        continue;
+      }
+
       // Expand abbreviations
       const expandedKey = ABBREV_EXPANSION[rawKey] ?? rawKey;
 
@@ -589,6 +630,12 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
     if (isIcon && !props.iconName && symbolBase) {
       props.iconName = symbolBase;
     }
+
+    // For icon tags: merge family + iconName → "family:iconName" if iconName lacks prefix
+    if (isIcon && props._iconFamily && props.iconName && !props.iconName.includes(':')) {
+      props.iconName = `${props._iconFamily}:${props.iconName}`;
+    }
+    delete props._iconFamily;
 
     // Generate symbol
     const base = symbolBase ? toCamelCase(symbolBase) : (tag + (++autoCounter));

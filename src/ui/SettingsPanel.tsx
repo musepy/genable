@@ -25,8 +25,8 @@ export interface SettingsPanelProps {
   setApiKey: (key: string) => void;
   modelName: string;
   setModelName: (name: string) => void;
-  providerName: 'gemini' | 'openrouter'; // [NEW]
-  setProviderName: (name: 'gemini' | 'openrouter') => void; // [NEW]
+  providerName: 'gemini' | 'openrouter' | 'dashscope'; // [NEW]
+  setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope') => void; // [NEW]
   suggestedModels: { name: string; displayName: string }[];
   fetchStatus: 'idle' | 'fetching' | 'success' | 'fail';
   settingsError: string | null;
@@ -56,29 +56,28 @@ export function SettingsPanel({
   localComponents = []
 }: SettingsPanelProps) {
   
-  const [expandedProvider, setExpandedProvider] = useState<'gemini' | 'openrouter' | null>(providerName);
+  const [expandedProvider, setExpandedProvider] = useState<'gemini' | 'openrouter' | 'dashscope' | null>(providerName);
   const [showDeveloper, setShowDeveloper] = useState(false);
-  const [showFreeOnly, setShowFreeOnly] = useState(false);
+  const [showFreeOnly, setShowFreeOnly] = useState(providerName === 'gemini');
   
   const debouncedApiKey = useDebounce(apiKey, 800);
   
+  useEffect(() => {
+    setShowFreeOnly(providerName === 'gemini');
+  }, [providerName]);
+
   useEffect(() => {
     if (debouncedApiKey && debouncedApiKey.length >= 20 && fetchStatus !== 'fetching') {
       onFetchModels();
     }
   }, [debouncedApiKey]);
 
-  const providerMeta = providerName === 'openrouter'
-    ? {
-        label: 'OpenRouter',
-        keyUrl: 'https://openrouter.ai/keys',
-        keyLabel: 'OpenRouter Keys',
-      }
-    : {
-        label: 'Gemini',
-        keyUrl: 'https://aistudio.google.com/apikey',
-        keyLabel: 'Google AI Studio',
-      };
+  const providerMetaMap: Record<string, { label: string; keyUrl: string; keyLabel: string }> = {
+    gemini: { label: 'Gemini', keyUrl: 'https://aistudio.google.com/apikey', keyLabel: 'Google AI Studio' },
+    openrouter: { label: 'OpenRouter', keyUrl: 'https://openrouter.ai/keys', keyLabel: 'OpenRouter Keys' },
+    dashscope: { label: 'DashScope', keyUrl: 'https://bailian.console.aliyun.com/', keyLabel: 'Alibaba Cloud Bailian' },
+  };
+  const providerMeta = providerMetaMap[providerName] || providerMetaMap.gemini;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--color-background)' }}>
@@ -101,13 +100,14 @@ export function SettingsPanel({
             borderBottom: 'var(--border-default)',
             marginBottom: tokens.space[4],
           }}>
-            {['gemini', 'openrouter'].map(p => {
+            {(['gemini', 'openrouter', 'dashscope'] as const).map(p => {
               const isActive = providerName === p;
+              const tabLabel = providerMetaMap[p]?.label || p;
               return (
                 <button
                   key={p}
                   type="button"
-                  onClick={() => setProviderName(p as 'gemini' | 'openrouter')}
+                  onClick={() => setProviderName(p)}
                   style={{
                     padding: `0 0 ${tokens.space[2]}px 0`,
                     border: 'none',
@@ -119,7 +119,7 @@ export function SettingsPanel({
                     position: 'relative',
                   }}
                 >
-                  {p === 'gemini' ? 'Gemini' : 'OpenRouter'}
+                  {tabLabel}
                   {isActive && (
                     <div style={{
                       position: 'absolute',
@@ -173,23 +173,21 @@ export function SettingsPanel({
                   }}>
                     available models
                   </label>
-                  {providerName === 'openrouter' && (
-                    <label style={{ 
-                      fontSize: tokens.fontSize[1], 
-                      color: 'var(--gray-11)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.space[1],
-                      cursor: 'pointer'
-                    }}>
-                      <input 
-                        type="checkbox" 
-                        checked={showFreeOnly}
-                        onChange={(e) => setShowFreeOnly((e.target as HTMLInputElement).checked)}
-                      />
-                      Show free models only
-                    </label>
-                  )}
+                  <label style={{
+                    fontSize: tokens.fontSize[1],
+                    color: 'var(--gray-11)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.space[1],
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={showFreeOnly}
+                      onChange={(e) => setShowFreeOnly((e.target as HTMLInputElement).checked)}
+                    />
+                    Show free models only
+                  </label>
                 </div>
                 <ModelSelector 
                   models={suggestedModels}

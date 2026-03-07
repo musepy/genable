@@ -7,8 +7,8 @@ import { tokens } from '../design-system/tokens';
 interface OnboardingViewProps {
   apiKey: string;
   setApiKey: (key: string) => void;
-  providerName: 'gemini' | 'openrouter';
-  setProviderName: (name: 'gemini' | 'openrouter') => void;
+  providerName: 'gemini' | 'openrouter' | 'dashscope';
+  setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope') => void;
   onComplete: (apiKey: string) => void;
   onFetchModels: (apiKey: string) => Promise<void>;
   isLoading?: boolean;
@@ -36,19 +36,12 @@ export function OnboardingView({
     setLocalError(null);
   }, [providerName]);
 
-  const providerMeta = providerName === 'openrouter'
-    ? {
-        label: 'OpenRouter',
-        placeholder: 'sk-or-v1-...',
-        keyUrl: 'https://openrouter.ai/keys',
-        keyLabel: 'OpenRouter Keys',
-      }
-    : {
-        label: 'Gemini',
-        placeholder: 'AIzaSy...',
-        keyUrl: 'https://aistudio.google.com/apikey',
-        keyLabel: 'Google AI Studio',
-      };
+  const providerMetaMap: Record<string, { label: string; placeholder: string; keyUrl: string; keyLabel: string }> = {
+    gemini: { label: 'Gemini', placeholder: 'AIzaSy...', keyUrl: 'https://aistudio.google.com/apikey', keyLabel: 'Google AI Studio' },
+    openrouter: { label: 'OpenRouter', placeholder: 'sk-or-v1-...', keyUrl: 'https://openrouter.ai/keys', keyLabel: 'OpenRouter Keys' },
+    dashscope: { label: 'DashScope', placeholder: 'sk-...', keyUrl: 'https://bailian.console.aliyun.com/', keyLabel: 'Alibaba Cloud Bailian' },
+  };
+  const providerMeta = providerMetaMap[providerName] || providerMetaMap.gemini;
 
   const handleConnect = async () => {
     if (!apiKey.trim()) {
@@ -92,13 +85,14 @@ export function OnboardingView({
         borderBottom: 'var(--border-default)',
         marginBottom: tokens.space[4],
       }}>
-        {['gemini', 'openrouter'].map(p => {
+        {(['gemini', 'openrouter', 'dashscope'] as const).map(p => {
           const isActive = providerName === p;
+          const label = p === 'gemini' ? 'Gemini' : p === 'openrouter' ? 'OpenRouter' : 'DashScope';
           return (
             <button
               key={p}
               type="button"
-              onClick={() => setProviderName(p as 'gemini' | 'openrouter')}
+              onClick={() => setProviderName(p)}
               style={{
                 padding: `0 0 ${tokens.space[2]}px 0`,
                 border: 'none',
@@ -110,7 +104,7 @@ export function OnboardingView({
                 position: 'relative',
               }}
             >
-              {p === 'gemini' ? 'Gemini' : 'OpenRouter'}
+              {label}
               {isActive && (
                 <div style={{
                   position: 'absolute',

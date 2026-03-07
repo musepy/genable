@@ -18,7 +18,8 @@ import {
 import { WINDOW_WIDTH, getIdealHeight } from './ui/constants/layout'
 
 import { NodeSerializer } from './engine/figma-adapter/nodeSerializer';
-import { SerializeSelectionHandler } from './types';
+import { SerializeSelectionHandler, DevBridgeExportHandler } from './types';
+import { serializeCurrentPage } from './dev/nodeTreeSerializer';
 
 // ==========================================
 // IPC Handlers and Services
@@ -158,6 +159,58 @@ export default async function () {
   });
 
 
+
+  // ==========================================
+  // Dev Bridge: Export node tree + screenshot
+  // ==========================================
+  on<DevBridgeExportHandler>('DEV_BRIDGE_EXPORT', async function ({ rootNodeIds }) {
+    try {
+      const nodeTree = serializeCurrentPage();
+
+      // Screenshot: target the agent-created root node, fallback to last top-level node
+      let screenshot: string | null = null;
+      let target: SceneNode | null = null;
+
+      if (rootNodeIds && rootNodeIds.length > 0) {
+        // Pick the largest root node by area (most likely the main design frame)
+        let maxArea = 0;
+        for (const id of rootNodeIds) {
+          const node = figma.getNodeById(id) as SceneNode | null;
+          if (node && 'width' in node && 'height' in node) {
+            const area = node.width * node.height;
+            if (area > maxArea) { maxArea = area; target = node; }
+          }
+        }
+      }
+      if (!target) {
+        // Fallback: last top-level node on the page
+        const topNodes = figma.currentPage.children;
+        if (topNodes.length > 0) {
+          target = topNodes[topNodes.length - 1];
+        }
+      }
+
+      if (target) {
+        try {
+          const bytes = await target.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 2 } });
+          screenshot = figma.base64Encode(bytes);
+        } catch (e: any) {
+          console.warn('[DevBridge] Screenshot export failed:', e.message);
+        }
+      }
+
+      emit<import('./types').DevBridgeExportResultHandler>('DEV_BRIDGE_EXPORT_RESULT', {
+        nodeTree,
+        screenshot,
+      });
+    } catch (e: any) {
+      console.error('[DevBridge] Export failed:', e);
+      emit<import('./types').DevBridgeExportResultHandler>('DEV_BRIDGE_EXPORT_RESULT', {
+        nodeTree: null,
+        screenshot: null,
+      });
+    }
+  });
 
   on<ResizeHandler>('RESIZE', (data) => {
     figma.ui.resize(WINDOW_WIDTH, data.height);

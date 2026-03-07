@@ -16,8 +16,8 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Default timeout for a single tool execution in milliseconds */
   DEFAULT_TOOL_TIMEOUT_MS: 30000,
 
-  /** Max time (ms) for thinking without action before timeout */
-  THINKING_TIMEOUT_MS: 120000,
+  /** Total budget (ms) for a single LLM generation including retries. Safety net only. */
+  TOTAL_GENERATION_BUDGET_MS: 300000,
 
   /** @deprecated Rambling guard removed — text-only response is implicit completion. */
   MAX_THINKING_ONLY_ITERATIONS: 4,

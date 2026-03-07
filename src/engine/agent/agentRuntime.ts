@@ -1,8 +1,13 @@
 /**
  * @file agentRuntime.ts
- * @description Autonomous agent runtime. Pure dispatch loop — the LLM decides
- * what tools to call and when to stop. Safety guardrails run as composable
- * hooks via the HookRegistry → HookRunner pipeline.
+ * @description Autonomous agent runtime with layered context management.
+ *
+ * Context is structured in 3 layers, not a flat message array:
+ *   1. systemPrompt  — static, set once at construction
+ *   2. summary       — rolling summary of previous turns, updated at turn boundaries
+ *   3. turnMessages  — current turn's messages, cleared at turn end
+ *
+ * This keeps context bounded and predictable regardless of conversation length.
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
@@ -13,7 +18,7 @@ import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
-import { CONTEXT_CONSTANTS } from './context/constants';
+import { buildCompressionSummary } from './context/contextSummarizer';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
@@ -33,7 +38,6 @@ export interface AgentRuntimeOptions {
   tools: ToolDefinition[];
   ipcBridge?: import('./ipcBridge').IpcBridge;
   maxIterations?: number;
-  maxContextTokens?: number;
   systemPrompt?: string;
   behaviorConfig?: Partial<AgentBehaviorConfig>;
   onToolCall?: (toolCall: LLMToolCall) => void;
@@ -43,11 +47,10 @@ export interface AgentRuntimeOptions {
   taskId?: string;
   taskTitle?: string;
   toolExecutors?: Record<string, import('./tools/types').ToolExecutor>;
-  messages?: LLMMessage[];
   loopPolicy?: Partial<AgentLoopPolicy>;
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
-  /** Custom hooks. If omitted, builtin safety hooks are registered by default. */
   hooks?: HookRegistration[];
+  requireToolApproval?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,15 +67,18 @@ export class AgentRuntimeCanceledError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// AgentRuntime — Autonomous dispatch loop
+// AgentRuntime — Layered context, autonomous dispatch
 // ---------------------------------------------------------------------------
 
 export class AgentRuntime {
   private maxIterations: number;
-  private maxContextTokens: number;
-  private messages: LLMMessage[] = [];
-  private lastPromptTokens: number = 0;
 
+  // ─── Layered context ───
+  private readonly staticSystemPrompt: string;
+  private summary: string = '';            // rolling summary of previous turns
+  private turnMessages: LLMMessage[] = []; // current turn only, cleared at turn end
+
+  private lastPromptTokens: number = 0;
   private cleaner: ToolResultCleaner;
   private toolExecutionCoordinator = new ToolExecutionCoordinator();
   private llmCoordinator: LLMGenerationCoordinator;
@@ -83,33 +89,30 @@ export class AgentRuntime {
   private hookRegistry: HookRegistry;
   private hookRunner: HookRunner;
   private resetBuiltinState: (() => void) | null = null;
-  systemPrompt?: string;
   behaviorConfig: AgentBehaviorConfig;
   loopPolicy: AgentLoopPolicy;
-  private originalUserRequest: string = '';
   private canceled = false;
   private cancelReason = 'Canceled by user';
   private activeAbortController: AbortController | null = null;
   private currentRunId = '';
   private eventSequence = 0;
   private canceledEventEmitted = false;
+  private pendingApproval: { resolve: (approved: boolean) => void } | null = null;
   private runStats = {
     toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
     tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
   };
 
   constructor(private options: AgentRuntimeOptions) {
-
     this.behaviorConfig = resolveBehavior(options.behaviorConfig);
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
-    this.maxContextTokens = options.maxContextTokens || AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS;
+    this.staticSystemPrompt = options.systemPrompt || '';
     this.cleaner = new ToolResultCleaner(options.tools);
     this.llmCoordinator = new LLMGenerationCoordinator(
       options.provider,
       this.cleaner,
       {
-        thinkingTimeoutMs: AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS,
         throttleMs: this.THROTTLE_MS,
         generateId: (prefix) => this.generateId(prefix),
         normalizeToolCallId: (tc, fallbackPrefix) => this.normalizeToolCallId(tc, fallbackPrefix),
@@ -136,23 +139,8 @@ export class AgentRuntime {
         getRunId: () => this.currentRunId,
       },
     );
-    // Seed messages: static system prompt at index 0
-    // No dynamic context message — keeping the prefix stable enables KV-cache
-    // reuse across iterations (every message after sys_static is append-only).
-    const seedMessages: LLMMessage[] = [];
-    if (options.systemPrompt) {
-      seedMessages.push({
-        id: 'sys_static',
-        role: 'system',
-        content: options.systemPrompt,
-      });
-    }
-    if (options.messages) {
-      seedMessages.push(...options.messages);
-    }
-    this.messages = [...seedMessages];
 
-    // Hook system — builtin hooks by default, custom hooks override
+    // Hook system
     this.hookRegistry = new HookRegistry();
     if (options.hooks) {
       this.hookRegistry.registerAll(options.hooks);
@@ -163,7 +151,6 @@ export class AgentRuntime {
     }
     this.hookRunner = new HookRunner(this.hookRegistry);
 
-    // Disable throttling in tests
     if (process.env.NODE_ENV === 'test') {
       (this as any).THROTTLE_MS = 0;
     }
@@ -174,10 +161,23 @@ export class AgentRuntime {
   public cancel(reason: string = 'Canceled by user'): void {
     this.canceled = true;
     this.cancelReason = reason;
+    if (this.pendingApproval) {
+      this.pendingApproval.resolve(false);
+      this.pendingApproval = null;
+    }
     if (this.activeAbortController && !this.activeAbortController.signal.aborted) {
       this.activeAbortController.abort();
     }
     this.emitCanceledEvent();
+  }
+
+  public resolveApproval(approved: boolean): void {
+    this.pendingApproval?.resolve(approved);
+    this.pendingApproval = null;
+  }
+
+  public mergeToolExecutors(executors: Record<string, import('./tools/types').ToolExecutor>): void {
+    this.toolDispatcher.mergeExecutors(executors);
   }
 
   // ─── Events ──────────────────────────────────────────────────
@@ -235,91 +235,48 @@ export class AgentRuntime {
     return `${prefix}_${timestamp}${random}${this.idCounter}`;
   }
 
-  // ─── Sanitization ────────────────────────────────────────────
+  // ─── Context assembly ─────────────────────────────────────────
 
-  private sanitizeString(value: any, maxLength = 200): string {
-    const text = String(value ?? '');
-    if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + '…';
-  }
+  /**
+   * Assemble the prompt from layered context.
+   * Always bounded: system + summary + current turn messages.
+   */
+  private assemblePrompt(): LLMMessage[] {
+    const messages: LLMMessage[] = [];
 
-  private sanitizeArgsBySchema(value: any, schema?: ToolParameter, depth = 0): any {
-    if (value === null || value === undefined || !schema) return value;
-
-    switch (schema.type) {
-      case 'string':
-        return this.sanitizeString(value);
-      case 'number':
-      case 'boolean':
-        return value;
-      case 'array': {
-        if (!Array.isArray(value)) return [];
-        const sliced = value.slice(0, 20);
-        if (!schema.items) return sliced;
-        return sliced.map(item => this.sanitizeArgsBySchema(item, schema.items, depth + 1));
-      }
-      case 'object': {
-        if (typeof value !== 'object') return {};
-        const props = schema.properties || {};
-        const keys = Object.keys(props);
-        if (keys.length === 0) {
-          const out: Record<string, any> = {};
-          const entries = Object.entries(value).slice(0, 10);
-          for (const [key, val] of entries) {
-            if (val === null || val === undefined) continue;
-            if (typeof val === 'string') out[key] = this.sanitizeString(val, 120);
-            else if (typeof val === 'number' || typeof val === 'boolean') out[key] = val;
-            else if (Array.isArray(val)) out[key] = `[${val.length} items]`;
-            else if (typeof val === 'object') out[key] = '{…}';
-          }
-          return out;
-        }
-
-        const out: Record<string, any> = {};
-        for (const key of keys) {
-          if (value[key] === undefined) continue;
-          out[key] = this.sanitizeArgsBySchema(value[key], props[key], depth + 1);
-        }
-        return out;
-      }
-      default:
-        return value;
+    // Layer 1: static system prompt
+    if (this.staticSystemPrompt) {
+      messages.push({ id: 'sys_static', role: 'system', content: this.staticSystemPrompt });
     }
+
+    // Layer 2: rolling summary of previous turns
+    if (this.summary) {
+      messages.push({ id: 'ctx_summary', role: 'user', content: this.summary });
+    }
+
+    // Layer 3: current turn messages
+    messages.push(...this.turnMessages);
+
+    return messages;
   }
 
-  // ─── Context management ──────────────────────────────────────
-
-  private manageContext(): void {
-    if (this.lastPromptTokens === 0) return;
-    const threshold = this.maxContextTokens * CONTEXT_CONSTANTS.CONTEXT_COMPRESSION_LIMIT_FACTOR;
-    if (this.lastPromptTokens <= threshold) return;
-
-    // Hide oldest model+tool pairs. The message sequence is naturally
-    // [sys, user(pinned), model₁, tool₁, model₂, tool₂, ...], so iterating
-    // forward hides them in order without breaking role alternation.
-    const excessRatio = this.lastPromptTokens / threshold;
-    const pairsToHide = Math.max(1, Math.floor(excessRatio));
-
-    let hidden = 0;
-    for (const msg of this.messages) {
-      if (hidden >= pairsToHide) break;
-      if (msg.hidden || msg.pinned || msg.role === 'system' || msg.role === 'user') continue;
-      msg.hidden = true;
-      if (msg.role === 'model') hidden++;
+  /**
+   * Summarize the current turn and append to rolling summary.
+   * turnMessages are NOT cleared here — they stay available for getMessages()
+   * (used by debrief). They're cleared at the start of the next run().
+   */
+  private endTurn(): void {
+    const turnSummary = buildCompressionSummary(this.turnMessages);
+    if (turnSummary) {
+      this.summary = this.summary
+        ? `${this.summary}\n${turnSummary}`
+        : turnSummary;
+      console.log(`[Context] Turn summarized (${turnSummary.length} chars). Total summary: ${this.summary.length} chars`);
     }
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // MAIN AGENT LOOP — Autonomous dispatch
-  //
-  // STRUCTURE:
-  // 1. Setup: Add user message, build system prompt
-  // 2. Loop:
-  //    a. Context management
-  //    b. LLM generate (all tools available, AUTO mode)
-  //    c. Tool execution (dispatch to executors)
-  //    d. Safety guardrails (loop detection, rambling, token limit)
-  // 3. Termination: completion signal or max iterations
+  // MAIN AGENT LOOP
   // ═══════════════════════════════════════════════════════════════
 
   async run(userPrompt: string): Promise<string> {
@@ -329,17 +286,16 @@ export class AgentRuntime {
     this.activeAbortController = null;
     this.canceled = false;
     this.cancelReason = 'Canceled by user';
-    this.originalUserRequest = userPrompt;
 
-    this.messages.push({
+    // Clear previous turn (its summary is already in this.summary)
+    this.turnMessages = [];
+
+    // Add user message to current turn
+    this.turnMessages.push({
       id: this.generateId('usr'),
       role: 'user',
       content: userPrompt,
-      pinned: this.behaviorConfig.enableInstructionAnchoring,
     });
-
-    // Proactive compression on resume
-    this.manageContext();
 
     let iteration = 0;
     this.resetBuiltinState?.();
@@ -363,30 +319,21 @@ export class AgentRuntime {
     // ════════════════════════════════════════════
     while (iteration < this.maxIterations) {
       this.throwIfCanceled(iteration + 1);
-      this.manageContext();
-      this.throwIfCanceled(iteration + 1);
+
+      const prompt = this.assemblePrompt();
       const currentTokens = this.lastPromptTokens;
-      const visibleMessageCount = this.messages.filter(m => !m.hidden).length;
-      const hiddenMessages = this.messages.length;
       this.emitRuntimeEvent({
         type: 'context_usage',
         iteration: iteration + 1,
-
         phase: 'execution',
         usage: {
           current: currentTokens,
-          max: this.maxContextTokens,
-          percent: currentTokens > 0 ? Math.round((currentTokens / this.maxContextTokens) * 100) : 0,
-          visibleMessages: visibleMessageCount,
-          hiddenMessages
+          max: AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS,
+          percent: currentTokens > 0 ? Math.round((currentTokens / AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS) * 100) : 0,
+          visibleMessages: prompt.length,
+          hiddenMessages: 0,
         }
       });
-
-      // Hard stop: token budget overflow (only when we have real token data)
-      if (currentTokens > 0 && currentTokens > this.maxContextTokens * 1.2) {
-        console.error(`[AgentRuntime] FATAL: Context budget exceeded 120%. Aborting.`);
-        throw new Error(`Agent aborted: context budget exceeded 120% (${Math.round(currentTokens/this.maxContextTokens*100)}%).`);
-      }
 
       // Lazy iteration start notification
       let hasNotifiedIterationStart = false;
@@ -401,7 +348,6 @@ export class AgentRuntime {
         type: 'iteration_start',
         iteration: iteration + 1,
         maxIterations: this.maxIterations,
-
         phase: 'execution',
       });
 
@@ -409,9 +355,9 @@ export class AgentRuntime {
       const abortController = new AbortController();
       this.activeAbortController = abortController;
       const timeoutId = setTimeout(() => {
-        console.warn(`[AgentRuntime] Thinking timeout — aborting stream`);
+        console.warn(`[AgentRuntime] Total generation budget exceeded — aborting`);
         abortController.abort();
-      }, AGENT_RUNTIME_CONSTANTS.THINKING_TIMEOUT_MS);
+      }, AGENT_RUNTIME_CONSTANTS.TOTAL_GENERATION_BUDGET_MS);
 
       let toolCallsForExecution: LLMToolCall[] = [];
       let rawToolCallsForLoopDetection: LLMToolCall[] = [];
@@ -421,7 +367,7 @@ export class AgentRuntime {
         this.llmCoordinator.config.notifyIterationStart = notifyIterationStartOnce;
         const genResult = await this.llmCoordinator.generate(
           {
-            messages: this.messages.filter(m => !m.hidden),
+            messages: prompt,
             tools: this.options.tools,
             toolConfig: { mode: 'AUTO' as ToolCallMode },
             maxOutputTokens: this.loopPolicy.maxOutputTokens,
@@ -438,26 +384,23 @@ export class AgentRuntime {
         if (this.canceled || abortController.signal.aborted) {
           this.throwIfCanceled(iteration + 1);
         }
-        // Non-retryable or all retries exhausted — bubble up
         throw error;
       } finally {
         clearTimeout(timeoutId);
         this.activeAbortController = null;
       }
 
-      // Ensure iteration start was notified
       if (response.text || (response.toolCalls && response.toolCalls.length > 0)) {
         notifyIterationStartOnce();
       }
 
       // ──── HOOK: afterLLMResponse ────
-      // Replaces inline empty-response guard, rambling detection, and loop detection.
       const hookCtx: HookContext = {
         iteration,
         maxIterations: this.maxIterations,
         responseText: response.text,
         toolCalls: rawToolCallsForLoopDetection.length > 0 ? rawToolCallsForLoopDetection : toolCallsForExecution,
-        messages: this.messages,
+        messages: this.turnMessages,
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),
       };
@@ -467,28 +410,23 @@ export class AgentRuntime {
         throw new Error(hookResult.reason || 'Aborted by hook');
       }
       if (hookResult.action === 'skip') {
-        // Skip this iteration (e.g. empty response retry)
         iteration = Math.max(0, iteration - 1);
         continue;
       }
 
-      // Track loop detection in runStats
       if (hookResult.injectMessage && typeof hookResult.injectMessage === 'string'
         && (hookResult.injectMessage.includes('repeated') || hookResult.injectMessage.includes('consecutive iterations'))) {
         this.runStats.loopDetected = true;
       }
 
-      // Fire onIteration callback
       this.options.onIteration?.(iteration, response);
       this.throwIfCanceled(iteration + 1);
 
-      // ──── ADD MODEL RESPONSE TO HISTORY ────
+      // ──── ADD MODEL RESPONSE TO TURN ────
       const modelMessage = this.options.provider.formatResponse(response);
       modelMessage.id = this.generateId('mdl');
+      this.turnMessages.push(modelMessage);
 
-      this.messages.push(modelMessage);
-
-      // Track real prompt tokens from LLM response
       this.lastPromptTokens = response.usage?.promptTokens ?? this.lastPromptTokens;
       if (response.usage) {
         this.runStats.tokenUsage.totalPromptTokens += response.usage.promptTokens;
@@ -497,11 +435,52 @@ export class AgentRuntime {
         this.runStats.tokenUsage.callCount++;
       }
 
+      // ──── EMPTY ARGS GUARD (universal, all providers) ────
+      // Some models (e.g. Kimi K2.5) return tool calls with empty/null args.
+      // Strip them and inject a self-correct hint so the LLM regenerates.
+      if (toolCallsForExecution.length > 0) {
+        const emptyArgsCalls = toolCallsForExecution.filter(tc =>
+          tc.args == null
+          || (typeof tc.args === 'object' && Object.keys(tc.args).length === 0)
+          || tc.args === ''
+        );
+        if (emptyArgsCalls.length > 0) {
+          const names = emptyArgsCalls.map(tc => tc.name).join(', ');
+          console.warn(`[AgentRuntime] Stripping ${emptyArgsCalls.length} tool call(s) with empty args: ${names}`);
+          toolCallsForExecution = toolCallsForExecution.filter(tc => !emptyArgsCalls.includes(tc));
+          // Inject hint so LLM self-corrects on next iteration
+          this.turnMessages.push({
+            id: this.generateId('empty_hint'),
+            role: 'user',
+            content: `Your tool call to ${names} had empty arguments and was not executed. Please provide the required parameters (e.g. xml for create/edit) and try again.`,
+          });
+          if (toolCallsForExecution.length === 0) {
+            iteration++;
+            continue;
+          }
+        }
+      }
+
       // ──── TOOL EXECUTION ────
       if (toolCallsForExecution.length > 0) {
+        if (this.options.requireToolApproval) {
+          this.emitRuntimeEvent({
+            type: 'tool_approval_request',
+            phase: 'execution',
+            iteration: iteration + 1,
+            toolCalls: toolCallsForExecution.map(tc => ({ id: tc.id!, name: tc.name, args: tc.args })),
+          });
+          const approved = await new Promise<boolean>(r => { this.pendingApproval = { resolve: r } });
+          this.pendingApproval = null;
+          this.throwIfCanceled(iteration + 1);
+          if (!approved) {
+            this.turnMessages.push({ id: this.generateId('usr'), role: 'user', content: 'Tools denied by user. Try a different approach.' });
+            iteration++;
+            continue;
+          }
+        }
         this.runStats.toolCallCount += toolCallsForExecution.length;
         const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
-        // Count tool errors from the result message
         const content = dispatchResult.toolResultsMessage.content;
         if (Array.isArray(content)) {
           for (const part of content) {
@@ -510,19 +489,19 @@ export class AgentRuntime {
             }
           }
         }
-        this.messages.push(dispatchResult.toolResultsMessage);
+        this.turnMessages.push(dispatchResult.toolResultsMessage);
         iteration++;
         continue;
       } else {
-        // Implicit completion: no tool calls = agent is done.
-        // The LLM's text response is the completion summary.
+        // Turn end: summarize this turn, prepare for next
         this.emitRuntimeEvent({
-          type: 'completed',
+          type: 'turn_end',
           phase: 'execution',
           iteration: iteration + 1,
           totalIterations: iteration + 1,
-          summary: response.text || 'Completed',
+          summary: response.text || '',
         });
+        this.endTurn();
         return response.text;
       }
     }
@@ -530,8 +509,9 @@ export class AgentRuntime {
     throw new Error(`Maximum iterations (${this.maxIterations}) reached.`);
   }
 
+  /** Returns current turn messages (for debrief/diagnostics). */
   public getMessages(): LLMMessage[] {
-    return this.messages;
+    return this.turnMessages;
   }
 
   public getRunStats() {

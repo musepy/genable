@@ -276,17 +276,37 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             receipt.failed = bdResult.stats.failed;
             if (failures.length > 0) receipt.errors = failures;
           }
+
+          // Collect degraded nodes (frames created as minimal placeholders)
+          const degradedNodes = bdResult.lineResults
+            .filter(lr => lr.warnings?.some(w => w.code === 'DEGRADED_FALLBACK'))
+            .map(lr => lr.symbol)
+            .filter(Boolean) as string[];
+          if (degradedNodes.length > 0) {
+            receipt.degraded = degradedNodes;
+            receipt.degradedHint = 'These frames were created with minimal props due to errors. Use edit to apply their intended styles (layout, bg, padding, gap, etc).';
+          }
+
           if (bdAnomalies && bdAnomalies.length > 0) {
             receipt.anomalies = bdAnomalies.slice(0, 5);
+          }
+
+          // Build error message parts
+          const msgParts: string[] = [];
+          if (bdResult.stats.failed > 0) {
+            msgParts.push(`${bdResult.stats.failed} failed`);
+          }
+          if (degradedNodes.length > 0) {
+            msgParts.push(`${degradedNodes.length} degraded (use edit to fix: ${degradedNodes.join(', ')})`);
           }
 
           response = {
             success: bdResult.success,
             data: receipt,
-            error: bdResult.hasErrors
+            error: (bdResult.hasErrors || degradedNodes.length > 0)
               ? {
-                  code: 'PARTIAL_FAILURE',
-                  message: `${bdResult.stats.failed} of ${bdResult.stats.total} failed. ${bdResult.stats.created} created. Use idMap to fix only the failed operations.`,
+                  code: bdResult.hasErrors ? 'PARTIAL_FAILURE' : 'DEGRADED',
+                  message: `${bdResult.stats.created} created. ${msgParts.join('. ')}. Use idMap for references.`,
                 }
               : undefined,
           };
@@ -368,7 +388,16 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             if (r.success && r.nodeId) idMap[r.nodeId] = r.nodeId;
           }
 
+          // Collect per-node warnings (props that silently failed to apply)
+          const allWarnings = allResults
+            .filter(r => r.warnings && r.warnings.length > 0)
+            .map(r => ({ nodeId: r.nodeId, warnings: r.warnings }));
+
           const receipt: Record<string, any> = { edited: editedCount, idMap };
+          if (allWarnings.length > 0) {
+            receipt.warnings = allWarnings.slice(0, 15);
+            receipt.warningCount = allWarnings.reduce((sum, w) => sum + w.warnings.length, 0);
+          }
           if (editAnomalies && editAnomalies.length > 0) {
             receipt.anomalies = editAnomalies.slice(0, 5);
           }
@@ -383,7 +412,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               success: false,
               error: {
                 code: 'APPLY_ERROR',
-                message: `Failed to edit ${failedResults.length} node(s). ${editedCount} succeeded.`,
+                message: `Failed to edit ${failedResults.length} node(s). ${editedCount} succeeded.${allWarnings.length > 0 ? ` ${receipt.warningCount} property warning(s) on ${allWarnings.length} node(s).` : ''}`,
               },
               data: receipt,
             };

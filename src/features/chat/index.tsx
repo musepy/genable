@@ -55,7 +55,7 @@ const userItemStyle = {
   WebkitUserSelect: 'text' as const,
 };
 
-function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, reasoningText, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, queuedCount, onStop, onContinue, onErrorAction, anchorRef }: {
+function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, reasoningText, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, onStop, onContinue, onErrorAction, anchorRef }: {
   history: any[];
   expandedRawIds: Set<number>;
   toggleRaw: (id: number) => void;
@@ -65,8 +65,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
   runtimePhase: any;
   runtimeProgress: { iteration: number; maxIterations: number } | null;
   runtimeContextUsage: any;
-  runtimeState: 'idle' | 'running' | 'completed' | 'canceled' | 'error';
-  queuedCount: number;
+  runtimeState: 'idle' | 'running' | 'canceled' | 'error';
   onStop: () => void;
   onContinue: () => void;
   onErrorAction: (action: ErrorActionType) => void;
@@ -131,7 +130,6 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                       runError={msg.runError}
                       taskStartTime={msg.startTime}
                       taskEndTime={msg.endTime}
-                      queuedCount={msg.streaming ? queuedCount : 0}
                       onStop={onStop}
                       onContinue={onContinue}
                       onErrorAction={onErrorAction}
@@ -180,7 +178,8 @@ export function ChatFeature(props: UseChatProps) {
     generate,
     stopGeneration,
     continueGeneration,
-    queuedCount,
+    pendingApproval,
+    respondToApproval,
     modelName,
     setModelName,
     apiKey,
@@ -272,7 +271,6 @@ export function ChatFeature(props: UseChatProps) {
           runtimeProgress={runtimeProgress}
           runtimeContextUsage={runtimeContextUsage}
           runtimeState={runtimeState}
-          queuedCount={queuedCount}
           onStop={stopGeneration}
           onContinue={continueGeneration}
           onErrorAction={(action) => errorActions[action]()}
@@ -293,11 +291,29 @@ export function ChatFeature(props: UseChatProps) {
         {/* Scroll anchor for bottom */}
       </div>
 
+      {/* Tool Approval Panel */}
+      {pendingApproval && (
+        <div style={{
+          flexShrink: 0,
+          padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space[2],
+        }}>
+          <span style={{ flex: 1, fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontFamily: 'var(--font-family-mono)' }}>
+            {pendingApproval.toolCalls.map(tc => tc.name).join(', ')}
+          </span>
+          <Button variant="primary" size="sm" onClick={() => respondToApproval(true)}>Approve</Button>
+          <Button variant="ghost" size="sm" onClick={() => respondToApproval(false)}>Deny</Button>
+        </div>
+      )}
+
       {/* Input Area — Flex-anchored at bottom */}
       <div style={{
-        flexShrink: 0, // Prevent input itself from shrinking
+        flexShrink: 0,
         padding: `0 ${tokens.space[3]}px ${tokens.space[3]}px`,
-        background: tokens.colors.background, 
+        background: tokens.colors.background,
         zIndex: 10,
         position: 'relative',
       }}>

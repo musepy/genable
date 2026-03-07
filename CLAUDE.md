@@ -11,19 +11,33 @@ Figma plugin that uses an agentic AI loop (Gemini Flash) to generate UI designs 
 
 Communication: IPC via `@create-figma-plugin/utilities` emit/on pattern.
 
-### Agent Loop (Autonomous)
-Single-mode autonomous loop — no phase transitions. The agent decides its own plan/execute/verify rhythm.
+### Agent Loop (Conversational)
+Multi-turn conversational agent. Each `run()` call is one user turn. Text-only response = turn ends (pause, wait for user). No `signal(complete)` tool — the agent just speaks and waits.
 
 ```
-user prompt → [iteration loop] → text-only response (implicit completion)
-                   │
-              LLM generate → tool dispatch → hook guardrails → next iteration
+user message → run() → [iteration loop] → text-only response → turn end (wait for user)
+                              │
+                    LLM generate → tool dispatch → hooks → next iteration
 ```
 
-Safety is enforced by 3 built-in hooks (not phase transitions):
+Session lifecycle: plugin open → multiple `run()` calls → "New Design" (session reset).
+
+Safety hooks (2):
 - **emptyResponseHook** — retries empty LLM responses (max 2), then aborts
-- **ramblingGuardHook** — detects text-only iterations without tool calls (max 4), then aborts
-- **loopDetectionHook** — fingerprints tool call signatures; identical pattern 4+ times → grace warning → fatal abort; monotone tool-name pattern → hint injection
+- **loopDetectionHook** — fingerprints tool call signatures; identical pattern 4+ times → abort
+
+### Context Management (Layered)
+Context is structured in 3 layers, NOT a flat message array:
+
+```
+Layer 1: staticSystemPrompt  — set once at construction, never changes
+Layer 2: summary             — rolling summary of previous turns, updated at turn boundaries
+Layer 3: turnMessages        — current turn only, cleared at next run() start
+```
+
+Each LLM call receives `[systemPrompt, summary, ...turnMessages]`. Context is always bounded (~12K tokens) regardless of conversation length. No `hidden`/`pinned` flags, no reactive compression.
+
+At turn end: `endTurn()` summarizes current turn → appends to `summary` → `turnMessages` stay for debrief, cleared at next `run()`.
 
 ### Entry Point
 ```
@@ -31,17 +45,17 @@ AgentOrchestrator.generate(prompt)  →  AgentRuntime  →  agent.run(prompt)
 ```
 
 ### Execution Flow (single iteration)
-1. Context management — compression if prompt tokens > 70% budget
-2. Dynamic context update — mode tag updated in-place (KV-cache friendly)
-3. LLM generation — streams response with tool mode AUTO, all tools available
-4. Hook pipeline — emptyResponse → ramblingGuard → loopDetection (priority-ordered)
-5. Tool dispatch — sequential execution via IPC to main thread (or local for signal/query_knowledge)
-6. Termination — text-only response (no tool calls) = implicit completion
+1. Assemble prompt from 3 layers
+2. LLM generation — streams response with tool mode AUTO, all tools available
+3. Hook pipeline — emptyResponse → loopDetection (priority-ordered)
+4. Tool dispatch — sequential execution via IPC to main thread (or local for query_knowledge)
+5. Turn end — text-only response (no tool calls) = turn ends, wait for user
 
 ### Key Directories
 - `src/engine/agent/` — Agent runtime, loop policy, loop detection, hooks
-- `src/engine/agent/tools/` — 7 unified tool definitions (read_node, build_design, patch_node, delete_node, query_knowledge, capture_screenshot, signal)
-- `src/engine/llm-client/` — LLM providers, prompt composition, context management
+- `src/engine/agent/tools/` — 4 unified tool definitions (create, edit, read, query_knowledge)
+- `src/engine/agent/context/` — Context summarizer (`contextSummarizer.ts`), tool result cleaner
+- `src/engine/llm-client/` — LLM providers, prompt composition
 - `src/engine/actions/` — Typed action executor (sequential, with topological sort and rollback)
 - `src/engine/agent/skills/` + `.agent/skills/*/SKILL.md` — Skill system (regex trigger + BM25 knowledge)
 - `src/ipc/` — IPC handlers, batch executor
@@ -50,7 +64,7 @@ AgentOrchestrator.generate(prompt)  →  AgentRuntime  →  agent.run(prompt)
 ### Configuration
 Two config layers:
 - **AgentBehaviorConfig** — LLM-facing: designStrategy, visualQuality, thinkingLevel
-- **AgentLoopPolicy** — Runtime control: iteration limits, loop thresholds, token budgets
+- **AgentLoopPolicy** — Runtime control: iteration limits, loop thresholds
 
 ## Development
 

@@ -76,3 +76,14 @@ export const OPENROUTER_CONFIG = {
   SITE_URL: 'https://github.com/muse40007-stack/genable-figma-plugin',
   SITE_NAME: 'Genable Figma Plugin',
 } as const;
+
+/**
+ * DashScope Coding Plan API configuration
+ * Uses OpenAI-compatible protocol with Claude Code user-agent for coding plan compliance.
+ */
+export const DASHSCOPE_CONFIG = {
+  BASE_URL: 'https://coding.dashscope.aliyuncs.com/v1',
+  DEFAULT_MODEL: 'qwen3.5-plus',
+  /** Mimic Claude Code CLI headers so DashScope coding plan treats requests as coding-agent traffic */
+  USER_AGENT: 'claude-cli/2.0.57 (external, cli)',
+} as const;

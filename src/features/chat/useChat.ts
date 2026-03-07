@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
-import { emit } from '@create-figma-plugin/utilities'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
@@ -8,6 +7,7 @@ import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
 } from '../../shared/protocol/agentRuntimeEvents'
+import { useDevBridge } from '../../dev/useDevBridge'
 
 interface UseChatProps {
   apiKey: string
@@ -17,10 +17,14 @@ interface UseChatProps {
   setModelName?: (name: string) => void
   suggestedModels?: { name: string; displayName: string }[]
   onOpenSettings?: () => void
-  providerName: 'gemini' | 'openrouter'
+  providerName: 'gemini' | 'openrouter' | 'dashscope'
 }
 
-type RunState = 'idle' | 'running' | 'completed' | 'canceled' | 'error'
+export interface ToolApprovalRequest {
+  toolCalls: { id: string; name: string; args: any }[]
+}
+
+type RunState = 'idle' | 'running' | 'canceled' | 'error'
 
 export function useChat({
   apiKey,
@@ -33,7 +37,6 @@ export function useChat({
   providerName,
 }: UseChatProps) {
   const [prompt, setPrompt] = useState<string>('')
-  const [queuedMessages, setQueuedMessages] = useState<Array<{ id: string; text: string }>>([])
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [loadingStatus, setLoadingStatus] = useState<string>('')
@@ -43,15 +46,23 @@ export function useChat({
   const [runtimePhase, setRuntimePhase] = useState<'execution' | 'idle'>('idle')
   const [runtimeProgress, setRuntimeProgress] = useState<{ iteration: number; maxIterations: number } | null>(null)
   const [runtimeContextUsage, setRuntimeContextUsage] = useState<AgentRuntimeContextUsage | null>(null)
+  const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null)
 
   const [thinkingLevel] = useState<'minimal' | 'low' | 'high'>('high')
 
   const activeOrchestratorRef = useRef<AgentOrchestrator | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
-  const lastPromptRef = useRef<string>('')
-  const queueDispatchingRef = useRef(false)
 
+  // End session and dispose orchestrator
+  const endSession = () => {
+    activeOrchestratorRef.current?.endSession()
+    activeOrchestratorRef.current = null
+  }
 
+  // Reset session on config change
+  useEffect(() => {
+    endSession()
+  }, [apiKey, modelName, providerName])
 
   const findLastStreamingIndex = (messages: ChatMessage[]) => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -106,6 +117,7 @@ export function useChat({
         }
         updateStreamingMessage(msg => ({
           ...msg,
+          text: '', // Reset intermediate text — prevents accumulation across iterations
           iterations: [...(msg.iterations || []), newIteration],
         }))
         break
@@ -202,14 +214,18 @@ export function useChat({
         }))
         break
       }
-      case 'completed': {
+      case 'tool_approval_request': {
+        setPendingApproval({ toolCalls: event.toolCalls })
+        break
+      }
+      case 'turn_end': {
         setLoading(false)
-        setRuntimeState('completed')
+        setRuntimeState('idle')
         setRuntimePhase(event.phase)
-        setLoadingStatus('Completed')
+        setLoadingStatus('')
         updateStreamingMessage(msg => ({
           ...msg,
-          text: event.summary || msg.text || 'Completed',
+          text: event.summary || msg.text || '',
           streaming: false,
           runState: 'completed',
           endTime: Date.now(),
@@ -221,6 +237,7 @@ export function useChat({
         setRuntimeState('canceled')
         setLoadingStatus('Canceled by user')
         setRuntimePhase(event.phase)
+        setPendingApproval(null)
         updateStreamingMessage(msg => ({
           ...msg,
           text: msg.text || event.reason || 'Canceled by user',
@@ -239,6 +256,7 @@ export function useChat({
         setRuntimeState('error')
         setRuntimePhase(event.phase)
         setError(event.message)
+        setPendingApproval(null)
         updateStreamingMessage(msg => ({
           ...msg,
           streaming: false,
@@ -250,8 +268,6 @@ export function useChat({
         break
       }
       case 'debrief': {
-        // Debrief arrives after completed/error has set streaming=false,
-        // so we target the last model message regardless of streaming state.
         updateLastModelMessage(msg => ({
           ...msg,
           debrief: {
@@ -267,13 +283,9 @@ export function useChat({
     }
   }
 
-  const generateFromPrompt = async (
-    inputPrompt: string,
-    options: { appendUserMessage?: boolean } = {}
-  ) => {
+  const generateFromPrompt = async (inputPrompt: string) => {
     const normalizedPrompt = inputPrompt.trim()
     if (!normalizedPrompt) return
-    const appendUserMessage = options.appendUserMessage !== false
 
     setLoading(true)
     setError(null)
@@ -283,42 +295,38 @@ export function useChat({
     setRuntimeContextUsage(null)
     setLoadingStatus('Agent starting...')
     setThinkingText('')
+    setPendingApproval(null)
     activeRunIdRef.current = null
-    lastPromptRef.current = normalizedPrompt
 
-
-
-    const modelMsgId = `m-${Date.now() + 1}`
-
-    setHistory(prev => {
-      const next = [...prev]
-      if (appendUserMessage) {
-        next.push({ role: 'user', text: normalizedPrompt, id: `u-${Date.now()}` })
-      }
-      next.push({
+    setHistory(prev => [
+      ...prev,
+      { role: 'user', text: normalizedPrompt, id: `u-${Date.now()}` },
+      {
         role: 'model',
         text: '',
         streaming: true,
         iterations: [],
         toolCalls: [],
-        id: modelMsgId,
+        id: `m-${Date.now() + 1}`,
         startTime: Date.now(),
         runState: 'running',
-      })
-      return next
-    })
+      },
+    ])
 
     setPrompt('')
 
-    const orchestrator = new AgentOrchestrator({
-      apiKey,
-      modelName,
-      providerName,
-      thinkingLevel,
-      onRuntimeEvent: handleRuntimeEvent,
-    })
-
-    activeOrchestratorRef.current = orchestrator
+    // Reuse or create orchestrator (session persists across turns)
+    if (!activeOrchestratorRef.current) {
+      activeOrchestratorRef.current = new AgentOrchestrator({
+        apiKey,
+        modelName,
+        providerName,
+        thinkingLevel,
+        workerUrl: 'https://figma-ai-generator.muse40007.workers.dev',
+        requireToolApproval: false,
+        onRuntimeEvent: handleRuntimeEvent,
+      })
+    }
 
     try {
       const localExecutors = {
@@ -327,37 +335,22 @@ export function useChat({
             const results = knowledgeHub.searchAll(params.query || '')
             return { success: true, data: { results: results.map(r => r.item) } }
           }
-          // 'nodes' source → return null to signal "not handled locally, use IPC"
           return null
         },
       }
 
-      await orchestrator.generate(normalizedPrompt, { toolExecutors: localExecutors }, history)
+      await activeOrchestratorRef.current.generate(normalizedPrompt, { toolExecutors: localExecutors })
     } catch (e: any) {
-      // Errors that escape the orchestrator are truly unexpected — log but don't
-      // show a scary ErrorBanner. The orchestrator already routes user-actionable
-      // errors (API key, quota) via 'error' events.
       console.error('[useChat] Unhandled generation error:', e)
       setRuntimeState('error')
     } finally {
       setLoading(false)
-      activeOrchestratorRef.current = null
     }
   }
 
   const generate = async () => {
     const normalizedPrompt = prompt.trim()
-    if (!normalizedPrompt) return
-
-    if (loading) {
-      const queuedId = `u-${Date.now()}`
-      // Queue instructions in order and show as regular user messages immediately.
-      setQueuedMessages(prev => [...prev, { id: queuedId, text: normalizedPrompt }])
-      setHistory(prev => [...prev, { role: 'user', text: normalizedPrompt, id: queuedId }])
-      setPrompt('')
-      return
-    }
-
+    if (!normalizedPrompt || loading) return
     await generateFromPrompt(normalizedPrompt)
   }
 
@@ -368,12 +361,16 @@ export function useChat({
 
   const continueGeneration = async () => {
     if (loading) return
-    const previousPrompt = lastPromptRef.current.trim()
-    if (!previousPrompt) return
-    await generateFromPrompt(previousPrompt)
+    await generateFromPrompt('Continue from where you left off.')
+  }
+
+  const respondToApproval = (approved: boolean) => {
+    activeOrchestratorRef.current?.approveTools(approved)
+    setPendingApproval(null)
   }
 
   const handleRestore = () => {
+    endSession()
     setHistory([])
     setPrompt('')
     setError(null)
@@ -383,29 +380,8 @@ export function useChat({
     setRuntimeContextUsage(null)
     setLoadingStatus('')
     setThinkingText('')
-    setQueuedMessages([])
+    setPendingApproval(null)
   }
-
-  useEffect(() => {
-    if (loading) return
-    if (queuedMessages.length === 0) return
-    if (queueDispatchingRef.current) return
-
-    const [next, ...rest] = queuedMessages
-    const nextPrompt = next.text.trim()
-    if (!nextPrompt) {
-      setQueuedMessages(rest)
-      return
-    }
-
-    queueDispatchingRef.current = true
-    setQueuedMessages(rest)
-    Promise.resolve()
-      .then(() => generateFromPrompt(nextPrompt, { appendUserMessage: false }))
-      .finally(() => {
-        queueDispatchingRef.current = false
-      })
-  }, [loading, queuedMessages])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !(window as any).__GENABLE_PREVIEW__) {
@@ -523,9 +499,9 @@ export function useChat({
       queue(3600, () => {
         setLoading(false)
         setThinkingText('')
-        setRuntimeState('completed')
+        setRuntimeState('idle')
         setRuntimePhase('idle')
-        setLoadingStatus('Completed')
+        setLoadingStatus('')
         setFlowCalls(
           [...calls],
           false,
@@ -600,6 +576,11 @@ export function useChat({
     }
   }, [])
 
+  const { devBridgeStatus } = useDevBridge(
+    { generateFromPrompt, handleRestore },
+    { loading, runtimeState, history, modelName },
+  )
+
   return {
     prompt,
     setPrompt,
@@ -614,7 +595,8 @@ export function useChat({
     generate,
     stopGeneration,
     continueGeneration,
-    queuedCount: queuedMessages.length,
+    pendingApproval,
+    respondToApproval,
     runtimeState,
     runtimePhase,
     runtimeProgress,
@@ -627,6 +609,7 @@ export function useChat({
     suggestedModels: suggestedModels ?? [],
     onOpenSettings,
     providerName,
+    devBridgeStatus,
   }
 }
 

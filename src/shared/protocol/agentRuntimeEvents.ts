@@ -103,8 +103,8 @@ export interface AgentRuntimeErrorEvent extends AgentRuntimeBaseEvent {
   code?: string;
 }
 
-export interface AgentRuntimeCompletedEvent extends AgentRuntimeBaseEvent {
-  type: 'completed';
+export interface AgentRuntimeTurnEndEvent extends AgentRuntimeBaseEvent {
+  type: 'turn_end';
   phase: AgentRuntimePhase;
   iteration: number;
   totalIterations: number;
@@ -120,6 +120,13 @@ export interface AgentRuntimeRetryEvent extends AgentRuntimeBaseEvent {
   delayMs: number;
   errorCategory: string;
   errorMessage: string;
+}
+
+export interface AgentRuntimeToolApprovalRequestEvent extends AgentRuntimeBaseEvent {
+  type: 'tool_approval_request';
+  phase: AgentRuntimePhase;
+  iteration: number;
+  toolCalls: { id: string; name: string; args: any }[];
 }
 
 export interface AgentRuntimeCanceledEvent extends AgentRuntimeBaseEvent {
@@ -149,6 +156,14 @@ export interface AgentRuntimeLLMRequestEvent extends AgentRuntimeBaseEvent {
     maxOutputTokens: number;
     thinkingLevel: string;
     toolMode: string;
+  };
+  /** Provider-agnostic KV cache diagnostics based on prefix stability. */
+  cache?: {
+    /** Messages whose content is identical to the previous request (cacheable prefix). */
+    cacheableMessages: number;
+    totalMessages: number;
+    /** Estimated cacheable tokens (~chars/4). */
+    cacheableTokensEstimate: number;
   };
 }
 
@@ -180,6 +195,7 @@ export interface AgentRuntimeLLMResponseEvent extends AgentRuntimeBaseEvent {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cachedTokens?: number;
   };
   responseShape: {
     textLength: number;
@@ -199,8 +215,9 @@ export type AgentRuntimeEvent =
   | AgentRuntimeReasoningDeltaEvent
   | AgentRuntimeTextDeltaEvent
   | AgentRuntimeErrorEvent
-  | AgentRuntimeCompletedEvent
+  | AgentRuntimeTurnEndEvent
   | AgentRuntimeRetryEvent
+  | AgentRuntimeToolApprovalRequestEvent
   | AgentRuntimeCanceledEvent
   | AgentRuntimeLLMRequestEvent
   | AgentRuntimeLLMResponseEvent
@@ -215,8 +232,9 @@ export type AgentRuntimeEventType =
   | 'reasoning_delta'
   | 'text_delta'
   | 'error'
-  | 'completed'
+  | 'turn_end'
   | 'retry'
+  | 'tool_approval_request'
   | 'canceled'
   | 'llm_request'
   | 'llm_response'

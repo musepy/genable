@@ -3,7 +3,7 @@
  * @description OpenRouter LLM Provider implementation using OpenAI-compatible REST API.
  */
 
-import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolCall, LLMToolResult, formatResponseDefault, formatToolResultsDefault } from './types';
+import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolCall, LLMToolResult, formatResponseDefault, formatToolResultsDefault, getToolSystemInstructionDefault } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { OPENROUTER_CONFIG } from '../config';
 
@@ -90,10 +90,7 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   getToolSystemInstruction(tools: ToolDefinition[]): string {
-    if (!tools || tools.length === 0) return '';
-    // Centralized in promptRegistry — single source of truth
-    const { TOOL_CALLING_PROTOCOL } = require('../../prompt/promptRegistry');
-    return TOOL_CALLING_PROTOCOL;
+    return getToolSystemInstructionDefault(tools);
   }
 
   formatResponse(response: LLMResponse): LLMMessage {
@@ -183,6 +180,7 @@ export class OpenRouterProvider implements LLMProvider {
         promptTokens: data.usage.prompt_tokens,
         completionTokens: data.usage.completion_tokens,
         totalTokens: data.usage.total_tokens,
+        cachedTokens: data.usage.prompt_tokens_details?.cached_tokens || undefined,
       } : undefined,
     };
   }

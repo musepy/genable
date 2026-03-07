@@ -5,7 +5,7 @@
  * Strict model filtering: Only Gemini 3.0 and 2.5 Pro/Flash models
  */
 
-import { MODEL_PATTERNS } from './config';
+import { MODEL_PATTERNS, DASHSCOPE_CONFIG } from './config';
 
 /**
  * Raw model data from Gemini API
@@ -23,6 +23,21 @@ export interface LLMModel {
   name: string;
   displayName: string;
   isFree?: boolean;
+}
+
+/**
+ * Rule-based free model detection for Gemini.
+ * Google API doesn't return pricing info, so we infer from naming patterns.
+ * Historically stable rule: Flash/Lite = free tier, Pro = paid only.
+ */
+export function isLikelyFreeGeminiModel(modelName: string): boolean {
+  const name = modelName.toLowerCase();
+  // Pro models are paid-only (no free tier)
+  if (/\bpro\b/.test(name)) return false;
+  // Flash and Lite variants are always free-tier eligible
+  if (/\b(flash|lite)\b/.test(name)) return true;
+  // Unknown variant — conservative default: not free
+  return false;
 }
 
 /**
@@ -75,10 +90,14 @@ export async function fetchGeminiModels(apiKey: string): Promise<LLMModel[]> {
   
   return data.models
     .filter((m: RawGeminiModel) => m.supportedGenerationMethods?.includes('generateContent'))
-    .map((m: RawGeminiModel) => ({
-      name: m.name.replace('models/', ''),
-      displayName: m.displayName || m.name
-    }))
+    .map((m: RawGeminiModel) => {
+      const name = m.name.replace('models/', '');
+      return {
+        name,
+        displayName: m.displayName || m.name,
+        isFree: isLikelyFreeGeminiModel(name),
+      };
+    })
     .filter((m: LLMModel) => isAllowedModel(m.name, m.displayName));
 }
 
@@ -109,11 +128,22 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<LLMModel[]>
 }
 
 /**
+ * DashScope models — static list only (API endpoint has no CORS headers,
+ * can't be called from plugin sandbox iframe)
+ */
+export async function fetchDashScopeModels(_apiKey: string): Promise<LLMModel[]> {
+  return [];
+}
+
+/**
  * Unified model fetcher
  */
-export async function fetchModels(provider: 'gemini' | 'openrouter', apiKey: string): Promise<LLMModel[]> {
+export async function fetchModels(provider: 'gemini' | 'openrouter' | 'dashscope', apiKey: string): Promise<LLMModel[]> {
   if (provider === 'openrouter') {
     return fetchOpenRouterModels(apiKey);
+  }
+  if (provider === 'dashscope') {
+    return fetchDashScopeModels(apiKey);
   }
   return fetchGeminiModels(apiKey);
 }

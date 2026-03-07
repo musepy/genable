@@ -72,8 +72,53 @@ Two config layers:
 - **Type check**: `npx tsc --noEmit`
 - **Test**: `npx vitest run` (NOT jest)
 - **Lint**: `npx eslint "src/**/*.{ts,tsx}"`
-- **LLM providers**: Gemini Flash (primary), OpenRouter (alternative)
+- **LLM providers**: Gemini Flash (primary), OpenRouter (alternative), DashScope/Kimi K2.5 (via Cloudflare Worker proxy)
 - **UI framework**: Preact with `@create-figma-plugin/ui`
+
+## Local E2E Testing (Dev Bridge)
+
+Automated end-to-end testing via the dev bridge — Claude Code sends prompts to the Figma plugin and collects results without manual interaction.
+
+### Quick Start
+```bash
+# 1. Build plugin
+node build.js
+
+# 2. Start dev bridge server
+npx tsx tools/dev-bridge/server.ts          # → localhost:3456
+
+# 3. Open Figma desktop → run plugin (it auto-connects to bridge)
+
+# 4. Trigger a design prompt
+curl -X POST http://localhost:3456/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Design a login page with email, password, and sign-in button"}'
+# → {"ok":true,"id":"trigger-xxx"}
+
+# 5. Poll for result
+curl http://localhost:3456/result/trigger-xxx
+# → {status: "done", logs, toolCalls, ...}
+```
+
+### Architecture
+```
+Claude Code ──curl──▶ dev-bridge server (localhost:3456)
+                          │ writes /tmp/figma-bridge/triggers/
+                          │ reads  /tmp/figma-bridge/results/
+                          ▼
+              Figma plugin (useDevBridge.ts polls filesystem)
+                          │ injects prompt → agent runs → writes result
+```
+
+### Key Files
+- `tools/dev-bridge/server.ts` — HTTP server: /trigger, /result/:id, /health
+- `src/dev/useDevBridge.ts` — Plugin-side hook, polls triggers, collects results
+- `src/dev/nodeTreeSerializer.ts` — Serializes Figma node tree for export
+
+### When to Use
+- After changing executor/tool/prompt logic — run E2E to validate design output
+- After changing LLM provider code — verify tool calls work end-to-end
+- Result includes: agent digest (iterations, duration, tool calls), full tool call log with params/results/errors
 
 ## Testing Rules
 
@@ -84,6 +129,7 @@ See [docs/TESTING.md](docs/TESTING.md) for full guide. Key rules:
 - **Only unit-test pure logic** — functions with no Figma/LLM dependency (loop detection, topological sort, token estimation, parsers)
 - **Real API harness** is the most valuable test: `GEMINI_API_KEY=xxx npx vitest run src/engine/agent/__tests__/agent_realapi_harness.test.ts`
 - **Figma desktop smoke test** after changing executor/tool logic — build and run in Figma desktop app
+- **Dev bridge E2E** is the most comprehensive test — see "Local E2E Testing" section above
 
 ## Conventions
 

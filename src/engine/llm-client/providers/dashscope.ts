@@ -38,6 +38,10 @@ const STREAM_IDLE_TIMEOUT_MS = 45000;
  * DashScope TTFB through Worker can be 10-30s+ due to cross-border latency
  * (Cloudflare edge → China datacenter) plus model reasoning time. */
 const CONNECT_TIMEOUT_MS = 90000;
+/** Max retries for transient 5xx errors (e.g. Cloudflare 520). */
+const MAX_RETRIES = 2;
+/** Base delay for exponential backoff (ms): 2s → 4s. */
+const RETRY_BASE_DELAY_MS = 2000;
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
@@ -161,23 +165,56 @@ export class DashScopeProvider implements LLMProvider {
     return this.mapToLLMResponse(await res.json());
   }
 
+  /** Fetch with retry for transient 5xx errors (e.g. Cloudflare 520). */
+  private async fetchWithRetry(body: Record<string, any>, abortSignal?: AbortSignal): Promise<Response> {
+    let lastError: Error | undefined;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`[DashScope] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        if (abortSignal?.aborted) throw new Error('[DashScope] Aborted during retry wait');
+      }
+
+      try {
+        const res = await withConnectTimeout(
+          () => fetch(`${this.workerUrl}/api/dashscope/generate`, {
+            method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: abortSignal,
+          }),
+          CONNECT_TIMEOUT_MS,
+        );
+
+        if (res.ok) return res;
+
+        const errText = await res.text();
+        // Only retry on 5xx (server/infra errors). 4xx = client error, don't retry.
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          console.warn(`[DashScope] ${res.status} error, will retry: ${errText.slice(0, 200)}`);
+          lastError = new Error(`[DashScope] Streaming error ${res.status}: ${errText}`);
+          continue;
+        }
+        throw new Error(`[DashScope] Streaming error ${res.status}: ${errText}`);
+      } catch (e: any) {
+        // Network errors (fetch threw) are also retryable
+        if (e.name === 'AbortError') throw e;
+        if (attempt < MAX_RETRIES && !e.message?.includes('Streaming error 4')) {
+          console.warn(`[DashScope] Fetch failed, will retry: ${e.message?.slice(0, 200)}`);
+          lastError = e;
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw lastError ?? new Error('[DashScope] All retries exhausted');
+  }
+
   private async generateStreaming(
     body: Record<string, any>,
     onProgress?: (chunk: string) => void,
     onThinking?: (thought: string) => void,
     abortSignal?: AbortSignal,
   ): Promise<LLMResponse> {
-    const res = await withConnectTimeout(
-      () => fetch(`${this.workerUrl}/api/dashscope/generate`, {
-        method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: abortSignal,
-      }),
-      CONNECT_TIMEOUT_MS,
-    );
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`[DashScope] Streaming error ${res.status}: ${errText}`);
-    }
+    const res = await this.fetchWithRetry(body, abortSignal);
 
     const reader = res.body!.getReader();
     const accumulator = new ResponseAccumulator();
@@ -192,7 +229,10 @@ export class DashScopeProvider implements LLMProvider {
         accumulator.append(chunk);
       }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
 
-      if (timedOut) console.warn('[DashScope] Stream idle timeout. Returning partial result.');
+      if (timedOut) {
+        console.warn('[DashScope] Stream idle timeout. Returning partial result.');
+        accumulator.append({ text: '', finishReason: 'timeout' });
+      }
     } finally {
       reader.cancel().catch(() => {});
     }
@@ -268,6 +308,7 @@ export class DashScopeProvider implements LLMProvider {
     return {
       text: message?.content || '',
       toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
+      finishReason: choice?.finish_reason || undefined,
       usage: data.usage ? {
         promptTokens: data.usage.prompt_tokens || 0,
         completionTokens: data.usage.completion_tokens || 0,
@@ -333,6 +374,8 @@ export class DashScopeProvider implements LLMProvider {
         totalTokens: data.usage.total_tokens || 0,
         cachedTokens: data.usage.prompt_tokens_details?.cached_tokens || undefined,
       } : undefined,
+      // finish_reason arrives in the final chunk (e.g. 'stop', 'length', 'tool_calls')
+      finishReason: choice?.finish_reason || undefined,
     };
   }
 

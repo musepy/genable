@@ -19,6 +19,7 @@ export class ResponseAccumulator {
   private toolCalls: LLMToolCall[] = [];
   private fullParts: Part[] = [];
   private usage?: LLMResponse['usage'];
+  private finishReason?: string;
 
   append(chunk: LLMResponse): void {
     if (chunk.text) this.text += chunk.text;
@@ -26,6 +27,7 @@ export class ResponseAccumulator {
     if (chunk.toolCalls && chunk.toolCalls.length > 0) this.toolCalls.push(...chunk.toolCalls);
     if (chunk.fullParts && chunk.fullParts.length > 0) this.fullParts.push(...chunk.fullParts);
     if (chunk.usage) this.usage = chunk.usage;
+    if (chunk.finishReason) this.finishReason = chunk.finishReason;
   }
 
   finalize(): LLMResponse {
@@ -70,6 +72,7 @@ export class ResponseAccumulator {
       toolCalls: this.toolCalls.length > 0 ? this.toolCalls : undefined,
       fullParts: finalFullParts.length > 0 ? finalFullParts : undefined,
       usage: this.usage,
+      finishReason: this.finishReason,
     };
   }
 

@@ -322,6 +322,24 @@ export class AgentRuntime {
 
       const prompt = this.assemblePrompt();
       const currentTokens = this.lastPromptTokens;
+
+      // Debug: dump full LLM prompt for each iteration (visible in Figma DevTools Console)
+      console.log(`\n${'='.repeat(60)}\n[Iteration ${iteration + 1}/${this.maxIterations}] LLM Prompt (${prompt.length} messages)\n${'='.repeat(60)}`);
+      for (const m of prompt) {
+        const contentPreview = typeof m.content === 'string'
+          ? m.content.slice(0, 500)
+          : Array.isArray(m.content)
+            ? (m.content as any[]).map((p: any) => {
+                if (p.text) return `[text] ${p.text.slice(0, 200)}`;
+                if (p.functionCall) return `[call] ${p.functionCall.name}(${JSON.stringify(p.functionCall.args).slice(0, 200)})`;
+                if (p.functionResponse) return `[result] ${p.functionResponse.name}: ${JSON.stringify(p.functionResponse.response).slice(0, 200)}`;
+                return '[other]';
+              }).join('\n    ')
+            : '(empty)';
+        console.log(`  [${m.role}] ${m.id}: ${contentPreview}`);
+      }
+      console.log('='.repeat(60));
+
       this.emitRuntimeEvent({
         type: 'context_usage',
         iteration: iteration + 1,
@@ -493,6 +511,22 @@ export class AgentRuntime {
         iteration++;
         continue;
       } else {
+        // ──── TRUNCATION GUARD ────
+        // If finishReason is present and NOT 'stop', the response was truncated
+        // (e.g. 'length' = max_tokens hit, 'timeout' = stream timeout).
+        // Inject a continuation hint so the LLM can resume its work.
+        const fr = response.finishReason;
+        if (fr && fr !== 'stop' && fr !== 'tool_calls') {
+          console.warn(`[AgentRuntime] Response truncated (finishReason=${fr}). Injecting continuation.`);
+          this.turnMessages.push({
+            id: this.generateId('cont'),
+            role: 'user',
+            content: 'Your previous response was truncated. Continue where you left off.',
+          });
+          iteration++;
+          continue;
+        }
+
         // Turn end: summarize this turn, prepare for next
         this.emitRuntimeEvent({
           type: 'turn_end',

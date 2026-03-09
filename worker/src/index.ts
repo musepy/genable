@@ -272,6 +272,8 @@ async function handleUsage(request: Request, env: Env): Promise<Response> {
 // ─── DashScope CORS Proxy ────────────────────────────────────────────────────
 
 const DASHSCOPE_BASE = 'https://coding.dashscope.aliyuncs.com/v1';
+/** Subrequest timeout for DashScope (ms). Cross-border latency can be 10-30s+. */
+const DASHSCOPE_TIMEOUT_MS = 45000;
 
 /** Generic CORS proxy for DashScope — forwards client's own API key, adds UA */
 async function handleDashScopeProxy(request: Request, stream: boolean): Promise<Response> {
@@ -283,6 +285,9 @@ async function handleDashScopeProxy(request: Request, stream: boolean): Promise<
 
   if (stream) body.stream = true;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DASHSCOPE_TIMEOUT_MS);
+
   let upstream: Response;
   try {
     upstream = await fetch(`${DASHSCOPE_BASE}/chat/completions`, {
@@ -293,19 +298,30 @@ async function handleDashScopeProxy(request: Request, stream: boolean): Promise<
         'User-Agent': 'anthropic-python/0.42.0',
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
   } catch (e: any) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError' || controller.signal.aborted) {
+      console.error(`[DashScope] Upstream timeout after ${DASHSCOPE_TIMEOUT_MS}ms`);
+      return errorResponse(`DashScope upstream timeout after ${DASHSCOPE_TIMEOUT_MS}ms`, 504);
+    }
+    console.error(`[DashScope] Upstream unreachable: ${e.message}`);
     return errorResponse(`DashScope upstream unreachable: ${e.message}`, 502);
   }
+  clearTimeout(timeoutId);
 
   if (!upstream.ok) {
-    const errText = await upstream.text();
+    let errText: string;
+    try { errText = await upstream.text(); } catch { errText = '(failed to read error body)'; }
+    console.error(`[DashScope] Upstream error ${upstream.status}: ${errText.slice(0, 500)}`);
     return new Response(errText, {
       status: upstream.status,
       headers: { 'Content-Type': 'application/json', ...corsHeaders() },
     });
   }
 
+  console.log(`[DashScope] Upstream ok, streaming=${stream}`);
   const contentType = stream ? 'text/event-stream' : 'application/json';
   return new Response(upstream.body, {
     status: 200,
@@ -317,37 +333,42 @@ async function handleDashScopeProxy(request: Request, stream: boolean): Promise<
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
-    }
+    try {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, { status: 204, headers: corsHeaders() });
+      }
 
-    const url = new URL(request.url);
-    const path = url.pathname;
+      const url = new URL(request.url);
+      const path = url.pathname;
 
-    // DashScope CORS proxy (client provides own API key)
-    if (path === '/api/dashscope/generate' && request.method === 'POST') {
-      return handleDashScopeProxy(request, true);
-    }
-    if (path === '/api/dashscope/generate-sync' && request.method === 'POST') {
-      return handleDashScopeProxy(request, false);
-    }
+      // DashScope CORS proxy (client provides own API key)
+      if (path === '/api/dashscope/generate' && request.method === 'POST') {
+        return handleDashScopeProxy(request, true);
+      }
+      if (path === '/api/dashscope/generate-sync' && request.method === 'POST') {
+        return handleDashScopeProxy(request, false);
+      }
 
-    if (path === '/api/generate' && request.method === 'POST') {
-      return handleGenerateStream(request, env);
-    }
-    if (path === '/api/generate-sync' && request.method === 'POST') {
-      return handleGenerateSync(request, env);
-    }
-    if (path === '/api/models' && request.method === 'GET') {
-      return handleModels(request, env);
-    }
-    if (path === '/api/validate-token' && request.method === 'POST') {
-      return handleValidateToken(request, env);
-    }
-    if (path === '/api/usage' && request.method === 'GET') {
-      return handleUsage(request, env);
-    }
+      if (path === '/api/generate' && request.method === 'POST') {
+        return handleGenerateStream(request, env);
+      }
+      if (path === '/api/generate-sync' && request.method === 'POST') {
+        return handleGenerateSync(request, env);
+      }
+      if (path === '/api/models' && request.method === 'GET') {
+        return handleModels(request, env);
+      }
+      if (path === '/api/validate-token' && request.method === 'POST') {
+        return handleValidateToken(request, env);
+      }
+      if (path === '/api/usage' && request.method === 'GET') {
+        return handleUsage(request, env);
+      }
 
-    return errorResponse('Not found', 404);
+      return errorResponse('Not found', 404);
+    } catch (e: any) {
+      console.error(`[Worker] Unhandled exception: ${e.stack || e.message || e}`);
+      return errorResponse(`Internal error: ${e.message || 'unknown'}`, 500);
+    }
   },
 };

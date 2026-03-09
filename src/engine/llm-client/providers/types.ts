@@ -85,6 +85,8 @@ export interface LLMResponse {
   thoughts?: string;
   /** Full original parts from the provider to ensure exact history reconstruction */
   fullParts?: Part[];
+  /** Why the model stopped: 'stop' (natural), 'length' (truncated), 'tool_calls', etc. */
+  finishReason?: string;
 }
 
 export interface LLMGenerateOptions {

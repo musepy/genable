@@ -16,7 +16,7 @@ import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 /** Idle timeout: max silence between chunks (ms) */
 const STREAM_IDLE_TIMEOUT_MS = 30000;
 /** Connect timeout: max time to establish the streaming connection (ms) */
-const CONNECT_TIMEOUT_MS = 15000;
+const CONNECT_TIMEOUT_MS = 60000;
 
 export class GeminiProvider implements LLMProvider {
   public readonly name = 'gemini';

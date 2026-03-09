@@ -35,8 +35,9 @@ export type FetchProxy = (
 /** Idle timeout: max silence between chunks (ms). Extra hop through Worker. */
 const STREAM_IDLE_TIMEOUT_MS = 45000;
 /** Connect timeout: max time until first byte from Worker proxy (ms).
- * DashScope TTFB through Worker can be 8-15s+ (reasoning models, large prompts). */
-const CONNECT_TIMEOUT_MS = 30000;
+ * DashScope TTFB through Worker can be 10-30s+ due to cross-border latency
+ * (Cloudflare edge → China datacenter) plus model reasoning time. */
+const CONNECT_TIMEOUT_MS = 90000;
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);

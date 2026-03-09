@@ -38,6 +38,7 @@ export interface ModelConfig {
  */
 export const SUPPORTED_MODELS: Record<string, ModelConfig[]> = {
   gemini: [
+    { name: MODEL_FAMILIES.GEMINI_3_FLASH_PREVIEW, displayName: 'Gemini 3 Flash', tier: 'fast', isFree: true },
     { name: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', tier: 'fast', isFree: true },
     { name: MODEL_FAMILIES.GEMINI_2_5_FLASH, displayName: 'Gemini 2.5 Flash', tier: 'fast', isFree: true },
     { name: MODEL_FAMILIES.GEMINI_2_5_PRO, displayName: 'Gemini 2.5 Pro', tier: 'balanced', isFree: false },

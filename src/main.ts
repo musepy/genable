@@ -30,8 +30,6 @@ import { handleLoadSettings, handleSaveSettings, handleResetSettings } from './i
 export default async function () {
   console.log('[Genable] Plugin started');
 
-
-
   function getNodeCenter(node: SceneNode) {
     // Use any cast to avoid complex type narrowing issues with SceneNode subtypes
     const bounds = (node as any).absoluteBoundingBox || (node as any).absoluteRenderBounds || null;

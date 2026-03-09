@@ -14,6 +14,7 @@ type RunState = 'idle' | 'running' | 'canceled' | 'error'
 interface DevBridgeCallbacks {
   generateFromPrompt: (prompt: string) => Promise<void>
   handleRestore: () => void
+  switchModel?: (provider: string, model: string) => void
 }
 
 interface DevBridgeState {
@@ -27,6 +28,8 @@ interface TriggerPayload {
   id: string
   prompt: string
   reset?: boolean
+  /** Switch model before running. Format: "provider/model" e.g. "dashscope/kimi-k2.5" or "gemini/gemini-2.5-flash-preview-04-17" */
+  model?: string
 }
 
 async function fetchBridge(path: string, options?: RequestInit): Promise<Response | null> {
@@ -122,8 +125,8 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
       name: tc.name,
       status: tc.status,
       durationMs: tc.endTime && tc.startTime ? tc.endTime - tc.startTime : undefined,
-      params: tc.parameters ? JSON.stringify(tc.parameters).slice(0, 200) : undefined,
-      result: tc.result ? JSON.stringify(tc.result).slice(0, 500) : undefined,
+      params: tc.parameters ? JSON.stringify(tc.parameters) : undefined,
+      result: tc.result ? JSON.stringify(tc.result) : undefined,
       error: tc.error,
     }))
 
@@ -132,6 +135,19 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
 
     // Request node tree + screenshot from main thread, then POST everything
     requestExport(rootNodeIds).then(({ nodeTree, screenshot }) => {
+      // Serialize full conversation history for debugging LLM decisions
+      const conversationHistory = state.history.map(m => ({
+        role: m.role,
+        text: m.text,
+        toolCalls: m.toolCalls?.map(tc => ({
+          name: tc.name,
+          parameters: tc.parameters,
+          result: tc.result,
+          status: tc.status,
+          error: tc.error,
+        })),
+      }))
+
       const payload = {
         triggerId,
         status: curr,
@@ -140,6 +156,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
         modelName: state.modelName,
         toolCallSummary,
         toolCallDetails,
+        conversationHistory,
         logs,
         nodeTree,
         screenshot,
@@ -216,6 +233,18 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
       triggerIdRef.current = trigger.id
       triggerStartTimeRef.current = Date.now()
       setStatus('executing')
+
+      // Switch model if requested (triggers session reset via useChat's useEffect)
+      if (trigger.model && callbacksRef.current.switchModel) {
+        const [provider, ...modelParts] = trigger.model.split('/')
+        const model = modelParts.join('/')
+        if (provider && model) {
+          console.log(`[DevBridge] Switching model to ${provider}/${model}`)
+          callbacksRef.current.switchModel(provider, model)
+          // Wait for session reset to settle
+          await new Promise(r => setTimeout(r, 500))
+        }
+      }
 
       // Reset session if requested
       if (trigger.reset) {

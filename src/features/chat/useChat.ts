@@ -603,8 +603,18 @@ export function useChat({
     }
   }, [])
 
+  const switchModel = (provider: string, model: string) => {
+    const validProviders = ['gemini', 'openrouter', 'dashscope'] as const
+    if (validProviders.includes(provider as any)) {
+      (setModelName as any)?.(model)
+      // providerName is not directly settable from useChat — we need the parent's setter
+      // For now, emit a message that the parent can handle
+      ;(window as any).__GENABLE_SWITCH_PROVIDER__?.(provider, model)
+    }
+  }
+
   const { devBridgeStatus } = useDevBridge(
-    { generateFromPrompt, handleRestore },
+    { generateFromPrompt, handleRestore, switchModel },
     { loading, runtimeState, history, modelName },
   )
 

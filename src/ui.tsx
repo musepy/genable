@@ -67,6 +67,18 @@ function PluginContent() {
   // Key for remounting ChatFeature (replaces window.location.reload)
   const [chatKey, setChatKey] = useState(0)
 
+  // Dev bridge model switching — exposed via window global for cross-component access
+  useEffect(() => {
+    (window as any).__GENABLE_SWITCH_PROVIDER__ = (provider: string, model: string) => {
+      const validProviders = ['gemini', 'openrouter', 'dashscope'] as const
+      if (validProviders.includes(provider as any)) {
+        setProviderName(provider as any)
+        setModelName(model)
+      }
+    }
+    return () => { delete (window as any).__GENABLE_SWITCH_PROVIDER__ }
+  }, [setProviderName, setModelName])
+
   // 3. Theme & UI Animation State
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system')
   const [isSettingsClosing, setIsSettingsClosing] = useState(false)

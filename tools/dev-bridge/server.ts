@@ -2,27 +2,30 @@
  * Dev Bridge Server — bridges Claude Code ↔ Figma Plugin
  *
  * Endpoints:
- *   GET  /trigger  → returns current prompt (or 204 if none)
- *   POST /trigger  → set a new prompt (Claude writes here)
- *   POST /result   → plugin posts execution results
- *   GET  /result   → returns latest result (Claude reads here)
- *   GET  /health   → liveness check
+ *   GET  /trigger      → returns current prompt (or 204 if none)
+ *   POST /trigger      → set a new prompt (Claude writes here)
+ *   DEL  /trigger      → clear pending prompt
+ *   POST /result       → plugin posts execution results
+ *   GET  /result       → returns latest result
+ *   GET  /result/:id   → returns specific result (supports ?wait=N long-poll)
+ *   GET  /health       → liveness check
  *
- * Storage: /tmp/figma-bridge/ (ephemeral, no cleanup needed)
+ * Storage: /tmp/figma-bridge/ (ephemeral)
+ * Auto-cleanup: keeps most recent MAX_RESULTS results.
  *
  * Usage:
  *   npx tsx tools/dev-bridge/server.ts
- *   # or: node --import tsx tools/dev-bridge/server.ts
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT) || 3456;
 const BRIDGE_DIR = process.env.BRIDGE_DIR || '/tmp/figma-bridge';
 const TRIGGER_FILE = join(BRIDGE_DIR, 'prompt.json');
 const RESULT_DIR = join(BRIDGE_DIR, 'results');
+const MAX_RESULTS = 5;
 
 // --- helpers ---
 
@@ -45,6 +48,43 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
+}
+
+// --- result waiters (long-poll support) ---
+
+const resultWaiters = new Map<string, Array<(data: any) => void>>();
+
+function notifyWaiters(id: string, data: any) {
+  const waiters = resultWaiters.get(id);
+  if (waiters) {
+    for (const resolve of waiters) resolve(data);
+    resultWaiters.delete(id);
+  }
+}
+
+// --- auto-cleanup ---
+
+async function cleanupOldResults() {
+  try {
+    const entries = await readdir(RESULT_DIR);
+    if (entries.length <= MAX_RESULTS) return;
+
+    const withTime = await Promise.all(
+      entries.map(async (e) => {
+        const s = await stat(join(RESULT_DIR, e));
+        return { name: e, mtime: s.mtimeMs };
+      })
+    );
+    withTime.sort((a, b) => b.mtime - a.mtime);
+
+    const toDelete = withTime.slice(MAX_RESULTS);
+    for (const entry of toDelete) {
+      await rm(join(RESULT_DIR, entry.name), { recursive: true });
+    }
+    if (toDelete.length > 0) {
+      console.log(`[cleanup] removed ${toDelete.length} old result(s), keeping ${MAX_RESULTS}`);
+    }
+  } catch { /* ignore */ }
 }
 
 // --- routes ---
@@ -127,11 +167,16 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
 
   json(res, 201, { ok: true, id, path: resultDir });
   console.log(`[result] saved to ${resultDir}`);
+
+  // Notify any long-poll waiters
+  notifyWaiters(id, payload);
+
+  // Auto-cleanup old results
+  await cleanupOldResults();
 }
 
 async function handleResultGet(res: ServerResponse) {
   try {
-    const { readdir, stat } = await import('node:fs/promises');
     const entries = await readdir(RESULT_DIR);
     if (entries.length === 0) {
       json(res, 204, null);
@@ -156,6 +201,46 @@ async function handleResultGet(res: ServerResponse) {
     cors(res);
     res.writeHead(204);
     res.end();
+  }
+}
+
+async function handleResultById(id: string, waitSec: number, res: ServerResponse) {
+  // Try to read existing result first
+  const resultDir = join(RESULT_DIR, id);
+  try {
+    const meta = await readFile(join(resultDir, 'meta.json'), 'utf-8');
+    json(res, 200, { id, ...JSON.parse(meta) });
+    return;
+  } catch { /* not ready yet */ }
+
+  // No result yet — if wait requested, long-poll
+  if (waitSec > 0) {
+    const timeoutMs = Math.min(waitSec, 300) * 1000; // cap at 5 min
+    let resolved = false;
+
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      const waiters = resultWaiters.get(id);
+      if (waiters) {
+        const idx = waiters.indexOf(resolve);
+        if (idx >= 0) waiters.splice(idx, 1);
+        if (waiters.length === 0) resultWaiters.delete(id);
+      }
+      json(res, 202, { id, status: 'pending', message: `No result after ${waitSec}s` });
+    }, timeoutMs);
+
+    function resolve(data: any) {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      json(res, 200, { id, ...data });
+    }
+
+    if (!resultWaiters.has(id)) resultWaiters.set(id, []);
+    resultWaiters.get(id)!.push(resolve);
+  } else {
+    json(res, 202, { id, status: 'pending' });
   }
 }
 
@@ -187,6 +272,10 @@ const server = createServer(async (req, res) => {
       await handleResultPost(req, res);
     } else if (path === '/result' && method === 'GET') {
       await handleResultGet(res);
+    } else if (path.startsWith('/result/') && method === 'GET') {
+      const id = path.slice('/result/'.length);
+      const waitSec = Number(url.searchParams.get('wait')) || 0;
+      await handleResultById(id, waitSec, res);
     } else {
       json(res, 404, { error: 'Not found' });
     }
@@ -200,16 +289,21 @@ async function main() {
   await mkdir(BRIDGE_DIR, { recursive: true });
   await mkdir(RESULT_DIR, { recursive: true });
 
+  // Clean up on startup
+  await cleanupOldResults();
+
   server.listen(PORT, () => {
     console.log(`\nDev Bridge Server running on http://localhost:${PORT}`);
     console.log(`Bridge dir: ${BRIDGE_DIR}`);
     console.log(`\nEndpoints:`);
-    console.log(`  GET  /health   - liveness check`);
-    console.log(`  GET  /trigger  - read pending prompt (204 if none)`);
-    console.log(`  POST /trigger  - set prompt { "prompt": "..." }`);
-    console.log(`  DEL  /trigger  - clear pending prompt`);
-    console.log(`  POST /result   - save execution result`);
-    console.log(`  GET  /result   - read latest result (204 if none)\n`);
+    console.log(`  GET  /health          - liveness check`);
+    console.log(`  GET  /trigger         - read pending prompt (204 if none)`);
+    console.log(`  POST /trigger         - set prompt { "prompt": "..." }`);
+    console.log(`  DEL  /trigger         - clear pending prompt`);
+    console.log(`  POST /result          - save execution result`);
+    console.log(`  GET  /result          - read latest result`);
+    console.log(`  GET  /result/:id      - read specific result`);
+    console.log(`  GET  /result/:id?wait=120 - long-poll until result ready\n`);
   });
 }
 

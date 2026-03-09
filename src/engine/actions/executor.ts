@@ -14,12 +14,25 @@ import { parseActionError } from './errorParser';
 import { ActionErrorSubCategory } from './errorTypes';
 import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
 
+/**
+ * Module-level component registry — maps component symbols to real Figma node IDs.
+ * Persists across ActionExecutor instances and execute() calls so that a component
+ * created in one tool call can be instantiated in a later tool call.
+ * Call ActionExecutor.clearComponentRegistry() on session reset ("New Design").
+ */
+const componentRegistry = new Map<string, string>();
+
 export class ActionExecutor {
   private tempIdMap = new Map<string, string>(); // tempId → realFigmaId
   private opStatus = new Map<string, { success: boolean; error?: string }>();
   private rollbackStack: Array<{ tempId: string; nodeId: string }> = [];
 
   constructor(private readonly options: { onError?: 'skip-dependents' | 'abort' } = {}) {}
+
+  /** Clear the persistent component registry (call on session reset / "New Design") */
+  static clearComponentRegistry() {
+    componentRegistry.clear();
+  }
 
   /**
    * Main execution entry point. 
@@ -376,6 +389,10 @@ export class ActionExecutor {
           }
           try {
             const warnings = await this.applyProps(comp, action.props);
+            // Register component symbol for cross-batch instance resolution
+            if (action.tempId) {
+              this.componentRegistry.set(action.tempId, comp.id);
+            }
             return { success: true, nodeId: comp.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
             comp.remove();
@@ -608,7 +625,10 @@ export class ActionExecutor {
       }
     }
     if (nodeId) {
-      const node = await figma.getNodeByIdAsync(nodeId);
+      // Resolution chain: tempIdMap (current batch) → componentRegistry (cross-batch) → raw ID
+      const resolvedId = this.resolveId(nodeId);
+      const finalId = resolvedId !== nodeId ? resolvedId : (this.componentRegistry.get(nodeId) || nodeId);
+      const node = await figma.getNodeByIdAsync(finalId);
       if (node && node.type === 'COMPONENT') return node as ComponentNode;
       if (node && node.type === 'COMPONENT_SET') return (node as ComponentSetNode).defaultVariant as ComponentNode;
     }

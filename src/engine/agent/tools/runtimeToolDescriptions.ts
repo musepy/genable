@@ -47,13 +47,16 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     mode: 'EXECUTION',
     required: [
       { name: 'source', trim: true, check: 'required' },
-      { name: 'query', trim: true, check: 'required' },
     ],
+    conditionalRequired: [{
+      when: (args) => args?.source !== 'style-tags',
+      required: [{ name: 'query', trim: true, check: 'required' }],
+    }],
     invalidRules: [{
       name: 'source',
       reason: `must be one of ${QUERY_SOURCES.join(', ')}`,
       isValid: (args) => typeof args?.source === 'string' && VALID_SOURCES.has(args.source),
     }],
-    repairHint: `provide "source" as one of ${QUERY_SOURCES.join(', ')} and a non-empty "query"`,
+    repairHint: `provide "source" as one of ${QUERY_SOURCES.join(', ')} and a non-empty "query" (except for "style-tags")`,
   },
 ];

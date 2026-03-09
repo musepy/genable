@@ -50,6 +50,11 @@ export class ToolResultCleaner {
       return cleaned;
     }
 
+    // query: results already bounded by executor (knowledge: BM25 top-k, guidelines: single topic doc)
+    if (cleaned.name === 'query') {
+      return cleaned;
+    }
+
     // Generic fallback: cap oversized data for other tools
     const dataJson = JSON.stringify(cleaned.data);
     if (dataJson.length > CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS) {

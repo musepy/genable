@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'preact/hooks'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
-import { knowledgeHub } from '../../engine/llm-client/knowledge/knowledgeHub'
+import guidelinesCatalog from '../../generated/guidelines-catalog.json'
+import styleCatalog from '../../generated/style-catalog.json'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -331,9 +332,35 @@ export function useChat({
     try {
       const localExecutors = {
         query: async (params: any) => {
-          if (params.source === 'knowledge') {
-            const results = knowledgeHub.searchAll(params.query || '')
-            return { success: true, data: { results: results.map(r => r.item) } }
+          if (params.source === 'guidelines') {
+            const topic = (params.query || '').toLowerCase().trim()
+            const content = (guidelinesCatalog as Record<string, string>)[topic]
+            if (!content) {
+              return { success: false, error: { code: 'UNKNOWN_TOPIC',
+                message: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` } }
+            }
+            return { success: true, data: { topic, content } }
+          }
+          if (params.source === 'style-tags') {
+            return { success: true, data: { tags: (styleCatalog as any).tags } }
+          }
+          if (params.source === 'style') {
+            const queryTags = (params.query || '').split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
+            const guides = (styleCatalog as any).guides as Record<string, { tags: string[]; content: string }>
+            let bestName = ''
+            let bestScore = -1
+            for (const [name, guide] of Object.entries(guides)) {
+              const score = queryTags.filter((t: string) => guide.tags.includes(t)).length
+              if (score > bestScore) {
+                bestScore = score
+                bestName = name
+              }
+            }
+            if (!bestName || bestScore === 0) {
+              return { success: false, error: { code: 'NO_STYLE_MATCH',
+                message: `No style guide matched tags "${queryTags.join(', ')}". Use query(source="style-tags") to see available tags.` } }
+            }
+            return { success: true, data: { name: bestName, tags: guides[bestName].tags, content: guides[bestName].content } }
           }
           return null
         },

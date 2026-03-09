@@ -60,6 +60,13 @@ create({
 })
 ```
 
+### STYLE GUIDE FOR VISUAL DIRECTION
+When creating a NEW design from scratch (not editing existing):
+1. `query(source="style-tags")` — see available visual styles
+2. Pick 3-5 tags matching user's request (mood, color scheme, use case)
+3. `query(source="style", query="dark-mode, minimal, dashboard")` — get color/font/spacing system
+4. Apply the style guide's color tokens, typography, spacing, and shape values to your `create` calls
+
 ### MODIFICATION (for edits, additions to existing designs)
 Use `edit` when:
 - Modifying an EXISTING design's properties (not creating from scratch)

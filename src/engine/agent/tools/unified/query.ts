@@ -1,7 +1,7 @@
 import { ToolDefinition } from '../types';
 
 // ── Single source of truth: query sources ──
-export const QUERY_SOURCES = ['knowledge', 'nodes'] as const;
+export const QUERY_SOURCES = ['nodes', 'guidelines', 'style-tags', 'style'] as const;
 export type QuerySource = (typeof QUERY_SOURCES)[number];
 
 /**
@@ -12,30 +12,34 @@ export const queryDefinition: ToolDefinition = {
   name: 'query',
   category: 'knowledge',
   display: { displayName: 'Query', group: 'inspect' },
-  description: `Search for design knowledge or canvas nodes.
+  description: `Search canvas nodes, get design guidelines, or retrieve visual style guides.
 
 Sources:
-- "knowledge": Search design patterns, spacing rules, typography, layout conventions, and skill instructions. Uses fuzzy text search.
-- "nodes": Search the current Figma page for nodes by name or type. Returns matching node IDs, names, types, and positions.`,
+- "nodes": Search the current Figma page for nodes by name or type. Returns matching node IDs, names, types, and positions.
+- "guidelines": Get a complete design guideline document for a topic. Returns XML skeletons, layout templates, and anti-patterns. Topics: dashboard, form, landing-page, card-layout, navigation, mobile, table, chart. Pass the topic name as the query.
+- "style-tags": List all available visual style tags. Call FIRST when designing from scratch to discover style options. No query needed.
+- "style": Get a complete visual style guide (colors, typography, spacing, shape). Pass comma-separated tags as query (e.g. "dark-mode, minimal, dashboard"). Returns the best-matching style guide.`,
   parameters: {
     type: 'object',
     properties: {
       source: {
         type: 'string',
         enum: [...QUERY_SOURCES],
-        description: 'What to search: "knowledge" for design patterns and skills, "nodes" for canvas elements.'
+        description: 'What to search: "nodes" for canvas elements, "guidelines" for design handbooks, "style-tags" for available style tags, "style" for a visual style guide.'
       },
       query: {
         type: 'string',
-        description: 'Search query. For "knowledge": natural language (e.g. "card spacing"). For "nodes": node name substring or type (e.g. "login button", "TEXT").'
+        description: 'Search query. For "nodes": node name substring or type. For "guidelines": topic name (e.g. "dashboard"). For "style": comma-separated tags (e.g. "dark-mode, minimal, dashboard"). For "style-tags": ignored (returns all tags).'
       },
     },
-    required: ['source', 'query']
+    required: ['source']
   },
   executionStrategy: 'parallel',
   errors: {
     INVALID_SOURCE: `Source must be one of: ${QUERY_SOURCES.join(', ')}.`,
     SEARCH_ERROR: 'An error occurred while searching.',
     NO_RESULTS: 'No matching results found.',
+    UNKNOWN_TOPIC: 'Unknown guideline topic. Available: dashboard, form, landing-page, card-layout, navigation, mobile, table, chart.',
+    NO_STYLE_MATCH: 'No style guide matched the given tags. Use query(source="style-tags") to see available tags.',
   },
 };

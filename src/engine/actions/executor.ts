@@ -209,7 +209,7 @@ export class ActionExecutor {
       }
 
       // Root node centering for newly created elements
-      if (!parentNode && ['createFrame', 'createText', 'createShape', 'createIcon', 'createInstance'].includes(action.action)) {
+      if (!parentNode && ['createFrame', 'createText', 'createShape', 'createIcon', 'createComponent', 'createInstance'].includes(action.action)) {
         (action as any).props = this.centerNodeInViewport((action as any).props, action.action);
       }
 
@@ -369,6 +369,20 @@ export class ActionExecutor {
            }
         }
 
+        case 'createComponent': {
+          const comp = figma.createComponent();
+          if (parentNode && 'appendChild' in parentNode) {
+            parentNode.appendChild(comp);
+          }
+          try {
+            const warnings = await this.applyProps(comp, action.props);
+            return { success: true, nodeId: comp.id, warnings: warnings.length ? warnings : undefined };
+          } catch (e: any) {
+            comp.remove();
+            throw e;
+          }
+        }
+
         case 'createInstance': {
           const master = await this.resolveComponent(action.source.componentKey, action.source.nodeId);
           if (!master) {
@@ -385,6 +399,25 @@ export class ActionExecutor {
             } catch (e: any) {
               instance.remove();
               throw e;
+            }
+          }
+          // Apply overrides: find children by name and apply props
+          if (action.overrides) {
+            for (const [childName, overrideProps] of Object.entries(action.overrides)) {
+              const child = instance.findOne(n => n.name === childName);
+              if (child) {
+                try {
+                  if (child.type === 'TEXT') {
+                    const w = await this.applyTextProps(child as TextNode, overrideProps);
+                    if (w.length) warnings.push(...w);
+                  } else {
+                    const w = await this.applyProps(child, overrideProps);
+                    if (w.length) warnings.push(...w);
+                  }
+                } catch (e: any) {
+                  warnings.push({ code: 'OVERRIDE_FAILED', severity: 'warning', message: `Override for '${childName}' failed: ${e.message}` });
+                }
+              }
             }
           }
           return { success: true, nodeId: instance.id, warnings: warnings.length ? warnings : undefined };

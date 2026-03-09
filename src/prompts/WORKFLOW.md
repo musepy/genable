@@ -60,6 +60,24 @@ create({
 })
 ```
 
+### COMPONENT-FIRST WORKFLOW (reusable elements)
+When creating 2+ similar elements (cards, list items, nav items, stat tiles):
+
+1. **Define once** — `create` with `reusable='true'` on a `<frame>`. Keep it small (3–8 nodes), include ALL design dimensions. This creates a Figma Component.
+2. **Instantiate** — `create` with `<ref component='Name'>` to stamp instances. Each instance inherits all styles. Use `set:childName='text'` to override text content.
+
+```json
+create({"xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A'>0</text></frame>"})
+```
+Then:
+```json
+create({"parentId": "...", "xml": "<frame name='Stats' layout='row' gap='16' w='fill' height='hug' bg='transparent'><ref component='StatCard' w='fill' set:label='Revenue' set:value='$48,250'/><ref component='StatCard' w='fill' set:label='Users' set:value='2,420'/></frame>"})
+```
+
+**When to use**: 2+ similar elements with identical structure but different content.
+**When NOT to use**: one-off layouts, unique sections → direct `create`.
+**Key benefit**: component definition is small (focused attention = fewer attribute omissions), instances are tiny (2–4 attrs each).
+
 ### STYLE GUIDE FOR VISUAL DIRECTION
 When creating a NEW design from scratch (not editing existing):
 1. `query(source="style-tags")` — see available visual styles

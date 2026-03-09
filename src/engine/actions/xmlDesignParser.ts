@@ -124,7 +124,7 @@ export function parseXml(xml: string): XmlNode[] {
 
       // Parse attribute name
       const attrNameStart = pos;
-      while (pos < len && /[a-zA-Z0-9_-]/.test(xml[pos])) pos++;
+      while (pos < len && /[a-zA-Z0-9_:-]/.test(xml[pos])) pos++;
       const attrName = xml.substring(attrNameStart, pos);
       if (!attrName) {
         // Detect LLM truncation patterns: '…' (U+2026) or '...'
@@ -244,6 +244,7 @@ const TAG_TO_TYPE: Record<string, string> = {
   section: 'SECTION',
   vector: 'VECTOR',
   delete: 'DELETE',
+  ref: 'REF',
 };
 
 // ==========================================
@@ -287,7 +288,7 @@ const STRING_VALUE_PROPS = new Set([
   'primaryAxisAlignItems', 'counterAxisAlignItems', 'textAlignHorizontal',
   'layoutPositioning', 'strokeAlign', 'iconName', 'layoutSizingHorizontal',
   'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',
-  'layoutWrap',
+  'layoutWrap', 'component',
 ]);
 
 /** Properties that are numeric when the value is a number, but can also be "fill"/"hug" */
@@ -536,10 +537,75 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
 
     // ── Create mode (default): unchanged behavior ──
 
+    // ── <ref> tag → instance command ──
+    if (figmaType === 'REF') {
+      const componentRef = node.attrs.component;
+      if (!componentRef) {
+        throw new XmlParseError(`<ref> tag requires a 'component' attribute`, 0);
+      }
+
+      const props: Record<string, any> = {};
+      const overrides: Record<string, Record<string, any>> = {};
+      let symbolBase: string | undefined;
+
+      for (const [rawKey, rawValue] of Object.entries(node.attrs)) {
+        if (rawKey === 'id' || rawKey === 'component') continue;
+
+        if (rawKey === 'name') {
+          symbolBase = rawValue;
+          props.name = rawValue;
+          continue;
+        }
+
+        // set:childName='value' → text override
+        if (rawKey.startsWith('set:')) {
+          const childName = rawKey.substring(4);
+          overrides[childName] = { characters: rawValue };
+          continue;
+        }
+
+        const expandedKey = ABBREV_EXPANSION[rawKey] ?? rawKey;
+        if (expandedKey === 'padding' || rawKey === 'p') { Object.assign(props, expandPadding(rawValue)); continue; }
+        props[expandedKey] = coerceValue(expandedKey, rawValue);
+      }
+
+      // Use componentRef as the symbol base for the dependency
+      const componentSymbol = toCamelCase(componentRef);
+      const base = symbolBase ? toCamelCase(symbolBase) : ('ref' + (++autoCounter));
+      const symbol = uniqueSymbol(base || 'ref' + (++autoCounter));
+
+      const lineNumber = ++lineCounter;
+      const raw = JSON.stringify({ command: 'instance', symbol, componentRef, parent: parentSymbol, props });
+
+      const depList = [...computeDependsOn(parentSymbol)];
+      // Add component as dependency (symbol reference)
+      if (componentSymbol && !componentSymbol.includes(':')) {
+        depList.push(componentSymbol);
+      }
+
+      const parsedLine: ParsedLine = {
+        lineNumber,
+        raw,
+        symbol,
+        command: 'instance',
+        parentRef: parentSymbol,
+        props: compileCssProps(props),
+        dependsOn: depList,
+        componentRef: componentSymbol,
+        overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+      };
+
+      parsedLines.push(parsedLine);
+      return;
+    }
+
     // Determine command type
     const isIcon = tag === 'icon';
     const isImage = tag === 'image';
     const command = isIcon ? 'icon' : isImage ? 'image' : 'create';
+
+    // Check for reusable flag (component definition)
+    const isReusable = node.attrs.reusable === 'true';
 
     // Build props from attributes
     const props: Record<string, any> = {};
@@ -548,6 +614,9 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
     for (const [rawKey, rawValue] of Object.entries(node.attrs)) {
       // Skip 'id' attribute (read-path artifact)
       if (rawKey === 'id') continue;
+
+      // Skip 'reusable' — consumed above, not a Figma property
+      if (rawKey === 'reusable') continue;
 
       // Capture name for symbol generation
       if (rawKey === 'name') {
@@ -654,6 +723,7 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
       parentRef: parentSymbol,
       props: compileCssProps(props),
       dependsOn: computeDependsOn(parentSymbol),
+      ...(isReusable ? { reusable: true } : {}),
     };
 
     parsedLines.push(parsedLine);

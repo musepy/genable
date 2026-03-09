@@ -107,6 +107,9 @@ export class ActionCompiler {
       case 'create':
         return this.compileCreate(line, parentId, props, dependsOn);
 
+      case 'instance':
+        return this.compileInstance(line, parentId, props, dependsOn);
+
       case 'update':
         return this.compileUpdate(line, props, dependsOn);
 
@@ -137,6 +140,11 @@ export class ActionCompiler {
     props: Record<string, any>,
     dependsOn: string[] | undefined,
   ): CompiledEntry | CompilationError {
+    // Reusable flag → createComponent instead of createFrame
+    if (line.reusable) {
+      return this.compileComponent(line, parentId, props, dependsOn);
+    }
+
     const nodeType = (line.nodeType ?? 'FRAME').toUpperCase();
     const hasParent = !!parentId;
 
@@ -308,6 +316,45 @@ export class ActionCompiler {
         ...dimensionProps,
         ...rest,
       },
+      dependsOn,
+    };
+    return { line, action };
+  }
+
+  private compileComponent(
+    line: ParsedLine,
+    parentId: string | undefined,
+    props: Record<string, any>,
+    dependsOn: string[] | undefined,
+  ): CompiledEntry | CompilationError {
+    const hasParent = !!parentId;
+    const { props: enhanced, warnings } = this.applySizingDefaults(props, hasParent, true);
+    const action: FigmaAction = {
+      action: 'createComponent',
+      tempId: line.symbol,
+      parentId,
+      props: enhanced,
+      dependsOn,
+    };
+    return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
+  }
+
+  private compileInstance(
+    line: ParsedLine,
+    parentId: string | undefined,
+    props: Record<string, any>,
+    dependsOn: string[] | undefined,
+  ): CompiledEntry | CompilationError {
+    if (!line.componentRef) {
+      return { line, error: "instance command missing 'componentRef'" };
+    }
+    const action: FigmaAction = {
+      action: 'createInstance',
+      tempId: line.symbol,
+      parentId,
+      source: { nodeId: line.componentRef },
+      props: Object.keys(props).length > 0 ? props : undefined,
+      overrides: line.overrides,
       dependsOn,
     };
     return { line, action };

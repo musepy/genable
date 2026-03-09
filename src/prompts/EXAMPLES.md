@@ -96,7 +96,25 @@ create({
 edit({"xml": "<text id='100:2' weight='Medium'/>"})
 ```
 
-### Example 6: Completion (text-only response, no tool calls)
+### Example 6: Component-first card row (reusable + ref)
+User: "Create a stats dashboard with 3 metric cards"
+
+**Step 1 — Define the reusable component** (small, all attributes):
+```json
+create({
+  "xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A'>0</text></frame>"
+})
+```
+
+**Step 2 — Stamp instances with text overrides**:
+```json
+create({
+  "parentId": "...",
+  "xml": "<frame name='Stats Row' layout='row' gap='16' w='fill' height='hug' bg='transparent'><ref component='StatCard' w='fill' set:label='Revenue' set:value='$48,250'/><ref component='StatCard' w='fill' set:label='Users' set:value='2,420'/><ref component='StatCard' w='fill' set:label='Growth' set:value='+12.5%'/></frame>"
+})
+```
+
+### Example 7: Completion (text-only response, no tool calls)
 After all design work is done, respond with text only — this ends the loop:
 
 "I've created the login form with email/password fields, a sign-in button, and proper card styling. The form uses vertical auto-layout with 16px spacing."

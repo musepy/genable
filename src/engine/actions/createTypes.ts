@@ -22,7 +22,7 @@ export interface ParsedLine {
   raw: string;
   /** Binding name (symbol), e.g. "header" */
   symbol?: string;
-  /** Normalized command: create | update | delete | icon | image */
+  /** Normalized command: create | update | delete | icon | image | instance */
   command: string;
   /** For `create`: the Figma node type (FRAME, TEXT, RECTANGLE, ELLIPSE, LINE, etc.) */
   nodeType?: string;
@@ -38,6 +38,12 @@ export interface ParsedLine {
    * and is not the literal keyword "root".
    */
   dependsOn: string[];
+  /** If true, this create line produces a ComponentNode instead of a FrameNode */
+  reusable?: boolean;
+  /** For 'instance' command: the component symbol or name to instantiate */
+  componentRef?: string;
+  /** For 'instance' command: child name → override props (Phase 1: text overrides) */
+  overrides?: Record<string, Record<string, any>>;
 }
 
 // ==========================================
@@ -121,7 +127,7 @@ export interface CreateExecutionResult {
  * @internal
  * Exhaustive list of canonical commands understood by the create tool.
  */
-export const VALID_COMMANDS = ['create', 'update', 'delete', 'icon', 'image'] as const;
+export const VALID_COMMANDS = ['create', 'update', 'delete', 'icon', 'image', 'instance'] as const;
 
 /** Union type of all valid create commands. */
 export type CreateCommand = typeof VALID_COMMANDS[number];

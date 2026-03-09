@@ -29,8 +29,9 @@ export const createDefinition: ToolDefinition = {
   description: `
 Create new design nodes from XML markup in a single call.
 
-Tags: frame, text, rect, ellipse, line, icon, image, group, section, vector
+Tags: frame, text, rect, ellipse, line, icon, image, group, section, vector, ref
 Nesting = parent-child. Text content = characters. Use single quotes for attributes.
+Use \`<ref component='Name' set:child='text'/>\` to instantiate reusable components.
 
 Attributes accept CSS names (layout, gap, background, borderRadius), read-path abbreviations (w, h, size, weight, corner, p, bg), and Figma-native names.
 
@@ -53,6 +54,13 @@ Common sizes: Card root 360-480px wide, Input height 44px, Button height 44-48px
 
 Returns: idMap (symbol → real Figma node ID) and count of created/failed nodes.
 
+## Reusable Components
+Use \`reusable='true'\` on a \`<frame>\` to create a Figma Component (not just a frame).
+Use \`<ref component='Name'>\` to create instances of that component.
+Use \`set:childName='text'\` on \`<ref>\` to override text content in instances.
+
+Example: \`<frame name='Card' reusable='true' ...>...</frame>\` then \`<ref component='Card' set:title='Hello'/>\`
+
 ## Handling partial failures
 
 DO NOT regenerate the entire design on partial failure. Instead:
@@ -66,7 +74,7 @@ DO NOT regenerate the entire design on partial failure. Instead:
       xml: {
         type: 'string',
         description:
-          'XML design markup. Tags: frame, text, rect, ellipse, line, icon, image, group, section, vector. Nesting = parent-child. Text content = characters. Use single quotes.',
+          'XML design markup. Tags: frame, text, rect, ellipse, line, icon, image, group, section, vector, ref. Nesting = parent-child. Text content = characters. Use single quotes. Use reusable=true on frame for components, <ref component=Name/> for instances.',
       },
       parentId: {
         type: 'string',

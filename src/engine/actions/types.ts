@@ -11,6 +11,7 @@ export type FigmaAction =
   | CreateTextAction
   | CreateShapeAction
   | CreateIconAction
+  | CreateComponentAction
   | CreateInstanceAction
   | SwapInstanceAction
   | UpdatePropsAction
@@ -121,6 +122,14 @@ export interface CreateIconAction extends ActionBase {
   };
 }
 
+export interface CreateComponentAction extends ActionBase {
+  action: 'createComponent';
+  props: {
+    name?: string;
+    [key: string]: any;
+  };
+}
+
 export interface CreateInstanceAction extends ActionBase {
   action: 'createInstance';
   source: {
@@ -135,6 +144,8 @@ export interface CreateInstanceAction extends ActionBase {
     y?: number;
     [key: string]: any;
   };
+  /** Child name → props to override on the instance. Phase 1: text overrides only. */
+  overrides?: Record<string, Record<string, any>>;
 }
 
 export interface SwapInstanceAction extends ActionBase {

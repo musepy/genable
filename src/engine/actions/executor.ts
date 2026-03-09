@@ -391,7 +391,7 @@ export class ActionExecutor {
             const warnings = await this.applyProps(comp, action.props);
             // Register component symbol for cross-batch instance resolution
             if (action.tempId) {
-              this.componentRegistry.set(action.tempId, comp.id);
+              componentRegistry.set(action.tempId, comp.id);
             }
             return { success: true, nodeId: comp.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
@@ -627,7 +627,7 @@ export class ActionExecutor {
     if (nodeId) {
       // Resolution chain: tempIdMap (current batch) → componentRegistry (cross-batch) → raw ID
       const resolvedId = this.resolveId(nodeId);
-      const finalId = resolvedId !== nodeId ? resolvedId : (this.componentRegistry.get(nodeId) || nodeId);
+      const finalId = resolvedId !== nodeId ? resolvedId : (componentRegistry.get(nodeId) || nodeId);
       const node = await figma.getNodeByIdAsync(finalId);
       if (node && node.type === 'COMPONENT') return node as ComponentNode;
       if (node && node.type === 'COMPONENT_SET') return (node as ComponentSetNode).defaultVariant as ComponentNode;

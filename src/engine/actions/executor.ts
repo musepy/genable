@@ -779,6 +779,13 @@ export class ActionExecutor {
           }
           throw e;
         }
+      } else {
+        console.warn(`[ActionExecutor] Unsupported property '${key}' on node ${node.id} (${node.type})`);
+        warnings.push({
+          code: 'UNSUPPORTED_PROP',
+          severity: 'warning',
+          message: `Skipped unsupported property '${key}' on ${node.type} node`,
+        });
       }
     }
     return warnings;

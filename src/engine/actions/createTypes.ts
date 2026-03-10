@@ -3,48 +3,23 @@
  * @description Type definitions for the create/edit tools.
  *
  * The create tool accepts XML design markup. These types define the
- * parameter contract, internal ParsedLine representation, per-line execution
- * results, and overall result shape.
+ * parameter contract, per-line execution results, and overall result shape.
+ *
+ * ParsedLine is a type alias for OperationIR — both represent a single
+ * design operation ready for ActionCompiler.
  */
 
+import type { OperationIR } from '../../domain/design-ir';
+
 // ==========================================
-// ParsedLine (internal compiler input)
+// ParsedLine (alias for OperationIR)
 // ==========================================
 
 /**
- * Structured representation of a single operation, ready for ActionCompiler.
- * Produced by operationsToParsedLines() from the Operation[] array.
+ * Type alias — ParsedLine is OperationIR.
+ * Both represent a single design operation ready for ActionCompiler.
  */
-export interface ParsedLine {
-  /** 1-based operation index */
-  lineNumber: number;
-  /** JSON summary of the original operation (for diagnostics) */
-  raw: string;
-  /** Binding name (symbol), e.g. "header" */
-  symbol?: string;
-  /** Normalized command: create | update | delete | icon | image | instance */
-  command: string;
-  /** For `create`: the Figma node type (FRAME, TEXT, RECTANGLE, ELLIPSE, LINE, etc.) */
-  nodeType?: string;
-  /** For `update` / `delete`: the target node reference (symbol or Figma ID) */
-  targetRef?: string;
-  /** The parent node reference */
-  parentRef?: string;
-  /** Properties object */
-  props?: Record<string, any>;
-  /**
-   * Auto-computed list of symbol references this line depends on.
-   * A reference is a dependency if it doesn't contain `:` (not a real Figma ID)
-   * and is not the literal keyword "root".
-   */
-  dependsOn: string[];
-  /** If true, this create line produces a ComponentNode instead of a FrameNode */
-  reusable?: boolean;
-  /** For 'instance' command: the component symbol or name to instantiate */
-  componentRef?: string;
-  /** For 'instance' command: child name → override props (Phase 1: text overrides) */
-  overrides?: Record<string, Record<string, any>>;
-}
+export type ParsedLine = OperationIR;
 
 // ==========================================
 // Tool Parameters

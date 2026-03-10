@@ -17,8 +17,8 @@ export const queryDefinition: ToolDefinition = {
 Sources:
 - "nodes": Search the current Figma page for nodes by name or type. Returns matching node IDs, names, types, and positions.
 - "guidelines": Get a complete design guideline document for a topic. Returns XML skeletons, layout templates, and anti-patterns. Topics: dashboard, form, landing-page, card-layout, navigation, mobile, table, chart. Pass the topic name as the query.
-- "style-tags": List all available visual style tags. Call FIRST when designing from scratch to discover style options. No query needed.
-- "style": Get a complete visual style guide (colors, typography, spacing, shape). Pass comma-separated tags as query (e.g. "dark-mode, minimal, dashboard"). Returns the best-matching style guide.`,
+- "style-tags": List all available visual style tags. Use when you want to explore or narrow a visual direction for a new design. No query needed.
+- "style": Get a complete visual style guide (colors, typography, spacing, shape). Pass comma-separated tags as query (e.g. "dark-mode, dashboard, blue-accent"). Returns the best-matching style guide.`,
   parameters: {
     type: 'object',
     properties: {

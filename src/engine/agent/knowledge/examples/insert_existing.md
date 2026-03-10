@@ -8,7 +8,7 @@ read({nodeId: "100:1", depth: 2})
 **Iteration 2 — Insert using REAL parentId from inspection:**
 ```json
 create({
-  "xml": "<frame name='Action Bar' layout='row' gap='8' bg='transparent' height='hug' width='fill'><frame name='Confirm' layout='row' p='8 16' fill='#4F46E5' corner='6' justifyContent='center' alignItems='center' width='hug' height='hug'><text name='Button Text' size='14' weight='Bold' fill='#FFFFFF'>确认</text></frame></frame>",
+  "xml": "<frame name='Action Bar' layout='row' gap='8' bg='transparent' height='hug' width='fill'><frame name='Confirm' layout='row' p='8 16' fill='#4F46E5' corner='6' justifyContent='center' alignItems='center' width='hug' height='hug'><text name='Button Text' size='14' weight='Bold' fill='#FFFFFF' textAutoResize='WIDTH_AND_HEIGHT'>确认</text></frame></frame>",
   "parentId": "100:1"
 })
 ```

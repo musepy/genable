@@ -18,13 +18,14 @@ import { FigmaAction } from '../../engine/actions/types';
 import { ActionCompiler } from '../../engine/actions/compiler';
 import { IncrementalExecutor } from '../../engine/actions/incrementalExecutor';
 import { collectTreeViolations } from '../../engine/validation/postOpValidator';
-import { compileCssProps } from '../../engine/actions/cssCompiler';
-import { parseXml, xmlToParsedLines } from '../../engine/actions/xmlDesignParser';
+import { normalizeProps } from '../../domain/node-normalizers';
+import { parseXml } from '../../engine/actions/xmlDesignParser';
 import { interpretXmlNodes } from '../../engine/xml/xml-interpreter';
-import { operationsToParsedLines } from '../../engine/xml/ir-adapter';
+import { validateSemantics } from '../../engine/validation/semanticValidator';
 import { logger } from '../../utils/logger';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { buildCreateReceipt, buildEditReceipt } from './receiptBuilder';
+import type { ValidationViolation } from '../../engine/validation/postOpValidator';
 
 export interface ToolCallData {
   toolName: string;
@@ -47,6 +48,35 @@ async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
     return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `Node ${nodeId} (type: ${node.type}) is not a SceneNode.` } } };
   }
   return { ok: true, node: node as SceneNode };
+}
+
+async function collectViolationsForNodeIds(
+  nodeIds: Array<string | undefined>,
+  maxDepth: number,
+  maxViolations: number = 10
+): Promise<ValidationViolation[] | undefined> {
+  const uniqueNodeIds = [...new Set(nodeIds.filter((nodeId): nodeId is string => Boolean(nodeId)))];
+  if (uniqueNodeIds.length === 0) return undefined;
+
+  const violations: ValidationViolation[] = [];
+  const seen = new Set<string>();
+
+  for (const nodeId of uniqueNodeIds) {
+    if (violations.length >= maxViolations) break;
+    const resolved = await resolveSceneNode(nodeId);
+    if (!resolved.ok) continue;
+
+    const found = collectTreeViolations(resolved.node, maxDepth, maxViolations - violations.length);
+    for (const violation of found) {
+      const key = `${violation.nodeId}:${violation.code}:${violation.message}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      violations.push(violation);
+      if (violations.length >= maxViolations) break;
+    }
+  }
+
+  return violations.length > 0 ? violations : undefined;
 }
 
 
@@ -234,15 +264,20 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         let parsedLines;
         try {
-          parsedLines = xmlToParsedLines(xmlInput);
+          const xmlNodes = parseXml(xmlInput);
+          const rawOps = interpretXmlNodes(xmlNodes, { mode: 'create' });
+          // Pass 3: semantic validation
+          const { validated, diagnostics } = validateSemantics(rawOps, { requireTextAutoResize: true });
+          parsedLines = validated;
+          if (diagnostics.length > 0) {
+            logger.info('Semantic validation diagnostics', { diagnostics });
+          }
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;
         }
 
         try {
-
-          // 2. Compile: convert ParsedLines to FigmaActions
           const compiler = new ActionCompiler();
           const { actions, errors } = compiler.compile(parsedLines, bdParentId);
 
@@ -255,15 +290,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           });
 
           // Inline post-op validation: check the root node for violations
-          let bdViolations: any[] | undefined;
           const bdRootId = bdParentId || Object.values(bdResult.idMap)[0];
-          if (bdRootId) {
-            const bdRootResolved = await resolveSceneNode(bdRootId);
-            if (bdRootResolved.ok) {
-              const found = collectTreeViolations(bdRootResolved.node, 5);
-              if (found.length > 0) bdViolations = found;
-            }
-          }
+          const bdViolations = await collectViolationsForNodeIds([bdRootId], 5);
 
           // Build compact receipt
           const receipt = buildCreateReceipt({ result: bdResult, violations: bdViolations });
@@ -309,7 +337,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         let parsedLines;
         try {
-          parsedLines = xmlToParsedLines(editXml, { mode: 'edit' });
+          const xmlNodes = parseXml(editXml);
+          parsedLines = interpretXmlNodes(xmlNodes, { mode: 'edit' });
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;
@@ -327,7 +356,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             const patchActions: FigmaAction[] = updateLines.map(line => ({
               action: 'updateProps' as const,
               nodeId: line.targetRef!,
-              props: line.props ? compileCssProps(line.props) : {}
+              props: line.props ? normalizeProps(line.props) : {}
             }));
 
             const executor = new ActionExecutor({ onError: 'skip-dependents' });
@@ -346,15 +375,10 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           }
 
           // Inline post-op validation on edited nodes
-          let editViolations: any[] | undefined;
-          const editRootId = updateLines[0]?.targetRef;
-          if (editRootId) {
-            const editResolved = await resolveSceneNode(editRootId);
-            if (editResolved.ok) {
-              const found = collectTreeViolations(editResolved.node, 3);
-              if (found.length > 0) editViolations = found;
-            }
-          }
+          const editViolations = await collectViolationsForNodeIds(
+            updateLines.map(line => line.targetRef),
+            3
+          );
 
           // Build compact receipt
           const receipt = buildEditReceipt({ allResults, violations: editViolations });
@@ -391,8 +415,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         let designParsedLines;
         try {
           const xmlNodes = parseXml(designXml);
-          const operations = interpretXmlNodes(xmlNodes, { mode: 'design' });
-          designParsedLines = operationsToParsedLines(operations);
+          const rawOps = interpretXmlNodes(xmlNodes, { mode: 'design' });
+          // Pass 3: semantic validation
+          const { validated, diagnostics } = validateSemantics(rawOps, { requireTextAutoResize: true });
+          designParsedLines = validated;
+          if (diagnostics.length > 0) {
+            logger.info('Semantic validation diagnostics', { diagnostics });
+          }
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;
@@ -418,15 +447,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             });
 
             // Post-op validation on root
-            let createViolations: any[] | undefined;
             const createRootId = designParentId || Object.values(createResult.idMap)[0];
-            if (createRootId) {
-              const rootResolved = await resolveSceneNode(createRootId);
-              if (rootResolved.ok) {
-                const found = collectTreeViolations(rootResolved.node, 5);
-                if (found.length > 0) createViolations = found;
-              }
-            }
+            const createViolations = await collectViolationsForNodeIds([createRootId], 5);
 
             const createReceipt = buildCreateReceipt({
               result: createResult,
@@ -444,12 +466,19 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             const patchActions: FigmaAction[] = updateLines.map(line => ({
               action: 'updateProps' as const,
               nodeId: line.targetRef!,
-              props: line.props ? compileCssProps(line.props) : {}
+              props: line.props ? normalizeProps(line.props) : {}
             }));
             const updateExec = new ActionExecutor({ onError: 'skip-dependents' });
             const updateResult = await updateExec.execute(patchActions);
 
-            const editReceipt = buildEditReceipt({ allResults: updateResult.results });
+            const updateViolations = await collectViolationsForNodeIds(
+              updateLines.map(line => line.targetRef),
+              3
+            );
+            const editReceipt = buildEditReceipt({
+              allResults: updateResult.results,
+              violations: updateViolations,
+            });
             receipt.edited = editReceipt.edited;
             if (editReceipt.failed) {
               hasAnyError = true;
@@ -457,6 +486,11 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               receipt.editErrors = editReceipt.errors;
             }
             if (editReceipt.warnings) receipt.warnings = editReceipt.warnings;
+            if (editReceipt.warningCount) receipt.warningCount = editReceipt.warningCount;
+            if (editReceipt.violations) {
+              const priorViolations = Array.isArray(receipt.violations) ? receipt.violations : [];
+              receipt.violations = [...priorViolations, ...editReceipt.violations].slice(0, 10);
+            }
           }
 
           // Phase 3: Execute deletes

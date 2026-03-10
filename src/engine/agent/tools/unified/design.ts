@@ -32,7 +32,7 @@ Attributes accept CSS names (layout, gap, background), abbreviations (w, h, size
 **Mixed example** (create + edit + delete in one call):
 \`\`\`json
 design({
-  "xml": "<frame name='Card' layout='column' gap='16' p='24' w='400' height='hug' bg='#FFFFFF' corner='16'><text size='20' weight='Bold' fill='#111827'>Title</text></frame><text id='100:8' fill='#EF4444'>Updated text</text><delete id='100:12'/>",
+  "xml": "<frame name='Card' layout='column' gap='16' p='24' w='400' height='hug' bg='#FFFFFF' corner='16'><text size='20' weight='Bold' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Title</text></frame><text id='100:8' fill='#EF4444'>Updated text</text><delete id='100:12'/>",
   "parentId": "200:1"
 })
 \`\`\`
@@ -41,6 +41,12 @@ design({
 Frames default to 100×100px when width/height is omitted — almost NEVER correct.
 ALWAYS set explicit dimensions or use height="hug" / width="fill".
 Common sizes: Card root 360-480px wide, Input height 44px, Button height 44-48px, Icon 20-24px.
+
+## TEXT SIZING RULES
+- New \`<text>\` nodes MUST declare \`textAutoResize\` explicitly.
+- \`textAutoResize='WIDTH_AND_HEIGHT'\` = intrinsic text, so do NOT set width/height.
+- \`textAutoResize='HEIGHT' | 'TRUNCATE' | 'NONE'\` = fixed-width text, so you MUST set a numeric \`w\`/ \`width\`.
+- TEXT nodes do NOT support \`w='fill'\`, \`w='hug'\`, \`sizingH\`, or \`layoutSizingHorizontal\`.
 
 ## Reusable Components
 Use \`reusable='true'\` on a \`<frame>\` to create a Figma Component.

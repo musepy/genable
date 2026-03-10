@@ -1,7 +1,9 @@
 /**
  * @file compiler.ts
- * @description ActionCompiler converts ParsedLine[] (produced by operationAdapter)
- * into FigmaAction[] that can be fed to ActionExecutor.
+ * @description Pass 4 — Pure lowering: OperationIR[] → FigmaAction[].
+ *
+ * No semantic validation, no sizing defaults injection — those happen
+ * in Pass 2 (xml-interpreter) and Pass 3 (semanticValidator).
  */
 
 import { FigmaAction } from './types';
@@ -71,15 +73,6 @@ export class ActionCompiler {
     const errors: CompilationError[] = [];
 
     for (const line of lines) {
-      // ---- PARSE_ERROR lines go straight to errors ----
-      if (line.command === 'PARSE_ERROR') {
-        errors.push({
-          line,
-          error: line.props?.message ?? line.raw ?? 'Parse error on line',
-        });
-        continue;
-      }
-
       const result = this.compileLine(line, defaultParentId);
       if ('error' in result) {
         errors.push(result);
@@ -146,19 +139,9 @@ export class ActionCompiler {
     }
 
     const nodeType = (line.nodeType ?? 'FRAME').toUpperCase();
-    const hasParent = !!parentId;
 
     if (nodeType === 'TEXT') {
       const textProps = { characters: '', ...props } as { characters: string; [key: string]: any };
-      const warnings: Array<{ code: string; message: string }> = [];
-
-      // Default textAutoResize to HEIGHT for child text nodes (enables wrapping).
-      // Figma defaults to WIDTH_AND_HEIGHT which causes text to grow infinitely wide.
-      if (hasParent && textProps.textAutoResize === undefined) {
-        textProps.textAutoResize = 'HEIGHT';
-        warnings.push({ code: 'TEXT_RESIZE_DEFAULT', message: 'textAutoResize defaulted to "HEIGHT" (child text node). Set explicitly to override.' });
-      }
-
       const action: FigmaAction = {
         action: 'createText',
         tempId: line.symbol,
@@ -166,92 +149,30 @@ export class ActionCompiler {
         props: textProps,
         dependsOn,
       };
-      return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
+      return { line, action };
     }
 
     if (SHAPE_TYPES.has(nodeType)) {
-      const { props: enhanced, warnings } = this.applySizingDefaults(props, hasParent, false);
       const action: FigmaAction = {
         action: 'createShape',
         shapeType: nodeType as 'RECTANGLE' | 'ELLIPSE' | 'LINE' | 'VECTOR',
         tempId: line.symbol,
         parentId,
-        props: enhanced,
+        props,
         dependsOn,
       };
-      return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
+      return { line, action };
     }
 
     // Default: FRAME (covers FRAME and any unknown node types)
-    const { props: enhanced, warnings } = this.applySizingDefaults(props, hasParent, true);
     const action: FigmaAction = {
       action: 'createFrame',
       tempId: line.symbol,
       parentId,
-      props: enhanced,
+      props,
       dependsOn,
     };
-    return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Private: smart sizing defaults
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Inject sensible sizing defaults to prevent Figma's 100×100px fallback.
-   * Returns both the enhanced props and warnings describing what was injected,
-   * so the agent can see exactly which defaults were applied.
-   *
-   * Rules:
-   * - Root frames (no parent): width defaults to 360px when not specified.
-   * - Frames with layoutMode: layoutSizingVertical defaults to "HUG" when
-   *   neither explicit height nor layoutSizingVertical is provided.
-   * - Child frames/shapes (has parent): layoutSizingHorizontal defaults to
-   *   "FILL" when neither explicit width nor layoutSizingHorizontal is set.
-   */
-  private applySizingDefaults(
-    props: Record<string, any>,
-    hasParent: boolean,
-    isFrame: boolean,
-  ): { props: Record<string, any>; warnings: Array<{ code: string; message: string }> } {
-    const p = { ...props };
-    const warnings: Array<{ code: string; message: string }> = [];
-
-    if (isFrame) {
-      // Root frame: ensure reasonable width (avoid 100px default)
-      if (!hasParent && p.width === undefined && p.layoutSizingHorizontal !== 'FILL') {
-        p.width = 360;
-        warnings.push({ code: 'SIZING_DEFAULT', message: 'width defaulted to 360px (root frame without explicit width). Set width explicitly to control this.' });
-      }
-
-      // Frame with layoutMode: default to HUG height so it wraps content
-      if (p.layoutMode && p.height === undefined && p.layoutSizingVertical === undefined) {
-        p.layoutSizingVertical = 'HUG';
-        warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingVertical defaulted to "HUG" (auto-layout frame without explicit height). Set height or layoutSizingVertical explicitly.' });
-      }
-
-      // Auto-layout frames: default clipsContent to false so child shadows/effects aren't clipped.
-      // Figma API defaults to true, but layout containers rarely want clipping.
-      if (p.layoutMode && p.clipsContent === undefined) {
-        p.clipsContent = false;
-        warnings.push({ code: 'CLIPS_CONTENT_DEFAULT', message: 'clipsContent defaulted to false (auto-layout frame). Set explicitly to override.' });
-      }
-
-      // Child frame: default to FILL width (stretch to parent)
-      if (hasParent && p.width === undefined && p.layoutSizingHorizontal === undefined) {
-        p.layoutSizingHorizontal = 'FILL';
-        warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingHorizontal defaulted to "FILL" (child frame without explicit width). Set width or layoutSizingHorizontal explicitly.' });
-      }
-    }
-
-    // Child shapes (RECTANGLE, etc.): default to FILL width
-    if (!isFrame && hasParent && p.width === undefined && p.layoutSizingHorizontal === undefined) {
-      p.layoutSizingHorizontal = 'FILL';
-      warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingHorizontal defaulted to "FILL" (child shape without explicit width).' });
-    }
-
-    return { props: p, warnings };
+    return { line, action };
   }
 
   private compileUpdate(
@@ -344,16 +265,14 @@ export class ActionCompiler {
     props: Record<string, any>,
     dependsOn: string[] | undefined,
   ): CompiledEntry | CompilationError {
-    const hasParent = !!parentId;
-    const { props: enhanced, warnings } = this.applySizingDefaults(props, hasParent, true);
     const action: FigmaAction = {
       action: 'createComponent',
       tempId: line.symbol,
       parentId,
-      props: enhanced,
+      props,
       dependsOn,
     };
-    return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
+    return { line, action };
   }
 
   private compileInstance(

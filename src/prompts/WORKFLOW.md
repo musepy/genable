@@ -30,7 +30,7 @@ For medium/complex designs, break creation into semantic steps:
 **XML format** (preferred — fewer tokens, natural nesting):
 - **Tags**: `frame`, `text`, `rect`, `ellipse`, `line`, `icon`, `image`, `group`, `section`, `vector`, `delete`
 - **Nesting** = parent-child relationship. No need for `symbol`/`parent` references.
-- **Text content** = characters: `<text size='16'>Hello</text>`
+- **Text content** = characters: `<text size='16' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Hello</text>`
 - **Use single quotes** for attributes (avoids JSON escaping).
 
 **Three attribute naming systems** (all accepted):
@@ -51,12 +51,16 @@ For medium/complex designs, break creation into semantic steps:
    - **Buttons / badges / tags**: `width='hug'` + `height='hug'` (or fixed `h='44'`)
    - **Structural wrappers** (transparent layout frames): `width='fill'` + `height='hug'`
 2. **Typography**: For `weight` (fontWeight), prioritize `Regular`, `Medium`, and `Bold`. **AVOID** `Semi Bold`.
-3. **Gradient Fills**: Use gradient objects in JSON operations format (not supported in XML shorthand).
+3. **Text sizing**: New `<text>` nodes MUST declare `textAutoResize`.
+   - `WIDTH_AND_HEIGHT` = intrinsic text, so omit width/height.
+   - `HEIGHT` / `TRUNCATE` / `NONE` = fixed-width text, so use numeric `w`/`width`.
+   - Never use `w='fill'`, `w='hug'`, `sizingH`, or `layoutSizingHorizontal` on TEXT nodes.
+4. **Gradient Fills**: Use gradient objects in JSON operations format (not supported in XML shorthand).
 
 **Example** — a polished card:
 ```json
 design({
-  "xml": "<frame name='Card' layout='column' gap='16' p='24' bg='#FFFFFF' corner='16' w='360' height='hug' shadow='0,4,16,0,#0000001A'><text name='Title' size='20' weight='Bold' fill='#111827' width='fill'>Card Title</text><text name='Body' size='14' fill='#6B7280' width='fill'>Body text goes here</text></frame>"
+  "xml": "<frame name='Card' layout='column' gap='16' p='24' bg='#FFFFFF' corner='16' w='360' height='hug' shadow='0,4,16,0,#0000001A'><text name='Title' size='20' weight='Bold' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Card Title</text><text name='Body' size='14' fill='#6B7280' w='312' textAutoResize='HEIGHT'>Body text goes here</text></frame>"
 })
 ```
 
@@ -67,7 +71,7 @@ When creating 2+ similar elements (cards, list items, nav items, stat tiles):
 2. **Instantiate** — `design` with `<ref component='Name'>` to stamp instances. Each instance inherits all styles. Use `set:childName='text'` to override text content.
 
 ```json
-design({"xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A'>0</text></frame>"})
+design({"xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B' textAutoResize='WIDTH_AND_HEIGHT'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A' textAutoResize='WIDTH_AND_HEIGHT'>0</text></frame>"})
 ```
 Then:
 ```json
@@ -79,11 +83,12 @@ design({"parentId": "...", "xml": "<frame name='Stats' layout='row' gap='16' w='
 **Key benefit**: component definition is small (focused attention = fewer attribute omissions), instances are tiny (2–4 attrs each).
 
 ### STYLE GUIDE FOR VISUAL DIRECTION
-When creating a NEW design from scratch (not editing existing):
-1. `query(source="style-tags")` — see available visual styles
-2. Pick 3-5 tags matching user's request (mood, color scheme, use case)
-3. `query(source="style", query="dark-mode, minimal, dashboard")` — get color/font/spacing system
+When creating a NEW design from scratch (not editing existing), use style guides only when they add signal:
+1. If the request does not already imply a clear visual direction, or you want a bundled palette/type system, optionally call `query(source="style-tags")`
+2. Pick 2-4 specific tags that capture use case first, then mode/accent/mood
+3. `query(source="style", query="dark-mode, dashboard, blue-accent")` — get color/font/spacing system
 4. Apply the style guide's color tokens, typography, spacing, and shape values to your `design` calls
+5. Skip style queries when the user already specified the look, or when matching an existing canvas/design system matters more than exploration
 
 ### MODIFICATION (using design with id attributes)
 The `design` tool handles both creation and modification in a single call:
@@ -105,7 +110,7 @@ design({
 **Mixed create + edit + delete** (all in one call):
 ```json
 design({
-  "xml": "<text name='New Label' size='14' fill='#6B7280'>Added text</text><frame id='100:5' bg='#FF0000'/><delete id='100:12'/>",
+  "xml": "<text name='New Label' size='14' fill='#6B7280' textAutoResize='WIDTH_AND_HEIGHT'>Added text</text><frame id='100:5' bg='#FF0000'/><delete id='100:12'/>",
   "parentId": "200:1"
 })
 ```
@@ -168,7 +173,7 @@ All read tools return compact XML representation, symmetric with the `design` wr
 - `fill` = single fill color, `fills` = multiple fill colors
 - `shadow` = effects (format: `ox,oy,blur,spread,color`)
 
-**Text content** appears as tag body: `<text size="16" weight="Bold">Hello World</text>`
+**Text content** appears as tag body: `<text size="16" weight="Bold" fill="#111827" textAutoResize="WIDTH_AND_HEIGHT">Hello World</text>`
 
 **Example outline output** (structural skeleton):
 ```xml
@@ -181,7 +186,7 @@ All read tools return compact XML representation, symmetric with the `design` wr
 **Example inspect output** (full styles):
 ```xml
 <frame id="1:2" name="Card" layout="V" gap="12" fill="#FFF" w="320" sizingV="HUG" p="24">
-  <text id="3:4" name="Title" size="24" weight="Bold" fill="#111">Welcome</text>
+  <text id="3:4" name="Title" size="24" weight="Bold" fill="#111" textAutoResize="WIDTH_AND_HEIGHT">Welcome</text>
   <rect id="7:8" name="Divider" h="1" fill="#E0E0E0"/>
 </frame>
 ```

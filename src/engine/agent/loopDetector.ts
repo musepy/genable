@@ -26,6 +26,7 @@ export class LoopDetector {
   private signatureHistory: string[] = [];
   private identicalGraceGiven = false;
   private readonly maxHistoryLength = 10;
+  private readonly readTools = new Set(['context', 'outline', 'inspect']);
 
   /**
    * Record this iteration's tool calls and run all loop detection checks.
@@ -147,29 +148,36 @@ export class LoopDetector {
     if (this.signatureHistory.length < threshold) return null;
 
     const recentSignatures = this.signatureHistory.slice(-threshold);
-    const toolNamePatterns = recentSignatures.map(sig => {
-      return sig.split('|')
-        .map(s => s.split('[')[0])
-        .filter(Boolean)
-        .sort()
-        .join('+');
-    });
+    const toolNamePatterns = recentSignatures.map(sig => this.extractToolPattern(sig));
 
     const allSamePattern = toolNamePatterns.every(p => p === toolNamePatterns[0]);
     if (!allSamePattern || !toolNamePatterns[0]) return null;
 
-    // Only trigger for modify-only patterns (not read tools)
-    const readTools = ['context', 'outline', 'inspect'];
-    const isModifyOnly = !readTools.some(t => toolNamePatterns[0].includes(t));
-    if (!isModifyOnly) return null;
-
     const pattern = toolNamePatterns[0];
+    const patternTools = pattern.split('+').filter(Boolean);
+    const isReadOnly = patternTools.every(tool => this.readTools.has(tool));
+    const includesReadTool = patternTools.some(tool => this.readTools.has(tool));
+
     return {
       type: 'monotone',
       message: `Monotone loop: tool pattern "${pattern}" repeated ${threshold} consecutive iterations.`,
       fatal: false,
-      hint: `You have called "${pattern}" for ${threshold} consecutive iterations without resolving the issue. `
-        + `If you are stuck, explain the difficulty to the user.`,
+      hint: isReadOnly
+        ? `You have only used read-only tools ("${pattern}") for ${threshold} consecutive iterations. `
+          + `Stop inspecting more nodes unless a new inspection will change your plan. Either make the next edit/create call or explain the blocking issue to the user.`
+        : includesReadTool
+          ? `You have repeated the same inspection/modify pattern ("${pattern}") for ${threshold} consecutive iterations. `
+            + `Do not keep verifying the same area. Make a concrete change, or explain the blocker to the user.`
+          : `You have called "${pattern}" for ${threshold} consecutive iterations without resolving the issue. `
+            + `If you are stuck, explain the difficulty to the user.`,
     };
+  }
+
+  private extractToolPattern(signature: string): string {
+    const toolNames = [...signature.matchAll(/([a-zA-Z_]+)\[/g)]
+      .map(match => match[1])
+      .filter(Boolean)
+      .sort();
+    return toolNames.join('+');
   }
 }

@@ -118,7 +118,7 @@ describe('buildCreateReceipt', () => {
     const result = makeResult([makeLineResult()], { node1: '1:1' });
     const violations: ValidationViolation[] = [
       makeViolation({ code: 'TEXT_OVERFLOW', message: 'text overflows', nodeId: '1:2' }),
-      makeViolation({ code: 'ZERO_DIM', message: 'width=0', nodeId: '1:3', hints: ['Set width > 0'] }),
+      makeViolation({ code: 'TEXT_WIDTH_COLLAPSED', message: 'text collapsed to a narrow width', nodeId: '1:3', hints: ['Use WIDTH_AND_HEIGHT'] }),
     ];
 
     const receipt = buildCreateReceipt({ result, violations });
@@ -132,11 +132,11 @@ describe('buildCreateReceipt', () => {
       fix: 'Set textAutoResize to "HEIGHT"',
     });
     expect(receipt.violations[1]).toMatchObject({
-      code: 'ZERO_DIM',
+      code: 'TEXT_WIDTH_COLLAPSED',
       severity: 'error',
       node: '1:3',
-      message: 'width=0',
-      fix: 'Set width > 0',
+      message: 'text collapsed to a narrow width',
+      fix: 'Use WIDTH_AND_HEIGHT',
     });
   });
 
@@ -213,26 +213,6 @@ describe('buildCreateReceipt', () => {
     expect(receipt.nodeLimitWarning).toContain('recommended max: 20');
   });
 
-  it('populates TEXT_RESIZE_DEFAULT', () => {
-    const lr = makeLineResult({
-      status: 'warning',
-      symbol: 'label',
-      warnings: [
-        {
-          code: 'TEXT_RESIZE_DEFAULT',
-          message: 'textAutoResize defaulted to "HEIGHT" (child text node). Set explicitly to override.',
-        },
-      ],
-    });
-    const result = makeResult([lr], { label: '1:1' });
-
-    const receipt = buildCreateReceipt({ result });
-
-    expect(receipt.defaultsAppliedCount).toBe(1);
-    expect(receipt.defaultsApplied).toHaveLength(1);
-    expect(receipt.defaultsApplied[0].property).toBe('textAutoResize');
-    expect(receipt.defaultsApplied[0].value).toBe('HEIGHT');
-  });
 });
 
 describe('buildEditReceipt', () => {

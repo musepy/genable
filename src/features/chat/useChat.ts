@@ -4,6 +4,7 @@ import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../
 import { PluginData } from '../../hooks/usePluginData'
 import guidelinesCatalog from '../../generated/guidelines-catalog.json'
 import styleCatalog from '../../generated/style-catalog.json'
+import { matchStyleGuide, normalizeStyleTags, StyleGuideEntry } from './styleGuideMatcher'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -349,22 +350,17 @@ export function useChat({
             return { success: true, data: { tags: (styleCatalog as any).tags } }
           }
           if (params.source === 'style') {
-            const queryTags = (params.query || '').split(',').map((t: string) => t.trim().toLowerCase()).filter(Boolean)
-            const guides = (styleCatalog as any).guides as Record<string, { tags: string[]; content: string }>
-            let bestName = ''
-            let bestScore = -1
-            for (const [name, guide] of Object.entries(guides)) {
-              const score = queryTags.filter((t: string) => guide.tags.includes(t)).length
-              if (score > bestScore) {
-                bestScore = score
-                bestName = name
-              }
-            }
-            if (!bestName || bestScore === 0) {
+            const queryTags = normalizeStyleTags(params.query || '')
+            const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
+            const match = matchStyleGuide(queryTags, guides)
+            if (!match) {
               return { success: false, error: { code: 'NO_STYLE_MATCH',
                 message: `No style guide matched tags "${queryTags.join(', ')}". Use query(source="style-tags") to see available tags.` } }
             }
-            return { success: true, data: { name: bestName, tags: guides[bestName].tags, content: guides[bestName].content } }
+            return {
+              success: true,
+              data: { name: match.name, tags: match.guide.tags, content: match.guide.content }
+            }
           }
           return null
         },

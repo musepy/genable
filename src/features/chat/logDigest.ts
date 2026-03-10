@@ -18,6 +18,12 @@ const parameterExtractors: Record<string, (params: any) => string> = {
     if (typeof params.xml === 'string') return `xml: ${params.xml.length} chars`;
     return params.nodeId ? `nodeId: ${params.nodeId}` : 'empty';
   },
+  design: (params) => {
+    const parts: string[] = [];
+    if (typeof params.xml === 'string') parts.push(`xml: ${params.xml.length} chars`);
+    if (params.parentId) parts.push(`parentId: ${params.parentId}`);
+    return parts.join(', ') || 'empty';
+  },
   read: (params) => {
     const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
     return `nodeId: ${params.nodeId || '?'}${depthStr}`;
@@ -35,6 +41,51 @@ function extractResultInfo(tool: ToolCallRecord): string {
       .map(([key, id]) => `${key}→${id}`)
       .join(', ');
     return mappings ? `ids: ${mappings}` : '';
+  }
+  if (tool.name === 'design') {
+    const data = tool.result?.data;
+    if (!data || typeof data !== 'object') return '';
+
+    const parts: string[] = [];
+    const counts = [
+      typeof data.created === 'number' && data.created > 0 ? `created ${data.created}` : '',
+      typeof data.edited === 'number' && data.edited > 0 ? `edited ${data.edited}` : '',
+      typeof data.deleted === 'number' && data.deleted > 0 ? `deleted ${data.deleted}` : '',
+      typeof data.failed === 'number' && data.failed > 0 ? `failed ${data.failed}` : '',
+    ].filter(Boolean);
+    if (counts.length > 0) parts.push(counts.join(', '));
+
+    if (idMap && typeof idMap === 'object') {
+      const mappings = Object.entries(idMap)
+        .slice(0, 4)
+        .map(([key, id]) => `${key}→${id}`)
+        .join(', ');
+      if (mappings) parts.push(`ids: ${mappings}`);
+    }
+
+    const defaultsAppliedCount = typeof data.defaultsAppliedCount === 'number'
+      ? data.defaultsAppliedCount
+      : (Array.isArray(data.defaultsApplied) ? data.defaultsApplied.length : 0);
+    if (defaultsAppliedCount > 0) {
+      const defaultProps = Array.isArray(data.defaultsApplied)
+        ? data.defaultsApplied.slice(0, 3).map((entry: any) => entry?.property).filter(Boolean)
+        : [];
+      parts.push(defaultProps.length > 0
+        ? `defaults(${defaultsAppliedCount}): ${defaultProps.join(', ')}`
+        : `defaults(${defaultsAppliedCount})`);
+    }
+
+    if (Array.isArray(data.violations) && data.violations.length > 0) {
+      const violations = data.violations
+        .slice(0, 3)
+        .map((violation: any) => `${violation?.code || 'UNKNOWN'}:${violation?.severity || '?'}`)
+        .join(', ');
+      parts.push(`violations(${data.violations.length}): ${violations}`);
+    }
+
+    if (data.nodeLimitWarning) parts.push('nodeLimitWarning');
+
+    return parts.join(' | ');
   }
   return '';
 }

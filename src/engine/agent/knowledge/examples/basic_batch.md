@@ -4,7 +4,7 @@ User: "创建一个带标题的卡片"
 **ONE create call creates the entire component:**
 ```json
 create({
-  "xml": "<frame name='Card Container' w='360' height='hug' layout='column' p='16' gap='12' fill='#FFFFFF' corner='12' shadow='0,4,16,0,#0000001A'><text name='Title' width='fill' fill='#111827'>卡片标题</text><text name='Subtitle' width='fill' fill='#6B7280'>描述文字</text></frame>"
+  "xml": "<frame name='Card Container' w='360' height='hug' layout='column' p='16' gap='12' fill='#FFFFFF' corner='12' shadow='0,4,16,0,#0000001A'><text name='Title' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>卡片标题</text><text name='Subtitle' w='328' fill='#6B7280' textAutoResize='HEIGHT'>描述文字</text></frame>"
 })
 ```
 → Returns: idMap with symbol → real Figma node ID mappings

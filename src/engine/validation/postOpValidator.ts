@@ -168,25 +168,27 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): ValidationVio
     }
   }
 
-  // TEXT_WRAP_MISSING: FILL width but textAutoResize=WIDTH_AND_HEIGHT means no wrapping
-  if (t.textAutoResize === 'WIDTH_AND_HEIGHT') {
-    const isLikelyFill = 'layoutSizingHorizontal' in t &&
-                         (t as any).layoutSizingHorizontal === 'FILL';
-    const isLongContent = content.length > 60 || content.includes('\n');
-
-    if (isLikelyFill && isLongContent) {
+  // TEXT_WIDTH_COLLAPSED: HEIGHT text in a very narrow box, causing per-word stacking.
+  if (t.textAutoResize === 'HEIGHT' && !content.includes('\n') && content.length >= 6 && t.width > 0) {
+    const fontSize = getFontSize(t);
+    const estimatedLines = estimateLineCount(content, t.width, fontSize);
+    const narrowWidthThreshold = Math.max(96, fontSize * 4);
+    if (estimatedLines >= 3 && t.width <= narrowWidthThreshold) {
       violations.push({
-        code: 'TEXT_WRAP_MISSING',
-        message: `'${t.name}' has FILL width + long text but textAutoResize=WIDTH_AND_HEIGHT (no wrapping)`,
+        code: 'TEXT_WIDTH_COLLAPSED',
+        message: `'${t.name}' is wrapping into a narrow ${Math.round(t.width)}px text box (${estimatedLines} estimated lines)`,
         nodeId: t.id,
         nodeName: t.name,
         context: {
           textAutoResize: t.textAutoResize,
-          layoutSizingHorizontal: (t as any).layoutSizingHorizontal,
+          width: Math.round(t.width),
+          estimatedLines,
+          fontSize,
           contentLength: content.length,
         },
         hints: [
-          `Set textAutoResize to "HEIGHT" to enable text wrapping (patchNode nodeId="${t.id}" props={textAutoResize: "HEIGHT"})`,
+          `If this is a short label or heading, switch to textAutoResize="WIDTH_AND_HEIGHT" and remove width`,
+          `If this text should wrap, widen the text box beyond ${Math.round(narrowWidthThreshold)}px`,
         ],
       });
     }

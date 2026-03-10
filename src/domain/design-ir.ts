@@ -113,4 +113,8 @@ export interface OperationIR {
   overrides?: Record<string, CanonicalProps>;
   /** If true, creates a ComponentNode instead of a FrameNode */
   reusable?: boolean;
+  /** 1-based operation index (diagnostic) */
+  lineNumber?: number;
+  /** JSON summary of the original operation (diagnostic) */
+  raw?: string;
 }

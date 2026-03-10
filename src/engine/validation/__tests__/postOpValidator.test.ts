@@ -40,7 +40,6 @@ function mockText(overrides: Partial<TextNode> & { parent?: any } = {}): any {
     characters: 'Hello',
     fontSize: 14,
     textAutoResize: 'WIDTH_AND_HEIGHT',
-    layoutSizingHorizontal: 'FIXED',
     parent: null,
     ...overrides,
   };
@@ -135,22 +134,36 @@ describe('postOpValidator structured output', () => {
     });
   });
 
-  describe('TEXT_WRAP_MISSING', () => {
-    it('detects missing text wrap on FILL+long text', () => {
+  describe('TEXT_WIDTH_COLLAPSED', () => {
+    it('detects narrow HEIGHT text that will collapse into stacked lines', () => {
       const node = mockText({
         id: 'txt2',
-        name: 'LongText',
-        characters: 'A'.repeat(80),
-        textAutoResize: 'WIDTH_AND_HEIGHT',
-        layoutSizingHorizontal: 'FILL',
+        name: 'Heading',
+        characters: 'Settings',
+        textAutoResize: 'HEIGHT',
+        width: 73,
+        fontSize: 38,
       });
       const violations = validatePostOp(node);
 
-      const wrap = violations.find(a => a.code === 'TEXT_WRAP_MISSING');
+      const wrap = violations.find(a => a.code === 'TEXT_WIDTH_COLLAPSED');
       expect(wrap).toBeDefined();
-      expect(wrap!.context.textAutoResize).toBe('WIDTH_AND_HEIGHT');
-      expect(wrap!.context.layoutSizingHorizontal).toBe('FILL');
-      expect(wrap!.hints[0]).toContain('HEIGHT');
+      expect(wrap!.context.textAutoResize).toBe('HEIGHT');
+      expect(wrap!.context.width).toBe(73);
+      expect(wrap!.context.estimatedLines).toBeGreaterThanOrEqual(3);
+      expect(wrap!.hints[0]).toContain('WIDTH_AND_HEIGHT');
+    });
+
+    it('does not flag adequately wide wrapped text', () => {
+      const node = mockText({
+        characters: 'Automatically save your work every 30 seconds',
+        textAutoResize: 'HEIGHT',
+        width: 320,
+        fontSize: 14,
+      });
+
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'TEXT_WIDTH_COLLAPSED')).toBeUndefined();
     });
   });
 

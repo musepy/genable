@@ -174,6 +174,7 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
   const operations: OperationIR[] = [];
   const usedSymbols = new Set<string>();
   let autoCounter = 0;
+  let lineCounter = 0;
 
   function uniqueSymbol(base: string): string {
     let sym = base;
@@ -208,11 +209,14 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
 
       if (tag === 'delete') {
         if (!nodeId) throw new Error(`<delete> tag requires an 'id' attribute`);
+        const ln = ++lineCounter;
         operations.push({
           command: 'delete',
           targetRef: nodeId,
           dependsOn: [],
           props: {},
+          lineNumber: ln,
+          raw: JSON.stringify({ command: 'delete', targetRef: nodeId }),
         });
         return;
       }
@@ -222,11 +226,14 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
       }
 
       const props = buildProps(node, tag, false);
+      const ln = ++lineCounter;
       operations.push({
         command: 'update',
         targetRef: nodeId,
         dependsOn: [],
-        props: normalizeProps(props),
+        props: normalizeProps(props, { nodeType: figmaType }),
+        lineNumber: ln,
+        raw: JSON.stringify({ command: 'update', targetRef: nodeId }),
       });
 
       for (const child of node.children) {
@@ -267,6 +274,7 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
         depList.push(componentSymbol);
       }
 
+      const ln = ++lineCounter;
       operations.push({
         command: 'instance',
         symbol,
@@ -275,6 +283,8 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
         dependsOn: depList,
         componentRef: componentSymbol,
         overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+        lineNumber: ln,
+        raw: JSON.stringify({ command: 'instance', symbol, componentRef: componentSymbol }),
       });
       return;
     }
@@ -298,14 +308,24 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
     const symbolBase = props.name ? toCamelCase(String(props.name)) : (tag + (++autoCounter));
     const symbol = uniqueSymbol(symbolBase || tag + (++autoCounter));
 
+    const normalized = normalizeProps(props, { nodeType: figmaType });
+
+    // Apply sizing defaults for create ops (canonicalize phase)
+    if (command === 'create') {
+      canonicalizeSizing(normalized, !!parentSymbol, figmaType);
+    }
+
+    const ln = ++lineCounter;
     operations.push({
       command,
       symbol,
       ...(command === 'create' ? { nodeType: figmaType } : {}),
       parentRef: parentSymbol,
-      props: normalizeProps(props),
+      props: normalized,
       dependsOn: computeDependsOn(parentSymbol),
       ...(isReusable ? { reusable: true } : {}),
+      lineNumber: ln,
+      raw: JSON.stringify({ command, symbol, type: figmaType, parent: parentSymbol }),
     });
 
     for (const child of node.children) {
@@ -390,6 +410,42 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
     }
 
     return props;
+  }
+
+  /**
+   * Inject sensible sizing defaults for create ops to prevent Figma's 100×100px fallback.
+   * Called during canonicalization (Pass 2) so the compiler doesn't need to.
+   */
+  function canonicalizeSizing(props: Record<string, any>, hasParent: boolean, nodeType: string): void {
+    const isFrame = nodeType === 'FRAME' || nodeType === 'SECTION' || nodeType === 'GROUP';
+    const isShape = !isFrame && nodeType !== 'TEXT';
+
+    if (isFrame) {
+      // Root frame: ensure reasonable width (avoid 100px default)
+      if (!hasParent && props.width === undefined && props.layoutSizingHorizontal !== 'FILL') {
+        props.width = 360;
+      }
+
+      // Frame with layoutMode: default to HUG height so it wraps content
+      if (props.layoutMode && props.height === undefined && props.layoutSizingVertical === undefined) {
+        props.layoutSizingVertical = 'HUG';
+      }
+
+      // Auto-layout frames: default clipsContent to false so child shadows/effects aren't clipped
+      if (props.layoutMode && props.clipsContent === undefined) {
+        props.clipsContent = false;
+      }
+
+      // Child frame: default to FILL width (stretch to parent)
+      if (hasParent && props.width === undefined && props.layoutSizingHorizontal === undefined) {
+        props.layoutSizingHorizontal = 'FILL';
+      }
+    }
+
+    // Child shapes (RECTANGLE, etc.): default to FILL width
+    if (isShape && hasParent && props.width === undefined && props.layoutSizingHorizontal === undefined) {
+      props.layoutSizingHorizontal = 'FILL';
+    }
   }
 
   for (const root of nodes) {

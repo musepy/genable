@@ -138,5 +138,47 @@ describe('xml-interpreter', () => {
       expect(ops[0].command).toBe('update');
       expect(ops[1].command).toBe('create');
     });
+
+    it('accepts intrinsic text without width', () => {
+      const ops = interpret(
+        "<text name='Title' size='20' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Settings</text>",
+        'design',
+      );
+      expect(ops[0].command).toBe('create');
+      expect(ops[0].nodeType).toBe('TEXT');
+      expect(ops[0].props.textAutoResize).toBe('WIDTH_AND_HEIGHT');
+      expect(ops[0].props.width).toBeUndefined();
+    });
+
+    it('accepts wrapped text with numeric width', () => {
+      const ops = interpret(
+        "<text name='Body' w='320' size='14' fill='#6B7280' textAutoResize='HEIGHT'>Wrapped body copy</text>",
+        'design',
+      );
+      expect(ops[0].props.width).toBe(320);
+      expect(ops[0].props.textAutoResize).toBe('HEIGHT');
+    });
+
+    it('passes through text without textAutoResize (validation moved to semanticValidator)', () => {
+      const ops = interpret("<text name='Title' size='20' fill='#111827'>Settings</text>", 'design');
+      expect(ops).toHaveLength(1);
+      expect(ops[0].command).toBe('create');
+      expect(ops[0].nodeType).toBe('TEXT');
+    });
+
+    it('allows edit-only text patches that do not touch sizing', () => {
+      const ops = interpret("<text id='1:1' fill='#EF4444'>Updated Title</text>", 'design');
+      expect(ops).toHaveLength(1);
+      expect(ops[0].command).toBe('update');
+      expect(ops[0].props.fill).toBeUndefined();
+      expect(ops[0].props.fills).toBeDefined();
+      expect(ops[0].props.textAutoResize).toBeUndefined();
+    });
+
+    it('passes through text edit patches (validation moved to semanticValidator)', () => {
+      const ops = interpret("<text id='1:1' w='220'>Updated Title</text>", 'design');
+      expect(ops).toHaveLength(1);
+      expect(ops[0].command).toBe('update');
+    });
   });
 });

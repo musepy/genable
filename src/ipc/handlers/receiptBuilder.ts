@@ -37,7 +37,7 @@ const SEVERITY_MAP: Record<string, 'warning' | 'error'> = {
   ZERO_DIM: 'error',
   INVISIBLE: 'error',
   TEXT_OVERFLOW: 'warning',
-  TEXT_WRAP_MISSING: 'warning',
+  TEXT_WIDTH_COLLAPSED: 'error',
   CHILDREN_OVERFLOW: 'warning',
   SIBLING_WIDTH_MISMATCH: 'warning',
   MISSING_AUTO_LAYOUT: 'warning',
@@ -55,7 +55,6 @@ const MAX_VIOLATIONS = 10;
 
 /** Warning codes that indicate a compiler default was applied. */
 const DEFAULT_CODES = new Set([
-  'TEXT_RESIZE_DEFAULT',
   'SIZING_DEFAULT',
   'CLIPS_CONTENT_DEFAULT',
 ]);
@@ -66,7 +65,6 @@ const DEFAULT_CODES = new Set([
  */
 function parseDefaultWarning(message: string): { property: string; value: string; reason: string } {
   // e.g. "layoutSizingHorizontal defaulted to \"FILL\" (child frame without explicit width). Set..."
-  // e.g. "textAutoResize defaulted to \"HEIGHT\" (child text node). Set..."
   // e.g. "width defaulted to 360px (root frame without explicit width). Set..."
   // e.g. "clipsContent defaulted to false (auto-layout frame). Set..."
   const match = message.match(/^(\S+) defaulted to [""]?([^""(]+?)[""]?\s*\(([^)]+)\)/);

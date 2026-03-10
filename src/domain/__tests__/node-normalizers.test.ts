@@ -28,10 +28,22 @@ describe('normalizeProps', () => {
     expect(result).not.toHaveProperty('width');
   });
 
+  it('keeps text width="fill" untouched so text sizing can be validated explicitly', () => {
+    const result = normalizeProps({ width: 'fill' }, { nodeType: 'TEXT' });
+    expect(result.width).toBe('fill');
+    expect(result.layoutSizingHorizontal).toBeUndefined();
+  });
+
   it('converts height: "hug" → layoutSizingVertical', () => {
     const result = normalizeProps({ height: 'hug' });
     expect(result.layoutSizingVertical).toBe('HUG');
     expect(result).not.toHaveProperty('height');
+  });
+
+  it('keeps text height="hug" untouched', () => {
+    const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT' });
+    expect(result.height).toBe('hug');
+    expect(result.layoutSizingVertical).toBeUndefined();
   });
 
   it('converts width: "100%" → layoutSizingHorizontal: FILL', () => {

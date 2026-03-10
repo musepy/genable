@@ -4,8 +4,8 @@
  *
  * create accepts XML design markup and converts it to Figma nodes.
  * The pipeline:
- *   1. xmlToParsedLines → parse XML into ParsedLine[]
- *   2. ActionCompiler.compile   → convert ParsedLines to FigmaActions
+ *   1. parseXml → XmlNode[]  +  interpretXmlNodes → OperationIR[]
+ *   2. ActionCompiler.compile   → convert to FigmaActions
  *   3. IncrementalExecutor.execute → run actions one by one with dependency tracking
  */
 
@@ -13,7 +13,8 @@ import { ToolDefinition, ToolExecutor } from './types';
 import { CreateParams } from '../../actions/createTypes';
 import { ActionCompiler } from '../../actions/compiler';
 import { IncrementalExecutor } from '../../actions/incrementalExecutor';
-import { xmlToParsedLines } from '../../actions/xmlDesignParser';
+import { parseXml } from '../../actions/xmlDesignParser';
+import { interpretXmlNodes } from '../../xml/xml-interpreter';
 import { buildCreateReceipt } from '../../../ipc/handlers/receiptBuilder';
 
 // ==========================================
@@ -101,7 +102,7 @@ DO NOT regenerate the entire design on partial failure. Instead:
 /**
  * Full executor for create.
  *
- * Pipeline: xmlToParsedLines → compile → incremental execute → compact receipt.
+ * Pipeline: parseXml → interpretXmlNodes → compile → incremental execute → compact receipt.
  */
 export const createExecutor: ToolExecutor<CreateParams> = async (
   params,
@@ -124,7 +125,8 @@ export const createExecutor: ToolExecutor<CreateParams> = async (
 
   let parsedLines;
   try {
-    parsedLines = xmlToParsedLines(xml);
+    const xmlNodes = parseXml(xml);
+    parsedLines = interpretXmlNodes(xmlNodes, { mode: 'create' });
   } catch (e: any) {
     return {
       success: false,

@@ -124,4 +124,58 @@ describe('generateLogDigest', () => {
     expect(result).toContain('Prompt: "' + 'A'.repeat(100) + '..."');
     expect(result).toContain('xml:');
   });
+
+  it('should include design receipt details in the digest', () => {
+    const history: ChatMessage[] = [
+      { role: 'user', text: 'Build settings panel', id: '1' },
+      {
+        role: 'model',
+        text: 'Working...',
+        id: '2',
+        toolCalls: [
+          {
+            id: 'tc1',
+            name: 'design',
+            parameters: { parentId: '200:1', xml: '<frame name="Panel"/>' },
+            status: 'success',
+            startTime: 1000,
+            endTime: 1500,
+            result: {
+              success: true,
+              data: {
+                created: 4,
+                edited: 2,
+                idMap: {
+                  panel: '10:1',
+                  title: '10:2',
+                  subtitle: '10:3',
+                  toggle: '10:4',
+                  colorSwatch: '10:5',
+                },
+                defaultsAppliedCount: 6,
+                defaultsApplied: [
+                  { property: 'textAutoResize' },
+                  { property: 'layoutSizingHorizontal' },
+                ],
+                violations: [
+                  { code: 'TEXT_OVERFLOW', severity: 'warning' },
+                  { code: 'SIZING_REVERTED', severity: 'error' },
+                ],
+                nodeLimitWarning: 'Large batch',
+              },
+            },
+          }
+        ]
+      }
+    ];
+
+    const result = generateLogDigest(history);
+    expect(result).toContain('#1 [design] 500ms OK');
+    expect(result).toContain('parentId: 200:1');
+    expect(result).toContain('created 4, edited 2');
+    expect(result).toContain('ids: panel→10:1, title→10:2, subtitle→10:3, toggle→10:4');
+    expect(result).toContain('defaults(6): textAutoResize, layoutSizingHorizontal');
+    expect(result).toContain('violations(2): TEXT_OVERFLOW:warning, SIZING_REVERTED:error');
+    expect(result).toContain('nodeLimitWarning');
+  });
 });

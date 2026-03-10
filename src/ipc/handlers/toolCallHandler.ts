@@ -19,7 +19,9 @@ import { ActionCompiler } from '../../engine/actions/compiler';
 import { IncrementalExecutor } from '../../engine/actions/incrementalExecutor';
 import { collectTreeAnomalies } from '../../engine/validation/postOpValidator';
 import { compileCssProps } from '../../engine/actions/cssCompiler';
-import { xmlToParsedLines } from '../../engine/actions/xmlDesignParser';
+import { parseXml, xmlToParsedLines } from '../../engine/actions/xmlDesignParser';
+import { interpretXmlNodes } from '../../engine/xml/xml-interpreter';
+import { operationsToParsedLines } from '../../engine/xml/ir-adapter';
 import { logger } from '../../utils/logger';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 
@@ -441,7 +443,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         let designParsedLines;
         try {
-          designParsedLines = xmlToParsedLines(designXml, { mode: 'design' });
+          const xmlNodes = parseXml(designXml);
+          const operations = interpretXmlNodes(xmlNodes, { mode: 'design' });
+          designParsedLines = operationsToParsedLines(operations);
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;

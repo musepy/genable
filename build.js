@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Custom Build Script with Version Injection
- * 
+ *
  * Injects BUILD_VERSION into the compiled code by replacing the placeholder string.
- * 
+ *
  * Usage:
  *   node build.js          # Production build
  *   node build.js --watch  # Watch mode
@@ -60,7 +60,7 @@ if (isWatch) {
 
   // Watch mode: inject version after each rebuild
   const child = spawn('npx', buildArgs, { stdio: 'inherit', shell: true });
-  
+
   // Watch the output files for changes and inject metadata
   let debounce = null;
   fs.watch(path.join(__dirname, 'build'), (event, filename) => {
@@ -72,14 +72,12 @@ if (isWatch) {
       }, 100);
     }
   });
-  
+
   child.on('exit', (code) => process.exit(code));
 } else {
   // One-shot build
   try {
-    // UI capture disabled per user request
-    // console.log(`📸 Running UI Capture Engine...`);
-    // execSync(`npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/capture-ui.ts`, { stdio: 'inherit' });
+    // UI capture disabled (test worktree)
 
     console.log(`🔨 Generating Agent Registries...`);
     execSync(`node scripts/generate-skills-registry.js`, { stdio: 'inherit' });
@@ -87,7 +85,7 @@ if (isWatch) {
     execSync(`node scripts/generate-prompt-catalog.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-guidelines-catalog.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-style-catalog.js`, { stdio: 'inherit' });
-    
+
     console.log(`🔨 Running Figma Plugin Build...`);
     execSync(`npx ${buildArgs.join(' ')}`, { stdio: 'inherit' });
     injectMetaData();

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
+import type { RefObject } from 'preact'
 import { emit, on } from '@create-figma-plugin/utilities'
 import { ChatMessage } from '../types/chat'
+import { AgentRuntimeEvent } from '../shared/protocol/agentRuntimeEvents'
 import { generateLogDigest } from '../features/chat/logDigest'
 import type { DevBridgeExportHandler, DevBridgeExportResultHandler } from '../types'
 
@@ -22,6 +24,7 @@ interface DevBridgeState {
   runtimeState: RunState
   history: ChatMessage[]
   modelName: string
+  eventBufferRef: RefObject<AgentRuntimeEvent[]>
 }
 
 interface TriggerPayload {
@@ -60,12 +63,12 @@ function extractRootNodeIds(history: ChatMessage[]): string[] {
   return ids
 }
 
-/** Request node tree + screenshot from main thread via IPC. Timeout after 10s. */
-function requestExport(rootNodeIds?: string[]): Promise<{ nodeTree: any; screenshot: string | null }> {
+/** Request node tree + screenshots from main thread via IPC. Timeout after 10s. */
+function requestExport(rootNodeIds?: string[]): Promise<{ nodeTree: any; screenshots: Array<{ nodeId: string; name: string; base64: string }> }> {
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       cleanup()
-      resolve({ nodeTree: null, screenshot: null })
+      resolve({ nodeTree: null, screenshots: [] })
     }, 10_000)
 
     const cleanup = on<DevBridgeExportResultHandler>('DEV_BRIDGE_EXPORT_RESULT', (data) => {
@@ -133,8 +136,8 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     const logs = generateLogDigest(state.history, { modelName: state.modelName })
     const rootNodeIds = extractRootNodeIds(state.history)
 
-    // Request node tree + screenshot from main thread, then POST everything
-    requestExport(rootNodeIds).then(({ nodeTree, screenshot }) => {
+    // Request node tree + screenshots from main thread, then POST everything
+    requestExport(rootNodeIds).then(({ nodeTree, screenshots }) => {
       // Serialize full conversation history for debugging LLM decisions
       const conversationHistory = state.history.map(m => ({
         role: m.role,
@@ -157,9 +160,10 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
         toolCallSummary,
         toolCallDetails,
         conversationHistory,
+        runtimeEvents: stateRef.current.eventBufferRef.current,
         logs,
         nodeTree,
-        screenshot,
+        screenshots,
       }
 
       return fetchBridge('/result', {

@@ -99,9 +99,11 @@ export class LoopDetector {
       } else if (tc.name === 'edit' && tc.args?.xml) {
         const editHash = this.hashString(String(tc.args.xml).slice(0, 256));
         fingerprint = `|edit:${editHash}`;
-      } else if (tc.name === 'read') {
+      } else if (tc.name === 'outline' || tc.name === 'inspect') {
         const depth = tc.args?.depth ?? 5;
         fingerprint = `|depth:${depth}`;
+      } else if (tc.name === 'context') {
+        fingerprint = `|static`;
       } else {
         fingerprint = `${nameSample}${contextSample}|args:${this.hashString(JSON.stringify(tc.args ?? {}))}`;
       }
@@ -157,7 +159,8 @@ export class LoopDetector {
     if (!allSamePattern || !toolNamePatterns[0]) return null;
 
     // Only trigger for modify-only patterns (not read tools)
-    const isModifyOnly = !toolNamePatterns[0].includes('read');
+    const readTools = ['context', 'outline', 'inspect'];
+    const isModifyOnly = !readTools.some(t => toolNamePatterns[0].includes(t));
     if (!isModifyOnly) return null;
 
     const pattern = toolNamePatterns[0];

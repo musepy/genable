@@ -158,7 +158,10 @@ function summarizeArgs(toolName: string, args: any): string {
     const xml = args.xml || args.content || '';
     return xml.length > 40 ? `${xml.length} chars` : truncate(xml, 40);
   }
-  if (toolName === 'read') {
+  if (toolName === 'context') {
+    return '';
+  }
+  if (toolName === 'outline' || toolName === 'inspect') {
     return args.nodeId || args.id || '';
   }
   if (toolName === 'query' || toolName === 'query_knowledge') {
@@ -187,7 +190,11 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
     const count = resp.data?.editedCount || resp.data?.results?.length;
     return count ? `edited ${count} nodes` : 'ok';
   }
-  if (toolName === 'read') {
+  if (toolName === 'context') {
+    const childCount = resp.data?.page?.childCount;
+    return childCount ? `page with ${childCount} nodes` : 'ok';
+  }
+  if (toolName === 'outline' || toolName === 'inspect') {
     const xml = resp.data?.xml || resp.data;
     if (typeof xml === 'string') return `${xml.length} chars`;
     return 'ok';

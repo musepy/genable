@@ -231,7 +231,7 @@ export interface DevBridgeExportResultHandler extends EventHandler {
   name: 'DEV_BRIDGE_EXPORT_RESULT';
   handler: (data: {
     nodeTree: any;
-    screenshot: string | null; // base64 PNG
+    screenshots: Array<{ nodeId: string; name: string; base64: string }>; // per-root-node screenshots
   }) => void;
 }
 

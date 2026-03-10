@@ -21,8 +21,8 @@ import { compileCssProps } from './cssCompiler';
 // ==========================================
 
 export interface XmlParseOptions {
-  /** 'create' (default) — new nodes, id attr skipped. 'edit' — update/delete existing nodes, id attr required. */
-  mode?: 'create' | 'edit';
+  /** 'create' (default) — new nodes, id attr skipped. 'edit' — update/delete existing nodes, id attr required. 'design' — per-tag: id present → edit, absent → create. */
+  mode?: 'create' | 'edit' | 'design';
 }
 
 // ==========================================
@@ -460,12 +460,16 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
       return;
     }
 
-    // ── Edit mode: all tags require id attr, <delete> maps to 'delete' command ──
-    if (mode === 'edit') {
+    // ── Determine effective mode for this tag ──
+    // 'design' mode: per-tag detection based on id presence
+    // 'edit' mode: all tags must have id
+    // 'create' mode: id is ignored
+    const isEditTag = mode === 'edit' || (mode === 'design' && (tag === 'delete' || !!node.attrs.id));
+
+    if (isEditTag) {
       const nodeId = node.attrs.id;
 
       if (tag === 'delete') {
-        // <delete id="xxx"/> → delete command
         if (!nodeId) {
           throw new XmlParseError(`<delete> tag requires an 'id' attribute`, 0);
         }
@@ -481,7 +485,7 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
         return;
       }
 
-      // Non-delete tags in edit mode must have id
+      // Non-delete tags in edit path must have id
       if (!nodeId) {
         throw new XmlParseError(`In edit mode, <${tag}> must have an 'id' attribute referencing an existing node. edit() can only modify existing nodes — to add NEW nodes, use create() instead.`, 0);
       }
@@ -528,14 +532,14 @@ export function xmlToParsedLines(xml: string, options?: XmlParseOptions): Parsed
         dependsOn: [],
       });
 
-      // Process children recursively (edit mode children also need id)
+      // Process children recursively
       for (const child of node.children) {
         processNode(child);
       }
       return;
     }
 
-    // ── Create mode (default): unchanged behavior ──
+    // ── Create path (mode='create' or design-mode tags without id) ──
 
     // ── <ref> tag → instance command ──
     if (figmaType === 'REF') {

@@ -142,10 +142,14 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
     await writeFile(join(resultDir, 'tree.json'), JSON.stringify(payload.nodeTree, null, 2));
   }
 
-  // write screenshot (base64 PNG)
-  if (payload.screenshot) {
-    const buf = Buffer.from(payload.screenshot, 'base64');
-    await writeFile(join(resultDir, 'screenshot.png'), buf);
+  // write per-node screenshots
+  if (payload.screenshots && Array.isArray(payload.screenshots)) {
+    for (let i = 0; i < payload.screenshots.length; i++) {
+      const s = payload.screenshots[i];
+      const buf = Buffer.from(s.base64, 'base64');
+      const suffix = payload.screenshots.length === 1 ? '' : `-${i + 1}`;
+      await writeFile(join(resultDir, `screenshot${suffix}.png`), buf);
+    }
   }
 
   // write logs
@@ -157,6 +161,11 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
   // write tool call details (per-call params + results + warnings)
   if (payload.toolCallDetails) {
     await writeFile(join(resultDir, 'tool-calls.json'), JSON.stringify(payload.toolCallDetails, null, 2));
+  }
+
+  // write runtime events for UI replay
+  if (payload.runtimeEvents && Array.isArray(payload.runtimeEvents)) {
+    await writeFile(join(resultDir, 'runtime-events.json'), JSON.stringify(payload.runtimeEvents));
   }
 
   // write full payload as meta
@@ -171,8 +180,8 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
   // Notify any long-poll waiters
   notifyWaiters(id, payload);
 
-  // Auto-cleanup old results
-  await cleanupOldResults();
+  // Auto-cleanup disabled — keep all results for post-test analysis
+  // await cleanupOldResults();
 }
 
 async function handleResultGet(res: ServerResponse) {
@@ -244,6 +253,46 @@ async function handleResultById(id: string, waitSec: number, res: ServerResponse
   }
 }
 
+// --- recordings (for UI replay) ---
+
+async function handleRecordingsList(res: ServerResponse) {
+  try {
+    const entries = await readdir(RESULT_DIR);
+    const recordings: { id: string; mtime: number; hasEvents: boolean }[] = [];
+
+    for (const entry of entries) {
+      const dirPath = join(RESULT_DIR, entry);
+      const s = await stat(dirPath);
+      if (!s.isDirectory()) continue;
+
+      let hasEvents = false;
+      try {
+        await stat(join(dirPath, 'runtime-events.json'));
+        hasEvents = true;
+      } catch { /* no events file */ }
+
+      recordings.push({ id: entry, mtime: s.mtimeMs, hasEvents });
+    }
+
+    recordings.sort((a, b) => b.mtime - a.mtime);
+    json(res, 200, recordings);
+  } catch {
+    json(res, 200, []);
+  }
+}
+
+async function handleRecordingEvents(id: string, res: ServerResponse) {
+  const eventsPath = join(RESULT_DIR, id, 'runtime-events.json');
+  try {
+    const data = await readFile(eventsPath, 'utf-8');
+    cors(res);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(data);
+  } catch {
+    json(res, 404, { error: `No runtime-events.json for recording "${id}"` });
+  }
+}
+
 // --- server ---
 
 const server = createServer(async (req, res) => {
@@ -276,6 +325,11 @@ const server = createServer(async (req, res) => {
       const id = path.slice('/result/'.length);
       const waitSec = Number(url.searchParams.get('wait')) || 0;
       await handleResultById(id, waitSec, res);
+    } else if (path === '/recordings' && method === 'GET') {
+      await handleRecordingsList(res);
+    } else if (path.match(/^\/recordings\/[^/]+\/events$/) && method === 'GET') {
+      const id = path.split('/')[2];
+      await handleRecordingEvents(id, res);
     } else {
       json(res, 404, { error: 'Not found' });
     }
@@ -289,8 +343,8 @@ async function main() {
   await mkdir(BRIDGE_DIR, { recursive: true });
   await mkdir(RESULT_DIR, { recursive: true });
 
-  // Clean up on startup
-  await cleanupOldResults();
+  // Clean up on startup — disabled, keep all results
+  // await cleanupOldResults();
 
   server.listen(PORT, () => {
     console.log(`\nDev Bridge Server running on http://localhost:${PORT}`);
@@ -303,7 +357,9 @@ async function main() {
     console.log(`  POST /result          - save execution result`);
     console.log(`  GET  /result          - read latest result`);
     console.log(`  GET  /result/:id      - read specific result`);
-    console.log(`  GET  /result/:id?wait=120 - long-poll until result ready\n`);
+    console.log(`  GET  /result/:id?wait=120 - long-poll until result ready`);
+    console.log(`  GET  /recordings      - list recordings with runtime events`);
+    console.log(`  GET  /recordings/:id/events - get runtime events for replay\n`);
   });
 }
 

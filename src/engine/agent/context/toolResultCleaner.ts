@@ -39,8 +39,9 @@ export class ToolResultCleaner {
 
     if (!cleaned.data) return cleaned;
 
-    // read: truncate oversized XML at safe boundary
-    if (cleaned.name === 'read') {
+    // read tools: truncate oversized XML at safe boundary
+    const READ_TOOLS = new Set(['context', 'outline', 'inspect']);
+    if (READ_TOOLS.has(cleaned.name)) {
       cleaned.data = this.cleanInspectResult(cleaned.data);
       return cleaned;
     }
@@ -71,11 +72,15 @@ export class ToolResultCleaner {
    * Safe truncation: cuts at last `>` or newline to avoid broken XML tags.
    */
   private cleanInspectResult(data: any): any {
-    const result: any = { xml: data.xml };
+    const result: any = {};
+    if (data.xml) result.xml = data.xml;
 
-    // Preserve hint and context from handler (auto-degradation, page overview)
+    // Preserve structured fields from handler
     if (data.hint) result.hint = data.hint;
     if (data.context) result.context = data.context;
+    if (data.page) result.page = data.page;
+    if (data.selection) result.selection = data.selection;
+    if (data.suggestedReads) result.suggestedReads = data.suggestedReads;
 
     const MAX_XML_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
     if (result.xml && result.xml.length > MAX_XML_CHARS) {

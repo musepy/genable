@@ -164,48 +164,47 @@ export default async function () {
   on<DevBridgeExportHandler>('DEV_BRIDGE_EXPORT', async function ({ rootNodeIds }) {
     try {
       const nodeTree = serializeCurrentPage();
+      const exportOpts = { format: 'PNG' as const, constraint: { type: 'SCALE' as const, value: 2 } };
 
-      // Screenshot: target the agent-created root node, fallback to last top-level node
-      let screenshot: string | null = null;
-      let target: SceneNode | null = null;
-
+      // Collect all root nodes for per-node screenshots
+      const nodes: Array<{ node: SceneNode; id: string; name: string; area: number }> = [];
       if (rootNodeIds && rootNodeIds.length > 0) {
-        // Pick the largest root node by area (most likely the main design frame)
-        let maxArea = 0;
         for (const id of rootNodeIds) {
           const node = figma.getNodeById(id) as SceneNode | null;
           if (node && 'width' in node && 'height' in node) {
-            const area = node.width * node.height;
-            if (area > maxArea) { maxArea = area; target = node; }
+            nodes.push({ node, id, name: node.name, area: node.width * node.height });
           }
         }
       }
-      if (!target) {
-        // Fallback: last top-level node on the page
+      // Fallback: last top-level node on the page
+      if (nodes.length === 0) {
         const topNodes = figma.currentPage.children;
         if (topNodes.length > 0) {
-          target = topNodes[topNodes.length - 1];
+          const last = topNodes[topNodes.length - 1];
+          nodes.push({ node: last, id: last.id, name: last.name, area: ('width' in last ? last.width * last.height : 0) });
         }
       }
 
-      if (target) {
+      // Screenshot every root node
+      const screenshots: Array<{ nodeId: string; name: string; base64: string }> = [];
+      for (const { node, id, name } of nodes) {
         try {
-          const bytes = await target.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 2 } });
-          screenshot = figma.base64Encode(bytes);
+          const bytes = await node.exportAsync(exportOpts);
+          screenshots.push({ nodeId: id, name, base64: figma.base64Encode(bytes) });
         } catch (e: any) {
-          console.warn('[DevBridge] Screenshot export failed:', e.message);
+          console.warn(`[DevBridge] Screenshot export failed for ${id}:`, e.message);
         }
       }
 
       emit<import('./types').DevBridgeExportResultHandler>('DEV_BRIDGE_EXPORT_RESULT', {
         nodeTree,
-        screenshot,
+        screenshots,
       });
     } catch (e: any) {
       console.error('[DevBridge] Export failed:', e);
       emit<import('./types').DevBridgeExportResultHandler>('DEV_BRIDGE_EXPORT_RESULT', {
         nodeTree: null,
-        screenshot: null,
+        screenshots: [],
       });
     }
   });

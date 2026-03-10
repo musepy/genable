@@ -141,9 +141,9 @@ export class ToolDispatcher {
         },
       });
 
-      // Log create failures with per-line details for real-time debugging
-      if (!resultSuccess && tc.name === 'create' && errorMessage) {
-        console.warn(`[create] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
+      // Log design/create failures with per-line details for real-time debugging
+      if (!resultSuccess && (tc.name === 'design' || tc.name === 'create') && errorMessage) {
+        console.warn(`[${tc.name}] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
       }
 
       // Extract image attachment before cleaning (prevents base64 truncation by cleaner)
@@ -305,7 +305,7 @@ export class ToolDispatcher {
    * Currently only create has specialized canonicalization.
    */
   private computeToolRequestHash(tc: LLMToolCall): string {
-    if (tc.name === 'create') {
+    if (tc.name === 'create' || tc.name === 'design') {
       return computeRequestHash(canonicalizeCreateParams(tc.args));
     }
     // Generic fallback: hash the stringified args

@@ -18,7 +18,7 @@ const ERROR_MAP: Record<string, SemanticError> = {
   'NODE_NOT_FOUND': {
     category: 'ID Persistence',
     message: 'The target node ID is no longer valid or does not exist.',
-    suggestion: 'The design hierarchy might have changed. Use read({ depth: 5 }) to refresh current IDs.'
+    suggestion: 'The design hierarchy might have changed. Use outline(nodeId) to refresh current IDs.'
   },
   'INVALID_NODE_TYPE': {
     category: 'Type Hallucination',

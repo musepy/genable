@@ -89,8 +89,8 @@ describe('buildStaticSystemPrompt', () => {
     it('should use phase-based serialization when tools have categories', () => {
         const categorizedTools: ToolDefinition[] = [
             {
-                name: 'read',
-                description: 'Read a node.',
+                name: 'context',
+                description: 'Get canvas overview.',
                 category: 'read' as any,
                 parameters: { type: 'object', properties: {} }
             },

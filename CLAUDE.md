@@ -2,6 +2,8 @@
 
 Figma plugin that uses an agentic AI loop (Gemini Flash) to generate UI designs from natural language prompts.
 
+> **Error Catalog**: `.agent/error-catalog.md` — known error patterns, check when debugging.
+
 ## Architecture
 
 ### Plugin Architecture (3 threads)

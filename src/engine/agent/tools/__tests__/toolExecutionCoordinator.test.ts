@@ -5,7 +5,7 @@ describe('ToolExecutionCoordinator', () => {
   const coordinator = new ToolExecutionCoordinator();
 
   it.each([
-    ['read', {}, 'nodeId'],
+    ['outline', {}, 'nodeId'],
     ['create', {}, 'xml'],
     ['edit', {}, 'xml'],
     ['query', {}, 'source'],
@@ -27,7 +27,7 @@ describe('ToolExecutionCoordinator', () => {
 
   it('treats blank strings as missing required values', () => {
     const result = coordinator.validateToolCall(
-      'read',
+      'outline',
       { nodeId: '   ' },
       'EXECUTION'
     );
@@ -58,7 +58,7 @@ describe('ToolExecutionCoordinator', () => {
       'complete_task',
       { summary: 'done' },
       'EXECUTION',
-      ['read', 'create', 'edit', 'query']
+      ['context', 'outline', 'inspect', 'design', 'replace', 'query']
     );
 
     expect(result.ok).toBe(false);

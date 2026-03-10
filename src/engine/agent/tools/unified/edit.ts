@@ -11,16 +11,16 @@ export const editDefinition: ToolDefinition = {
   display: { displayName: 'Edit', group: 'design' },
   executionStrategy: 'sequential',
   idempotent: false,
-  dependencies: ['read'],
+  dependencies: ['inspect'],
   description: `Modify or delete existing nodes using XML markup. Same CSS/abbreviation syntax as create.
 
 CANNOT create new nodes — only modify or delete existing ones. To add new nodes, use \`create\` instead.
-Every tag MUST have an \`id\` attribute referencing a real Figma node ID (from \`read\` or previous \`create\` idMap).
+Every tag MUST have an \`id\` attribute referencing a real Figma node ID (from \`inspect\`/\`outline\` or previous \`create\` idMap).
 Only include properties you want to CHANGE — unspecified properties remain unchanged.
 Use \`<delete id="xxx"/>\` to remove a node and all its children.
 To REPLACE a node: \`edit\` to delete the old one, then \`create\` to add the new one.
 
-IMPORTANT: Always use \`read\` first to get real nodeIds before editing.
+IMPORTANT: Always use \`inspect\` or \`outline\` first to get real nodeIds before editing.
 
 \`\`\`json
 edit({
@@ -46,7 +46,7 @@ Returns: per-node results with success/error status.`,
   errors: {
     EMPTY_XML: 'A non-empty "xml" string must be provided.',
     XML_PARSE_ERROR: 'Failed to parse the XML edit markup.',
-    NODE_NOT_FOUND: 'One or more nodeIds do not exist. Use read to get valid IDs.',
+    NODE_NOT_FOUND: 'One or more nodeIds do not exist. Use outline or inspect to get valid IDs.',
     APPLY_ERROR: 'Failed to update one or more nodes.',
     EXECUTION_ERROR: 'An unexpected error occurred in the edit pipeline.',
   },

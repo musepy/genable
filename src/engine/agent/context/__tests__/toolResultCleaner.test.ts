@@ -122,28 +122,28 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.error.details).toBeUndefined();
   });
 
-  describe('read specific cleaning', () => {
-    it('passes through xml and preserves hint/context', () => {
+  describe('read tool cleaning (context/outline/inspect)', () => {
+    it('passes through inspect xml and preserves hint/context', () => {
       const rawResult = {
-        name: 'read',
+        name: 'inspect',
         success: true,
         data: {
           xml: '<frame id="root-1" layout="column"><text id="t1">Hello</text></frame>',
-          hint: 'auto-degraded to summary',
+          hint: 'auto-degraded to skeleton',
           context: { pageNodeCount: 42 },
         }
       };
 
       const cleaned = cleaner.cleanToolResult(rawResult);
       expect(cleaned.data.xml).toBe(rawResult.data.xml);
-      expect(cleaned.data.hint).toBe('auto-degraded to summary');
+      expect(cleaned.data.hint).toBe('auto-degraded to skeleton');
       expect(cleaned.data.context.pageNodeCount).toBe(42);
     });
 
     it('truncates oversized xml at safe boundary', () => {
       const longXml = '<frame id="root">' + '<text id="t">x</text>\n'.repeat(500) + '</frame>';
       const rawResult = {
-        name: 'read',
+        name: 'inspect',
         success: true,
         data: { xml: longXml }
       };
@@ -154,13 +154,14 @@ describe('ToolResultCleaner', () => {
       expect(cleaned.data.xml.length).toBeLessThan(longXml.length);
     });
 
-    it('strips unknown fields, keeps only xml/hint/context', () => {
+    it('strips unknown fields, keeps only xml/hint/context/page/selection/suggestedReads', () => {
       const rawResult = {
-        name: 'read',
+        name: 'outline',
         success: true,
         data: {
           xml: '<frame id="f1"/>',
           hint: 'ok',
+          suggestedReads: ['100:3', '100:5'],
           extraField: 'should be dropped',
           nodes: [{ id: '1' }],
         }
@@ -169,8 +170,25 @@ describe('ToolResultCleaner', () => {
       const cleaned = cleaner.cleanToolResult(rawResult);
       expect(cleaned.data.xml).toBe('<frame id="f1"/>');
       expect(cleaned.data.hint).toBe('ok');
+      expect(cleaned.data.suggestedReads).toEqual(['100:3', '100:5']);
       expect(cleaned.data.extraField).toBeUndefined();
       expect(cleaned.data.nodes).toBeUndefined();
+    });
+
+    it('preserves context tool page/selection fields', () => {
+      const rawResult = {
+        name: 'context',
+        success: true,
+        data: {
+          xml: '<frame id="f1"/>',
+          page: { name: 'Page 1', childCount: 5 },
+          selection: [{ id: '1:2', name: 'Card', type: 'FRAME' }],
+        }
+      };
+
+      const cleaned = cleaner.cleanToolResult(rawResult);
+      expect(cleaned.data.page).toEqual({ name: 'Page 1', childCount: 5 });
+      expect(cleaned.data.selection).toHaveLength(1);
     });
   });
 });

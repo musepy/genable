@@ -46,19 +46,6 @@ async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
   return { ok: true, node: node as SceneNode };
 }
 
-// ── Read target resolution: Document/Page → page children summary ──
-
-type ReadTarget =
-  | { kind: 'scene'; nodeId: string }
-  | { kind: 'page'; page: PageNode };
-
-async function resolveReadTarget(nodeId: string): Promise<ReadTarget> {
-  const node = await figma.getNodeByIdAsync(nodeId);
-  if (!node) return { kind: 'scene', nodeId }; // let resolveSceneNode handle NOT_FOUND
-  if (node.type === 'DOCUMENT') return { kind: 'page', page: figma.currentPage };
-  if (node.type === 'PAGE') return { kind: 'page', page: node as PageNode };
-  return { kind: 'scene', nodeId };
-}
 
 // ── Shared screenshot helper (used by read) ──
 
@@ -114,102 +101,118 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   try {
     switch (toolName) {
       // ==========================================
-      // UNIFIED TOOLS — 4-primitive API
+      // UNIFIED TOOLS — 6-tool API
       // ==========================================
 
-      case 'read': {
-        const { nodeId: rawReadNodeId, depth: readDepth, screenshot: wantScreenshot, detail: readDetail } = parameters;
-        const depthClamped = Math.min(readDepth || 5, 10);
-        const isSummary = readDetail === 'summary';
-
-        // Fallback: Document/Page → current page's children summary
-        const readTarget = await resolveReadTarget(rawReadNodeId);
-
-        if (readTarget.kind === 'page') {
-          // Page isn't a SceneNode — always use structural mode for page overview
-          const page = readTarget.page;
-          const childXmls: string[] = [];
-          for (const child of page.children) {
-            const hSerialized = NodeSerializer.serializeWithCompression(child, {
-              maxDepth: Math.min(depthClamped, 2), // shallow for page overview
-              pruneDefaults: true
-            });
-            childXmls.push(XmlSerializer.serialize(hSerialized, { maxDepth: Math.min(depthClamped, 2), structural: true }));
-          }
-          response = {
-            success: true,
-            data: {
-              xml: `<!-- Page: ${page.name} (${page.children.length} top-level nodes) -->\n${childXmls.join('\n')}`,
-              hint: 'This is a page overview. Use read with a specific nodeId for detailed inspection.',
-            }
-          };
-          break;
+      case 'context': {
+        // Canvas overview: page info + top-level skeleton + user selection
+        const page = figma.currentPage;
+        const childXmls: string[] = [];
+        for (const child of page.children) {
+          const hSerialized = NodeSerializer.serializeWithCompression(child, {
+            maxDepth: 2,
+            pruneDefaults: true
+          });
+          childXmls.push(XmlSerializer.serialize(hSerialized, { maxDepth: 2, structural: true }));
         }
 
-        const resolved = await resolveSceneNode(readTarget.nodeId);
-        if (!resolved.ok) { response = resolved.response; break; }
-        const readNode = resolved.node;
+        const selection = page.selection.map(n => ({
+          id: n.id,
+          name: n.name,
+          type: n.type,
+        }));
 
-        const hSerialized = NodeSerializer.serializeWithCompression(readNode, {
-          maxDepth: depthClamped,
+        response = {
+          success: true,
+          data: {
+            page: { name: page.name, childCount: page.children.length },
+            xml: childXmls.join('\n'),
+            ...(selection.length > 0 && { selection }),
+          }
+        };
+        break;
+      }
+
+      case 'outline': {
+        const { nodeId: outlineNodeId, depth: outlineDepth } = parameters;
+        const outlineDepthClamped = Math.min(outlineDepth || 5, 10);
+
+        const outlineResolved = await resolveSceneNode(outlineNodeId);
+        if (!outlineResolved.ok) { response = outlineResolved.response; break; }
+        const outlineNode = outlineResolved.node;
+
+        const outlineSerialized = NodeSerializer.serializeWithCompression(outlineNode, {
+          maxDepth: outlineDepthClamped,
+          pruneDefaults: true
+        });
+        const outlineXml = XmlSerializer.serialize(outlineSerialized, {
+          maxDepth: outlineDepthClamped,
+          structural: true,
+        });
+
+        // Compute suggestedReads: children with 3+ own children
+        const suggestedReads: string[] = [];
+        if ('children' in outlineNode) {
+          for (const child of (outlineNode as any).children) {
+            if ('children' in child && child.children.length > 3) {
+              suggestedReads.push(child.id);
+            }
+          }
+        }
+
+        const outlineData: any = { xml: outlineXml };
+        if (suggestedReads.length > 0) outlineData.suggestedReads = suggestedReads;
+
+        response = { success: true, data: outlineData };
+        break;
+      }
+
+      case 'inspect': {
+        const { nodeId: inspectNodeId, depth: inspectDepth, screenshot: wantScreenshot } = parameters;
+        const inspectDepthClamped = Math.min(inspectDepth || 5, 10);
+
+        const inspectResolved = await resolveSceneNode(inspectNodeId);
+        if (!inspectResolved.ok) { response = inspectResolved.response; break; }
+        const inspectNode = inspectResolved.node;
+
+        const inspectSerialized = NodeSerializer.serializeWithCompression(inspectNode, {
+          maxDepth: inspectDepthClamped,
           pruneDefaults: true
         });
 
-        // Summary mode: structural skeleton only
-        if (isSummary) {
-          const xml = XmlSerializer.serialize(hSerialized, {
-            maxDepth: depthClamped,
-            structural: true,
-          });
-          const data: any = { xml };
-
-          if (wantScreenshot && readNode.visible && readNode.width > 0 && readNode.height > 0) {
-            try {
-              const ssResult = await exportNodeToBase64(readNode);
-              data.__image = ssResult.__image;
-            } catch (e: any) {
-              logger.info(`Screenshot bundling failed for ${readTarget.nodeId}: ${e?.message}`);
-            }
-          }
-
-          response = { success: true, data };
-          break;
-        }
-
         // Full mode with auto-degradation
-        const fullXml = XmlSerializer.serialize(hSerialized, {
-          maxDepth: depthClamped,
+        const inspectFullXml = XmlSerializer.serialize(inspectSerialized, {
+          maxDepth: inspectDepthClamped,
         });
 
-        const data: any = {};
+        const inspectData: any = {};
         const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
 
-        if (fullXml.length > AUTO_DEGRADE_CHARS) {
-          // Auto-degrade: return structural skeleton + hint
-          const structuralXml = XmlSerializer.serialize(hSerialized, {
-            maxDepth: depthClamped,
+        if (inspectFullXml.length > AUTO_DEGRADE_CHARS) {
+          const inspectStructuralXml = XmlSerializer.serialize(inspectSerialized, {
+            maxDepth: inspectDepthClamped,
             structural: true,
           });
-          data.xml = structuralXml;
-          const childCount = readNode.type === 'FRAME' || readNode.type === 'GROUP' || readNode.type === 'SECTION'
-            ? ('children' in readNode ? (readNode as any).children.length : 0)
+          inspectData.xml = inspectStructuralXml;
+          const childCount = inspectNode.type === 'FRAME' || inspectNode.type === 'GROUP' || inspectNode.type === 'SECTION'
+            ? ('children' in inspectNode ? (inspectNode as any).children.length : 0)
             : 0;
-          data.hint = `Node tree is large (${childCount} children, ${fullXml.length} chars full XML). Showing structural skeleton. Use read with specific child IDs for full style details.`;
+          inspectData.hint = `Tree is large (${childCount} children, ${inspectFullXml.length} chars). Use outline() to discover structure, then inspect specific children.`;
         } else {
-          data.xml = fullXml;
+          inspectData.xml = inspectFullXml;
         }
 
         // Bundle screenshot if requested
-        if (wantScreenshot && readNode.visible && readNode.width > 0 && readNode.height > 0) {
+        if (wantScreenshot && inspectNode.visible && inspectNode.width > 0 && inspectNode.height > 0) {
           try {
-            const ssResult = await exportNodeToBase64(readNode);
-            data.__image = ssResult.__image;
+            const ssResult = await exportNodeToBase64(inspectNode);
+            inspectData.__image = ssResult.__image;
           } catch (e: any) {
-            logger.info(`Screenshot bundling failed for ${readTarget.nodeId}: ${e?.message}`);
+            logger.info(`Screenshot bundling failed for ${inspectNodeId}: ${e?.message}`);
           }
         }
 
-        response = { success: true, data };
+        response = { success: true, data: inspectData };
         break;
       }
 
@@ -428,6 +431,201 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         break;
       }
 
+      case 'design': {
+        const { xml: designXml, parentId: designParentId } = parameters;
+
+        if (!designXml || typeof designXml !== 'string' || designXml.trim().length === 0) {
+          response = { success: false, error: { code: 'EMPTY_XML', message: 'A non-empty "xml" string must be provided.' } };
+          break;
+        }
+
+        let designParsedLines;
+        try {
+          designParsedLines = xmlToParsedLines(designXml, { mode: 'design' });
+        } catch (e: any) {
+          response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
+          break;
+        }
+
+        try {
+          const createLines = designParsedLines.filter(l => l.command === 'create' || l.command === 'icon' || l.command === 'image' || l.command === 'instance');
+          const updateLines = designParsedLines.filter(l => l.command === 'update');
+          const deleteLines = designParsedLines.filter(l => l.command === 'delete');
+
+          const SOFT_CREATE_LIMIT = 20;
+
+          const receipt: Record<string, any> = {};
+          let hasAnyError = false;
+
+          // Phase 1: Execute creates
+          if (createLines.length > 0) {
+            const compiler = new ActionCompiler();
+            const { actions, errors } = compiler.compile(createLines, designParentId);
+            const createExec = new IncrementalExecutor();
+            const createResult = await createExec.execute(actions, errors, {
+              onError: 'continue', rollbackMode: 'none', parentId: designParentId,
+            });
+
+            receipt.idMap = createResult.idMap;
+            receipt.created = createResult.stats.created;
+
+            if (createResult.hasErrors) {
+              hasAnyError = true;
+              const failures = createResult.lineResults.filter(lr => lr.status === 'failed').slice(0, 8)
+                .map(lr => ({ op: lr.symbol || `line${lr.line}`, error: lr.error || 'unknown' }));
+              receipt.createFailed = createResult.stats.failed;
+              if (failures.length > 0) receipt.createErrors = failures;
+            }
+
+            const degradedNodes = createResult.lineResults
+              .filter(lr => lr.warnings?.some(w => w.code === 'DEGRADED_FALLBACK'))
+              .map(lr => lr.symbol).filter(Boolean) as string[];
+            if (degradedNodes.length > 0) receipt.degraded = degradedNodes;
+
+            const createRootId = designParentId || Object.values(createResult.idMap)[0];
+            if (createRootId) {
+              const rootResolved = await resolveSceneNode(createRootId);
+              if (rootResolved.ok) {
+                const found = collectTreeAnomalies(rootResolved.node, 5);
+                if (found.length > 0) receipt.anomalies = found;
+              }
+            }
+
+            // Soft limit warning: guide LLM toward progressive creation
+            if (createLines.length > SOFT_CREATE_LIMIT) {
+              receipt.nodeLimitWarning = `Created ${createLines.length} nodes in one call (recommended max: ${SOFT_CREATE_LIMIT}). Large batches increase attribute omission risk. Split into skeleton + per-section calls for better quality.`;
+            }
+          }
+
+          // Phase 2: Execute updates
+          if (updateLines.length > 0) {
+            const patchActions: FigmaAction[] = updateLines.map(line => ({
+              action: 'updateProps' as const,
+              nodeId: line.targetRef!,
+              props: line.props ? compileCssProps(line.props) : {}
+            }));
+            const updateExec = new ActionExecutor({ onError: 'skip-dependents' });
+            const updateResult = await updateExec.execute(patchActions);
+
+            const editedCount = updateResult.results.filter(r => r.success).length;
+            const editFailed = updateResult.results.filter(r => !r.success);
+            receipt.edited = editedCount;
+
+            if (editFailed.length > 0) {
+              hasAnyError = true;
+              receipt.editFailed = editFailed.length;
+              receipt.editErrors = editFailed.slice(0, 8).map(r => ({ op: r.nodeId || '?', error: r.error || 'unknown' }));
+            }
+
+            const editWarnings = updateResult.results.filter(r => r.warnings && r.warnings.length > 0)
+              .map(r => ({ nodeId: r.nodeId, warnings: r.warnings }));
+            if (editWarnings.length > 0) receipt.warnings = editWarnings.slice(0, 15);
+          }
+
+          // Phase 3: Execute deletes
+          if (deleteLines.length > 0) {
+            let deletedCount = 0;
+            const deleteErrors: any[] = [];
+            for (const line of deleteLines) {
+              try {
+                const delResult = await nodeLayoutService.deleteNode(line.targetRef!);
+                if (delResult.success) deletedCount++;
+                else deleteErrors.push({ op: line.targetRef, error: delResult.error?.message || 'unknown' });
+              } catch (e: any) {
+                deleteErrors.push({ op: line.targetRef, error: e.message });
+              }
+            }
+            receipt.deleted = deletedCount;
+            if (deleteErrors.length > 0) { hasAnyError = true; receipt.deleteErrors = deleteErrors; }
+          }
+
+          if (hasAnyError) {
+            const parts: string[] = [];
+            if (receipt.created) parts.push(`${receipt.created} created`);
+            if (receipt.edited) parts.push(`${receipt.edited} edited`);
+            if (receipt.deleted) parts.push(`${receipt.deleted} deleted`);
+            if (receipt.createFailed) parts.push(`${receipt.createFailed} create failed`);
+            if (receipt.editFailed) parts.push(`${receipt.editFailed} edit failed`);
+            response = { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
+          } else {
+            response = { success: true, data: receipt };
+          }
+        } catch (e: any) {
+          response = { success: false, error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error in design pipeline' } };
+        }
+        break;
+      }
+
+      case 'replace': {
+        const { mode: replaceMode, rootId: replaceRootId, properties: replaceProps, replacements } = parameters;
+
+        if (replaceMode !== 'search' && replaceMode !== 'replace') {
+          response = { success: false, error: { code: 'INVALID_MODE', message: 'Mode must be "search" or "replace".' } };
+          break;
+        }
+
+        const replaceRootResolved = await resolveSceneNode(replaceRootId);
+        if (!replaceRootResolved.ok) { response = replaceRootResolved.response; break; }
+        const replaceRoot = replaceRootResolved.node;
+
+        try {
+          if (replaceMode === 'search') {
+            if (!replaceProps || !Array.isArray(replaceProps) || replaceProps.length === 0) {
+              response = { success: false, error: { code: 'MISSING_PROPERTIES', message: 'Search mode requires a non-empty "properties" array.' } };
+              break;
+            }
+
+            const uniqueValues: Record<string, Set<string | number>> = {};
+            for (const prop of replaceProps) uniqueValues[prop] = new Set();
+
+            function collectValues(node: SceneNode): void {
+              for (const prop of replaceProps) {
+                const val = extractReplacePropertyValue(node, prop);
+                if (val !== undefined && val !== null) uniqueValues[prop].add(val);
+              }
+              if ('children' in node) {
+                for (const child of (node as any).children) collectValues(child);
+              }
+            }
+            collectValues(replaceRoot);
+
+            const result: Record<string, (string | number)[]> = {};
+            for (const [prop, valueSet] of Object.entries(uniqueValues)) result[prop] = Array.from(valueSet);
+            response = { success: true, data: result };
+          } else {
+            if (!replacements || typeof replacements !== 'object' || Object.keys(replacements).length === 0) {
+              response = { success: false, error: { code: 'MISSING_REPLACEMENTS', message: 'Replace mode requires a non-empty "replacements" object.' } };
+              break;
+            }
+
+            let totalReplaced = 0;
+            const details: Record<string, number> = {};
+
+            function doReplace(node: SceneNode): void {
+              for (const [prop, rules] of Object.entries(replacements)) {
+                if (!Array.isArray(rules)) continue;
+                for (const rule of rules) {
+                  const currentVal = extractReplacePropertyValue(node, prop);
+                  if (currentVal !== undefined && matchesReplaceValue(currentVal, rule.from)) {
+                    applyReplacePropertyValue(node, prop, rule.to);
+                    totalReplaced++;
+                    details[prop] = (details[prop] || 0) + 1;
+                  }
+                }
+              }
+              if ('children' in node) {
+                for (const child of (node as any).children) doReplace(child);
+              }
+            }
+            doReplace(replaceRoot);
+            response = { success: true, data: { replaced: totalReplaced, details } };
+          }
+        } catch (e: any) {
+          response = { success: false, error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error during replace' } };
+        }
+        break;
+      }
+
       case 'query': {
         const { source: querySource, query: queryText } = parameters;
 
@@ -489,4 +687,97 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   }
 
   emit<ToolResultHandler>('TOOL_RESULT', { requestId, response: response! });
+}
+
+// ── Replace tool helpers ──
+
+function rgbaToHex(c: { r: number; g: number; b: number }): string {
+  const r = Math.round(c.r * 255);
+  const g = Math.round(c.g * 255);
+  const b = Math.round(c.b * 255);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+}
+
+function hexToRgba(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  return {
+    r: parseInt(full.substring(0, 2), 16) / 255,
+    g: parseInt(full.substring(2, 4), 16) / 255,
+    b: parseInt(full.substring(4, 6), 16) / 255,
+  };
+}
+
+function extractReplacePropertyValue(node: SceneNode, prop: string): string | number | undefined {
+  switch (prop) {
+    case 'fillColor': {
+      const fills = (node as any).fills;
+      if (Array.isArray(fills) && fills.length > 0 && fills[0].type === 'SOLID') return rgbaToHex(fills[0].color);
+      return undefined;
+    }
+    case 'textColor': {
+      if (node.type !== 'TEXT') return undefined;
+      const fills = (node as any).fills;
+      if (Array.isArray(fills) && fills.length > 0 && fills[0].type === 'SOLID') return rgbaToHex(fills[0].color);
+      return undefined;
+    }
+    case 'strokeColor': {
+      const strokes = (node as any).strokes;
+      if (Array.isArray(strokes) && strokes.length > 0 && strokes[0].type === 'SOLID') return rgbaToHex(strokes[0].color);
+      return undefined;
+    }
+    case 'cornerRadius':
+      return typeof (node as any).cornerRadius === 'number' ? (node as any).cornerRadius : undefined;
+    case 'gap':
+      return typeof (node as any).itemSpacing === 'number' ? (node as any).itemSpacing : undefined;
+    case 'fontSize':
+      return node.type === 'TEXT' && typeof (node as any).fontSize === 'number' ? (node as any).fontSize : undefined;
+    case 'fontFamily':
+      return node.type === 'TEXT' && typeof (node as any).fontName === 'object' ? (node as any).fontName.family : undefined;
+    case 'fontWeight':
+      return node.type === 'TEXT' && typeof (node as any).fontName === 'object' ? (node as any).fontName.style : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function matchesReplaceValue(current: string | number, from: string | number): boolean {
+  if (typeof current === 'number' && typeof from === 'number') return current === from;
+  if (typeof current === 'string' && typeof from === 'string') return current.toUpperCase() === from.toUpperCase();
+  return String(current) === String(from);
+}
+
+function applyReplacePropertyValue(node: SceneNode, prop: string, value: string | number): void {
+  switch (prop) {
+    case 'fillColor':
+      if (typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
+      break;
+    case 'textColor':
+      if (node.type === 'TEXT' && typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
+      break;
+    case 'strokeColor':
+      if (typeof value === 'string') (node as any).strokes = [{ type: 'SOLID', color: hexToRgba(value) }];
+      break;
+    case 'cornerRadius':
+      if (typeof value === 'number') (node as any).cornerRadius = value;
+      break;
+    case 'gap':
+      if (typeof value === 'number') (node as any).itemSpacing = value;
+      break;
+    case 'fontSize':
+      if (node.type === 'TEXT' && typeof value === 'number') (node as any).fontSize = value;
+      break;
+    case 'fontFamily':
+      if (node.type === 'TEXT' && typeof value === 'string') {
+        const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
+        (node as any).fontName = { family: value, style: cur.style };
+      }
+      break;
+    case 'fontWeight':
+      if (node.type === 'TEXT' && typeof value === 'string') {
+        const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
+        (node as any).fontName = { family: cur.family, style: value };
+      }
+      break;
+  }
 }

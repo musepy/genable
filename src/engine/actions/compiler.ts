@@ -149,14 +149,24 @@ export class ActionCompiler {
     const hasParent = !!parentId;
 
     if (nodeType === 'TEXT') {
+      const textProps = { characters: '', ...props } as { characters: string; [key: string]: any };
+      const warnings: Array<{ code: string; message: string }> = [];
+
+      // Default textAutoResize to HEIGHT for child text nodes (enables wrapping).
+      // Figma defaults to WIDTH_AND_HEIGHT which causes text to grow infinitely wide.
+      if (hasParent && textProps.textAutoResize === undefined) {
+        textProps.textAutoResize = 'HEIGHT';
+        warnings.push({ code: 'TEXT_RESIZE_DEFAULT', message: 'textAutoResize defaulted to "HEIGHT" (child text node). Set explicitly to override.' });
+      }
+
       const action: FigmaAction = {
         action: 'createText',
         tempId: line.symbol,
         parentId,
-        props: { characters: '', ...props },
+        props: textProps,
         dependsOn,
       };
-      return { line, action };
+      return { line, action, warnings: warnings.length > 0 ? warnings : undefined };
     }
 
     if (SHAPE_TYPES.has(nodeType)) {
@@ -219,6 +229,12 @@ export class ActionCompiler {
       if (p.layoutMode && p.height === undefined && p.layoutSizingVertical === undefined) {
         p.layoutSizingVertical = 'HUG';
         warnings.push({ code: 'SIZING_DEFAULT', message: 'layoutSizingVertical defaulted to "HUG" (auto-layout frame without explicit height). Set height or layoutSizingVertical explicitly.' });
+      }
+
+      // Auto-layout frames: default clipsContent to false so child shadows/effects aren't clipped.
+      // Figma API defaults to true, but layout containers rarely want clipping.
+      if (p.layoutMode && p.clipsContent === undefined) {
+        p.clipsContent = false;
       }
 
       // Child frame: default to FILL width (stretch to parent)

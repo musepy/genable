@@ -53,6 +53,7 @@ export function useChat({
 
   const activeOrchestratorRef = useRef<AgentOrchestrator | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  const eventBufferRef = useRef<AgentRuntimeEvent[]>([])
 
   // End session and dispose orchestrator
   const endSession = () => {
@@ -97,6 +98,8 @@ export function useChat({
   }
 
   const handleRuntimeEvent = (event: AgentRuntimeEvent) => {
+    eventBufferRef.current.push(event)
+
     if (!activeRunIdRef.current) {
       activeRunIdRef.current = event.runId
     }
@@ -298,6 +301,7 @@ export function useChat({
     setThinkingText('')
     setPendingApproval(null)
     activeRunIdRef.current = null
+    eventBufferRef.current = []
 
     setHistory(prev => [
       ...prev,
@@ -500,7 +504,7 @@ export function useChat({
       queue(950, () => {
         setRuntimeProgress({ iteration: 10, maxIterations: 40 })
         setLoadingStatus('Reading hierarchy')
-        calls.unshift(buildCall('tc-2', 'read', 'success', 91))
+        calls.unshift(buildCall('tc-2', 'outline', 'success', 91))
         setFlowCalls([...calls])
       })
 
@@ -519,7 +523,7 @@ export function useChat({
       })
 
       queue(2950, () => {
-        calls.unshift(buildCall('tc-6', 'read', 'success', 50))
+        calls.unshift(buildCall('tc-6', 'inspect', 'success', 50))
         setFlowCalls([...calls])
       })
 
@@ -541,7 +545,7 @@ export function useChat({
       resetPreview()
 
       const calls: ToolCallRecord[] = [
-        buildCall('err-1', 'read', 'success', 68),
+        buildCall('err-1', 'outline', 'success', 68),
         buildCall('err-2', 'create', 'error', 2100, 'Validation failed on 2 nodes'),
       ]
 
@@ -583,6 +587,48 @@ export function useChat({
       })
     }
 
+    let activeReplayControl: { abort: () => void } | null = null
+
+    const runEventReplay = (events: AgentRuntimeEvent[], opts?: { speed?: number; prompt?: string }) => {
+      // Abort any previous replay
+      activeReplayControl?.abort()
+      activeReplayControl = null
+
+      resetPreview()
+
+      const speed = opts?.speed ?? 5
+      const promptText = opts?.prompt ?? 'Replaying recorded session'
+
+      setHistory([
+        { role: 'user', text: promptText, id: `u-replay-${Date.now()}` },
+        {
+          role: 'model',
+          text: '',
+          streaming: true,
+          iterations: [],
+          toolCalls: [],
+          id: `m-replay-${Date.now() + 1}`,
+          startTime: Date.now(),
+          runState: 'running',
+        },
+      ])
+      setLoading(true)
+      setRuntimeState('running')
+      activeRunIdRef.current = null
+
+      // Dynamic import to avoid bundling replay engine in production
+      import('../../../preview/eventReplay').then(({ replayEvents }) => {
+        const control = replayEvents(events, {
+          speed,
+          onEvent: handleRuntimeEvent,
+          onComplete: () => {
+            activeReplayControl = null
+          },
+        })
+        activeReplayControl = control
+      })
+    }
+
     ;(window as any).runMockUiFlow = runFlowSimulation
     ;(window as any).runMockUiErrorFlow = runErrorSimulation
     ;(window as any).resetMockUiFlow = resetPreview
@@ -590,12 +636,14 @@ export function useChat({
       runFlowSimulation,
       runErrorSimulation,
       resetPreview,
+      runEventReplay,
     }
 
     queue(600, runFlowSimulation)
 
     return () => {
       clearTimers()
+      activeReplayControl?.abort()
       delete (window as any).runMockUiFlow
       delete (window as any).runMockUiErrorFlow
       delete (window as any).resetMockUiFlow
@@ -615,7 +663,7 @@ export function useChat({
 
   const { devBridgeStatus } = useDevBridge(
     { generateFromPrompt, handleRestore, switchModel },
-    { loading, runtimeState, history, modelName },
+    { loading, runtimeState, history, modelName, eventBufferRef },
   )
 
   return {

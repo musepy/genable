@@ -2,17 +2,18 @@
  * @file index.ts
  * @description Consolidated entry point for all Agentic Tools.
  *
- * Exports the 4 unified primitives used by the LLM:
- * read | create | edit | query
+ * Exports the unified primitives used by the LLM:
+ * read | design | replace | query
+ *
+ * Legacy create | edit still handled by IPC but not in the LLM tool set.
  */
 
-// ── Unified Tools (4 primitives) ──
+// ── Unified Tools ──
 import { unifiedTools } from './unified';
 import { ToolDefinition, ToolDisplayMeta } from './types';
 
 /**
  * Primary tool set for LLM function calling.
- * 4 unified primitives: read, create, edit, query.
  */
 export const agentTools: ToolDefinition[] = unifiedTools;
 

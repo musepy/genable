@@ -149,4 +149,104 @@ function withPreviewHarness(action: (harness: any) => void) {
 ;(window as any).runErrorSimulation = () => withPreviewHarness((h) => h.runErrorSimulation())
 ;(window as any).resetFlowSimulation = () => withPreviewHarness((h) => h.resetPreview())
 
+// --- Recording replay ---
+
+const BRIDGE_URL = 'http://localhost:3456'
+
+async function fetchRecordings(): Promise<{ id: string; mtime: number; hasEvents: boolean }[]> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/recordings`)
+    if (!res.ok) return []
+    return await res.json()
+  } catch {
+    return []
+  }
+}
+
+async function fetchRecordingEvents(id: string): Promise<any[] | null> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/recordings/${id}/events`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+function populateRecordingDropdown(recordings: { id: string; mtime: number; hasEvents: boolean }[]) {
+  const select = document.getElementById('recording-select') as HTMLSelectElement | null
+  if (!select) return
+
+  // Clear existing options except the placeholder
+  select.innerHTML = '<option value="">-- select recording --</option>'
+
+  const withEvents = recordings.filter(r => r.hasEvents)
+  for (const rec of withEvents) {
+    const opt = document.createElement('option')
+    opt.value = rec.id
+    const date = new Date(rec.mtime)
+    opt.textContent = `${rec.id} (${date.toLocaleTimeString()})`
+    select.appendChild(opt)
+  }
+
+  const status = document.getElementById('recording-status')
+  if (status) {
+    status.textContent = withEvents.length > 0 ? `${withEvents.length} recording(s)` : 'No recordings'
+  }
+}
+
+;(window as any).refreshRecordings = async () => {
+  const recordings = await fetchRecordings()
+  populateRecordingDropdown(recordings)
+}
+
+;(window as any).replayRecording = async () => {
+  const select = document.getElementById('recording-select') as HTMLSelectElement | null
+  const speedInput = document.getElementById('replay-speed') as HTMLSelectElement | null
+  if (!select?.value) return
+
+  const events = await fetchRecordingEvents(select.value)
+  if (!events || events.length === 0) {
+    console.warn('[Preview] No events found for recording:', select.value)
+    return
+  }
+
+  const speed = Number(speedInput?.value ?? '5')
+  console.log(`[Preview] Replaying ${events.length} events at ${speed}x speed`)
+
+  withPreviewHarness((h) => {
+    h.runEventReplay(events, { speed, prompt: `Replay: ${select.value}` })
+  })
+}
+
+;(window as any).loadRecordingFile = (input: HTMLInputElement) => {
+  const file = input.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    try {
+      const events = JSON.parse(reader.result as string)
+      if (!Array.isArray(events) || events.length === 0) {
+        console.warn('[Preview] Invalid or empty events file')
+        return
+      }
+
+      const speedInput = document.getElementById('replay-speed') as HTMLSelectElement | null
+      const speed = Number(speedInput?.value ?? '5')
+      console.log(`[Preview] Replaying ${events.length} events from file at ${speed}x speed`)
+
+      withPreviewHarness((h) => {
+        h.runEventReplay(events, { speed, prompt: `File: ${file.name}` })
+      })
+    } catch (err) {
+      console.error('[Preview] Failed to parse events file:', err)
+    }
+  }
+  reader.readAsText(file)
+}
+
+// Auto-fetch recordings on load
+setTimeout(() => (window as any).refreshRecordings(), 1000)
+
 console.log('[Preview] UI module imported')

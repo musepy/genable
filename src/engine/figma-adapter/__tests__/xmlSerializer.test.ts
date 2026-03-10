@@ -115,8 +115,9 @@ describe('XmlSerializer', () => {
       fills: [{ type: 'GRADIENT_LINEAR', stops: [{ position: 0, color: '#000' }, { position: 1, color: '#FFF' }] }],
     }));
     expect(xml).toContain('GRADIENT_LINEAR');
-    expect(xml).toContain('#000@0');
-    expect(xml).toContain('#FFF@1');
+    // Canonical format normalizes 3-digit hex to 6-digit
+    expect(xml).toContain('#000000@0');
+    expect(xml).toContain('#FFFFFF@1');
   });
 
   it('empty fills → no fill attribute', () => {
@@ -131,7 +132,8 @@ describe('XmlSerializer', () => {
       _id: '1:1',
       effects: [{ type: 'DROP_SHADOW', offset: { x: 0, y: 4 }, blur: 8, spread: 0, color: '#000' }],
     }));
-    expect(xml).toContain('shadow="0,4,8,0,#000"');
+    // Canonical format normalizes 3-digit hex to 6-digit
+    expect(xml).toContain('shadow="0,4,8,0,#000000"');
   });
 
   it('inner shadow → inset prefix', () => {
@@ -139,7 +141,8 @@ describe('XmlSerializer', () => {
       _id: '1:1',
       effects: [{ type: 'INNER_SHADOW', offset: { x: 1, y: 2 }, blur: 3, spread: 0, color: '#AAA' }],
     }));
-    expect(xml).toContain('shadow="inset,1,2,3,0,#AAA"');
+    // Canonical format normalizes 3-digit hex to 6-digit
+    expect(xml).toContain('shadow="inset,1,2,3,0,#AAAAAA"');
   });
 
   it('layer blur → blur() format', () => {

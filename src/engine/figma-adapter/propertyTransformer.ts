@@ -42,6 +42,11 @@ export class PropertyTransformer {
         switch (meta.type) {
             case 'scalar':
                 if (figmaValue === undefined) return meta.defaultValue;
+                // Figma lineHeight/letterSpacing are objects {unit, value}, not scalars
+                if (figmaValue && typeof figmaValue === 'object' && 'value' in figmaValue) {
+                    if (figmaValue.unit === 'AUTO') return undefined; // AUTO = default, skip
+                    return figmaValue.value;
+                }
                 return figmaValue;
 
             case 'color':

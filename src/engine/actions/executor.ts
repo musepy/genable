@@ -13,6 +13,7 @@ import { fetchIconSvg } from '../figma-adapter/assets/iconify';
 import { parseActionError } from './errorParser';
 import { ActionErrorSubCategory } from './errorTypes';
 import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
+import { lowerPaints, lowerEffects, lowerUnitValue } from '../figma/figma-lowering';
 
 /**
  * Module-level component registry — maps component symbols to real Figma node IDs.
@@ -352,8 +353,8 @@ export class ActionExecutor {
              // Fill-based icons (mdi): fills exist → recolor fills. Stroke-based (lucide/tabler): strokes exist → recolor strokes.
              // Brand logos: LLM should omit fills to preserve original colors (enforced via prompt).
              if (iconFills || iconStrokes || iconStrokeWeight !== undefined) {
-               const tintColor = iconFills ? this.normalizePaints(iconFills) : undefined;
-               const explicitStrokes = iconStrokes ? this.normalizePaints(iconStrokes) : undefined;
+               const tintColor = iconFills ? lowerPaints(iconFills) : undefined;
+               const explicitStrokes = iconStrokes ? lowerPaints(iconStrokes) : undefined;
                for (const child of iconNode.findAll()) {
                  if ('fills' in child && 'strokes' in child) {
                    const childFills = (child as any).fills as readonly Paint[];
@@ -499,8 +500,26 @@ export class ActionExecutor {
       const h = p.height !== undefined ? p.height : defaultHeight;
 
       if (typeof figma !== 'undefined' && figma.viewport) {
-        p.x = Math.round(figma.viewport.center.x - w / 2);
-        p.y = Math.round(figma.viewport.center.y - h / 2);
+        // Find rightmost edge of existing top-level nodes to avoid overlap
+        const topChildren = figma.currentPage.children;
+        let maxRight = -Infinity;
+        for (const child of topChildren) {
+          if ('x' in child && 'width' in child) {
+            const right = child.x + child.width;
+            if (right > maxRight) maxRight = right;
+          }
+        }
+
+        const GAP = 100; // spacing between designs
+        if (maxRight > -Infinity) {
+          // Place to the right of all existing content
+          p.x = Math.round(maxRight + GAP);
+          p.y = Math.round(figma.viewport.center.y - h / 2);
+        } else {
+          // Empty canvas: center in viewport
+          p.x = Math.round(figma.viewport.center.x - w / 2);
+          p.y = Math.round(figma.viewport.center.y - h / 2);
+        }
       }
     }
     return p;
@@ -702,36 +721,32 @@ export class ActionExecutor {
     //    (e.g., layoutMode must be set before layoutSizingVertical)
     const sortedEntries = ActionExecutor.sortPropsByDependency(Object.entries(normalizedProps));
 
-    // 3. Format conversions + apply
+    // 3. Format conversions + apply (using figma-lowering for complex types)
     for (const [key, value] of sortedEntries) {
       if (key === 'fills' && Array.isArray(value)) {
         try {
-          (node as any).fills = this.normalizePaints(value);
+          (node as any).fills = lowerPaints(value);
         } catch (e: any) {
           console.warn(`[ActionExecutor] Failed to apply fills on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'PAINT_INVALID', severity: 'warning', message: `Failed to apply fills: ${e.message}` });
         }
       } else if (key === 'strokes' && Array.isArray(value)) {
         try {
-          (node as any).strokes = this.normalizePaints(value);
+          (node as any).strokes = lowerPaints(value);
         } catch (e: any) {
           console.warn(`[ActionExecutor] Failed to apply strokes on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'PAINT_INVALID', severity: 'warning', message: `Failed to apply strokes: ${e.message}` });
         }
       } else if (key === 'effects' && Array.isArray(value)) {
         try {
-          (node as any).effects = this.normalizeEffects(value);
+          (node as any).effects = lowerEffects(value);
         } catch (e: any) {
           console.warn(`[ActionExecutor] Failed to apply effects on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'EFFECT_INVALID', severity: 'warning', message: `Failed to apply effects: ${e.message}` });
         }
-      } else if ((key === 'letterSpacing' || key === 'lineHeight') && (typeof value === 'number' || typeof value === 'string')) {
+      } else if ((key === 'letterSpacing' || key === 'lineHeight') && (typeof value === 'number' || typeof value === 'string' || (typeof value === 'object' && value !== null && 'unit' in value))) {
         try {
-          if (typeof value === 'string' && value.endsWith('%')) {
-            (node as any)[key] = { value: parseFloat(value), unit: 'PERCENT' };
-          } else {
-            (node as any)[key] = { value: Number(value), unit: 'PIXELS' };
-          }
+          (node as any)[key] = lowerUnitValue(value);
         } catch (e: any) {
           console.warn(`[ActionExecutor] Failed to apply ${key} on node ${node.id}: ${e.message}`);
           warnings.push({ code: 'PROP_NORMALIZE_FAILED', severity: 'warning', message: `Failed to apply ${key}: ${e.message}` });
@@ -767,66 +782,6 @@ export class ActionExecutor {
       }
     }
     return warnings;
-  }
-
-  private normalizePaints(paints: any[]): Paint[] {
-    return paints.map(item => {
-      if (typeof item === 'string') {
-        return figma.util.solidPaint(item);
-      }
-      if (typeof item === 'object' && item !== null) {
-        return item as Paint;
-      }
-      throw new Error(`Invalid paint format: ${JSON.stringify(item)}`);
-    });
-  }
-
-  private normalizeEffects(effects: any[]): Effect[] {
-    return effects.map(item => {
-      if (typeof item !== 'object' || item === null || !item.type) {
-        throw new Error(`Invalid effect format: ${JSON.stringify(item)}`);
-      }
-      
-      const normalized: any = { ...item };
-      
-      // Convert legacy "blur" to "radius"
-      if ('blur' in normalized && !('radius' in normalized)) {
-        normalized.radius = normalized.blur;
-        delete normalized.blur;
-      }
-      
-      // Convert legacy hex color to {r,g,b,a} color object
-      if (typeof normalized.color === 'string') {
-        const parsed = this.parseHexColor(normalized.color);
-        if (parsed) {
-          normalized.color = parsed;
-        } else {
-           throw new Error(`Invalid hex color in effect: ${normalized.color}`);
-        }
-      }
-      
-      // Ensure blendMode and visible have defaults
-      if (!normalized.blendMode) normalized.blendMode = 'NORMAL';
-      if (normalized.visible === undefined) normalized.visible = true;
-      if (normalized.type === 'DROP_SHADOW' || normalized.type === 'INNER_SHADOW') {
-         if (!normalized.offset) normalized.offset = {x: 0, y: 0};
-      }
-      
-      return normalized as Effect;
-    });
-  }
-
-  private parseHexColor(hex: string): {r: number, g: number, b: number, a: number} | null {
-    const clean = hex.replace('#', '');
-    if (clean.length === 6 || clean.length === 8) {
-      const r = parseInt(clean.slice(0, 2), 16) / 255;
-      const g = parseInt(clean.slice(2, 4), 16) / 255;
-      const b = parseInt(clean.slice(4, 6), 16) / 255;
-      const a = clean.length === 8 ? parseInt(clean.slice(6, 8), 16) / 255 : 1;
-      if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a)) return null;
-      return { r, g, b, a };
-    }
-    return null;
   }
 
   private canAssignProperty(node: SceneNode, key: string): boolean {

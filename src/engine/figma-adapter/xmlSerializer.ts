@@ -7,6 +7,7 @@
  */
 
 import type { NodeLayer } from '../../schema/layerSchema';
+import { paintSpec, effectSpec } from '../../domain/property-specs';
 
 // ── Constants ──
 
@@ -105,40 +106,53 @@ function escapeXml(s: string): string {
 
 // ── Fill helpers ──
 
-function colorToHex(fill: any): string | null {
-  if (typeof fill === 'string') return fill;
-  if (fill && typeof fill === 'object' && fill.type === 'SOLID' && fill.color) {
-    const { r, g, b } = fill.color;
-    const hex = '#' + [r, g, b].map((c: number) =>
-      Math.round(c * 255).toString(16).padStart(2, '0')
-    ).join('');
-    return hex.toUpperCase();
-  }
-  return null;
-}
-
-function isGradient(fill: any): boolean {
-  return fill && typeof fill === 'object' && typeof fill.type === 'string' && fill.type.startsWith('GRADIENT');
-}
-
 function formatFills(fills: any[]): { attr: string; value: string } | null {
   if (!fills || fills.length === 0) return null;
 
-  const hexColors: string[] = [];
-  for (const f of fills) {
-    if (isGradient(f)) {
-      // Gradient: keep a compact representation
-      const stops = (f.stops || []).map((s: any) => `${s.color}@${s.position}`).join(',');
-      hexColors.push(`${f.type}(${stops})`);
-    } else {
-      const hex = colorToHex(f);
-      if (hex) hexColors.push(hex);
+  // Normalize input: items can be strings, Figma Paint objects, or legacy gradient objects
+  const normalized = fills.map((f: any) => {
+    if (typeof f === 'string') {
+      // Already a hex string → wrap as SOLID for spec
+      return { type: 'SOLID', color: parseHexForSpec(f), opacity: 1 };
     }
-  }
+    // Legacy format: { type: 'GRADIENT_LINEAR', stops: [...] } → convert stops to gradientStops
+    if (f && typeof f === 'object' && f.stops && !f.gradientStops) {
+      return { ...f, gradientStops: f.stops.map((s: any) => ({
+        color: typeof s.color === 'string' ? parseHexForSpec(s.color) : (s.color || { r: 0, g: 0, b: 0, a: 1 }),
+        position: s.position ?? 0,
+      }))};
+    }
+    return f;
+  });
 
-  if (hexColors.length === 0) return null;
-  if (hexColors.length === 1) return { attr: 'fill', value: hexColors[0] };
-  return { attr: 'fills', value: hexColors.join(',') };
+  const irPaints = paintSpec.fromFigma(normalized);
+  if (irPaints.length === 0) return null;
+
+  const formatted = paintSpec.formatXml(irPaints);
+  if (formatted === 'transparent') return null;
+
+  if (irPaints.length === 1) return { attr: 'fill', value: formatted };
+  return { attr: 'fills', value: formatted };
+}
+
+/** Parse a hex string into Figma-like RGB object (0-1 range) */
+function parseHexForSpec(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace('#', '');
+  if (clean.length >= 6) {
+    return {
+      r: parseInt(clean.slice(0, 2), 16) / 255,
+      g: parseInt(clean.slice(2, 4), 16) / 255,
+      b: parseInt(clean.slice(4, 6), 16) / 255,
+    };
+  }
+  if (clean.length === 3) {
+    return {
+      r: parseInt(clean[0] + clean[0], 16) / 255,
+      g: parseInt(clean[1] + clean[1], 16) / 255,
+      b: parseInt(clean[2] + clean[2], 16) / 255,
+    };
+  }
+  return { r: 0, g: 0, b: 0 };
 }
 
 // ── Effect helpers ──
@@ -146,23 +160,27 @@ function formatFills(fills: any[]): { attr: string; value: string } | null {
 function formatEffects(effects: any[]): string | null {
   if (!effects || effects.length === 0) return null;
 
-  const parts: string[] = [];
-  for (const e of effects) {
-    if (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') {
-      const ox = e.offset?.x ?? 0;
-      const oy = e.offset?.y ?? 0;
-      const blur = e.blur ?? e.radius ?? 0;
-      const spread = e.spread ?? 0;
-      const color = e.color || '#000';
-      const prefix = e.type === 'INNER_SHADOW' ? 'inset,' : '';
-      parts.push(`${prefix}${ox},${oy},${blur},${spread},${color}`);
-    } else if (e.type === 'LAYER_BLUR') {
-      parts.push(`blur(${e.blur ?? e.radius ?? 0})`);
-    } else if (e.type === 'BACKGROUND_BLUR') {
-      parts.push(`bgblur(${e.blur ?? e.radius ?? 0})`);
+  // Normalize legacy format: blur → radius, string color → RGBA object
+  const normalized = effects.map((e: any) => {
+    const n = { ...e };
+    // Legacy DSL uses "blur" where Figma uses "radius"
+    if ('blur' in n && !('radius' in n)) {
+      n.radius = n.blur;
     }
-  }
-  return parts.length > 0 ? parts.join(';') : null;
+    // String color → RGBA object (effectSpec.fromFigma expects RGBA)
+    if (typeof n.color === 'string') {
+      const parsed = parseHexForSpec(n.color);
+      const hex = n.color.replace('#', '');
+      const a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
+      n.color = { ...parsed, a };
+    }
+    return n;
+  });
+
+  const irEffects = effectSpec.fromFigma(normalized);
+  if (irEffects.length === 0) return null;
+
+  return effectSpec.formatXml(irEffects);
 }
 
 // ── Padding helpers ──
@@ -197,6 +215,7 @@ export interface XmlSerializeOptions {
 const STRUCTURAL_PROPS = new Set([
   'name', 'width', 'height', 'layoutMode',
   'layoutSizingHorizontal', 'layoutSizingVertical',
+  'x', 'y',
 ]);
 
 /** Max inline text length in structural mode before collapsing to chars="N". */
@@ -326,6 +345,9 @@ export class XmlSerializer {
         attrs.push(`${attrName}="${value ? 'hidden' : 'visible'}"`);
         continue;
       }
+
+      // Safety: skip objects that weren't handled upstream (prevents [object Object])
+      if (typeof value === 'object') continue;
 
       const attrName = ATTR_ABBREV[key] || key;
       attrs.push(`${attrName}="${escapeXml(String(value))}"`);

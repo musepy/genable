@@ -10,6 +10,7 @@ import type { NodeLayer } from '../../schema/layerSchema';
 import { PROPS, NODE_TYPES, PROP_METADATA } from '../../constants/figma-api';
 import { PropertyTransformer } from './propertyTransformer';
 import { extractFigmaNodeData } from './figmaNodeData';
+import { readPaints, readEffects, readUnitValue, readFontName } from '../figma/figma-reader';
 
 export interface SerializationOptions {
     maxDepth?: number;
@@ -74,12 +75,36 @@ export class NodeSerializer {
         const nodeData = extractFigmaNodeData(node, Object.values(PROP_METADATA).map(m => m.figmaKey));
 
         Object.values(PROPS).forEach(dslKey => {
-            const value = PropertyTransformer.serialize(nodeData, dslKey);
-            
+            // Use specs for complex types, PropertyTransformer for the rest
+            let value: any;
+            const meta = PROP_METADATA[dslKey];
+            if (dslKey === 'fills' || dslKey === 'strokes') {
+                const figmaVal = nodeData[meta?.figmaKey ?? dslKey];
+                if (figmaVal) {
+                    const irPaints = readPaints(figmaVal);
+                    // Store raw Figma Paint[] for xmlSerializer (it calls paintSpec.fromFigma internally)
+                    value = figmaVal;
+                } else {
+                    value = undefined;
+                }
+            } else if (dslKey === 'effects') {
+                value = nodeData[meta?.figmaKey ?? dslKey];
+            } else if (dslKey === 'lineHeight' || dslKey === 'letterSpacing') {
+                const figmaVal = nodeData[meta?.figmaKey ?? dslKey];
+                if (figmaVal && typeof figmaVal === 'object' && figmaVal.unit === 'AUTO') {
+                    value = undefined; // AUTO = default, skip
+                } else if (figmaVal && typeof figmaVal === 'object' && 'value' in figmaVal) {
+                    value = figmaVal.value;
+                } else {
+                    value = PropertyTransformer.serialize(nodeData, dslKey);
+                }
+            } else {
+                value = PropertyTransformer.serialize(nodeData, dslKey);
+            }
+
             if (value !== undefined) {
                 // Skip default values if pruning is enabled
                 if (pruneDefaults) {
-                    const meta = PROP_METADATA[dslKey];
                     if (meta && meta.defaultValue !== undefined) {
                         const isDefault = PropertyTransformer.isEqual(nodeData, dslKey, meta.defaultValue);
                         if (isDefault) return;
@@ -88,7 +113,7 @@ export class NodeSerializer {
 
                 // Skip empty arrays
                 if (Array.isArray(value) && value.length === 0) return;
-                
+
                 props[dslKey] = value;
             }
         });

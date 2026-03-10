@@ -139,13 +139,18 @@ export async function fetchDashScopeModels(_apiKey: string): Promise<LLMModel[]>
  * Unified model fetcher
  */
 export async function fetchModels(provider: 'gemini' | 'openrouter' | 'dashscope', apiKey: string): Promise<LLMModel[]> {
+  if (provider === 'gemini') {
+    return fetchGeminiModels(apiKey);
+  }
   if (provider === 'openrouter') {
     return fetchOpenRouterModels(apiKey);
   }
   if (provider === 'dashscope') {
     return fetchDashScopeModels(apiKey);
   }
-  return fetchGeminiModels(apiKey);
+  // Unknown provider — never send API key to wrong endpoint
+  console.warn(`[modelFilter] Unknown provider: ${provider}, returning empty model list`);
+  return [];
 }
 
 import { supportsThinkingMode } from './modelEngine';

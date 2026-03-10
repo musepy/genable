@@ -51,7 +51,7 @@ class MockFigmaState {
 
   inspect(mode: string): any {
     // True Agent: If we are calling inspect, just say it's fine for this test to avoid infinite loops
-    return { mode, dsl: { type: 'FRAME', name: 'Valid Tree' }, anomalies: [], nodeCount: 1 };
+    return { mode, dsl: { type: 'FRAME', name: 'Valid Tree' }, violations: [], nodeCount: 1 };
   }
 
   recordPatch() { this.patchCount++; }
@@ -62,7 +62,7 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     generateDesign: async (params: any) => {
       const nodes = params.nodes || [];
       const result = state.registerNodes(nodes);
-      return { success: true, data: { rootNodeId: result.rootNodeId, totalNodes: result.totalNodes, idMap: result.idMap, anomalies: [] } };
+      return { success: true, data: { rootNodeId: result.rootNodeId, totalNodes: result.totalNodes, idMap: result.idMap, violations: [] } };
     },
     inspectDesign: async (params: any) => {
       const result = state.inspect(params.mode || 'hierarchy');

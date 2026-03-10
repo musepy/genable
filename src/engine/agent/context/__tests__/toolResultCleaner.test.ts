@@ -3,7 +3,9 @@ import { ToolResultCleaner } from '../toolResultCleaner';
 
 describe('ToolResultCleaner', () => {
   const tools: any[] = [
-    { name: 'create', parameters: { properties: { xml: { type: 'string' } } } }
+    { name: 'create', parameters: { properties: { xml: { type: 'string' } } } },
+    { name: 'design', parameters: { properties: { xml: { type: 'string' } } } },
+    { name: 'query', parameters: { properties: { q: { type: 'string' } } } },
   ];
   const cleaner = new ToolResultCleaner(tools);
 
@@ -48,23 +50,24 @@ describe('ToolResultCleaner', () => {
     expect(cleaned.data.idMap).toEqual({ 'node-5': 'node-5' });
   });
 
-  it('passes through create receipt with anomalies', () => {
+  it('passes through design receipt with violations and defaults metadata', () => {
     const rawResult = {
-      name: 'create',
+      name: 'design',
       success: true,
       data: {
         created: 1,
+        edited: 0,
         idMap: { frame: 'node-3' },
-        anomalies: [{ code: 'CLIPPED', nodeId: 'node-3', message: 'Content clipped' }],
+        defaultsApplied: [{ property: 'clipsContent', value: 'false', node: 'frame', reason: 'auto-layout frame' }],
+        defaultsAppliedCount: 3,
+        violations: [{ code: 'CHILDREN_OVERFLOW', node: 'node-3', severity: 'warning', message: 'Content clipped' }],
       },
     };
     const cleaned = cleaner.cleanToolResult(rawResult);
-    expect(cleaned.data.created).toBe(1);
-    expect(cleaned.data.anomalies).toHaveLength(1);
-    expect(cleaned.data.anomalies[0].code).toBe('CLIPPED');
+    expect(cleaned.data).toEqual(rawResult.data);
   });
 
-  it('caps oversized generic tool data', () => {
+  it('passes through query results unchanged', () => {
     const rawResult = {
       name: 'query',
       success: true,
@@ -74,8 +77,7 @@ describe('ToolResultCleaner', () => {
     };
     const cleaned = cleaner.cleanToolResult(rawResult);
     expect(cleaned.success).toBe(true);
-    // Oversized generic data gets stripped (no idMap to preserve)
-    expect(cleaned.data.results).toBeUndefined();
+    expect(cleaned.data).toEqual(rawResult.data);
   });
 
   it('preserves validation error details for TOOL_VALIDATION_ERROR', () => {

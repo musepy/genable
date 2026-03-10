@@ -60,7 +60,7 @@ Aim for **≤20 create nodes per call**. For complex designs (dashboards, landin
 ## Handling partial failures
 DO NOT regenerate the entire design on partial failure. Check errors, use idMap, retry only failed operations.
 
-Returns: { idMap, created, edited, deleted, errors, anomalies }`,
+Returns: compact receipt with { idMap, created, edited, deleted, failed, errors, warnings, defaultsApplied, defaultsAppliedCount, violations }`,
   parameters: {
     type: 'object',
     properties: {

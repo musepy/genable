@@ -235,6 +235,7 @@ export class ActionCompiler {
       // Figma API defaults to true, but layout containers rarely want clipping.
       if (p.layoutMode && p.clipsContent === undefined) {
         p.clipsContent = false;
+        warnings.push({ code: 'CLIPS_CONTENT_DEFAULT', message: 'clipsContent defaulted to false (auto-layout frame). Set explicitly to override.' });
       }
 
       // Child frame: default to FILL width (stretch to parent)

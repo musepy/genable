@@ -14,6 +14,7 @@ import { CreateParams } from '../../actions/createTypes';
 import { ActionCompiler } from '../../actions/compiler';
 import { IncrementalExecutor } from '../../actions/incrementalExecutor';
 import { xmlToParsedLines } from '../../actions/xmlDesignParser';
+import { buildCreateReceipt } from '../../../ipc/handlers/receiptBuilder';
 
 // ==========================================
 // Tool Definition (LLM function-calling schema)
@@ -52,7 +53,8 @@ Frames default to 100×100px when width/height is omitted — almost NEVER corre
 ALWAYS set explicit dimensions or use height="hug" / width="fill".
 Common sizes: Card root 360-480px wide, Input height 44px, Button height 44-48px, Icon 20-24px.
 
-Returns: idMap (symbol → real Figma node ID) and count of created/failed nodes.
+Returns: compact receipt with idMap, created/failed counts, errors for failed ops,
+defaultsApplied for compiler auto-fixes, and violations if post-op validation flags issues.
 
 ## Reusable Components
 Use \`reusable='true'\` on a \`<frame>\` to create a Figma Component (not just a frame).
@@ -141,34 +143,17 @@ export const createExecutor: ToolExecutor<CreateParams> = async (
       parentId,
     });
 
-    // Build compact receipt — this is what the LLM sees in context.
-    const receipt: Record<string, any> = {
-      idMap: result.idMap,
-      created: result.stats.created,
-    };
-
     let errorInfo: { code: string; message: string } | undefined;
     if (result.hasErrors) {
-      const failures = result.lineResults
-        .filter(lr => lr.status === 'failed')
-        .slice(0, 8)
-        .map(lr => ({
-          op: lr.symbol || `line${lr.line}`,
-          error: lr.error || 'unknown',
-        }));
-
-      receipt.failed = result.stats.failed;
-      if (failures.length > 0) receipt.errors = failures;
-
       errorInfo = {
         code: 'PARTIAL_FAILURE',
         message: `${result.stats.failed} of ${result.stats.total} failed. ${result.stats.created} created. Use idMap to fix only the failed operations.`,
       };
     }
-
-    if (Array.isArray((result as any).anomalies) && (result as any).anomalies.length > 0) {
-      receipt.anomalies = (result as any).anomalies.slice(0, 5);
-    }
+    const receipt = buildCreateReceipt({
+      result,
+      violations: Array.isArray((result as any).violations) ? (result as any).violations : undefined,
+    });
 
     return {
       success: result.success,

@@ -234,7 +234,7 @@ export class ActionExecutor {
           if (action.upsertExisting) {
             const existingFrame = this.findExistingChild(parentNode, action.props.name, 'FRAME');
             if (existingFrame) {
-              const warnings = await this.applyProps(existingFrame, action.props);
+              const { warnings } = await this.applyProps(existingFrame, action.props);
               return { success: true, nodeId: existingFrame.id, warnings: warnings.length ? warnings : undefined };
             }
           }
@@ -247,7 +247,7 @@ export class ActionExecutor {
             parentNode.appendChild(frame);
           }
           try {
-            const warnings = await this.applyProps(frame, action.props);
+            const { warnings } = await this.applyProps(frame, action.props);
             return { success: true, nodeId: frame.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
             frame.remove();
@@ -259,7 +259,7 @@ export class ActionExecutor {
           if (action.upsertExisting) {
             const existingText = this.findExistingChild(parentNode, action.props.name, 'TEXT');
             if (existingText) {
-              const warnings = await this.applyTextProps(existingText as TextNode, action.props);
+              const { warnings } = await this.applyTextProps(existingText as TextNode, action.props);
               return { success: true, nodeId: existingText.id, warnings: warnings.length ? warnings : undefined };
             }
           }
@@ -269,7 +269,7 @@ export class ActionExecutor {
             parentNode.appendChild(text);
           }
           try {
-            const warnings = await this.applyTextProps(text, action.props);
+            const { warnings } = await this.applyTextProps(text, action.props);
             return { success: true, nodeId: text.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
             text.remove();
@@ -289,7 +289,7 @@ export class ActionExecutor {
               parentNode, action.props.name, shapeTypeMap[action.shapeType] || 'RECTANGLE'
             );
             if (existingShape) {
-              const warnings = await this.applyProps(existingShape, action.props);
+              const { warnings } = await this.applyProps(existingShape, action.props);
               return { success: true, nodeId: existingShape.id, warnings: warnings.length ? warnings : undefined };
             }
           }
@@ -304,7 +304,7 @@ export class ActionExecutor {
             parentNode.appendChild(shape);
           }
           try {
-            const warnings = await this.applyProps(shape, action.props);
+            const { warnings } = await this.applyProps(shape, action.props);
             return { success: true, nodeId: shape.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
             shape.remove();
@@ -316,7 +316,7 @@ export class ActionExecutor {
            if (action.upsertExisting) {
              const existingIcon = this.findExistingChild(parentNode, action.props.name, 'FRAME');
              if (existingIcon) {
-               const warnings = await this.applyProps(existingIcon, action.props);
+               const { warnings } = await this.applyProps(existingIcon, action.props);
                return { success: true, nodeId: existingIcon.id, warnings: warnings.length ? warnings : undefined };
              }
            }
@@ -352,7 +352,7 @@ export class ActionExecutor {
              delete propsForFrame.width;
              delete propsForFrame.height;
 
-             const warnings = await this.applyProps(iconNode, propsForFrame);
+             const { warnings } = await this.applyProps(iconNode, propsForFrame);
 
              // Tint vector children: only recolor properties that already have values.
              // Fill-based icons (mdi): fills exist → recolor fills. Stroke-based (lucide/tabler): strokes exist → recolor strokes.
@@ -395,7 +395,7 @@ export class ActionExecutor {
             parentNode.appendChild(comp);
           }
           try {
-            const warnings = await this.applyProps(comp, action.props);
+            const { warnings } = await this.applyProps(comp, action.props);
             // Register component symbol for cross-batch instance resolution
             if (action.tempId) {
               componentRegistry.set(action.tempId, comp.id);
@@ -419,7 +419,7 @@ export class ActionExecutor {
           let warnings: any[] = [];
           if (action.props) {
             try {
-              warnings = await this.applyProps(instance, action.props);
+              ({ warnings } = await this.applyProps(instance, action.props));
             } catch (e: any) {
               instance.remove();
               throw e;
@@ -432,11 +432,11 @@ export class ActionExecutor {
               if (child) {
                 try {
                   if (child.type === 'TEXT') {
-                    const w = await this.applyTextProps(child as TextNode, overrideProps);
-                    if (w.length) warnings.push(...w);
+                    const tw = await this.applyTextProps(child as TextNode, overrideProps);
+                    if (tw.warnings.length) warnings.push(...tw.warnings);
                   } else {
-                    const w = await this.applyProps(child, overrideProps);
-                    if (w.length) warnings.push(...w);
+                    const pw = await this.applyProps(child, overrideProps);
+                    if (pw.warnings.length) warnings.push(...pw.warnings);
                   }
                 } catch (e: any) {
                   warnings.push({ code: 'OVERRIDE_FAILED', severity: 'warning', message: `Override for '${childName}' failed: ${e.message}` });
@@ -462,10 +462,15 @@ export class ActionExecutor {
 
         case 'updateProps': {
           if (!targetNode) return { success: false, error: 'Node not found' };
-          const warnings = targetNode.type === 'TEXT'
+          const { warnings, diffs } = targetNode.type === 'TEXT'
             ? await this.applyTextProps(targetNode as TextNode, action.props)
             : await this.applyProps(targetNode, action.props);
-          return { success: true, nodeId: targetNode.id, warnings: warnings.length ? warnings : undefined };
+          return {
+            success: true,
+            nodeId: targetNode.id,
+            warnings: warnings.length ? warnings : undefined,
+            diffs: diffs?.length ? diffs : undefined,
+          };
         }
 
         case 'delete': {
@@ -691,6 +696,17 @@ export class ActionExecutor {
     strokesIncludedInLayout: 4,
     itemReverseZIndex: 4,
     constrainProportions: 4,
+    constraints: 4,
+    blendMode: 4,
+    // Stroke details (after strokeWeight)
+    strokeJoin: 4,
+    strokeCap: 4,
+    dashPattern: 4,
+    strokeTopWeight: 4,
+    strokeRightWeight: 4,
+    strokeBottomWeight: 4,
+    strokeLeftWeight: 4,
+    cornerSmoothing: 4,
     // Dimensions
     width: 5,
     height: 5,
@@ -715,8 +731,9 @@ export class ActionExecutor {
     });
   }
 
-  private async applyProps(node: SceneNode, props: Record<string, any>): Promise<any[]> {
+  private async applyProps(node: SceneNode, props: Record<string, any>): Promise<{ warnings: any[]; diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> }> {
     const warnings: any[] = [];
+    const diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> = [];
     const normalizedProps: Record<string, any> = { ...props };
 
     // 1. Padding expansion (avoid mutating the caller object)
@@ -733,14 +750,16 @@ export class ActionExecutor {
 
     // 3. Apply each property via the handler pipeline
     for (const [key, value] of sortedEntries) {
-      const w = await applyProperty(node, key, value);
-      if (w.length > 0) warnings.push(...w);
+      const result = await applyProperty(node, key, value);
+      if (result.warnings.length > 0) warnings.push(...result.warnings);
+      diffs.push(result.diff);
     }
-    return warnings;
+    return { warnings, diffs };
   }
 
-  private async applyTextProps(node: TextNode, props: Record<string, any>): Promise<any[]> {
+  private async applyTextProps(node: TextNode, props: Record<string, any>): Promise<{ warnings: any[]; diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> }> {
     const warnings: any[] = [];
+    const diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> = [];
     // Handle font resolution before setting characters
     const family = props.fontFamily || 'Inter';
     const style = props.fontWeight || 'Regular';
@@ -771,8 +790,9 @@ export class ActionExecutor {
        delete otherProps.fontWeight;
        delete otherProps.characters;
 
-       const propWarnings = await this.applyProps(node, otherProps);
-       if (propWarnings.length > 0) warnings.push(...propWarnings);
+       const propResult = await this.applyProps(node, otherProps);
+       if (propResult.warnings.length > 0) warnings.push(...propResult.warnings);
+       diffs.push(...propResult.diffs);
 
        // Apply style ranges via Figma Range API (after base props)
        for (const range of ranges) {
@@ -791,11 +811,12 @@ export class ActionExecutor {
        delete otherProps.fontFamily;
        delete otherProps.fontWeight;
 
-       const propWarnings = await this.applyProps(node, otherProps);
-       if (propWarnings.length > 0) warnings.push(...propWarnings);
+       const propResult = await this.applyProps(node, otherProps);
+       if (propResult.warnings.length > 0) warnings.push(...propResult.warnings);
+       diffs.push(...propResult.diffs);
     }
 
-    return warnings;
+    return { warnings, diffs };
   }
 
   /** Apply a single styled range to a TextNode using Figma Range API. */

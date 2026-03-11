@@ -185,6 +185,8 @@ export interface ActionResult {
   skipped?: boolean;
   warnings?: Array<{ code: string; severity: string; message: string; [k: string]: any }>;
   errorContext?: import('./errorTypes').ActionErrorContext;
+  /** Per-property diff for updateProps — shows what changed vs what was already at target. */
+  diffs?: Array<{ key: string; changed: boolean; before?: any; after?: any }>;
 }
 
 export interface ExecutionResult {

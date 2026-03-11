@@ -143,23 +143,70 @@ export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<str
 // ---------------------------------------------------------------------------
 
 export interface BuildEditReceiptParams {
-  allResults: Array<{ success: boolean; nodeId?: string; error?: string; warnings?: Array<{ code: string; message: string }> }>;
+  allResults: Array<{
+    success: boolean;
+    nodeId?: string;
+    error?: string;
+    warnings?: Array<{ code: string; message: string }>;
+    diffs?: Array<{ key: string; changed: boolean; before?: any; after?: any }>;
+  }>;
   violations?: ValidationViolation[];
 }
 
 /**
  * Build a compact receipt from edit (update/delete) results.
  * Used by `edit` and the edit-phase of `design`.
+ *
+ * When diffs are present (from updateProps), the receipt includes:
+ *   - `edited`: count of nodes where at least one property actually changed
+ *   - `unchanged`: count of nodes where ALL properties were already at target
+ *   - `changeSummary`: per-node list of what changed vs what was skipped
  */
 export function buildEditReceipt(params: BuildEditReceiptParams): Record<string, any> {
   const { allResults, violations } = params;
-  const editedCount = allResults.filter(r => r.success).length;
   const idMap: Record<string, string> = {};
   for (const r of allResults) {
     if (r.success && r.nodeId) idMap[r.nodeId] = r.nodeId;
   }
 
+  // Compute diff-aware edit counts
+  let editedCount = 0;
+  let unchangedCount = 0;
+  const changeSummary: Array<{ nodeId: string; changed: string[]; unchanged: string[] }> = [];
+
+  for (const r of allResults) {
+    if (!r.success) continue;
+
+    if (r.diffs && r.diffs.length > 0) {
+      const changed = r.diffs.filter(d => d.changed).map(d => d.key);
+      const unchanged = r.diffs.filter(d => !d.changed).map(d => d.key);
+
+      if (changed.length > 0) {
+        editedCount++;
+        changeSummary.push({
+          nodeId: r.nodeId || '?',
+          changed,
+          unchanged,
+        });
+      } else {
+        unchangedCount++;
+      }
+    } else {
+      // No diffs (create actions, delete, etc.) — count as edited
+      editedCount++;
+    }
+  }
+
   const receipt: Record<string, any> = { edited: editedCount, idMap };
+
+  // Diff summary — only when there are updates with diffs
+  if (unchangedCount > 0) {
+    receipt.unchanged = unchangedCount;
+    receipt.unchangedHint = `${unchangedCount} node(s) already had the requested values — no changes needed. Focus on nodes that still need fixing.`;
+  }
+  if (changeSummary.length > 0) {
+    receipt.changeSummary = changeSummary.slice(0, 15);
+  }
 
   // Per-node warnings
   const allWarnings = allResults

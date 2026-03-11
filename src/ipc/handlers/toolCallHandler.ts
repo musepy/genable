@@ -335,6 +335,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               violations: updateViolations,
             });
             receipt.edited = editReceipt.edited;
+            if (editReceipt.unchanged) receipt.unchanged = editReceipt.unchanged;
+            if (editReceipt.unchangedHint) receipt.unchangedHint = editReceipt.unchangedHint;
+            if (editReceipt.changeSummary) receipt.changeSummary = editReceipt.changeSummary;
             if (editReceipt.failed) {
               hasAnyError = true;
               receipt.editFailed = editReceipt.failed;

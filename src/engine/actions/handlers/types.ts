@@ -13,6 +13,14 @@ export interface Warning {
   [key: string]: any;
 }
 
+/** Diff info for a single property application. */
+export interface PropertyDiff {
+  key: string;
+  changed: boolean;
+  before?: any;
+  after?: any;
+}
+
 /**
  * A PropertyHandler knows how to apply one or more properties to a Figma SceneNode.
  *

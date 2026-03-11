@@ -19,11 +19,11 @@ import { ActionCompiler } from '../../engine/actions/compiler';
 import { IncrementalExecutor } from '../../engine/actions/incrementalExecutor';
 import { collectTreeViolations } from '../../engine/validation/postOpValidator';
 import { normalizeProps } from '../../domain/node-normalizers';
-import { parseXml } from '../../engine/actions/xmlDesignParser';
-import { interpretXmlNodes } from '../../engine/xml/xml-interpreter';
 import { validateSemantics } from '../../engine/validation/semanticValidator';
+import { parseFlatOps } from '../../engine/flat/flatOpsParser';
 import { logger } from '../../utils/logger';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
+import { fontBus } from '../../engine/figma-adapter/resources/FontBus';
 import { buildCreateReceipt, buildEditReceipt } from './receiptBuilder';
 import type { ValidationViolation } from '../../engine/validation/postOpValidator';
 
@@ -249,181 +249,36 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         break;
       }
 
-      case 'create': {
-        const { xml: xmlInput, parentId: bdParentId } = parameters;
-        const onError = 'continue';
-        const rollbackMode = 'none';
-
-        if (!xmlInput || typeof xmlInput !== 'string' || xmlInput.trim().length === 0) {
-          response = {
-            success: false,
-            error: { code: 'EMPTY_XML', message: 'A non-empty "xml" string must be provided.' }
-          };
-          break;
-        }
-
-        let parsedLines;
-        try {
-          const xmlNodes = parseXml(xmlInput);
-          const rawOps = interpretXmlNodes(xmlNodes, { mode: 'create' });
-          // Pass 3: semantic validation
-          const { validated, diagnostics } = validateSemantics(rawOps, { requireTextAutoResize: true });
-          parsedLines = validated;
-          if (diagnostics.length > 0) {
-            logger.info('Semantic validation diagnostics', { diagnostics });
-          }
-        } catch (e: any) {
-          response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
-          break;
-        }
-
-        try {
-          const compiler = new ActionCompiler();
-          const { actions, errors } = compiler.compile(parsedLines, bdParentId);
-
-          // 3. Execute incrementally
-          const bdExecutor = new IncrementalExecutor();
-          const bdResult = await bdExecutor.execute(actions, errors, {
-            onError,
-            rollbackMode,
-            parentId: bdParentId,
-          });
-
-          // Inline post-op validation: check the root node for violations
-          const bdRootId = bdParentId || Object.values(bdResult.idMap)[0];
-          const bdViolations = await collectViolationsForNodeIds([bdRootId], 5);
-
-          // Build compact receipt
-          const receipt = buildCreateReceipt({ result: bdResult, violations: bdViolations });
-
-          // Build error message parts
-          const msgParts: string[] = [];
-          if (bdResult.stats.failed > 0) {
-            msgParts.push(`${bdResult.stats.failed} failed`);
-          }
-          if (receipt.degraded) {
-            msgParts.push(`${receipt.degraded.length} degraded (use edit to fix: ${receipt.degraded.join(', ')})`);
-          }
-
-          response = {
-            success: bdResult.success,
-            data: receipt,
-            error: (bdResult.hasErrors || receipt.degraded)
-              ? {
-                  code: bdResult.hasErrors ? 'PARTIAL_FAILURE' : 'DEGRADED',
-                  message: `${bdResult.stats.created} created. ${msgParts.join('. ')}. Use idMap for references.`,
-                }
-              : undefined,
-          };
-        } catch (e: any) {
-          response = {
-            success: false,
-            error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error in create pipeline' }
-          };
-        }
-        break;
-      }
-
-      case 'edit': {
-        const { xml: editXml } = parameters;
-
-        if (!editXml || typeof editXml !== 'string' || editXml.trim().length === 0) {
-          response = {
-            success: false,
-            error: { code: 'EMPTY_XML', message: 'A non-empty "xml" string must be provided.' }
-          };
-          break;
-        }
-
-        let parsedLines;
-        try {
-          const xmlNodes = parseXml(editXml);
-          parsedLines = interpretXmlNodes(xmlNodes, { mode: 'edit' });
-        } catch (e: any) {
-          response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
-          break;
-        }
-
-        try {
-          // Separate update and delete operations
-          const updateLines = parsedLines.filter(l => l.command === 'update');
-          const deleteLines = parsedLines.filter(l => l.command === 'delete');
-
-          const allResults: any[] = [];
-
-          // Execute updates via ActionExecutor
-          if (updateLines.length > 0) {
-            const patchActions: FigmaAction[] = updateLines.map(line => ({
-              action: 'updateProps' as const,
-              nodeId: line.targetRef!,
-              props: line.props ? normalizeProps(line.props) : {}
-            }));
-
-            const executor = new ActionExecutor({ onError: 'skip-dependents' });
-            const execResult = await executor.execute(patchActions);
-            allResults.push(...execResult.results);
-          }
-
-          // Execute deletes
-          for (const line of deleteLines) {
-            try {
-              const delResult = await nodeLayoutService.deleteNode(line.targetRef!);
-              allResults.push({ success: delResult.success, nodeId: line.targetRef, action: 'delete', error: delResult.error?.message });
-            } catch (e: any) {
-              allResults.push({ success: false, nodeId: line.targetRef, action: 'delete', error: e.message });
-            }
-          }
-
-          // Inline post-op validation on edited nodes
-          const editViolations = await collectViolationsForNodeIds(
-            updateLines.map(line => line.targetRef),
-            3
-          );
-
-          // Build compact receipt
-          const receipt = buildEditReceipt({ allResults, violations: editViolations });
-
-          if (receipt.failed) {
-            response = {
-              success: false,
-              error: {
-                code: 'APPLY_ERROR',
-                message: `Failed to edit ${receipt.failed} node(s). ${receipt.edited} succeeded.${receipt.warningCount ? ` ${receipt.warningCount} property warning(s) on ${receipt.warnings.length} node(s).` : ''}`,
-              },
-              data: receipt,
-            };
-          } else {
-            response = { success: true, data: receipt };
-          }
-        } catch (e: any) {
-          response = {
-            success: false,
-            error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error in edit pipeline' }
-          };
-        }
-        break;
-      }
-
       case 'design': {
-        const { xml: designXml, parentId: designParentId } = parameters;
+        const { ops: designOps, parentId: designParentId } = parameters;
 
-        if (!designXml || typeof designXml !== 'string' || designXml.trim().length === 0) {
-          response = { success: false, error: { code: 'EMPTY_XML', message: 'A non-empty "xml" string must be provided.' } };
+        if (!designOps || typeof designOps !== 'string' || designOps.trim().length === 0) {
+          response = { success: false, error: { code: 'EMPTY_OPS', message: 'A non-empty "ops" string must be provided.' } };
           break;
         }
 
         let designParsedLines;
+        let droppedDiagnostics: Array<{ code: string; message: string; symbol?: string }> = [];
         try {
-          const xmlNodes = parseXml(designXml);
-          const rawOps = interpretXmlNodes(xmlNodes, { mode: 'design' });
+          const { lines: rawOps, errors: parseErrors } = parseFlatOps(designOps);
+          if (rawOps.length === 0 && parseErrors.length > 0) {
+            response = { success: false, error: { code: 'PARSE_ERROR', message: parseErrors.map(e => `L${e.line}: ${e.error}`).join('; ') } };
+            break;
+          }
           // Pass 3: semantic validation
-          const { validated, diagnostics } = validateSemantics(rawOps, { requireTextAutoResize: true });
+          const { validated, diagnostics } = validateSemantics(rawOps);
           designParsedLines = validated;
           if (diagnostics.length > 0) {
             logger.info('Semantic validation diagnostics', { diagnostics });
+            droppedDiagnostics = diagnostics
+              .filter(d => d.severity === 'error')
+              .map(d => ({ code: d.code, message: d.message, symbol: d.symbol }));
+          }
+          if (parseErrors.length > 0) {
+            logger.info('Flat ops parse errors (skipped lines)', { parseErrors: parseErrors.slice(0, 8) });
           }
         } catch (e: any) {
-          response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
+          response = { success: false, error: { code: 'PARSE_ERROR', message: e.message } };
           break;
         }
 
@@ -510,6 +365,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             if (deleteErrors.length > 0) { hasAnyError = true; receipt.deleteErrors = deleteErrors; }
           }
 
+          // Surface rejected ops from semantic validation
+          if (droppedDiagnostics.length > 0) {
+            receipt.rejected = droppedDiagnostics.length;
+            receipt.rejectedReasons = droppedDiagnostics.slice(0, 5).map(d => d.message);
+            hasAnyError = true;
+          }
+
           if (hasAnyError) {
             const parts: string[] = [];
             if (receipt.created) parts.push(`${receipt.created} created`);
@@ -517,6 +379,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             if (receipt.deleted) parts.push(`${receipt.deleted} deleted`);
             if (receipt.failed) parts.push(`${receipt.failed} create failed`);
             if (receipt.editFailed) parts.push(`${receipt.editFailed} edit failed`);
+            if (receipt.rejected) parts.push(`${receipt.rejected} rejected by validation`);
             response = { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
           } else {
             response = { success: true, data: receipt };
@@ -572,23 +435,23 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             let totalReplaced = 0;
             const details: Record<string, number> = {};
 
-            function doReplace(node: SceneNode): void {
+            async function doReplace(node: SceneNode): Promise<void> {
               for (const [prop, rules] of Object.entries(replacements)) {
                 if (!Array.isArray(rules)) continue;
                 for (const rule of rules) {
                   const currentVal = extractReplacePropertyValue(node, prop);
                   if (currentVal !== undefined && matchesReplaceValue(currentVal, rule.from)) {
-                    applyReplacePropertyValue(node, prop, rule.to);
+                    await applyReplacePropertyValue(node, prop, rule.to);
                     totalReplaced++;
                     details[prop] = (details[prop] || 0) + 1;
                   }
                 }
               }
               if ('children' in node) {
-                for (const child of (node as any).children) doReplace(child);
+                for (const child of (node as any).children) await doReplace(child);
               }
             }
-            doReplace(replaceRoot);
+            await doReplace(replaceRoot);
             response = { success: true, data: { replaced: totalReplaced, details } };
           }
         } catch (e: any) {
@@ -718,7 +581,7 @@ function matchesReplaceValue(current: string | number, from: string | number): b
   return String(current) === String(from);
 }
 
-function applyReplacePropertyValue(node: SceneNode, prop: string, value: string | number): void {
+async function applyReplacePropertyValue(node: SceneNode, prop: string, value: string | number): Promise<void> {
   switch (prop) {
     case 'fillColor':
       if (typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
@@ -741,13 +604,15 @@ function applyReplacePropertyValue(node: SceneNode, prop: string, value: string 
     case 'fontFamily':
       if (node.type === 'TEXT' && typeof value === 'string') {
         const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
-        (node as any).fontName = { family: value, style: cur.style };
+        const { loadedStyle } = await fontBus.getOrLoad(value, cur.style);
+        (node as any).fontName = { family: value, style: loadedStyle };
       }
       break;
     case 'fontWeight':
       if (node.type === 'TEXT' && typeof value === 'string') {
         const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
-        (node as any).fontName = { family: cur.family, style: value };
+        const { loadedStyle } = await fontBus.getOrLoad(cur.family, value);
+        (node as any).fontName = { family: cur.family, style: loadedStyle };
       }
       break;
   }

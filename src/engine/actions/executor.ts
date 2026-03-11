@@ -238,6 +238,9 @@ export class ActionExecutor {
           }
 
           const frame = figma.createFrame();
+          // Figma injects a default white fill on new frames — clear it so
+          // "no fill specified" truly means no fill (least-surprise principle).
+          frame.fills = [];
           if (parentNode && 'appendChild' in parentNode) {
             parentNode.appendChild(frame);
           }
@@ -385,6 +388,7 @@ export class ActionExecutor {
 
         case 'createComponent': {
           const comp = figma.createComponent();
+          comp.fills = [];
           if (parentNode && 'appendChild' in parentNode) {
             parentNode.appendChild(comp);
           }
@@ -456,7 +460,9 @@ export class ActionExecutor {
 
         case 'updateProps': {
           if (!targetNode) return { success: false, error: 'Node not found' };
-          const warnings = await this.applyProps(targetNode, action.props);
+          const warnings = targetNode.type === 'TEXT'
+            ? await this.applyTextProps(targetNode as TextNode, action.props)
+            : await this.applyProps(targetNode, action.props);
           return { success: true, nodeId: targetNode.id, warnings: warnings.length ? warnings : undefined };
         }
 

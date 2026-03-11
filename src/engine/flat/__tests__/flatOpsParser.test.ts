@@ -76,8 +76,9 @@ describe('flatOpsParser', () => {
 
     it('handles parent as root', () => {
       const ops = lines("card = frame(root, {w:320})");
-      expect(ops[0].parentRef).toBeUndefined();
-      expect(ops[0].dependsOn).toEqual([]);
+      // Parser passes 'root' through as-is; keyword resolution happens in executor
+      expect(ops[0].parentRef).toBe('root');
+      expect(ops[0].dependsOn).toEqual(['root']);
     });
 
     it('handles parent as symbol', () => {

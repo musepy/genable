@@ -151,10 +151,12 @@ export function normalizeProps(
     }
   }
 
-  // ── clipsContent string → boolean ──
-  if ('clipsContent' in result && typeof result.clipsContent === 'string') {
-    const v = String(result.clipsContent).toLowerCase();
-    result.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
+  // ── Boolean layout props: string → boolean ──
+  for (const boolProp of ['clipsContent', 'strokesIncludedInLayout', 'itemReverseZIndex', 'constrainProportions'] as const) {
+    if (boolProp in result && typeof result[boolProp] !== 'boolean') {
+      const v = String(result[boolProp]).toLowerCase();
+      result[boolProp] = (v === 'true' || v === 'hidden' || v === 'clip');
+    }
   }
 
   // ── layoutWrap → Figma enum ──
@@ -167,8 +169,8 @@ export function normalizeProps(
   // ── Catch-all enum normalization ──
   for (const [prop, meta] of Object.entries(PROP_METADATA)) {
     if (meta.type !== 'enum' || !meta.enumMap || result[prop] === undefined) continue;
-    // Skip clipsContent — it's already been converted to boolean above
-    if (prop === 'clipsContent' && typeof result[prop] === 'boolean') continue;
+    // Skip boolean layout props — already converted above
+    if (typeof result[prop] === 'boolean') continue;
     const upper = String(result[prop]).toUpperCase();
     let mapped = meta.enumMap[upper];
     if (!mapped) {

@@ -29,5 +29,39 @@
       "enabledByDefault": true
     },
     "body": "## DESIGN KNOWLEDGE\n\nAccess design knowledge when you need guidance:\n\n- `query_knowledge(source=\"knowledge\", query=\"...\")`: Find UI patterns, color schemes, typography rules, component anatomy, layout rules\n\nUse `query_knowledge` BEFORE creating complex components to ensure best practices.\n\n### Examples\n\n**Create a pricing table:**\n```\nquery_knowledge({ source: \"knowledge\", query: \"pricing table anatomy\" })\n→ { results: [...] }\n\nbuild_design({ \"operations\": [...] })\n```"
+  },
+  "rich-text": {
+    "id": "rich-text",
+    "name": "Rich Text Styling",
+    "description": "Apply mixed styles within a single text node using markdown markup",
+    "frontmatter": {
+      "id": "rich-text",
+      "name": "Rich Text Styling",
+      "description": "Apply mixed styles within a single text node using markdown markup",
+      "category": "core",
+      "priority": 4,
+      "injectionType": "dynamic",
+      "tools": [
+        "design"
+      ],
+      "triggerPatterns": [
+        "bold",
+        "italic",
+        "strikethrough",
+        "rich text",
+        "mixed style",
+        "highlight",
+        "price",
+        "markdown",
+        "加粗",
+        "斜体",
+        "删除线",
+        "富文本",
+        "混合样式",
+        "价格"
+      ],
+      "enabledByDefault": true
+    },
+    "body": "## RICH TEXT — Mixed Styles in One Text Node\n\nText content supports **markdown markup**. The runtime automatically parses it and applies styles per character range. You never need to calculate character offsets.\n\n### Supported Markup\n\n| Syntax | Effect | Example |\n|---|---|---|\n| `**text**` | Bold | `'Click **here** to continue'` |\n| `*text*` | Italic | `'Read the *fine print*'` |\n| `***text***` | Bold Italic | `'This is ***critical***'` |\n| `~~text~~` | Strikethrough | `'Was ~~$19~~'` |\n| `{color:#HEX\\|text}` | Color | `'{color:#EF4444\\|Error}: something failed'` |\n| `{size:N\\|text}` | Font Size | `'{size:32\\|Big} then normal'` |\n\n### Nesting\n\nMarkup can be nested. Inner styles stack on the same character range:\n\n- `**~~$19~~**` → bold + strikethrough\n- `{color:#EF4444|**$9**}` → red + bold\n\n### Common Patterns\n\n**Price tag** (old price struck through, new price highlighted):\n```\ntxt = text(parent, {size:16, fill:'#6B7280'}, '~~$19.99~~ {color:#EF4444|**$9.99**}')\n```\nResult: \"$19.99\" in gray with strikethrough, \"$9.99\" in red bold.\n\n**Call to action** (keyword emphasized):\n```\ntxt = text(parent, {size:14, fill:'#374151'}, 'Click **here** to get started')\n```\nResult: \"here\" in bold, rest in regular weight.\n\n**Status message** (colored keyword):\n```\ntxt = text(parent, {size:14}, 'Status: {color:#22C55E|Active}')\n```\nResult: \"Active\" in green.\n\n**Mixed emphasis**:\n```\ntxt = text(parent, {size:14}, 'This is *important* and this is **critical**')\n```\n\n### Rules\n\n1. The base font (from `weight` prop or default 'Regular') applies to unmarked text. Markup overrides only the marked range.\n2. `**bold**` uses the same font family — only the style changes (Regular → Bold).\n3. Plain text with no markup works exactly as before — zero overhead.\n4. Do NOT calculate character offsets yourself — the runtime does it automatically.\n5. When the entire text is one style, prefer the prop instead of markup: `weight:'Bold'` not `'**all bold**'`."
   }
 }

@@ -90,12 +90,11 @@ function parseLine(line: string, num: number, uniq: (s: string) => string): Oper
   const props = buildProps(rawProps, tag, isIcon);
   if (textContent && figmaType === 'TEXT') props.characters = textContent;
 
-  const parentRef = parent === 'root' ? undefined : parent;
   return {
     command, lineNumber: num, raw: line, symbol: uniq(sym),
     ...(command === 'create' ? { nodeType: figmaType } : {}),
-    parentRef, props: normalizeProps(props, { nodeType: figmaType, isCreate: true }),
-    dependsOn: computeDependsOn(parentRef),
+    parentRef: parent, props: normalizeProps(props, { nodeType: figmaType, isCreate: true }),
+    dependsOn: computeDependsOn(parent),
     ...(isReusable ? { reusable: true } : {}),
   };
 }
@@ -119,13 +118,12 @@ function parseRef(
   }
 
   const compSym = toCamelCase(componentName);
-  const parentRef = parent === 'root' ? undefined : parent;
-  const deps = [...computeDependsOn(parentRef)];
+  const deps = [...computeDependsOn(parent)];
   if (compSym && !compSym.includes(':')) deps.push(compSym);
 
   return {
     command: 'instance', lineNumber: num, raw, symbol: uniq(sym),
-    parentRef, props: normalizeProps(props), dependsOn: deps,
+    parentRef: parent, props: normalizeProps(props), dependsOn: deps,
     componentRef: compSym,
     overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
   };

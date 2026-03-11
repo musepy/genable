@@ -55,6 +55,9 @@ export const ABBREV_EXPANSION: Record<string, string> = {
   sizingV: 'layoutSizingVertical',
   overflow: 'clipsContent',
   wrap: 'layoutWrap',
+  strokesInLayout: 'strokesIncludedInLayout',
+  reverseZ: 'itemReverseZIndex',
+  lockRatio: 'constrainProportions',
   minW: 'minWidth',
   maxW: 'maxWidth',
   minH: 'minHeight',
@@ -145,7 +148,6 @@ export function toCamelCase(name: string): string {
 
 export function computeDependsOn(parentRef?: string): string[] {
   if (!parentRef) return [];
-  if (parentRef === 'root') return [];
   if (parentRef.includes(':')) return [];
   return [parentRef];
 }

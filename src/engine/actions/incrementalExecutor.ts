@@ -318,7 +318,10 @@ export class IncrementalExecutor {
     const resolved: any = { ...action };
 
     if (resolved.parentId) {
-      resolved.parentId = this.symbolMap.get(resolved.parentId) ?? resolved.parentId;
+      // Symbol-first resolution: check symbolMap before treating 'root' as keyword.
+      // This allows user-defined symbols named 'root' to shadow the keyword.
+      resolved.parentId = this.symbolMap.get(resolved.parentId)
+        ?? (resolved.parentId === 'root' ? undefined : resolved.parentId);
     }
     if (resolved.nodeId) {
       resolved.nodeId = this.symbolMap.get(resolved.nodeId) ?? resolved.nodeId;

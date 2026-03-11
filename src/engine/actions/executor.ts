@@ -688,6 +688,9 @@ export class ActionExecutor {
     layoutAlign: 4,
     layoutPositioning: 4,
     clipsContent: 4,
+    strokesIncludedInLayout: 4,
+    itemReverseZIndex: 4,
+    constrainProportions: 4,
     // Dimensions
     width: 5,
     height: 5,

@@ -32,7 +32,9 @@ const INSPECT_PROPS = new Set([
   'textAlignHorizontal', 'lineHeight', 'letterSpacing',
   'layoutPositioning', 'x', 'y', 'iconName',
   'clipsContent', 'layoutWrap',
+  'strokesIncludedInLayout', 'itemReverseZIndex',
   'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+  'constrainProportions',
 ]);
 
 /** Abbreviations aligned with flatOpsParser's ABBREV_EXPANSION (inverse). */
@@ -61,10 +63,13 @@ const ATTR_ABBREV: Record<string, string> = {
   iconName: 'icon',
   clipsContent: 'overflow',
   layoutWrap: 'wrap',
+  strokesIncludedInLayout: 'strokesInLayout',
+  itemReverseZIndex: 'reverseZ',
   minWidth: 'minW',
   maxWidth: 'maxW',
   minHeight: 'minH',
   maxHeight: 'maxH',
+  constrainProportions: 'lockRatio',
 };
 
 /** NodeLayer type → compact tag name. */
@@ -115,6 +120,9 @@ const DEFAULTS: Record<string, any> = {
   letterSpacing: 0,
   clipsContent: false,
   layoutWrap: 'NO_WRAP',
+  strokesIncludedInLayout: false,
+  itemReverseZIndex: false,
+  constrainProportions: false,
 };
 
 /** Properties included in structural mode (skeleton only). */

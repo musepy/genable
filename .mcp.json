@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "figma-plugin": {
+      "command": "npx",
+      "args": ["tsx", "tools/mcp-server/index.ts"],
+      "cwd": "/Users/daxiaoxiao/Projects/figma gen plugin/figma-ai-generator-dogfood"
+    }
+  }
+}

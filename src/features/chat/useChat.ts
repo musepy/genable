@@ -10,6 +10,7 @@ import {
   AgentRuntimeEvent,
 } from '../../shared/protocol/agentRuntimeEvents'
 import { useDevBridge } from '../../dev/useDevBridge'
+import { useMcpBridge } from '../../dev/useMcpBridge'
 
 interface UseChatProps {
   apiKey: string
@@ -662,6 +663,8 @@ export function useChat({
     { loading, runtimeState, history, modelName, eventBufferRef },
   )
 
+  const { mcpBridgeStatus } = useMcpBridge()
+
   return {
     prompt,
     setPrompt,
@@ -691,6 +694,7 @@ export function useChat({
     onOpenSettings,
     providerName,
     devBridgeStatus,
+    mcpBridgeStatus,
   }
 }
 

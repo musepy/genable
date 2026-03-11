@@ -5,12 +5,14 @@
     "@create-figma-plugin/ui": "^4.0.3",
     "@create-figma-plugin/utilities": "^4.0.3",
     "@google/genai": "^1.38.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "lucide-preact": "^0.562.0",
     "minisearch": "^7.2.0",
     "preact": ">=10",
-    "valibot": "^1.2.0"
+    "valibot": "^1.2.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@create-figma-plugin/build": "^4.0.3",
@@ -29,8 +31,7 @@
     "ts-node": "^10.9.2",
     "typescript": ">=5",
     "vite": "^6.2.0",
-    "vitest": "^4.0.16",
-    "ws": "^8.18.3"
+    "vitest": "^4.0.16"
   },
   "scripts": {
     "build": "node build.js",
@@ -43,7 +44,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "generate:reasoning": "node scripts/generate-reasoning.js",
-    "generate:knowledge": "node scripts/generate-knowledge.js"
+    "generate:knowledge": "node scripts/generate-knowledge.js",
+    "mcp-server": "npx tsx tools/mcp-server/index.ts"
   },
   "figma-plugin": {
     "editorType": [
@@ -70,9 +72,10 @@
         "https://figma-ai-generator.muse40007.workers.dev"
       ],
       "devAllowedDomains": [
-        "http://localhost:3456"
+        "http://localhost:3456",
+        "ws://localhost:3458"
       ],
-      "reasoning": "Production: LLM APIs, icon service, CORS proxy. Dev: local bridge server for automation testing."
+      "reasoning": "Production: LLM APIs, icon service, CORS proxy. Dev: local bridge server + MCP relay for automation."
     }
   }
 }

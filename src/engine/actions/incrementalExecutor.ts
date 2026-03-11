@@ -12,6 +12,7 @@
 import { ActionExecutor } from './executor';
 import { FigmaAction } from './types';
 import { CreateExecutionResult, LineResult, ParsedLine } from './createTypes';
+import { prefetchIcons } from '../figma-adapter/assets/iconify';
 
 export type { LineResult, CreateExecutionResult };
 
@@ -129,6 +130,14 @@ export class IncrementalExecutor {
       options.onProgress?.({ lineResult: lr, stats: { completed, total } });
     }
 
+    // ---- 1b. Prefetch icons in parallel before serial execution ----
+    const iconNames = compiledActions
+      .filter(e => e.action.action === 'createIcon' && e.action.props?.iconName)
+      .map(e => (e.action as any).props.iconName as string);
+    if (iconNames.length > 0) {
+      await prefetchIcons(iconNames);
+    }
+
     // ---- 2. Execute compiled actions one by one ----
     for (const entry of compiledActions) {
       const { line, action } = entry;
@@ -155,7 +164,7 @@ export class IncrementalExecutor {
       }
 
       // ---- 2c. Resolve symbol references embedded in the action ----
-      const resolvedAction = this.resolveActionRefs(action);
+      const { action: resolvedAction, warnings: resolveWarnings } = this.resolveActionRefs(action);
 
       // ---- 2d. Execute via ActionExecutor (single-action batch) ----
       const executor = new ActionExecutor({ onError: 'skip-dependents' });
@@ -187,7 +196,7 @@ export class IncrementalExecutor {
       // Merge compiler warnings (sizing defaults) with executor warnings (font fallback, etc.)
       const executorWarnings = actionResult?.warnings?.map(w => ({ code: w.code, message: w.message })) ?? [];
       const compilerWarnings = entry.warnings ?? [];
-      const allWarnings = [...compilerWarnings, ...executorWarnings];
+      const allWarnings = [...resolveWarnings, ...compilerWarnings, ...executorWarnings];
 
       const lr: LineResult = {
         line: line.lineNumber ?? 0,
@@ -313,18 +322,35 @@ export class IncrementalExecutor {
    * supply the cross-line resolved IDs here so the single-action batch sees the
    * correct real Figma ID rather than a stale symbol string.
    */
-  private resolveActionRefs(action: FigmaAction): FigmaAction {
+  private resolveActionRefs(action: FigmaAction): { action: FigmaAction; warnings: Array<{ code: string; message: string }> } {
     // Shallow clone to avoid mutating the original compiled action
     const resolved: any = { ...action };
+    const warnings: Array<{ code: string; message: string }> = [];
 
     if (resolved.parentId) {
+      const original = resolved.parentId;
       // Symbol-first resolution: check symbolMap before treating 'root' as keyword.
       // This allows user-defined symbols named 'root' to shadow the keyword.
       resolved.parentId = this.symbolMap.get(resolved.parentId)
         ?? (resolved.parentId === 'root' ? undefined : resolved.parentId);
+      // Detect unresolved symbols: if not found in symbolMap and doesn't look like
+      // a Figma node ID (format "digits:digits"), it's likely a cross-call symbol reference.
+      if (resolved.parentId === original && !original.match(/^\d+:\d+$/)) {
+        warnings.push({
+          code: 'UNRESOLVED_SYMBOL',
+          message: `Parent '${original}' not found in current batch. Use a real node ID for cross-call references.`,
+        });
+      }
     }
     if (resolved.nodeId) {
+      const original = resolved.nodeId;
       resolved.nodeId = this.symbolMap.get(resolved.nodeId) ?? resolved.nodeId;
+      if (resolved.nodeId === original && !original.match(/^\d+:\d+$/)) {
+        warnings.push({
+          code: 'UNRESOLVED_SYMBOL',
+          message: `Node '${original}' not found in current batch. Use a real node ID for cross-call references.`,
+        });
+      }
     }
 
     // CreateInstance: resolve source.nodeId (component reference from a prior line)
@@ -344,7 +370,7 @@ export class IncrementalExecutor {
     // Figma node IDs, fail the lookup, and incorrectly abort the action.
     delete resolved.dependsOn;
 
-    return resolved as FigmaAction;
+    return { action: resolved as FigmaAction, warnings };
   }
 
   /**

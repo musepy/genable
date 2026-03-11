@@ -53,9 +53,17 @@ export const PROPS = {
   strokes: 'strokes',
   strokeWeight: 'strokeWeight',
   strokeAlign: 'strokeAlign',
+  strokeJoin: 'strokeJoin',                // enum: MITER | BEVEL | ROUND
+  strokeCap: 'strokeCap',                  // enum: NONE | ROUND | SQUARE | ARROW_LINES | ARROW_EQUILATERAL
+  dashPattern: 'dashPattern',              // number[]: e.g. [10,5] for dashed
+  strokeTopWeight: 'strokeTopWeight',      // number: per-side stroke weight
+  strokeRightWeight: 'strokeRightWeight',
+  strokeBottomWeight: 'strokeBottomWeight',
+  strokeLeftWeight: 'strokeLeftWeight',
   cornerRadius: 'cornerRadius',
   cornerSmoothing: 'cornerSmoothing',
   effects: 'effects',
+  blendMode: 'blendMode',                  // enum: NORMAL | MULTIPLY | SCREEN | etc.
 
   // ==========================
   // Text Properties
@@ -226,6 +234,20 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   // Previously missing metadata (PROPS defined but PROP_METADATA was absent → serialization broken)
   [PROPS.rotation]: { figmaKey: 'rotation', type: 'scalar', defaultValue: 0, min: -360, max: 360 },
   [PROPS.strokeAlign]: { figmaKey: 'strokeAlign', type: 'enum', enumMap: { INSIDE: 'INSIDE', OUTSIDE: 'OUTSIDE', CENTER: 'CENTER' }, defaultValue: 'INSIDE' },
+  [PROPS.strokeJoin]: { figmaKey: 'strokeJoin', type: 'enum', enumMap: { MITER: 'MITER', BEVEL: 'BEVEL', ROUND: 'ROUND' }, defaultValue: 'MITER' },
+  [PROPS.strokeCap]: { figmaKey: 'strokeCap', type: 'enum', enumMap: { NONE: 'NONE', ROUND: 'ROUND', SQUARE: 'SQUARE', ARROW_LINES: 'ARROW_LINES', ARROW_EQUILATERAL: 'ARROW_EQUILATERAL' }, defaultValue: 'NONE' },
+  [PROPS.dashPattern]: { figmaKey: 'dashPattern', type: 'array', defaultValue: [] },
+  [PROPS.strokeTopWeight]: { figmaKey: 'strokeTopWeight', type: 'scalar', min: 0, max: 100 },
+  [PROPS.strokeRightWeight]: { figmaKey: 'strokeRightWeight', type: 'scalar', min: 0, max: 100 },
+  [PROPS.strokeBottomWeight]: { figmaKey: 'strokeBottomWeight', type: 'scalar', min: 0, max: 100 },
+  [PROPS.strokeLeftWeight]: { figmaKey: 'strokeLeftWeight', type: 'scalar', min: 0, max: 100 },
+  [PROPS.blendMode]: { figmaKey: 'blendMode', type: 'enum', enumMap: {
+    PASS_THROUGH: 'PASS_THROUGH', NORMAL: 'NORMAL', DARKEN: 'DARKEN', MULTIPLY: 'MULTIPLY',
+    LINEAR_BURN: 'LINEAR_BURN', COLOR_BURN: 'COLOR_BURN', LIGHTEN: 'LIGHTEN', SCREEN: 'SCREEN',
+    LINEAR_DODGE: 'LINEAR_DODGE', COLOR_DODGE: 'COLOR_DODGE', OVERLAY: 'OVERLAY',
+    SOFT_LIGHT: 'SOFT_LIGHT', HARD_LIGHT: 'HARD_LIGHT', DIFFERENCE: 'DIFFERENCE',
+    EXCLUSION: 'EXCLUSION', HUE: 'HUE', SATURATION: 'SATURATION', COLOR: 'COLOR', LUMINOSITY: 'LUMINOSITY',
+  }, defaultValue: 'PASS_THROUGH' },
   [PROPS.cornerSmoothing]: { figmaKey: 'cornerSmoothing', type: 'scalar', defaultValue: 0, min: 0, max: 1 },
 
   // Frame Clipping & Wrap

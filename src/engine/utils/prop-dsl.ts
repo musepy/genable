@@ -50,6 +50,15 @@ export const ABBREV_EXPANSION: Record<string, string> = {
   tracking: 'letterSpacing',
   leading: 'lineHeight',
   strokeA: 'strokeAlign',
+  strokeJ: 'strokeJoin',
+  strokeC: 'strokeCap',
+  dash: 'dashPattern',
+  strokeT: 'strokeTopWeight',
+  strokeR: 'strokeRightWeight',
+  strokeB: 'strokeBottomWeight',
+  strokeL: 'strokeLeftWeight',
+  blend: 'blendMode',
+  smooth: 'cornerSmoothing',
   bg: 'background',
   sizingH: 'layoutSizingHorizontal',
   sizingV: 'layoutSizingVertical',
@@ -58,6 +67,7 @@ export const ABBREV_EXPANSION: Record<string, string> = {
   strokesInLayout: 'strokesIncludedInLayout',
   reverseZ: 'itemReverseZIndex',
   lockRatio: 'constrainProportions',
+  pin: 'constraints',
   minW: 'minWidth',
   maxW: 'maxWidth',
   minH: 'minHeight',
@@ -74,7 +84,8 @@ const STRING_VALUE_PROPS = new Set([
   'primaryAxisAlignItems', 'counterAxisAlignItems', 'textAlignHorizontal',
   'layoutPositioning', 'strokeAlign', 'iconName', 'layoutSizingHorizontal',
   'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',
-  'layoutWrap', 'component',
+  'layoutWrap', 'component', 'constraints',
+  'strokeJoin', 'strokeCap', 'blendMode', 'dashPattern',
 ]);
 
 const MIXED_VALUE_PROPS = new Set(['width', 'height']);
@@ -85,6 +96,8 @@ const NUMERIC_PROPS = new Set([
   'letterSpacing', 'lineHeight', 'opacity',
   'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius',
   'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+  'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight',
+  'cornerSmoothing',
 ]);
 
 /** Properties that use the unitValue spec (lineHeight, letterSpacing) */

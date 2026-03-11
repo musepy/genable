@@ -12,7 +12,7 @@
  */
 
 import type { NodeLayer } from '../../schema/layerSchema';
-import { paintSpec, effectSpec } from '../../domain/property-specs';
+import { paintSpec, effectSpec, constraintsSpec } from '../../domain/property-specs';
 
 // ── Constants ──
 
@@ -29,12 +29,16 @@ const INSPECT_PROPS = new Set([
   'width', 'height', 'layoutSizingHorizontal', 'layoutSizingVertical',
   'primaryAxisAlignItems', 'counterAxisAlignItems',
   'opacity', 'visible', 'effects', 'strokeWeight', 'strokeAlign',
+  'strokeJoin', 'strokeCap', 'dashPattern',
+  'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight',
+  'blendMode', 'cornerSmoothing',
   'textAlignHorizontal', 'lineHeight', 'letterSpacing',
   'layoutPositioning', 'x', 'y', 'iconName',
   'clipsContent', 'layoutWrap',
   'strokesIncludedInLayout', 'itemReverseZIndex',
   'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
   'constrainProportions',
+  'constraints',
 ]);
 
 /** Abbreviations aligned with flatOpsParser's ABBREV_EXPANSION (inverse). */
@@ -60,6 +64,15 @@ const ATTR_ABBREV: Record<string, string> = {
   letterSpacing: 'tracking',
   lineHeight: 'leading',
   strokeAlign: 'strokeA',
+  strokeJoin: 'strokeJ',
+  strokeCap: 'strokeC',
+  dashPattern: 'dash',
+  strokeTopWeight: 'strokeT',
+  strokeRightWeight: 'strokeR',
+  strokeBottomWeight: 'strokeB',
+  strokeLeftWeight: 'strokeL',
+  blendMode: 'blend',
+  cornerSmoothing: 'smooth',
   iconName: 'icon',
   clipsContent: 'overflow',
   layoutWrap: 'wrap',
@@ -70,6 +83,7 @@ const ATTR_ABBREV: Record<string, string> = {
   minHeight: 'minH',
   maxHeight: 'maxH',
   constrainProportions: 'lockRatio',
+  constraints: 'pin',
 };
 
 /** NodeLayer type → compact tag name. */
@@ -94,6 +108,8 @@ const FIGMA_TO_CSS: Record<string, Record<string, string>> = {
   layoutSizingVertical:   { FILL: 'fill', HUG: 'hug' },
   textAlignHorizontal:    { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'justified' },
   strokeAlign:            { INSIDE: 'inside', OUTSIDE: 'outside', CENTER: 'center' },
+  strokeJoin:             { MITER: 'miter', BEVEL: 'bevel', ROUND: 'round' },
+  strokeCap:              { NONE: 'none', ROUND: 'round', SQUARE: 'square', ARROW_LINES: 'arrow-lines', ARROW_EQUILATERAL: 'arrow-equilateral' },
   layoutWrap:             { WRAP: 'wrap' },
 };
 
@@ -117,6 +133,14 @@ const DEFAULTS: Record<string, any> = {
   x: 0,
   y: 0,
   strokeAlign: 'INSIDE',
+  strokeJoin: 'MITER',
+  strokeCap: 'NONE',
+  blendMode: 'PASS_THROUGH',
+  cornerSmoothing: 0,
+  strokeTopWeight: 0,
+  strokeRightWeight: 0,
+  strokeBottomWeight: 0,
+  strokeLeftWeight: 0,
   letterSpacing: 0,
   clipsContent: false,
   layoutWrap: 'NO_WRAP',
@@ -362,9 +386,33 @@ export class FlatOpsSerializer {
 
       if (key in DEFAULTS && value === DEFAULTS[key]) continue;
 
+      // Suppress per-side stroke weights when they all match strokeWeight (uniform stroke)
+      if ((key === 'strokeTopWeight' || key === 'strokeRightWeight' || key === 'strokeBottomWeight' || key === 'strokeLeftWeight')) {
+        const sw = props.strokeWeight;
+        if (sw !== undefined && sw !== MIXED && value === sw) continue;
+      }
+
       // clipsContent → overflow semantics
       if (key === 'clipsContent') {
         pairs.push(`${ATTR_ABBREV[key] || key}:${fmtVal(value ? 'hidden' : 'visible')}`);
+        continue;
+      }
+
+      // dashPattern → compact "10,5" format
+      if (key === 'dashPattern' && Array.isArray(value)) {
+        if (value.length > 0) {
+          pairs.push(`${ATTR_ABBREV[key] || key}:${fmtVal(value.join(','))}`);
+        }
+        continue;
+      }
+
+      // constraints → compact "H,V" format
+      if (key === 'constraints' && typeof value === 'object') {
+        const ir = constraintsSpec.fromFigma(value);
+        const defaultIr = constraintsSpec.defaultValue!;
+        if (!constraintsSpec.isEqual(ir, defaultIr)) {
+          pairs.push(`${ATTR_ABBREV[key] || key}:${fmtVal(constraintsSpec.formatXml(ir))}`);
+        }
         continue;
       }
 

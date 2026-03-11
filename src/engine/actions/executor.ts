@@ -13,7 +13,8 @@ import { fetchIconSvg } from '../figma-adapter/assets/iconify';
 import { parseActionError } from './errorParser';
 import { ActionErrorSubCategory } from './errorTypes';
 import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
-import { lowerPaints, lowerEffects, lowerUnitValue } from '../figma/figma-lowering';
+import { lowerPaints } from '../figma/figma-lowering';
+import { applyProperty } from './handlers';
 import { parseRichText } from '../text/richTextParser';
 
 /**
@@ -725,91 +726,14 @@ export class ActionExecutor {
     }
 
     // 2. Sort properties by dependency order to avoid Figma API errors
-    //    (e.g., layoutMode must be set before layoutSizingVertical)
     const sortedEntries = ActionExecutor.sortPropsByDependency(Object.entries(normalizedProps));
 
-    // 3. Format conversions + apply (using figma-lowering for complex types)
+    // 3. Apply each property via the handler pipeline
     for (const [key, value] of sortedEntries) {
-      if (key === 'fills' && Array.isArray(value)) {
-        try {
-          (node as any).fills = lowerPaints(value);
-        } catch (e: any) {
-          console.warn(`[ActionExecutor] Failed to apply fills on node ${node.id}: ${e.message}`);
-          warnings.push({ code: 'PAINT_INVALID', severity: 'warning', message: `Failed to apply fills: ${e.message}` });
-        }
-      } else if (key === 'strokes' && Array.isArray(value)) {
-        try {
-          (node as any).strokes = lowerPaints(value);
-        } catch (e: any) {
-          console.warn(`[ActionExecutor] Failed to apply strokes on node ${node.id}: ${e.message}`);
-          warnings.push({ code: 'PAINT_INVALID', severity: 'warning', message: `Failed to apply strokes: ${e.message}` });
-        }
-      } else if (key === 'effects' && Array.isArray(value)) {
-        try {
-          (node as any).effects = lowerEffects(value);
-        } catch (e: any) {
-          console.warn(`[ActionExecutor] Failed to apply effects on node ${node.id}: ${e.message}`);
-          warnings.push({ code: 'EFFECT_INVALID', severity: 'warning', message: `Failed to apply effects: ${e.message}` });
-        }
-      } else if ((key === 'letterSpacing' || key === 'lineHeight') && (typeof value === 'number' || typeof value === 'string' || (typeof value === 'object' && value !== null && 'unit' in value))) {
-        try {
-          (node as any)[key] = lowerUnitValue(value);
-        } catch (e: any) {
-          console.warn(`[ActionExecutor] Failed to apply ${key} on node ${node.id}: ${e.message}`);
-          warnings.push({ code: 'PROP_NORMALIZE_FAILED', severity: 'warning', message: `Failed to apply ${key}: ${e.message}` });
-        }
-      } else if ((key === 'width' || key === 'height') && 'resize' in node) {
-        try {
-          (node as any).resize(
-            key === 'width' ? value : node.width,
-            key === 'height' ? value : node.height
-          );
-        } catch (e: any) {
-          console.warn(`[ActionExecutor] Failed to resize node ${node.id}: ${e.message}`);
-          warnings.push({ code: 'RESIZE_FAILED', severity: 'warning', message: `Failed to resize: ${e.message}` });
-        }
-      } else if (key in node) {
-        if (!this.canAssignProperty(node, key)) {
-          console.warn(`[ActionExecutor] Skipping readonly property '${key}' on node ${node.id} (${node.type})`);
-          warnings.push({ code: 'SKIPPED_READONLY', severity: 'warning', message: `Skipped readonly property '${key}'` });
-          continue;
-        }
-
-        try {
-          (node as any)[key] = value;
-        } catch (e: any) {
-          const message = e?.message || 'Unknown property set error';
-          if (String(message).includes('no setter for property')) {
-            console.warn(`[ActionExecutor] Skipping property '${key}' due to missing setter on node ${node.id} (${node.type})`);
-            warnings.push({ code: 'MISSING_SETTER', severity: 'warning', message: `Skipped property '${key}' due to missing setter` });
-            continue;
-          }
-          throw e;
-        }
-      } else {
-        console.warn(`[ActionExecutor] Unsupported property '${key}' on node ${node.id} (${node.type})`);
-        warnings.push({
-          code: 'UNSUPPORTED_PROP',
-          severity: 'warning',
-          message: `Skipped unsupported property '${key}' on ${node.type} node`,
-        });
-      }
+      const w = await applyProperty(node, key, value);
+      if (w.length > 0) warnings.push(...w);
     }
     return warnings;
-  }
-
-  private canAssignProperty(node: SceneNode, key: string): boolean {
-    // Walk the prototype chain to detect getter-only/readonly properties.
-    let target: any = node;
-    while (target) {
-      const descriptor = Object.getOwnPropertyDescriptor(target, key);
-      if (descriptor) {
-        return descriptor.writable === true || typeof descriptor.set === 'function';
-      }
-      target = Object.getPrototypeOf(target);
-    }
-    // If we cannot resolve a descriptor, keep previous behavior and attempt assignment.
-    return true;
   }
 
   private async applyTextProps(node: TextNode, props: Record<string, any>): Promise<any[]> {

@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { parse } = require('csv-parse/sync');
 
-const DATA_DIR = path.resolve(__dirname, '../../ui-ux-pro-max-skill/skills/ui-ux-pro-max/data');
+const DATA_DIR = '/Users/daxiaoxiao/Projects/figma gen plugin/ui-ux-pro-max-skill/.shared/ui-ux-pro-max/data';
 const OUTPUT_DIR = path.resolve(__dirname, '../src/generated');
 
 // Tier 1 data sources with their transformers

@@ -5,7 +5,7 @@ User: "Create a card with a title"
 
 ```json
 design({
-  "xml": "<frame name='Card' layout='column' gap='12' p='16' w='360' height='hug' bg='#FFFFFF' corner='12'><text name='Title' size='20' weight='Bold' fill='#111827' width='fill'>Card Title</text><text name='Subtitle' size='14' fill='#6B7280' width='fill'>Description text</text></frame>"
+  "xml": "<frame name='Card' layout='column' gap='12' p='16' w='360' height='hug' bg='#FFFFFF' corner='12'><text name='Title' size='20' weight='Bold' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Card Title</text><text name='Subtitle' size='14' fill='#6B7280' w='328' textAutoResize='HEIGHT'>Description text</text></frame>"
 })
 ```
 
@@ -24,7 +24,7 @@ design({
 ```json
 design({
   "parentId": "200:3",
-  "xml": "<text name='Logo' size='28' weight='Bold' fill='#4F46E5'>Acme</text><text name='Title' size='20' weight='Bold' fill='#111827'>Welcome back</text><text name='Subtitle' size='14' fill='#6B7280'>Sign in to your account</text>"
+  "xml": "<text name='Logo' size='28' weight='Bold' fill='#4F46E5' textAutoResize='WIDTH_AND_HEIGHT'>Acme</text><text name='Title' size='20' weight='Bold' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Welcome back</text><text name='Subtitle' size='14' fill='#6B7280' w='340' textAutoResize='HEIGHT'>Sign in to your account</text>"
 })
 ```
 
@@ -32,7 +32,7 @@ design({
 ```json
 design({
   "parentId": "200:4",
-  "xml": "<frame name='Email Field' layout='column' gap='6' width='fill' height='hug' bg='transparent'><text name='Label' size='14' weight='Medium' fill='#374151'>Email</text><frame name='Input' layout='row' p='12 16' width='fill' height='hug' bg='#FFFFFF' corner='8' stroke='#D1D5DB' strokeW='1'><text name='Placeholder' size='14' fill='#9CA3AF'>you@example.com</text></frame></frame><frame name='Password Field' layout='column' gap='6' width='fill' height='hug' bg='transparent'><text name='Label' size='14' weight='Medium' fill='#374151'>Password</text><frame name='Input' layout='row' p='12 16' width='fill' height='hug' bg='#FFFFFF' corner='8' stroke='#D1D5DB' strokeW='1'><text name='Placeholder' size='14' fill='#9CA3AF'>••••••••</text></frame></frame><frame name='Sign In Button' layout='row' justifyContent='center' alignItems='center' p='12' width='fill' h='44' bg='#4F46E5' corner='8'><text name='Label' size='16' weight='Bold' fill='#FFFFFF'>Sign In</text></frame>"
+  "xml": "<frame name='Email Field' layout='column' gap='6' width='fill' height='hug' bg='transparent'><text name='Label' size='14' weight='Medium' fill='#374151' textAutoResize='WIDTH_AND_HEIGHT'>Email</text><frame name='Input' layout='row' p='12 16' width='fill' height='hug' bg='#FFFFFF' corner='8' stroke='#D1D5DB' strokeW='1'><text name='Placeholder' size='14' fill='#9CA3AF' textAutoResize='WIDTH_AND_HEIGHT'>you@example.com</text></frame></frame><frame name='Password Field' layout='column' gap='6' width='fill' height='hug' bg='transparent'><text name='Label' size='14' weight='Medium' fill='#374151' textAutoResize='WIDTH_AND_HEIGHT'>Password</text><frame name='Input' layout='row' p='12 16' width='fill' height='hug' bg='#FFFFFF' corner='8' stroke='#D1D5DB' strokeW='1'><text name='Placeholder' size='14' fill='#9CA3AF' textAutoResize='WIDTH_AND_HEIGHT'>••••••••</text></frame></frame><frame name='Sign In Button' layout='row' justifyContent='center' alignItems='center' p='12' width='fill' h='44' bg='#4F46E5' corner='8'><text name='Label' size='16' weight='Bold' fill='#FFFFFF' textAutoResize='WIDTH_AND_HEIGHT'>Sign In</text></frame>"
 })
 ```
 
@@ -40,7 +40,7 @@ design({
 ```json
 design({
   "parentId": "200:5",
-  "xml": "<text name='Forgot' size='14' fill='#4F46E5'>Forgot password?</text><text name='Signup' size='14' fill='#6B7280'>Don't have an account? <text size='14' fill='#4F46E5' weight='Medium'>Sign up</text></text>"
+  "xml": "<text name='Forgot' size='14' fill='#4F46E5' textAutoResize='WIDTH_AND_HEIGHT'>Forgot password?</text><frame name='Signup Row' layout='row' gap='4' width='hug' height='hug' bg='transparent' alignItems='center'><text name='Signup Prompt' size='14' fill='#6B7280' textAutoResize='WIDTH_AND_HEIGHT'>Don't have an account?</text><text name='Signup Link' size='14' fill='#4F46E5' weight='Medium' textAutoResize='WIDTH_AND_HEIGHT'>Sign up</text></frame>"
 })
 ```
 
@@ -91,7 +91,7 @@ User: "Create a button with bold title"
 
 ```json
 design({
-  "xml": "<frame name='Button' layout='row' p='12' width='hug' h='44' corner='8' bg='#4F46E5' justifyContent='center' alignItems='center'><text name='Label' size='16' weight='Bold' fill='#FFFFFF'>Sign In</text></frame>"
+  "xml": "<frame name='Button' layout='row' p='12' width='hug' h='44' corner='8' bg='#4F46E5' justifyContent='center' alignItems='center'><text name='Label' size='16' weight='Bold' fill='#FFFFFF' textAutoResize='WIDTH_AND_HEIGHT'>Sign In</text></frame>"
 })
 design({"xml": "<text id='100:2' weight='Medium'/>"})
 ```
@@ -102,7 +102,7 @@ User: "Create a stats dashboard with 3 metric cards"
 **Step 1 — Define the reusable component** (small, all attributes):
 ```json
 design({
-  "xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A'>0</text></frame>"
+  "xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B' textAutoResize='WIDTH_AND_HEIGHT'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A' textAutoResize='WIDTH_AND_HEIGHT'>0</text></frame>"
 })
 ```
 

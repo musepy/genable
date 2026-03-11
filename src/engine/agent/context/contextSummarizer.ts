@@ -153,10 +153,15 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
 function summarizeArgs(toolName: string, args: any): string {
   if (!args || typeof args !== 'object') return '';
 
-  if (toolName === 'create' || toolName === 'edit') {
+  if (toolName === 'create' || toolName === 'edit' || toolName === 'design') {
     // XML content — just show length
     const xml = args.xml || args.content || '';
-    return xml.length > 40 ? `${xml.length} chars` : truncate(xml, 40);
+    const parts: string[] = [];
+    if (typeof xml === 'string' && xml.length > 0) {
+      parts.push(xml.length > 40 ? `${xml.length} chars` : truncate(xml, 40));
+    }
+    if (args.parentId) parts.push(`parent:${args.parentId}`);
+    return parts.join(', ');
   }
   if (toolName === 'context') {
     return '';
@@ -187,8 +192,10 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
     return 'ok';
   }
   if (toolName === 'edit') {
-    const count = resp.data?.editedCount || resp.data?.results?.length;
-    return count ? `edited ${count} nodes` : 'ok';
+    return summarizeEditLikeResult(resp.data);
+  }
+  if (toolName === 'design') {
+    return summarizeDesignResult(resp.data);
   }
   if (toolName === 'context') {
     const childCount = resp.data?.page?.childCount;
@@ -200,6 +207,86 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
     return 'ok';
   }
   return 'ok';
+}
+
+function summarizeEditLikeResult(data: any): string {
+  if (!data || typeof data !== 'object') return 'ok';
+
+  const parts: string[] = [];
+  const edited = typeof data.edited === 'number'
+    ? data.edited
+    : (typeof data.editedCount === 'number' ? data.editedCount : data.results?.length);
+  if (edited) parts.push(`edited ${edited}`);
+
+  appendReceiptSignals(parts, data);
+
+  return parts.join(', ') || 'ok';
+}
+
+function summarizeDesignResult(data: any): string {
+  if (!data || typeof data !== 'object') return 'ok';
+
+  const parts: string[] = [];
+  if (typeof data.created === 'number' && data.created > 0) parts.push(`created ${data.created}`);
+  if (typeof data.edited === 'number' && data.edited > 0) parts.push(`edited ${data.edited}`);
+  if (typeof data.deleted === 'number' && data.deleted > 0) parts.push(`deleted ${data.deleted}`);
+
+  appendIdMapSummary(parts, data.idMap);
+  appendReceiptSignals(parts, data);
+
+  return parts.join(', ') || 'ok';
+}
+
+function appendReceiptSignals(parts: string[], data: any): void {
+  const defaultsAppliedCount = typeof data.defaultsAppliedCount === 'number'
+    ? data.defaultsAppliedCount
+    : (Array.isArray(data.defaultsApplied) ? data.defaultsApplied.length : 0);
+  if (defaultsAppliedCount > 0) {
+    const sample = Array.isArray(data.defaultsApplied)
+      ? data.defaultsApplied
+          .slice(0, 3)
+          .map((entry: any) => entry?.property)
+          .filter(Boolean)
+      : [];
+    parts.push(sample.length > 0
+      ? `defaults ${defaultsAppliedCount} [${sample.join(', ')}]`
+      : `defaults ${defaultsAppliedCount}`);
+  }
+
+  const violations = Array.isArray(data.violations) ? data.violations : [];
+  if (violations.length > 0) {
+    const sampleCodes = violations
+      .slice(0, 3)
+      .map((violation: any) => violation?.code)
+      .filter(Boolean);
+    parts.push(sampleCodes.length > 0
+      ? `violations ${violations.length} [${sampleCodes.join(', ')}]`
+      : `violations ${violations.length}`);
+  }
+
+  if (data.nodeLimitWarning) parts.push('node-limit warning');
+  if (Array.isArray(data.degraded) && data.degraded.length > 0) {
+    parts.push(`degraded ${data.degraded.length}`);
+  }
+  if (typeof data.warningCount === 'number' && data.warningCount > 0) {
+    parts.push(`warnings ${data.warningCount}`);
+  }
+  if (typeof data.failed === 'number' && data.failed > 0) {
+    parts.push(`failed ${data.failed}`);
+  }
+}
+
+function appendIdMapSummary(parts: string[], idMap: any): void {
+  if (!idMap || typeof idMap !== 'object') return;
+
+  const entries = Object.entries(idMap);
+  if (entries.length === 0) return;
+
+  const sample = entries
+    .slice(0, 3)
+    .map(([key, value]) => `${key}=${value}`);
+  const suffix = entries.length > 3 ? ` +${entries.length - 3} more` : '';
+  parts.push(`ids [${sample.join(', ')}${suffix}]`);
 }
 
 function extractText(content: string | Part[]): string {

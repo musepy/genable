@@ -59,7 +59,7 @@ interface HarnessReport {
   iterations: IterationTrace[];
   generateDesignIteration: number | null;
   verificationEntryIteration: number | null;
-  anomaliesDetected: string[];
+  violationsDetected: string[];
   fixAttempts: number;
 }
 
@@ -111,9 +111,9 @@ class MockFigmaState {
   inspect(mode: string, _nodeId?: string, _depth?: number): any {
     this.inspectCallCount++;
     const dsl = this.buildDSL();
-    // First inspection: return minor anomalies. Subsequent: clean.
-    const anomalies = this.inspectCallCount === 1 ? this.generateAnomalies() : [];
-    return { mode, dsl, anomalies, nodeCount: this.nodes.size };
+    // First inspection: return minor violations. Subsequent: clean.
+    const violations = this.inspectCallCount === 1 ? this.generateViolations() : [];
+    return { mode, dsl, violations, nodeCount: this.nodes.size };
   }
 
   recordPatch() { this.patchCount++; }
@@ -161,20 +161,20 @@ class MockFigmaState {
     };
   }
 
-  private generateAnomalies(): any[] {
+  private generateViolations(): any[] {
     const textNodes = Array.from(this.nodes.values()).filter(n => n.type === 'TEXT');
-    const anomalies: any[] = [];
+    const violations: any[] = [];
     if (textNodes.length > 0) {
-      anomalies.push({
-        type: 'TEXT_OVERFLOW',
+      violations.push({
+        code: 'TEXT_OVERFLOW',
         nodeId: textNodes[0].id,
         nodeName: textNodes[0].name,
         severity: 'warning',
         message: `Text "${textNodes[0].name}" may overflow its container.`,
-        suggestedFix: { textAutoResize: 'HEIGHT' },
+        fix: 'Set textAutoResize to "HEIGHT"',
       });
     }
-    return anomalies;
+    return violations;
   }
 }
 
@@ -192,7 +192,7 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
           rootNodeId: result.rootNodeId,
           totalNodes: result.totalNodes,
           idMap: result.idMap,
-          anomalies: [],
+          violations: [],
         },
       };
     },
@@ -311,7 +311,7 @@ function printReport(report: HarnessReport): void {
   console.log('\n--- Key Milestones ---');
   console.log(`  generateDesign called at iteration:  ${report.generateDesignIteration ?? 'NEVER'}`);
   console.log(`  VERIFICATION entered at iteration:   ${report.verificationEntryIteration ?? 'NEVER'}`);
-  console.log(`  Anomalies detected:                  ${report.anomaliesDetected.length > 0 ? report.anomaliesDetected.join(', ') : 'none'}`);
+  console.log(`  Violations detected:                 ${report.violationsDetected.length > 0 ? report.violationsDetected.join(', ') : 'none'}`);
   console.log(`  Fix attempts (patch calls):          ${report.fixAttempts}`);
 
   console.log('\n--- Per-Iteration Timeline ---');
@@ -369,7 +369,7 @@ describe('Agent Real API Harness', () => {
       iterations: [],
       generateDesignIteration: null,
       verificationEntryIteration: null,
-      anomaliesDetected: [],
+      violationsDetected: [],
       fixAttempts: 0,
     };
 
@@ -443,9 +443,9 @@ describe('Agent Real API Harness', () => {
         if (toolCall.name === 'generateDesign' && report.generateDesignIteration === null) {
           report.generateDesignIteration = currentIteration;
         }
-        if (toolCall.name === 'inspectDesign' && result?.data?.anomalies?.length > 0) {
-          for (const a of result.data.anomalies) {
-            report.anomaliesDetected.push(`${a.type}: ${a.nodeName || a.nodeId}`);
+        if (toolCall.name === 'inspectDesign' && result?.data?.violations?.length > 0) {
+          for (const a of result.data.violations) {
+            report.violationsDetected.push(`${a.code}: ${a.nodeName || a.nodeId}`);
           }
         }
         if (toolCall.name === 'patchNode' || toolCall.name === 'applyDesignPatch') {

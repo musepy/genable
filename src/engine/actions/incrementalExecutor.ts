@@ -114,10 +114,10 @@ export class IncrementalExecutor {
     // ---- 1. Seed lineResults with parse/compilation errors ----
     for (const ce of parseErrors) {
       const lr: LineResult = {
-        line: ce.line.lineNumber,
-        raw: ce.line.raw,
+        line: ce.line.lineNumber ?? 0,
+        raw: ce.line.raw ?? '',
         status: 'failed',
-        command: ce.line.command !== 'PARSE_ERROR' ? ce.line.command : undefined,
+        command: ce.line.command,
         symbol: ce.line.symbol,
         error: ce.error,
       };
@@ -165,8 +165,8 @@ export class IncrementalExecutor {
       } catch (e: any) {
         // Unexpected throw from ActionExecutor itself
         const lr: LineResult = {
-          line: line.lineNumber,
-          raw: line.raw,
+          line: line.lineNumber ?? 0,
+          raw: line.raw ?? '',
           status: 'failed',
           command: line.command,
           symbol: line.symbol,
@@ -190,8 +190,8 @@ export class IncrementalExecutor {
       const allWarnings = [...compilerWarnings, ...executorWarnings];
 
       const lr: LineResult = {
-        line: line.lineNumber,
-        raw: line.raw,
+        line: line.lineNumber ?? 0,
+        raw: line.raw ?? '',
         status: succeeded ? 'ok' : 'failed',
         command: line.command,
         symbol: line.symbol,
@@ -295,8 +295,8 @@ export class IncrementalExecutor {
    */
   private makeSkippedResult(line: ParsedLine, skipReason: string): LineResult {
     return {
-      line: line.lineNumber,
-      raw: line.raw,
+      line: line.lineNumber ?? 0,
+      raw: line.raw ?? '',
       status: 'skipped',
       command: line.command,
       symbol: line.symbol,

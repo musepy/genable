@@ -46,6 +46,10 @@ const NAME_ALIASES: Record<string, string> = {
   borderRadius: 'cornerRadius',
 };
 
+export interface NormalizePropsOptions {
+  nodeType?: string;
+}
+
 /**
  * Apply all cross-property normalizations to a raw attribute map.
  * Returns a new object — does not mutate input.
@@ -61,8 +65,12 @@ const NAME_ALIASES: Record<string, string> = {
  *   8. layoutWrap string → Figma enum
  *   9. Catch-all enum normalization via PROP_METADATA
  */
-export function normalizeProps(props: Record<string, any>): Record<string, any> {
+export function normalizeProps(
+  props: Record<string, any>,
+  options: NormalizePropsOptions = {},
+): Record<string, any> {
   const result: Record<string, any> = { ...props };
+  const isTextNode = options.nodeType?.toUpperCase() === 'TEXT';
 
   // ── layout → layoutMode ──
   if ('layout' in result) {
@@ -86,7 +94,7 @@ export function normalizeProps(props: Record<string, any>): Record<string, any> 
   }
 
   // ── width: "fill"/"hug"/"100%" → layoutSizingHorizontal ──
-  if ('width' in result && typeof result.width === 'string') {
+  if (!isTextNode && 'width' in result && typeof result.width === 'string') {
     const w = result.width.toLowerCase().trim();
     if (w === 'fill' || w === 'hug') {
       result.layoutSizingHorizontal = w.toUpperCase();
@@ -98,7 +106,7 @@ export function normalizeProps(props: Record<string, any>): Record<string, any> 
   }
 
   // ── height: "fill"/"hug"/"100%" → layoutSizingVertical ──
-  if ('height' in result && typeof result.height === 'string') {
+  if (!isTextNode && 'height' in result && typeof result.height === 'string') {
     const h = result.height.toLowerCase().trim();
     if (h === 'fill' || h === 'hug') {
       result.layoutSizingVertical = h.toUpperCase();

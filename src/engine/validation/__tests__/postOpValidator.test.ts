@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePostOp, collectTreeAnomalies, ValidationAnomaly } from '../postOpValidator';
+import { validatePostOp, collectTreeViolations, ValidationViolation } from '../postOpValidator';
 
 /**
  * Mock SceneNode factory for testing.
@@ -40,7 +40,6 @@ function mockText(overrides: Partial<TextNode> & { parent?: any } = {}): any {
     characters: 'Hello',
     fontSize: 14,
     textAutoResize: 'WIDTH_AND_HEIGHT',
-    layoutSizingHorizontal: 'FIXED',
     parent: null,
     ...overrides,
   };
@@ -48,13 +47,13 @@ function mockText(overrides: Partial<TextNode> & { parent?: any } = {}): any {
 
 describe('postOpValidator structured output', () => {
 
-  describe('ValidationAnomaly structure', () => {
-    it('returns ValidationAnomaly objects with all required fields', () => {
+  describe('ValidationViolation structure', () => {
+    it('returns ValidationViolation objects with all required fields', () => {
       const node = mockFrame({ width: 0, height: 100 });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      expect(anomalies.length).toBe(1);
-      const a = anomalies[0];
+      expect(violations.length).toBe(1);
+      const a: ValidationViolation = violations[0];
 
       expect(a).toHaveProperty('code');
       expect(a).toHaveProperty('message');
@@ -72,42 +71,42 @@ describe('postOpValidator structured output', () => {
 
     it('returns empty array when no issues detected', () => {
       const node = mockFrame({ width: 400, height: 300 });
-      const anomalies = validatePostOp(node);
-      expect(anomalies).toEqual([]);
+      const violations = validatePostOp(node);
+      expect(violations).toEqual([]);
     });
   });
 
   describe('ZERO_DIM', () => {
     it('detects zero width with context', () => {
       const node = mockFrame({ id: 'f1', name: 'Card', width: 0, height: 100 });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      expect(anomalies.length).toBe(1);
-      expect(anomalies[0].code).toBe('ZERO_DIM');
-      expect(anomalies[0].nodeId).toBe('f1');
-      expect(anomalies[0].nodeName).toBe('Card');
-      expect(anomalies[0].context.width).toBe(0);
-      expect(anomalies[0].context.height).toBe(100);
-      expect(anomalies[0].hints.length).toBeGreaterThan(0);
+      expect(violations.length).toBe(1);
+      expect(violations[0].code).toBe('ZERO_DIM');
+      expect(violations[0].nodeId).toBe('f1');
+      expect(violations[0].nodeName).toBe('Card');
+      expect(violations[0].context.width).toBe(0);
+      expect(violations[0].context.height).toBe(100);
+      expect(violations[0].hints.length).toBeGreaterThan(0);
     });
 
     it('detects zero height', () => {
       const node = mockFrame({ width: 100, height: 0 });
-      const anomalies = validatePostOp(node);
-      expect(anomalies[0].code).toBe('ZERO_DIM');
-      expect(anomalies[0].context.height).toBe(0);
+      const violations = validatePostOp(node);
+      expect(violations[0].code).toBe('ZERO_DIM');
+      expect(violations[0].context.height).toBe(0);
     });
   });
 
   describe('INVISIBLE', () => {
     it('detects opacity=0 with context', () => {
       const node = mockFrame({ id: 'f2', name: 'Hidden', opacity: 0 });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      expect(anomalies.length).toBe(1);
-      expect(anomalies[0].code).toBe('INVISIBLE');
-      expect(anomalies[0].context.opacity).toBe(0);
-      expect(anomalies[0].hints.length).toBeGreaterThan(0);
+      expect(violations.length).toBe(1);
+      expect(violations[0].code).toBe('INVISIBLE');
+      expect(violations[0].context.opacity).toBe(0);
+      expect(violations[0].hints.length).toBeGreaterThan(0);
     });
   });
 
@@ -123,9 +122,9 @@ describe('postOpValidator structured output', () => {
         height: 20,
         fontSize: 14,
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const overflow = anomalies.find(a => a.code === 'TEXT_OVERFLOW');
+      const overflow = violations.find(a => a.code === 'TEXT_OVERFLOW');
       expect(overflow).toBeDefined();
       expect(overflow!.context.textAutoResize).toBe('NONE');
       expect(overflow!.context.containerWidth).toBe(100);
@@ -135,22 +134,36 @@ describe('postOpValidator structured output', () => {
     });
   });
 
-  describe('TEXT_WRAP_MISSING', () => {
-    it('detects missing text wrap on FILL+long text', () => {
+  describe('TEXT_WIDTH_COLLAPSED', () => {
+    it('detects narrow HEIGHT text that will collapse into stacked lines', () => {
       const node = mockText({
         id: 'txt2',
-        name: 'LongText',
-        characters: 'A'.repeat(80),
-        textAutoResize: 'WIDTH_AND_HEIGHT',
-        layoutSizingHorizontal: 'FILL',
+        name: 'Heading',
+        characters: 'Settings',
+        textAutoResize: 'HEIGHT',
+        width: 73,
+        fontSize: 38,
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const wrap = anomalies.find(a => a.code === 'TEXT_WRAP_MISSING');
+      const wrap = violations.find(a => a.code === 'TEXT_WIDTH_COLLAPSED');
       expect(wrap).toBeDefined();
-      expect(wrap!.context.textAutoResize).toBe('WIDTH_AND_HEIGHT');
-      expect(wrap!.context.layoutSizingHorizontal).toBe('FILL');
-      expect(wrap!.hints[0]).toContain('HEIGHT');
+      expect(wrap!.context.textAutoResize).toBe('HEIGHT');
+      expect(wrap!.context.width).toBe(73);
+      expect(wrap!.context.estimatedLines).toBeGreaterThanOrEqual(3);
+      expect(wrap!.hints[0]).toContain('WIDTH_AND_HEIGHT');
+    });
+
+    it('does not flag adequately wide wrapped text', () => {
+      const node = mockText({
+        characters: 'Automatically save your work every 30 seconds',
+        textAutoResize: 'HEIGHT',
+        width: 320,
+        fontSize: 14,
+      });
+
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'TEXT_WIDTH_COLLAPSED')).toBeUndefined();
     });
   });
 
@@ -166,9 +179,9 @@ describe('postOpValidator structured output', () => {
         layoutMode: 'NONE',
         children,
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const missing = anomalies.find(a => a.code === 'MISSING_AUTO_LAYOUT');
+      const missing = violations.find(a => a.code === 'MISSING_AUTO_LAYOUT');
       expect(missing).toBeDefined();
       expect(missing!.context.layoutMode).toBe('NONE');
       expect(missing!.context.childCount).toBe(2);
@@ -185,8 +198,8 @@ describe('postOpValidator structured output', () => {
         layoutMode: 'VERTICAL',
         children,
       });
-      const anomalies = validatePostOp(node);
-      expect(anomalies.find(a => a.code === 'MISSING_AUTO_LAYOUT')).toBeUndefined();
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'MISSING_AUTO_LAYOUT')).toBeUndefined();
     });
   });
 
@@ -200,9 +213,9 @@ describe('postOpValidator structured output', () => {
         parent,
       });
 
-      const anomalies = validatePostOp(node, { layoutSizingHorizontal: 'FILL' });
+      const violations = validatePostOp(node, { layoutSizingHorizontal: 'FILL' });
 
-      const reverted = anomalies.find(a => a.code === 'SIZING_REVERTED');
+      const reverted = violations.find(a => a.code === 'SIZING_REVERTED');
       expect(reverted).toBeDefined();
       expect(reverted!.context.axis).toBe('horizontal');
       expect(reverted!.context.intended).toBe('FILL');
@@ -221,8 +234,8 @@ describe('postOpValidator structured output', () => {
         parent,
       });
 
-      const anomalies = validatePostOp(node, { layoutSizingHorizontal: 'FILL' });
-      const reverted = anomalies.find(a => a.code === 'SIZING_REVERTED');
+      const violations = validatePostOp(node, { layoutSizingHorizontal: 'FILL' });
+      const reverted = violations.find(a => a.code === 'SIZING_REVERTED');
       expect(reverted).toBeDefined();
       // When parent has auto-layout, hint should suggest re-applying FILL, not fixing parent
       expect(reverted!.hints[0]).toContain('FILL');
@@ -243,9 +256,9 @@ describe('postOpValidator structured output', () => {
         layoutSizingVertical: 'FIXED',
         children,
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const cycle = anomalies.find(a => a.code === 'HUG_FILL_CYCLE');
+      const cycle = violations.find(a => a.code === 'HUG_FILL_CYCLE');
       expect(cycle).toBeDefined();
       expect(cycle!.context.axis).toBe('horizontal');
       expect(cycle!.context.parentSizing).toBe('HUG');
@@ -265,9 +278,9 @@ describe('postOpValidator structured output', () => {
         layoutSizingVertical: 'HUG',
         children,
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const cycle = anomalies.find(a => a.code === 'HUG_FILL_CYCLE');
+      const cycle = violations.find(a => a.code === 'HUG_FILL_CYCLE');
       expect(cycle).toBeDefined();
       expect(cycle!.context.axis).toBe('vertical');
     });
@@ -282,8 +295,8 @@ describe('postOpValidator structured output', () => {
         layoutSizingVertical: 'FIXED',
         children,
       });
-      const anomalies = validatePostOp(node);
-      expect(anomalies.find(a => a.code === 'HUG_FILL_CYCLE')).toBeUndefined();
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'HUG_FILL_CYCLE')).toBeUndefined();
     });
 
     it('does NOT flag when child is HUG (no cycle)', () => {
@@ -296,8 +309,8 @@ describe('postOpValidator structured output', () => {
         layoutSizingVertical: 'FIXED',
         children,
       });
-      const anomalies = validatePostOp(node);
-      expect(anomalies.find(a => a.code === 'HUG_FILL_CYCLE')).toBeUndefined();
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'HUG_FILL_CYCLE')).toBeUndefined();
     });
   });
 
@@ -309,9 +322,9 @@ describe('postOpValidator structured output', () => {
         fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
         strokes: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const ww = anomalies.find(a => a.code === 'WHITE_ON_WHITE');
+      const ww = violations.find(a => a.code === 'WHITE_ON_WHITE');
       expect(ww).toBeDefined();
       expect(ww!.context.fillColor).toBe('#FFFFFF');
       expect(ww!.context.strokeColor).toBe('#FFFFFF');
@@ -323,8 +336,8 @@ describe('postOpValidator structured output', () => {
         fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
         strokes: [{ type: 'SOLID', visible: true, color: { r: 0.88, g: 0.88, b: 0.88 } }],
       });
-      const anomalies = validatePostOp(node);
-      expect(anomalies.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
     });
 
     it('does NOT flag when there are no strokes', () => {
@@ -332,8 +345,8 @@ describe('postOpValidator structured output', () => {
         fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
         strokes: [],
       });
-      const anomalies = validatePostOp(node);
-      expect(anomalies.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
     });
 
     it('ignores invisible (visible=false) paints', () => {
@@ -341,8 +354,8 @@ describe('postOpValidator structured output', () => {
         fills: [{ type: 'SOLID', visible: false, color: { r: 1, g: 1, b: 1 } }],
         strokes: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
       });
-      const anomalies = validatePostOp(node);
-      expect(anomalies.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'WHITE_ON_WHITE')).toBeUndefined();
     });
   });
 
@@ -358,16 +371,16 @@ describe('postOpValidator structured output', () => {
         layoutMode: 'VERTICAL',
         children,
       });
-      const anomalies = validatePostOp(node);
+      const violations = validatePostOp(node);
 
-      const mismatch = anomalies.find(a => a.code === 'SIBLING_WIDTH_MISMATCH');
+      const mismatch = violations.find(a => a.code === 'SIBLING_WIDTH_MISMATCH');
       expect(mismatch).toBeDefined();
       expect(mismatch!.context.childWidths).toEqual([300, 250]);
       expect(mismatch!.hints.some(h => h.includes('FILL'))).toBe(true);
     });
   });
 
-  describe('collectTreeAnomalies', () => {
+  describe('collectTreeViolations', () => {
     it('returns structured objects for tree walk', () => {
       const child = mockFrame({ id: 'c1', name: 'ZeroChild', width: 0, height: 100 });
       const root = mockFrame({
@@ -376,15 +389,15 @@ describe('postOpValidator structured output', () => {
         children: [child],
       });
 
-      const anomalies = collectTreeAnomalies(root);
-      expect(anomalies.length).toBeGreaterThan(0);
-      expect(anomalies[0]).toHaveProperty('code');
-      expect(anomalies[0]).toHaveProperty('context');
-      expect(anomalies[0]).toHaveProperty('hints');
+      const violations = collectTreeViolations(root);
+      expect(violations.length).toBeGreaterThan(0);
+      expect(violations[0]).toHaveProperty('code');
+      expect(violations[0]).toHaveProperty('context');
+      expect(violations[0]).toHaveProperty('hints');
     });
 
-    it('respects maxAnomalies limit', () => {
-      // Create many zero-dim children to trigger multiple anomalies
+    it('respects maxViolations limit', () => {
+      // Create many zero-dim children to trigger multiple violations
       const children = Array.from({ length: 5 }, (_, i) => ({
         id: `c${i}`,
         name: `Child${i}`,
@@ -395,8 +408,8 @@ describe('postOpValidator structured output', () => {
       }));
       const root = mockFrame({ children });
 
-      const anomalies = collectTreeAnomalies(root, 5, 3);
-      expect(anomalies.length).toBeLessThanOrEqual(3);
+      const violations = collectTreeViolations(root, 5, 3);
+      expect(violations.length).toBeLessThanOrEqual(3);
     });
   });
 });

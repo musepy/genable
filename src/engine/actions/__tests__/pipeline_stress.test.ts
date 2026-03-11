@@ -21,10 +21,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseXml, xmlToParsedLines } from '../xmlDesignParser';
-import { compileCssProps } from '../cssCompiler';
+import { parseXml } from '../xmlDesignParser';
+import { interpretXmlNodes } from '../../xml/xml-interpreter';
+import { normalizeProps } from '../../../domain/node-normalizers';
 import { validateNodeLayer } from '../../../schema/layerSchema';
 import { PROP_METADATA } from '../../../constants/figma-api';
+
+/** Helper: unified pipeline for tests */
+function xmlToParsedLines(xml: string, options?: { mode?: 'create' | 'edit' | 'design' }) {
+  const nodes = parseXml(xml);
+  return interpretXmlNodes(nodes, { mode: options?.mode ?? 'create' });
+}
 
 // ============================================================
 // MEGA XML — one string, all edge cases
@@ -326,22 +333,8 @@ describe('Pipeline Stress: xmlToParsedLines (full pipeline)', () => {
     const root = lines[0]; // shadow='0,8,32,0,#0000001A;inset,0,1,3,0,#0000000D'
     const effects = root.props?.effects;
     expect(effects).toHaveLength(2);
-    expect(effects[0]).toEqual({
-      type: 'DROP_SHADOW',
-      color: '#0000001A',
-      offset: { x: 0, y: 8 },
-      radius: 32,
-      spread: 0,
-      visible: true,
-    });
-    expect(effects[1]).toEqual({
-      type: 'INNER_SHADOW',
-      color: '#0000000D',
-      offset: { x: 0, y: 1 },
-      radius: 3,
-      spread: 0,
-      visible: true,
-    });
+    expect(effects[0]).toMatchObject({ kind: 'drop-shadow', radius: 32, spread: 0 });
+    expect(effects[1]).toMatchObject({ kind: 'inner-shadow', radius: 3, spread: 0 });
   });
 
   // ── Color shorthand ──
@@ -353,12 +346,12 @@ describe('Pipeline Stress: xmlToParsedLines (full pipeline)', () => {
 
   it('expands fill to fills array for text nodes', () => {
     const title = lines[2]; // fill='#111827'
-    expect(title.props?.fills).toEqual(['#111827']);
+    expect(title.props?.fills).toEqual([{ kind: 'solid', color: '#111827' }]);
   });
 
   it('expands stroke to strokes array', () => {
     const searchInput = lines[13]; // stroke='#E5E7EB'
-    expect(searchInput.props?.strokes).toEqual(['#E5E7EB']);
+    expect(searchInput.props?.strokes).toEqual([{ kind: 'solid', color: '#E5E7EB' }]);
   });
 
   // ── PROP_METADATA: enum normalization (catch-all) ──
@@ -467,42 +460,42 @@ describe('Pipeline Stress: xmlToParsedLines (full pipeline)', () => {
 
 describe('Pipeline Stress: CSSCompiler enum normalization via PROP_METADATA', () => {
   it('normalizes mixed-case textAutoResize', () => {
-    const result = compileCssProps({ textAutoResize: 'width_and_height' });
+    const result = normalizeProps({ textAutoResize: 'width_and_height' });
     expect(result.textAutoResize).toBe('WIDTH_AND_HEIGHT');
   });
 
   it('normalizes hyphenated textAutoResize', () => {
-    const result = compileCssProps({ textAutoResize: 'width-and-height' });
+    const result = normalizeProps({ textAutoResize: 'width-and-height' });
     expect(result.textAutoResize).toBe('WIDTH_AND_HEIGHT');
   });
 
   it('normalizes strokeAlign with mixed case', () => {
-    const result = compileCssProps({ strokeAlign: 'inside' });
+    const result = normalizeProps({ strokeAlign: 'inside' });
     expect(result.strokeAlign).toBe('INSIDE');
   });
 
   it('normalizes layoutPositioning alias RELATIVE→AUTO', () => {
-    const result = compileCssProps({ layoutPositioning: 'RELATIVE' });
+    const result = normalizeProps({ layoutPositioning: 'RELATIVE' });
     expect(result.layoutPositioning).toBe('AUTO');
   });
 
   it('normalizes layoutSizingHorizontal alias AUTO→HUG', () => {
-    const result = compileCssProps({ layoutSizingHorizontal: 'AUTO' });
+    const result = normalizeProps({ layoutSizingHorizontal: 'AUTO' });
     expect(result.layoutSizingHorizontal).toBe('HUG');
   });
 
   it('normalizes layoutSizingVertical alias STRETCH→FILL', () => {
-    const result = compileCssProps({ layoutSizingVertical: 'STRETCH' });
+    const result = normalizeProps({ layoutSizingVertical: 'STRETCH' });
     expect(result.layoutSizingVertical).toBe('FILL');
   });
 
   it('normalizes textTruncation with lowercase', () => {
-    const result = compileCssProps({ textTruncation: 'ending' });
+    const result = normalizeProps({ textTruncation: 'ending' });
     expect(result.textTruncation).toBe('ENDING');
   });
 
   it('leaves unknown enum values as-is for downstream error', () => {
-    const result = compileCssProps({ textCase: 'NONEXISTENT' });
+    const result = normalizeProps({ textCase: 'NONEXISTENT' });
     // PROP_METADATA won't find a match → leaves as-is
     expect(result.textCase).toBe('NONEXISTENT');
   });
@@ -721,7 +714,7 @@ describe('Pipeline Stress: Edit mode', () => {
     // First: frame update
     expect(lines[0].command).toBe('update');
     expect(lines[0].targetRef).toBe('100:1');
-    expect(lines[0].props?.fills).toEqual(['#F3F4F6']);
+    expect(lines[0].props?.fills).toEqual(['#F3F4F6']); // bg → background → normalizeProps → string[]
     expect(lines[0].props?.cornerRadius).toBe(16);
     expect(lines[0].props?.layoutMode).toBe('HORIZONTAL');
     expect(lines[0].props?.primaryAxisAlignItems).toBe('SPACE_BETWEEN');
@@ -729,7 +722,7 @@ describe('Pipeline Stress: Edit mode', () => {
     // Second: text update with enum normalization
     expect(lines[1].command).toBe('update');
     expect(lines[1].targetRef).toBe('100:2');
-    expect(lines[1].props?.fills).toEqual(['#EF4444']);
+    expect(lines[1].props?.fills).toEqual([{ kind: 'solid', color: '#EF4444' }]); // fill → paintSpec
     expect(lines[1].props?.fontSize).toBe(18);
     expect(lines[1].props?.textCase).toBe('UPPER');
     expect(lines[1].props?.textDecoration).toBe('STRIKETHROUGH');

@@ -71,7 +71,7 @@ CRITICAL: Figma's implicit defaults differ from web standards. Never rely on the
   - For labels in fixed-width containers: use textTruncation=ENDING, maxLines=1, textAutoResize=TRUNCATE.
   - For body text with known width: use textAutoResize=HEIGHT (auto-wraps, auto-adjusts height).
 - Rule: Never use textAutoResize=NONE unless you intentionally want overflow.
-- Rule: FILL width + long text → set textAutoResize=HEIGHT to enable wrapping.
+- Rule: TEXT nodes never use FILL/HUG sizing. Use numeric width with HEIGHT/TRUNCATE/NONE, or omit width entirely with WIDTH_AND_HEIGHT.
 
 ### Efficiency: Think in Trees, Not Nodes
 - Output the complete structure in one `create` call when possible.
@@ -99,7 +99,7 @@ Figma adds NOTHING automatically — every visual property in a finished design 
 |---|---|---|---|
 | 1 | **TYPOGRAPHY** | How does it look? | `size`, `weight`, `lineHeight`, `font` |
 | 2 | **COLOR** | What color? (NO inheritance!) | `fill` — must always specify |
-| 3 | **SIZING** | How does it fit its container? | `width` (`'fill'`/`'hug'`), `textAutoResize` |
+| 3 | **SIZING** | How does it fit its container? | `w`/`width` + `textAutoResize` |
 | 4 | **OVERFLOW** | What if text is long? | `textTruncation`, `maxLines` |
 
 ### The asymmetry rule
@@ -116,12 +116,15 @@ Professional designs address ALL applicable dimensions intentionally, not just t
 ### Pre-output scan
 Before emitting `create` XML, verify every node has its defining dimensions:
 - `<frame>` → `layout` + `bg` + `w`/`h` + `gap` (if 2+ children). Missing any = silent bug.
-- `<text>` → `fill` + `size`. Missing = invisible or broken text.
+- `<text>` → `fill` + `size` + sizing mode. Missing = invisible or broken text.
+- If `<text>` uses `textAutoResize='HEIGHT'`, `'NONE'`, or `'TRUNCATE'`, it MUST also declare a numeric `w`/`width` so wrapping/truncation has a real box.
+- If `<text>` should size to its content, use `textAutoResize='WIDTH_AND_HEIGHT'` and omit `w`/`width`.
 - `lineHeight` uses `%` suffix (`'160%'`, not `'160'` = 160px).
 - `'fill'` children need auto-layout parent. `'hug'` frames need own `layout`.
 
 **Minimum correct frame**: `<frame name='X' layout='column' gap='16' w='fill' height='hug' bg='transparent'>`
-**Minimum correct text**: `<text name='X' size='14' fill='#111827'>content</text>`
+**Minimum correct wrapping text**: `<text name='Body' w='320' textAutoResize='HEIGHT' size='14' fill='#111827'>content</text>`
+**Minimum correct intrinsic text**: `<text name='Label' textAutoResize='WIDTH_AND_HEIGHT' size='14' fill='#111827'>content</text>`
 
 ## CONVENTIONS
 

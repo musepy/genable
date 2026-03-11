@@ -17,11 +17,15 @@ import { ActionExecutor } from '../../engine/actions/executor';
 import { FigmaAction } from '../../engine/actions/types';
 import { ActionCompiler } from '../../engine/actions/compiler';
 import { IncrementalExecutor } from '../../engine/actions/incrementalExecutor';
-import { collectTreeAnomalies } from '../../engine/validation/postOpValidator';
-import { compileCssProps } from '../../engine/actions/cssCompiler';
-import { xmlToParsedLines } from '../../engine/actions/xmlDesignParser';
+import { collectTreeViolations } from '../../engine/validation/postOpValidator';
+import { normalizeProps } from '../../domain/node-normalizers';
+import { parseXml } from '../../engine/actions/xmlDesignParser';
+import { interpretXmlNodes } from '../../engine/xml/xml-interpreter';
+import { validateSemantics } from '../../engine/validation/semanticValidator';
 import { logger } from '../../utils/logger';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
+import { buildCreateReceipt, buildEditReceipt } from './receiptBuilder';
+import type { ValidationViolation } from '../../engine/validation/postOpValidator';
 
 export interface ToolCallData {
   toolName: string;
@@ -44,6 +48,35 @@ async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
     return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `Node ${nodeId} (type: ${node.type}) is not a SceneNode.` } } };
   }
   return { ok: true, node: node as SceneNode };
+}
+
+async function collectViolationsForNodeIds(
+  nodeIds: Array<string | undefined>,
+  maxDepth: number,
+  maxViolations: number = 10
+): Promise<ValidationViolation[] | undefined> {
+  const uniqueNodeIds = [...new Set(nodeIds.filter((nodeId): nodeId is string => Boolean(nodeId)))];
+  if (uniqueNodeIds.length === 0) return undefined;
+
+  const violations: ValidationViolation[] = [];
+  const seen = new Set<string>();
+
+  for (const nodeId of uniqueNodeIds) {
+    if (violations.length >= maxViolations) break;
+    const resolved = await resolveSceneNode(nodeId);
+    if (!resolved.ok) continue;
+
+    const found = collectTreeViolations(resolved.node, maxDepth, maxViolations - violations.length);
+    for (const violation of found) {
+      const key = `${violation.nodeId}:${violation.code}:${violation.message}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      violations.push(violation);
+      if (violations.length >= maxViolations) break;
+    }
+  }
+
+  return violations.length > 0 ? violations : undefined;
 }
 
 
@@ -231,15 +264,20 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         let parsedLines;
         try {
-          parsedLines = xmlToParsedLines(xmlInput);
+          const xmlNodes = parseXml(xmlInput);
+          const rawOps = interpretXmlNodes(xmlNodes, { mode: 'create' });
+          // Pass 3: semantic validation
+          const { validated, diagnostics } = validateSemantics(rawOps, { requireTextAutoResize: true });
+          parsedLines = validated;
+          if (diagnostics.length > 0) {
+            logger.info('Semantic validation diagnostics', { diagnostics });
+          }
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;
         }
 
         try {
-
-          // 2. Compile: convert ParsedLines to FigmaActions
           const compiler = new ActionCompiler();
           const { actions, errors } = compiler.compile(parsedLines, bdParentId);
 
@@ -251,62 +289,26 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             parentId: bdParentId,
           });
 
-          // Inline post-op validation: check the root node for anomalies
-          let bdAnomalies: any[] | undefined;
+          // Inline post-op validation: check the root node for violations
           const bdRootId = bdParentId || Object.values(bdResult.idMap)[0];
-          if (bdRootId) {
-            const bdRootResolved = await resolveSceneNode(bdRootId);
-            if (bdRootResolved.ok) {
-              const found = collectTreeAnomalies(bdRootResolved.node, 5);
-              if (found.length > 0) bdAnomalies = found;
-            }
-          }
+          const bdViolations = await collectViolationsForNodeIds([bdRootId], 5);
 
-          // Build compact receipt at source
-          const receipt: Record<string, any> = {
-            idMap: bdResult.idMap,
-            created: bdResult.stats.created,
-          };
-
-          if (bdResult.hasErrors) {
-            const failures = bdResult.lineResults
-              .filter(lr => lr.status === 'failed')
-              .slice(0, 8)
-              .map(lr => ({
-                op: lr.symbol || `line${lr.line}`,
-                error: lr.error || 'unknown',
-              }));
-            receipt.failed = bdResult.stats.failed;
-            if (failures.length > 0) receipt.errors = failures;
-          }
-
-          // Collect degraded nodes (frames created as minimal placeholders)
-          const degradedNodes = bdResult.lineResults
-            .filter(lr => lr.warnings?.some(w => w.code === 'DEGRADED_FALLBACK'))
-            .map(lr => lr.symbol)
-            .filter(Boolean) as string[];
-          if (degradedNodes.length > 0) {
-            receipt.degraded = degradedNodes;
-            receipt.degradedHint = 'These frames were created with minimal props due to errors. Use edit to apply their intended styles (layout, bg, padding, gap, etc).';
-          }
-
-          if (bdAnomalies && bdAnomalies.length > 0) {
-            receipt.anomalies = bdAnomalies.slice(0, 5);
-          }
+          // Build compact receipt
+          const receipt = buildCreateReceipt({ result: bdResult, violations: bdViolations });
 
           // Build error message parts
           const msgParts: string[] = [];
           if (bdResult.stats.failed > 0) {
             msgParts.push(`${bdResult.stats.failed} failed`);
           }
-          if (degradedNodes.length > 0) {
-            msgParts.push(`${degradedNodes.length} degraded (use edit to fix: ${degradedNodes.join(', ')})`);
+          if (receipt.degraded) {
+            msgParts.push(`${receipt.degraded.length} degraded (use edit to fix: ${receipt.degraded.join(', ')})`);
           }
 
           response = {
             success: bdResult.success,
             data: receipt,
-            error: (bdResult.hasErrors || degradedNodes.length > 0)
+            error: (bdResult.hasErrors || receipt.degraded)
               ? {
                   code: bdResult.hasErrors ? 'PARTIAL_FAILURE' : 'DEGRADED',
                   message: `${bdResult.stats.created} created. ${msgParts.join('. ')}. Use idMap for references.`,
@@ -335,7 +337,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         let parsedLines;
         try {
-          parsedLines = xmlToParsedLines(editXml, { mode: 'edit' });
+          const xmlNodes = parseXml(editXml);
+          parsedLines = interpretXmlNodes(xmlNodes, { mode: 'edit' });
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;
@@ -353,7 +356,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             const patchActions: FigmaAction[] = updateLines.map(line => ({
               action: 'updateProps' as const,
               nodeId: line.targetRef!,
-              props: line.props ? compileCssProps(line.props) : {}
+              props: line.props ? normalizeProps(line.props) : {}
             }));
 
             const executor = new ActionExecutor({ onError: 'skip-dependents' });
@@ -371,51 +374,21 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             }
           }
 
-          const failedResults = allResults.filter(r => !r.success);
-
           // Inline post-op validation on edited nodes
-          let editAnomalies: any[] | undefined;
-          const editRootId = updateLines[0]?.targetRef;
-          if (editRootId) {
-            const editResolved = await resolveSceneNode(editRootId);
-            if (editResolved.ok) {
-              const found = collectTreeAnomalies(editResolved.node, 3);
-              if (found.length > 0) editAnomalies = found;
-            }
-          }
+          const editViolations = await collectViolationsForNodeIds(
+            updateLines.map(line => line.targetRef),
+            3
+          );
 
-          // Build compact receipt at source — no downstream cleaning needed
-          const editedCount = allResults.filter(r => r.success).length;
-          const idMap: Record<string, string> = {};
-          for (const r of allResults) {
-            if (r.success && r.nodeId) idMap[r.nodeId] = r.nodeId;
-          }
+          // Build compact receipt
+          const receipt = buildEditReceipt({ allResults, violations: editViolations });
 
-          // Collect per-node warnings (props that silently failed to apply)
-          const allWarnings = allResults
-            .filter(r => r.warnings && r.warnings.length > 0)
-            .map(r => ({ nodeId: r.nodeId, warnings: r.warnings }));
-
-          const receipt: Record<string, any> = { edited: editedCount, idMap };
-          if (allWarnings.length > 0) {
-            receipt.warnings = allWarnings.slice(0, 15);
-            receipt.warningCount = allWarnings.reduce((sum, w) => sum + w.warnings.length, 0);
-          }
-          if (editAnomalies && editAnomalies.length > 0) {
-            receipt.anomalies = editAnomalies.slice(0, 5);
-          }
-
-          if (failedResults.length > 0) {
-            receipt.failed = failedResults.length;
-            receipt.errors = failedResults.slice(0, 8).map(r => ({
-              op: r.nodeId || '?',
-              error: r.error || 'unknown',
-            }));
+          if (receipt.failed) {
             response = {
               success: false,
               error: {
                 code: 'APPLY_ERROR',
-                message: `Failed to edit ${failedResults.length} node(s). ${editedCount} succeeded.${allWarnings.length > 0 ? ` ${receipt.warningCount} property warning(s) on ${allWarnings.length} node(s).` : ''}`,
+                message: `Failed to edit ${receipt.failed} node(s). ${receipt.edited} succeeded.${receipt.warningCount ? ` ${receipt.warningCount} property warning(s) on ${receipt.warnings.length} node(s).` : ''}`,
               },
               data: receipt,
             };
@@ -441,7 +414,14 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         let designParsedLines;
         try {
-          designParsedLines = xmlToParsedLines(designXml, { mode: 'design' });
+          const xmlNodes = parseXml(designXml);
+          const rawOps = interpretXmlNodes(xmlNodes, { mode: 'design' });
+          // Pass 3: semantic validation
+          const { validated, diagnostics } = validateSemantics(rawOps, { requireTextAutoResize: true });
+          designParsedLines = validated;
+          if (diagnostics.length > 0) {
+            logger.info('Semantic validation diagnostics', { diagnostics });
+          }
         } catch (e: any) {
           response = { success: false, error: { code: 'XML_PARSE_ERROR', message: e.message } };
           break;
@@ -466,35 +446,19 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               onError: 'continue', rollbackMode: 'none', parentId: designParentId,
             });
 
-            receipt.idMap = createResult.idMap;
-            receipt.created = createResult.stats.created;
-
-            if (createResult.hasErrors) {
-              hasAnyError = true;
-              const failures = createResult.lineResults.filter(lr => lr.status === 'failed').slice(0, 8)
-                .map(lr => ({ op: lr.symbol || `line${lr.line}`, error: lr.error || 'unknown' }));
-              receipt.createFailed = createResult.stats.failed;
-              if (failures.length > 0) receipt.createErrors = failures;
-            }
-
-            const degradedNodes = createResult.lineResults
-              .filter(lr => lr.warnings?.some(w => w.code === 'DEGRADED_FALLBACK'))
-              .map(lr => lr.symbol).filter(Boolean) as string[];
-            if (degradedNodes.length > 0) receipt.degraded = degradedNodes;
-
+            // Post-op validation on root
             const createRootId = designParentId || Object.values(createResult.idMap)[0];
-            if (createRootId) {
-              const rootResolved = await resolveSceneNode(createRootId);
-              if (rootResolved.ok) {
-                const found = collectTreeAnomalies(rootResolved.node, 5);
-                if (found.length > 0) receipt.anomalies = found;
-              }
-            }
+            const createViolations = await collectViolationsForNodeIds([createRootId], 5);
 
-            // Soft limit warning: guide LLM toward progressive creation
-            if (createLines.length > SOFT_CREATE_LIMIT) {
-              receipt.nodeLimitWarning = `Created ${createLines.length} nodes in one call (recommended max: ${SOFT_CREATE_LIMIT}). Large batches increase attribute omission risk. Split into skeleton + per-section calls for better quality.`;
-            }
+            const createReceipt = buildCreateReceipt({
+              result: createResult,
+              violations: createViolations,
+              softCreateLimit: SOFT_CREATE_LIMIT,
+              createLineCount: createLines.length,
+            });
+
+            Object.assign(receipt, createReceipt);
+            if (createResult.hasErrors) hasAnyError = true;
           }
 
           // Phase 2: Execute updates
@@ -502,24 +466,31 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             const patchActions: FigmaAction[] = updateLines.map(line => ({
               action: 'updateProps' as const,
               nodeId: line.targetRef!,
-              props: line.props ? compileCssProps(line.props) : {}
+              props: line.props ? normalizeProps(line.props) : {}
             }));
             const updateExec = new ActionExecutor({ onError: 'skip-dependents' });
             const updateResult = await updateExec.execute(patchActions);
 
-            const editedCount = updateResult.results.filter(r => r.success).length;
-            const editFailed = updateResult.results.filter(r => !r.success);
-            receipt.edited = editedCount;
-
-            if (editFailed.length > 0) {
+            const updateViolations = await collectViolationsForNodeIds(
+              updateLines.map(line => line.targetRef),
+              3
+            );
+            const editReceipt = buildEditReceipt({
+              allResults: updateResult.results,
+              violations: updateViolations,
+            });
+            receipt.edited = editReceipt.edited;
+            if (editReceipt.failed) {
               hasAnyError = true;
-              receipt.editFailed = editFailed.length;
-              receipt.editErrors = editFailed.slice(0, 8).map(r => ({ op: r.nodeId || '?', error: r.error || 'unknown' }));
+              receipt.editFailed = editReceipt.failed;
+              receipt.editErrors = editReceipt.errors;
             }
-
-            const editWarnings = updateResult.results.filter(r => r.warnings && r.warnings.length > 0)
-              .map(r => ({ nodeId: r.nodeId, warnings: r.warnings }));
-            if (editWarnings.length > 0) receipt.warnings = editWarnings.slice(0, 15);
+            if (editReceipt.warnings) receipt.warnings = editReceipt.warnings;
+            if (editReceipt.warningCount) receipt.warningCount = editReceipt.warningCount;
+            if (editReceipt.violations) {
+              const priorViolations = Array.isArray(receipt.violations) ? receipt.violations : [];
+              receipt.violations = [...priorViolations, ...editReceipt.violations].slice(0, 10);
+            }
           }
 
           // Phase 3: Execute deletes
@@ -544,7 +515,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             if (receipt.created) parts.push(`${receipt.created} created`);
             if (receipt.edited) parts.push(`${receipt.edited} edited`);
             if (receipt.deleted) parts.push(`${receipt.deleted} deleted`);
-            if (receipt.createFailed) parts.push(`${receipt.createFailed} create failed`);
+            if (receipt.failed) parts.push(`${receipt.failed} create failed`);
             if (receipt.editFailed) parts.push(`${receipt.editFailed} edit failed`);
             response = { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
           } else {

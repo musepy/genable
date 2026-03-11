@@ -36,7 +36,7 @@
   - For labels in fixed-width containers: use textTruncation=ENDING, maxLines=1, textAutoResize=TRUNCATE.
   - For body text with known width: use textAutoResize=HEIGHT (auto-wraps, auto-adjusts height).
 - Rule: Never use textAutoResize=NONE unless you intentionally want overflow.
-- Rule: FILL width + long text → set textAutoResize=HEIGHT to enable wrapping.
+- Rule: TEXT nodes do not support FILL/HUG sizing. Use numeric width for HEIGHT/TRUNCATE/NONE, or omit width entirely with WIDTH_AND_HEIGHT.
 
 ### Efficiency: Think in Trees, Not Nodes
 - Output the COMPLETE tree in one create call. Each additional iteration costs ~4000 tokens of overhead.

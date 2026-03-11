@@ -41,7 +41,7 @@ describe('XmlSerializer', () => {
 
   // ── Attribute abbreviations ──
 
-  it('abbreviates property names', () => {
+  it('abbreviates property names and outputs CSS-friendly enum values', () => {
     const xml = XmlSerializer.serialize(node('FRAME', {
       _id: '1:1',
       layoutMode: 'VERTICAL',
@@ -56,13 +56,13 @@ describe('XmlSerializer', () => {
       fontWeight: 'Bold',
       fontSize: 14,
     }));
-    expect(xml).toContain('layout="VERTICAL"');
+    expect(xml).toContain('layout="column"');
     expect(xml).toContain('w="320"');
     expect(xml).toContain('h="480"');
-    expect(xml).toContain('sizingH="FILL"');
-    expect(xml).toContain('sizingV="HUG"');
-    expect(xml).toContain('alignMain="CENTER"');
-    expect(xml).toContain('alignCross="MAX"');
+    expect(xml).toContain('sizingH="fill"');
+    expect(xml).toContain('sizingV="hug"');
+    expect(xml).toContain('alignMain="center"');
+    expect(xml).toContain('alignCross="flex-end"');
     expect(xml).toContain('corner="16"');
     expect(xml).toContain('strokeW="2"');
     expect(xml).toContain('weight="Bold"');
@@ -306,6 +306,52 @@ describe('XmlSerializer', () => {
     expect(xml).toContain('icon="mdi:home"');
   });
 
+  // ── FIGMA_TO_CSS reverse mapping ──
+
+  describe('FIGMA_TO_CSS reverse mapping', () => {
+    it('outputs CSS-friendly layout values', () => {
+      const xml = XmlSerializer.serialize(node('FRAME', {
+        _id: '1:1',
+        layoutMode: 'HORIZONTAL',
+        primaryAxisAlignItems: 'SPACE_BETWEEN',
+        counterAxisAlignItems: 'BASELINE',
+        textAlignHorizontal: 'JUSTIFIED',
+        strokeAlign: 'OUTSIDE',
+        layoutWrap: 'WRAP',
+      }));
+      expect(xml).toContain('layout="row"');
+      expect(xml).toContain('alignMain="space-between"');
+      expect(xml).toContain('alignCross="baseline"');
+      expect(xml).toContain('textAlign="justified"');
+      expect(xml).toContain('strokeA="outside"');
+      expect(xml).toContain('wrap="wrap"');
+    });
+
+    it('passes through unmapped values unchanged', () => {
+      // primaryAxisAlignItems='MIN' is a default and gets pruned, so use 'CENTER' which is mapped
+      // Test that non-enum values like cornerRadius pass through as-is
+      const xml = XmlSerializer.serialize(node('FRAME', {
+        _id: '1:1',
+        layoutMode: 'VERTICAL',
+        cornerRadius: 12,
+        opacity: 0.8,
+      }));
+      expect(xml).toContain('layout="column"');
+      expect(xml).toContain('corner="12"');
+      expect(xml).toContain('opacity="0.8"');
+    });
+
+    it('still prunes defaults before applying reverse mapping', () => {
+      const xml = XmlSerializer.serialize(node('FRAME', {
+        _id: '1:1',
+        layoutMode: 'NONE',  // default → pruned
+        strokeAlign: 'INSIDE', // default → pruned
+      }));
+      expect(xml).not.toContain('layout=');
+      expect(xml).not.toContain('strokeA=');
+    });
+  });
+
   // ── Structural mode ──
 
   describe('structural mode', () => {
@@ -323,7 +369,7 @@ describe('XmlSerializer', () => {
       // Should include structural props
       expect(xml).toContain('id="1:1"');
       expect(xml).toContain('name="Card"');
-      expect(xml).toContain('layout="VERTICAL"');
+      expect(xml).toContain('layout="column"');
       expect(xml).toContain('w="320"');
       expect(xml).toContain('h="480"');
 
@@ -337,14 +383,14 @@ describe('XmlSerializer', () => {
       expect(xml).not.toContain('shadow=');
     });
 
-    it('includes sizingH and sizingV when non-default', () => {
+    it('includes sizingH and sizingV when non-default (CSS-friendly)', () => {
       const xml = XmlSerializer.serialize(node('FRAME', {
         _id: '1:1',
         layoutSizingHorizontal: 'FILL',
         layoutSizingVertical: 'HUG',
       }), { structural: true });
-      expect(xml).toContain('sizingH="FILL"');
-      expect(xml).toContain('sizingV="HUG"');
+      expect(xml).toContain('sizingH="fill"');
+      expect(xml).toContain('sizingV="hug"');
     });
 
     it('text ≤30 chars → inline content', () => {

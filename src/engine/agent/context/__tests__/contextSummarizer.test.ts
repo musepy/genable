@@ -123,4 +123,99 @@ describe('buildCompressionSummary', () => {
     expect(summary).not.toContain('Let me think');
     expect(summary).toContain('Agent: Here is your form.');
   });
+
+  it('preserves design receipt details during compression', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Create a settings panel' },
+      {
+        id: 'm1',
+        role: 'model',
+        content: [
+          { functionCall: { name: 'design', args: { parentId: '200:1', xml: '<frame name="Panel"/>' } } },
+        ],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        content: [
+          {
+            functionResponse: {
+              name: 'design',
+              response: {
+                success: true,
+                data: {
+                  created: 4,
+                  edited: 2,
+                  idMap: {
+                    panel: '100:1',
+                    title: '100:2',
+                    subtitle: '100:3',
+                    toggle: '100:4',
+                  },
+                  defaultsApplied: [
+                    { property: 'textAutoResize' },
+                    { property: 'layoutSizingHorizontal' },
+                  ],
+                  defaultsAppliedCount: 6,
+                  violations: [
+                    { code: 'TEXT_OVERFLOW' },
+                    { code: 'SIZING_REVERTED' },
+                  ],
+                  nodeLimitWarning: 'too many nodes',
+                },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('design(');
+    expect(summary).toContain('parent:200:1');
+    expect(summary).toContain('created 4');
+    expect(summary).toContain('edited 2');
+    expect(summary).toContain('defaults 6 [textAutoResize, layoutSizingHorizontal]');
+    expect(summary).toContain('violations 2 [TEXT_OVERFLOW, SIZING_REVERTED]');
+    expect(summary).toContain('node-limit warning');
+    expect(summary).toContain('panel=100:1');
+  });
+
+  it('uses receipt.edited for edit summaries', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Adjust the card spacing' },
+      {
+        id: 'm1',
+        role: 'model',
+        content: [
+          { functionCall: { name: 'edit', args: { xml: '<frame id="1:1" gap="24"/>' } } },
+        ],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        content: [
+          {
+            functionResponse: {
+              name: 'edit',
+              response: {
+                success: true,
+                data: {
+                  edited: 3,
+                  warnings: [{ nodeId: '1:1', warnings: [{ code: 'IGNORED_PROP' }] }],
+                  warningCount: 1,
+                  violations: [{ code: 'SIZING_REVERTED' }],
+                },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('edited 3');
+    expect(summary).toContain('warnings 1');
+    expect(summary).toContain('violations 1 [SIZING_REVERTED]');
+  });
 });

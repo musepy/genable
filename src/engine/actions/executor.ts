@@ -779,6 +779,13 @@ export class ActionExecutor {
           }
           throw e;
         }
+      } else {
+        console.warn(`[ActionExecutor] Unsupported property '${key}' on node ${node.id} (${node.type})`);
+        warnings.push({
+          code: 'UNSUPPORTED_PROP',
+          severity: 'warning',
+          message: `Skipped unsupported property '${key}' on ${node.type} node`,
+        });
       }
     }
     return warnings;
@@ -867,9 +874,14 @@ export class ActionExecutor {
   }
 
   private topologicalSort(actions: FigmaAction[]): FigmaAction[] {
+    // Actions without tempId (e.g. updateProps) have no dependency graph —
+    // topological sort is meaningless for them. Pass through in order.
+    const hasDeps = actions.some(a => a.tempId);
+    if (!hasDeps) return actions;
+
     const sorted: FigmaAction[] = [];
     const visited = new Set<string>();
-    const processing = new Set<string>(); // to detect circular logic
+    const processing = new Set<string>();
 
     const actionMap = new Map<string, FigmaAction>();
     for (const action of actions) {
@@ -879,15 +891,20 @@ export class ActionExecutor {
     }
 
     const visit = (action: FigmaAction) => {
-      const id = action.tempId || Symbol().toString();
+      const id = action.tempId;
+      if (!id) {
+        // No tempId = no dependency tracking. Just push in encounter order.
+        sorted.push(action);
+        return;
+      }
       if (visited.has(id)) return;
       if (processing.has(id)) {
         console.warn('Circular dependency detected in batch operations');
-        return; // just break circle
+        return;
       }
 
       processing.add(id);
-      
+
       if (action.dependsOn) {
         for (const dep of action.dependsOn) {
           const depAction = actionMap.get(dep);

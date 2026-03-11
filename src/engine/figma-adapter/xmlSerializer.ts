@@ -73,6 +73,21 @@ const TAG_MAP: Record<string, string> = {
   ICON: 'icon',
 };
 
+/**
+ * Reverse mapping: Figma-native enum values → CSS-friendly values.
+ * Ensures the LLM reads back the same vocabulary it writes.
+ */
+const FIGMA_TO_CSS: Record<string, Record<string, string>> = {
+  layoutMode:              { VERTICAL: 'column', HORIZONTAL: 'row' },
+  primaryAxisAlignItems:   { MIN: 'flex-start', CENTER: 'center', MAX: 'flex-end', SPACE_BETWEEN: 'space-between' },
+  counterAxisAlignItems:   { MIN: 'flex-start', CENTER: 'center', MAX: 'flex-end', BASELINE: 'baseline' },
+  layoutSizingHorizontal:  { FILL: 'fill', HUG: 'hug' },
+  layoutSizingVertical:    { FILL: 'fill', HUG: 'hug' },
+  textAlignHorizontal:     { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'justified' },
+  strokeAlign:             { INSIDE: 'inside', OUTSIDE: 'outside', CENTER: 'center' },
+  layoutWrap:              { WRAP: 'wrap' },
+};
+
 /** Default values — skip these to reduce noise. */
 const DEFAULTS: Record<string, any> = {
   layoutMode: 'NONE',
@@ -258,7 +273,9 @@ export class XmlSerializer {
         if (value === undefined || value === null) continue;
         if (key in DEFAULTS && value === DEFAULTS[key]) continue;
         const attrName = ATTR_ABBREV[key] || key;
-        attrs.push(`${attrName}="${escapeXml(String(value))}"`);
+        const cssMap = FIGMA_TO_CSS[key];
+        const displayValue = cssMap ? (cssMap[String(value)] ?? String(value)) : String(value);
+        attrs.push(`${attrName}="${escapeXml(displayValue)}"`);
       }
 
       // Text nodes: inline if short, otherwise chars="N"
@@ -350,7 +367,9 @@ export class XmlSerializer {
       if (typeof value === 'object') continue;
 
       const attrName = ATTR_ABBREV[key] || key;
-      attrs.push(`${attrName}="${escapeXml(String(value))}"`);
+      const cssMap = FIGMA_TO_CSS[key];
+      const displayValue = cssMap ? (cssMap[String(value)] ?? String(value)) : String(value);
+      attrs.push(`${attrName}="${escapeXml(displayValue)}"`);
     }
 
     // Add compact padding

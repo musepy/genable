@@ -46,8 +46,8 @@ export class ToolResultCleaner {
       return cleaned;
     }
 
-    // create/edit: data is already a compact receipt from executor — pass through
-    if (cleaned.name === 'create' || cleaned.name === 'edit') {
+    // create/edit/design: data is already a compact receipt from executor — pass through
+    if (cleaned.name === 'create' || cleaned.name === 'edit' || cleaned.name === 'design') {
       return cleaned;
     }
 
@@ -135,56 +135,6 @@ export class ToolResultCleaner {
       receivedKeys: safeReceivedKeys,
       repairHint: typeof details.repairHint === 'string' ? this.sanitizeString(details.repairHint, 240) : '',
     };
-  }
-
-  private cleanAnomalies(anomalies: any[], maxAnomalies: number = 12): any[] {
-    return anomalies.slice(0, maxAnomalies).map((a: any) => {
-      const code = typeof a?.code === 'string'
-        ? a.code
-        : (typeof a?.type === 'string' ? a.type : 'UNKNOWN_ANOMALY');
-      const hints = Array.isArray(a?.hints)
-        ? a.hints.slice(0, 5).map((h: any) => this.sanitizeString(h, 200))
-        : [];
-      return {
-        code,
-        message: this.sanitizeString(a?.message || '', 300),
-        ...(a?.nodeId && { nodeId: a.nodeId }),
-        ...(a?.nodeName && { nodeName: this.sanitizeString(a.nodeName, 80) }),
-        ...(a?.context && { context: this.cleanAnomalyContext(a.context) }),
-        ...(hints.length > 0 && { hints }),
-      };
-    });
-  }
-
-  private cleanAnomalyContext(context: any): any {
-    if (!context || typeof context !== 'object') return context;
-    const entries = Object.entries(context).slice(0, 12);
-    const out: Record<string, any> = {};
-    for (const [key, value] of entries) {
-      if (value === null || value === undefined) {
-        out[key] = value;
-        continue;
-      }
-      if (typeof value === 'string') {
-        out[key] = this.sanitizeString(value, 120);
-        continue;
-      }
-      if (typeof value === 'number' || typeof value === 'boolean') {
-        out[key] = value;
-        continue;
-      }
-      if (Array.isArray(value)) {
-        out[key] = value.slice(0, 6).map((item: any) => {
-          if (item === null || item === undefined) return item;
-          if (typeof item === 'string') return this.sanitizeString(item, 80);
-          if (typeof item === 'number' || typeof item === 'boolean') return item;
-          return '{…}';
-        });
-        continue;
-      }
-      out[key] = '{…}';
-    }
-    return out;
   }
 
   /**

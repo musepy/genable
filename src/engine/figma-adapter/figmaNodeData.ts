@@ -24,20 +24,26 @@ export function extractFigmaNodeData(node: SceneNode, keys: string[]): FigmaNode
         name: node.name
     };
 
+    // TextNodes with range-level styles (setRangeFills, setRangeFontSize, etc.)
+    // return figma.mixed for node-level property reads. Normalize to 'mixed' sentinel
+    // so downstream serializers can render it as `fill:mixed` instead of silently dropping.
+    const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
+    const isMixed = (v: any) => figmaMixed !== undefined && v === figmaMixed;
+
     keys.forEach(key => {
         if (key in node) {
-            data[key] = (node as any)[key];
+            const val = (node as any)[key];
+            data[key] = isMixed(val) ? 'mixed' : val;
         }
     });
 
-    // Special handling for nested/lived objects like fontName
+    // Explicit overrides for properties that have special handling
     if ('fontName' in node) {
-        const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
-        data.fontName = figmaMixed !== undefined && node.fontName === figmaMixed ? null : node.fontName;
+        data.fontName = isMixed(node.fontName) ? 'mixed' : node.fontName;
     }
-    if ('fills' in node) data.fills = node.fills;
-    if ('strokes' in node) data.strokes = node.strokes;
-    if ('effects' in node) data.effects = node.effects;
+    if ('fills' in node) data.fills = isMixed(node.fills) ? 'mixed' : node.fills;
+    if ('strokes' in node) data.strokes = isMixed(node.strokes) ? 'mixed' : node.strokes;
+    if ('effects' in node) data.effects = isMixed(node.effects) ? 'mixed' : node.effects;
 
     return data;
 }

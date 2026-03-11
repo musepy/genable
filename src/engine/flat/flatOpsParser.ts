@@ -18,7 +18,7 @@ import { normalizeProps } from '../../domain/node-normalizers';
 import {
   TAG_TO_TYPE, ABBREV_EXPANSION, coerceValue, expandPadding,
   toCamelCase, computeDependsOn,
-} from '../xml/xml-interpreter';
+} from '../utils/prop-dsl';
 
 export interface ParseError { line: number; raw: string; error: string }
 

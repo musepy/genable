@@ -14,6 +14,7 @@ import { parseActionError } from './errorParser';
 import { ActionErrorSubCategory } from './errorTypes';
 import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
 import { lowerPaints, lowerEffects, lowerUnitValue } from '../figma/figma-lowering';
+import { parseRichText } from '../text/richTextParser';
 
 /**
  * Module-level component registry — maps component symbols to real Figma node IDs.
@@ -816,7 +817,7 @@ export class ActionExecutor {
     // Handle font resolution before setting characters
     const family = props.fontFamily || 'Inter';
     const style = props.fontWeight || 'Regular';
-    
+
     // Default font loading
     const { success, loadedStyle } = await fontBus.getOrLoad(family, style);
     if (!success && loadedStyle !== style) {
@@ -828,21 +829,90 @@ export class ActionExecutor {
            message: `Font not found, applied fallback: ${loadedStyle}`
        });
     }
-    
+
     node.fontName = { family, style: loadedStyle };
 
+    // Parse rich text markup (markdown → plain text + ranges)
     if (props.characters !== undefined) {
-       node.characters = props.characters;
+       const { plainText, ranges } = parseRichText(props.characters);
+       node.characters = plainText;
+
+       // Apply base props BEFORE range overrides so node-level fills/fontSize
+       // don't clobber range-specific setRangeFills/setRangeFontSize calls.
+       const otherProps = { ...props };
+       delete otherProps.fontFamily;
+       delete otherProps.fontWeight;
+       delete otherProps.characters;
+
+       const propWarnings = await this.applyProps(node, otherProps);
+       if (propWarnings.length > 0) warnings.push(...propWarnings);
+
+       // Apply style ranges via Figma Range API (after base props)
+       for (const range of ranges) {
+         try {
+           await this.applyStyledRange(node, range, family);
+         } catch (e: any) {
+           warnings.push({
+             code: 'RANGE_STYLE_FAILED',
+             severity: 'warning',
+             message: `Failed to apply ${range.style.type} at [${range.start}:${range.end}]: ${e?.message}`,
+           });
+         }
+       }
+    } else {
+       const otherProps = { ...props };
+       delete otherProps.fontFamily;
+       delete otherProps.fontWeight;
+
+       const propWarnings = await this.applyProps(node, otherProps);
+       if (propWarnings.length > 0) warnings.push(...propWarnings);
     }
 
-    const otherProps = { ...props };
-    delete otherProps.fontFamily;
-    delete otherProps.fontWeight;
-    delete otherProps.characters;
-
-    const propWarnings = await this.applyProps(node, otherProps);
-    if (propWarnings.length > 0) warnings.push(...propWarnings);
     return warnings;
+  }
+
+  /** Apply a single styled range to a TextNode using Figma Range API. */
+  private async applyStyledRange(
+    node: TextNode,
+    range: import('../text/richTextParser').StyledRange,
+    baseFamily: string,
+  ): Promise<void> {
+    const { start, end, style } = range;
+
+    switch (style.type) {
+      case 'bold': {
+        const { loadedStyle } = await fontBus.getOrLoad(baseFamily, 'Bold');
+        node.setRangeFontName(start, end, { family: baseFamily, style: loadedStyle });
+        break;
+      }
+      case 'italic': {
+        const { loadedStyle } = await fontBus.getOrLoad(baseFamily, 'Italic');
+        node.setRangeFontName(start, end, { family: baseFamily, style: loadedStyle });
+        break;
+      }
+      case 'boldItalic': {
+        const { loadedStyle } = await fontBus.getOrLoad(baseFamily, 'Bold Italic');
+        node.setRangeFontName(start, end, { family: baseFamily, style: loadedStyle });
+        break;
+      }
+      case 'strikethrough':
+        node.setRangeTextDecoration(start, end, 'STRIKETHROUGH' as TextDecoration);
+        break;
+      case 'color': {
+        const hex = style.value.replace('#', '');
+        const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+        const color = {
+          r: parseInt(full.substring(0, 2), 16) / 255,
+          g: parseInt(full.substring(2, 4), 16) / 255,
+          b: parseInt(full.substring(4, 6), 16) / 255,
+        };
+        node.setRangeFills(start, end, [{ type: 'SOLID', color }]);
+        break;
+      }
+      case 'size':
+        node.setRangeFontSize(start, end, style.value);
+        break;
+    }
   }
 
   // --- Transactions ---

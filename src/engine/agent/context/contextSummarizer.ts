@@ -202,8 +202,8 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
     return childCount ? `page with ${childCount} nodes` : 'ok';
   }
   if (toolName === 'outline' || toolName === 'inspect') {
-    const xml = resp.data?.xml || resp.data;
-    if (typeof xml === 'string') return `${xml.length} chars`;
+    const tree = resp.data?.tree ?? resp.data?.xml ?? resp.data;
+    if (typeof tree === 'string') return `${tree.length} chars`;
     return 'ok';
   }
   return 'ok';

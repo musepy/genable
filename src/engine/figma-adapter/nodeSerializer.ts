@@ -82,7 +82,7 @@ export class NodeSerializer {
                 const figmaVal = nodeData[meta?.figmaKey ?? dslKey];
                 if (figmaVal) {
                     const irPaints = readPaints(figmaVal);
-                    // Store raw Figma Paint[] for xmlSerializer (it calls paintSpec.fromFigma internally)
+                    // Store raw Figma Paint[] for serializer (it calls paintSpec.fromFigma internally)
                     value = figmaVal;
                 } else {
                     value = undefined;

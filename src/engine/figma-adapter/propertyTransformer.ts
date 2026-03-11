@@ -30,13 +30,13 @@ export class PropertyTransformer {
             // console.log(`[Debug] ${dslKey} (figmaKey: ${meta.figmaKey}) =`, figmaValue);
         }
 
-        // [Figma Sandbox Fix] Safety: Handle figma.mixed (a Symbol)
-        // Symbols cannot be passed through postMessage (emit), causing "Cannot unwrap symbol"
+        // Handle mixed properties: figmaNodeData normalizes figma.mixed → 'mixed' string.
+        // Pass through as-is so the serializer can render `prop:mixed`.
+        if (figmaValue === 'mixed') return 'mixed';
+
+        // [Safety] Also handle raw figma.mixed symbol (in case called with un-normalized data)
         const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
-        if (typeof figmaMixed !== 'undefined' && figmaValue === figmaMixed) {
-            // console.log(`[Debug] ${dslKey} is figma.mixed -> returning null`);
-            return null;
-        }
+        if (typeof figmaMixed !== 'undefined' && figmaValue === figmaMixed) return 'mixed';
 
         // 2. Transformation Logic based on type
         switch (meta.type) {

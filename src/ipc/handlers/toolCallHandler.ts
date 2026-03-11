@@ -11,7 +11,7 @@ import { nodeLayoutService } from '../../engine/services';
 import { ToolResponse, ToolContext } from '../../engine/agent/tools/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
-import { XmlSerializer } from '../../engine/figma-adapter/xmlSerializer';
+import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
 
 import { ActionExecutor } from '../../engine/actions/executor';
 import { FigmaAction } from '../../engine/actions/types';
@@ -140,13 +140,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       case 'context': {
         // Canvas overview: page info + top-level skeleton + user selection
         const page = figma.currentPage;
-        const childXmls: string[] = [];
+        const childTrees: string[] = [];
         for (const child of page.children) {
           const hSerialized = NodeSerializer.serializeWithCompression(child, {
             maxDepth: 2,
             pruneDefaults: true
           });
-          childXmls.push(XmlSerializer.serialize(hSerialized, { maxDepth: 2, structural: true }));
+          childTrees.push(FlatOpsSerializer.serialize(hSerialized, { maxDepth: 2, structural: true }));
         }
 
         const selection = page.selection.map(n => ({
@@ -159,7 +159,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           success: true,
           data: {
             page: { name: page.name, childCount: page.children.length },
-            xml: childXmls.join('\n'),
+            tree: childTrees.join('\n'),
             ...(selection.length > 0 && { selection }),
           }
         };
@@ -178,7 +178,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           maxDepth: outlineDepthClamped,
           pruneDefaults: true
         });
-        const outlineXml = XmlSerializer.serialize(outlineSerialized, {
+        const outlineXml = FlatOpsSerializer.serialize(outlineSerialized, {
           maxDepth: outlineDepthClamped,
           structural: true,
         });
@@ -193,7 +193,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           }
         }
 
-        const outlineData: any = { xml: outlineXml };
+        const outlineData: any = { tree: outlineXml };
         if (suggestedReads.length > 0) outlineData.suggestedReads = suggestedReads;
 
         response = { success: true, data: outlineData };
@@ -214,7 +214,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         });
 
         // Full mode with auto-degradation
-        const inspectFullXml = XmlSerializer.serialize(inspectSerialized, {
+        const inspectFullXml = FlatOpsSerializer.serialize(inspectSerialized, {
           maxDepth: inspectDepthClamped,
         });
 
@@ -222,17 +222,17 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
 
         if (inspectFullXml.length > AUTO_DEGRADE_CHARS) {
-          const inspectStructuralXml = XmlSerializer.serialize(inspectSerialized, {
+          const inspectStructuralXml = FlatOpsSerializer.serialize(inspectSerialized, {
             maxDepth: inspectDepthClamped,
             structural: true,
           });
-          inspectData.xml = inspectStructuralXml;
+          inspectData.tree = inspectStructuralXml;
           const childCount = inspectNode.type === 'FRAME' || inspectNode.type === 'GROUP' || inspectNode.type === 'SECTION'
             ? ('children' in inspectNode ? (inspectNode as any).children.length : 0)
             : 0;
           inspectData.hint = `Tree is large (${childCount} children, ${inspectFullXml.length} chars). Use outline() to discover structure, then inspect specific children.`;
         } else {
-          inspectData.xml = inspectFullXml;
+          inspectData.tree = inspectFullXml;
         }
 
         // Bundle screenshot if requested

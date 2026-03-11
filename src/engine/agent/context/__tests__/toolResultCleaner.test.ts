@@ -125,43 +125,43 @@ describe('ToolResultCleaner', () => {
   });
 
   describe('read tool cleaning (context/outline/inspect)', () => {
-    it('passes through inspect xml and preserves hint/context', () => {
+    it('passes through inspect tree and preserves hint/context', () => {
       const rawResult = {
         name: 'inspect',
         success: true,
         data: {
-          xml: '<frame id="root-1" layout="column"><text id="t1">Hello</text></frame>',
+          tree: "frame('root-1', {layout:'column'})\n  text('t1', {}, 'Hello')",
           hint: 'auto-degraded to skeleton',
           context: { pageNodeCount: 42 },
         }
       };
 
       const cleaned = cleaner.cleanToolResult(rawResult);
-      expect(cleaned.data.xml).toBe(rawResult.data.xml);
+      expect(cleaned.data.tree).toBe(rawResult.data.tree);
       expect(cleaned.data.hint).toBe('auto-degraded to skeleton');
       expect(cleaned.data.context.pageNodeCount).toBe(42);
     });
 
-    it('truncates oversized xml at safe boundary', () => {
-      const longXml = '<frame id="root">' + '<text id="t">x</text>\n'.repeat(500) + '</frame>';
+    it('truncates oversized tree at newline boundary', () => {
+      const longTree = "frame('root', {})\n" + "  text('t', {}, 'x')\n".repeat(500);
       const rawResult = {
         name: 'inspect',
         success: true,
-        data: { xml: longXml }
+        data: { tree: longTree }
       };
 
-      expect(longXml.length).toBeGreaterThan(6000);
+      expect(longTree.length).toBeGreaterThan(6000);
 
       const cleaned = cleaner.cleanToolResult(rawResult);
-      expect(cleaned.data.xml.length).toBeLessThan(longXml.length);
+      expect(cleaned.data.tree.length).toBeLessThan(longTree.length);
     });
 
-    it('strips unknown fields, keeps only xml/hint/context/page/selection/suggestedReads', () => {
+    it('strips unknown fields, keeps only tree/hint/context/page/selection/suggestedReads', () => {
       const rawResult = {
         name: 'outline',
         success: true,
         data: {
-          xml: '<frame id="f1"/>',
+          tree: "frame('f1', {})",
           hint: 'ok',
           suggestedReads: ['100:3', '100:5'],
           extraField: 'should be dropped',
@@ -170,7 +170,7 @@ describe('ToolResultCleaner', () => {
       };
 
       const cleaned = cleaner.cleanToolResult(rawResult);
-      expect(cleaned.data.xml).toBe('<frame id="f1"/>');
+      expect(cleaned.data.tree).toBe("frame('f1', {})");
       expect(cleaned.data.hint).toBe('ok');
       expect(cleaned.data.suggestedReads).toEqual(['100:3', '100:5']);
       expect(cleaned.data.extraField).toBeUndefined();

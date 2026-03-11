@@ -67,13 +67,15 @@ export class ToolResultCleaner {
   }
 
   /**
-   * Cleans read results. XML string passed through directly (already compact).
+   * Cleans read results. Tree string passed through directly (already compact).
    * Preserves hint/context fields from handler (auto-degradation signals).
-   * Safe truncation: cuts at last `>` or newline to avoid broken XML tags.
+   * Safe truncation: cuts at last newline boundary.
    */
   private cleanInspectResult(data: any): any {
     const result: any = {};
-    if (data.xml) result.xml = data.xml;
+    // Support both new `tree` and legacy `xml` field
+    const treeContent = data.tree ?? data.xml;
+    if (treeContent) result.tree = treeContent;
 
     // Preserve structured fields from handler
     if (data.hint) result.hint = data.hint;
@@ -82,19 +84,12 @@ export class ToolResultCleaner {
     if (data.selection) result.selection = data.selection;
     if (data.suggestedReads) result.suggestedReads = data.suggestedReads;
 
-    const MAX_XML_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
-    if (result.xml && result.xml.length > MAX_XML_CHARS) {
-      // Safe truncation: find last `>` or newline before limit to avoid broken tags
-      let cutPoint = MAX_XML_CHARS;
-      const searchRegion = result.xml.substring(Math.max(0, MAX_XML_CHARS - 200), MAX_XML_CHARS);
-      const lastCloseTag = searchRegion.lastIndexOf('>');
-      const lastNewline = searchRegion.lastIndexOf('\n');
-      const bestCut = Math.max(lastCloseTag, lastNewline);
-      if (bestCut > 0) {
-        cutPoint = Math.max(0, MAX_XML_CHARS - 200) + bestCut + 1;
-      }
-
-      result.xml = result.xml.substring(0, cutPoint);
+    const MAX_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
+    if (result.tree && result.tree.length > MAX_CHARS) {
+      // Safe truncation at newline boundary (flat ops is line-oriented)
+      const lastNewline = result.tree.lastIndexOf('\n', MAX_CHARS);
+      const cutPoint = lastNewline > 0 ? lastNewline : MAX_CHARS;
+      result.tree = result.tree.substring(0, cutPoint);
     }
     return result;
   }

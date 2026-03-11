@@ -11,6 +11,7 @@
  */
 
 import { LLMMessage, Part } from '../../llm-client/providers/types';
+import { getContextProfile } from './constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,7 +77,7 @@ function groupIntoTurns(messages: LLMMessage[]): TurnDigest[] {
         turns.push(current);
       }
       current = {
-        userRequest: truncate(extractText(msg.content), 120),
+        userRequest: truncate(extractText(msg.content), getContextProfile().summaryUserRequestChars),
         toolActions: [],
       };
     } else if (msg.role === 'model') {
@@ -101,7 +102,7 @@ function groupIntoTurns(messages: LLMMessage[]): TurnDigest[] {
 function extractModelContent(content: string | Part[], turn: TurnDigest): void {
   if (typeof content === 'string') {
     if (content.trim()) {
-      turn.agentResponse = truncate(content.trim(), 150);
+      turn.agentResponse = truncate(content.trim(), getContextProfile().summaryAgentResponseChars);
     }
     return;
   }
@@ -110,7 +111,7 @@ function extractModelContent(content: string | Part[], turn: TurnDigest): void {
     if (part.thought) continue; // Skip thinking content
 
     if (part.text && part.text.trim()) {
-      turn.agentResponse = truncate(part.text.trim(), 150);
+      turn.agentResponse = truncate(part.text.trim(), getContextProfile().summaryAgentResponseChars);
     }
     if (part.functionCall) {
       const args = summarizeArgs(part.functionCall.name, part.functionCall.args);

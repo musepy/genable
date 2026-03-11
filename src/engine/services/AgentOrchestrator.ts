@@ -55,6 +55,7 @@ export interface OrchestratorOptions {
 }
 
 import { buildStaticSystemPrompt } from '../llm-client/context/system';
+import { setContextProfile, TIGHT_PROFILE, RELAXED_PROFILE } from '../agent/context/constants';
 
 import { IpcBridge } from '../agent/ipcBridge';
 
@@ -347,6 +348,11 @@ export class AgentOrchestrator {
     });
 
     console.log(`[AgentOrchestrator] Behavior resolved: thinking=${behaviorConfig.thinkingLevel}`);
+
+    // Select context profile based on model capabilities
+    const isLargeContextModel = /pro|kimi|k2/i.test(modelName) && !/flash-lite/i.test(modelName);
+    setContextProfile(isLargeContextModel ? RELAXED_PROFILE : TIGHT_PROFILE);
+    console.log(`[AgentOrchestrator] Context profile: ${isLargeContextModel ? 'RELAXED' : 'TIGHT'} (model: ${modelName})`);
 
     // Build static system prompt (set once, never changes — enables KV cache)
     const systemPrompt = buildStaticSystemPrompt(tools, provider);

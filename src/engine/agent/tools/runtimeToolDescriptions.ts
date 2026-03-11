@@ -45,20 +45,8 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
   {
     tool: 'design',
     mode: 'EXECUTION',
-    required: [{ name: 'xml', trim: true, check: 'required' }],
-    repairHint: 'provide a non-empty "xml" string with design markup (create, edit, or delete nodes)',
-  },
-  {
-    tool: 'create',
-    mode: 'EXECUTION',
-    required: [{ name: 'xml', trim: true, check: 'required' }],
-    repairHint: 'provide a non-empty "xml" string with design markup',
-  },
-  {
-    tool: 'edit',
-    mode: 'EXECUTION',
-    required: [{ name: 'xml', trim: true, check: 'required' }],
-    repairHint: 'provide a non-empty "xml" string with edit markup (each tag must have an id attribute)',
+    required: [{ name: 'ops', trim: true, check: 'required' }],
+    repairHint: 'provide a non-empty "ops" string with flat ops (create, update, or delete operations)',
   },
   {
     tool: 'replace',

@@ -5,7 +5,7 @@ User: "Create a card with a title"
 
 ```json
 design({
-  "xml": "<frame name='Card' layout='column' gap='12' p='16' w='360' height='hug' bg='#FFFFFF' corner='12'><text name='Title' size='20' weight='Bold' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Card Title</text><text name='Subtitle' size='14' fill='#6B7280' w='328' textAutoResize='HEIGHT'>Description text</text></frame>"
+  "ops": "card = frame(root, {name:'Card', layout:'column', gap:12, p:16, w:360, height:'hug', bg:'#FFFFFF', corner:12})\ntitle = text(card, {name:'Title', size:20, weight:'Bold', fill:'#111827', w:'fill'}, 'Card Title')\nsub = text(card, {name:'Subtitle', size:14, fill:'#6B7280', w:'fill'}, 'Description text')"
 })
 ```
 
@@ -15,16 +15,16 @@ User: "Create a login page"
 **Step 1 — Skeleton**: outer container + major sections as empty frames.
 ```json
 design({
-  "xml": "<frame name='Login Page' layout='column' alignItems='center' justifyContent='center' w='1440' h='900' bg='#F9FAFB'><frame name='Card' layout='column' gap='24' p='40' w='420' height='hug' bg='#FFFFFF' corner='16' shadow='0,4,24,0,#0000000F'><frame name='Header' layout='column' gap='8' alignItems='center' width='fill' height='hug' bg='transparent'/><frame name='Form' layout='column' gap='16' width='fill' height='hug' bg='transparent'/><frame name='Footer' layout='column' gap='12' alignItems='center' width='fill' height='hug' bg='transparent'/></frame></frame>"
+  "ops": "page = frame(root, {name:'Login Page', layout:'column', alignItems:'center', justifyContent:'center', w:1440, h:900, bg:'#F9FAFB'})\ncard = frame(page, {name:'Card', layout:'column', gap:24, p:40, w:420, height:'hug', bg:'#FFFFFF', corner:16, shadow:'0,4,24,0,#0000000F'})\nhdr = frame(card, {name:'Header', layout:'column', gap:8, alignItems:'center', w:'fill', height:'hug', bg:'transparent'})\nfrm = frame(card, {name:'Form', layout:'column', gap:16, w:'fill', height:'hug', bg:'transparent'})\nftr = frame(card, {name:'Footer', layout:'column', gap:12, alignItems:'center', w:'fill', height:'hug', bg:'transparent'})"
 })
 ```
-→ idMap returns: `{ "Login Page": "200:1", "Card": "200:2", "Header": "200:3", "Form": "200:4", "Footer": "200:5" }`
+→ idMap returns: `{ "loginPage": "200:1", "card": "200:2", "hdr": "200:3", "frm": "200:4", "ftr": "200:5" }`
 
 **Step 2 — Header region**: fill the header with logo and text.
 ```json
 design({
   "parentId": "200:3",
-  "xml": "<text name='Logo' size='28' weight='Bold' fill='#4F46E5' textAutoResize='WIDTH_AND_HEIGHT'>Acme</text><text name='Title' size='20' weight='Bold' fill='#111827' textAutoResize='WIDTH_AND_HEIGHT'>Welcome back</text><text name='Subtitle' size='14' fill='#6B7280' w='340' textAutoResize='HEIGHT'>Sign in to your account</text>"
+  "ops": "logo = text(root, {name:'Logo', size:28, weight:'Bold', fill:'#4F46E5'}, 'Acme')\nt1 = text(root, {name:'Title', size:20, weight:'Bold', fill:'#111827'}, 'Welcome back')\nt2 = text(root, {name:'Subtitle', size:14, fill:'#6B7280'}, 'Sign in to your account')"
 })
 ```
 
@@ -32,7 +32,7 @@ design({
 ```json
 design({
   "parentId": "200:4",
-  "xml": "<frame name='Email Field' layout='column' gap='6' width='fill' height='hug' bg='transparent'><text name='Label' size='14' weight='Medium' fill='#374151' textAutoResize='WIDTH_AND_HEIGHT'>Email</text><frame name='Input' layout='row' p='12 16' width='fill' height='hug' bg='#FFFFFF' corner='8' stroke='#D1D5DB' strokeW='1'><text name='Placeholder' size='14' fill='#9CA3AF' textAutoResize='WIDTH_AND_HEIGHT'>you@example.com</text></frame></frame><frame name='Password Field' layout='column' gap='6' width='fill' height='hug' bg='transparent'><text name='Label' size='14' weight='Medium' fill='#374151' textAutoResize='WIDTH_AND_HEIGHT'>Password</text><frame name='Input' layout='row' p='12 16' width='fill' height='hug' bg='#FFFFFF' corner='8' stroke='#D1D5DB' strokeW='1'><text name='Placeholder' size='14' fill='#9CA3AF' textAutoResize='WIDTH_AND_HEIGHT'>••••••••</text></frame></frame><frame name='Sign In Button' layout='row' justifyContent='center' alignItems='center' p='12' width='fill' h='44' bg='#4F46E5' corner='8'><text name='Label' size='16' weight='Bold' fill='#FFFFFF' textAutoResize='WIDTH_AND_HEIGHT'>Sign In</text></frame>"
+  "ops": "ef = frame(root, {name:'Email Field', layout:'column', gap:6, w:'fill', height:'hug', bg:'transparent'})\nel = text(ef, {name:'Label', size:14, weight:'Medium', fill:'#374151'}, 'Email')\nei = frame(ef, {name:'Input', layout:'row', p:'12 16', w:'fill', height:'hug', bg:'#FFFFFF', corner:8, stroke:'#D1D5DB', strokeW:1})\nep = text(ei, {name:'Placeholder', size:14, fill:'#9CA3AF'}, 'you@example.com')\npf = frame(root, {name:'Password Field', layout:'column', gap:6, w:'fill', height:'hug', bg:'transparent'})\npl = text(pf, {name:'Label', size:14, weight:'Medium', fill:'#374151'}, 'Password')\npi = frame(pf, {name:'Input', layout:'row', p:'12 16', w:'fill', height:'hug', bg:'#FFFFFF', corner:8, stroke:'#D1D5DB', strokeW:1})\npp = text(pi, {name:'Placeholder', size:14, fill:'#9CA3AF'}, '••••••••')\nbtn = frame(root, {name:'Sign In Button', layout:'row', justifyContent:'center', alignItems:'center', p:12, w:'fill', h:44, bg:'#4F46E5', corner:8})\nbl = text(btn, {name:'Label', size:16, weight:'Bold', fill:'#FFFFFF'}, 'Sign In')"
 })
 ```
 
@@ -40,7 +40,7 @@ design({
 ```json
 design({
   "parentId": "200:5",
-  "xml": "<text name='Forgot' size='14' fill='#4F46E5' textAutoResize='WIDTH_AND_HEIGHT'>Forgot password?</text><frame name='Signup Row' layout='row' gap='4' width='hug' height='hug' bg='transparent' alignItems='center'><text name='Signup Prompt' size='14' fill='#6B7280' textAutoResize='WIDTH_AND_HEIGHT'>Don't have an account?</text><text name='Signup Link' size='14' fill='#4F46E5' weight='Medium' textAutoResize='WIDTH_AND_HEIGHT'>Sign up</text></frame>"
+  "ops": "f1 = text(root, {name:'Forgot', size:14, fill:'#4F46E5'}, 'Forgot password?')\nf2 = text(root, {name:'Signup', size:14, fill:'#6B7280'}, 'Don\\'t have an account? Sign up')"
 })
 ```
 
@@ -71,9 +71,9 @@ inspect({"nodeId":"100:3"})
 ```
 → Returns full XML with styles for the header section only.
 
-**Step 4 — Edit based on detailed inspection (using design with id)**:
+**Step 4 — Edit based on detailed inspection**:
 ```json
-design({"xml": "<text id='100:5' fill='#4F46E5' size='24'>New Header</text>"})
+design({"ops": "update('100:5', {fill:'#4F46E5', size:24})"})
 ```
 
 ### Example 4: Query-first edit
@@ -81,9 +81,7 @@ User: "Change the button in the existing card to green and add rounded corners"
 
 ```json
 outline({"nodeId":"100:1","depth":2})
-design({
-  "xml": "<frame id='100:8' fill='#10B981' corner='10'/>"
-})
+design({"ops": "update('100:8', {fill:'#10B981', corner:10})"})
 ```
 
 ### Example 5: FONT_FALLBACK warning handling
@@ -91,9 +89,9 @@ User: "Create a button with bold title"
 
 ```json
 design({
-  "xml": "<frame name='Button' layout='row' p='12' width='hug' h='44' corner='8' bg='#4F46E5' justifyContent='center' alignItems='center'><text name='Label' size='16' weight='Bold' fill='#FFFFFF' textAutoResize='WIDTH_AND_HEIGHT'>Sign In</text></frame>"
+  "ops": "btn = frame(root, {name:'Button', layout:'row', p:12, w:'hug', h:44, corner:8, bg:'#4F46E5', justifyContent:'center', alignItems:'center'})\nlbl = text(btn, {name:'Label', size:16, weight:'Bold', fill:'#FFFFFF'}, 'Sign In')"
 })
-design({"xml": "<text id='100:2' weight='Medium'/>"})
+design({"ops": "update('100:2', {weight:'Medium'})"})
 ```
 
 ### Example 6: Component-first card row (reusable + ref)
@@ -102,7 +100,7 @@ User: "Create a stats dashboard with 3 metric cards"
 **Step 1 — Define the reusable component** (small, all attributes):
 ```json
 design({
-  "xml": "<frame name='StatCard' reusable='true' layout='column' gap='8' p='20' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' w='240' height='hug'><text name='label' size='14' fill='#64748B' textAutoResize='WIDTH_AND_HEIGHT'>Label</text><text name='value' size='28' weight='Bold' fill='#0F172A' textAutoResize='WIDTH_AND_HEIGHT'>0</text></frame>"
+  "ops": "sc = frame(root, {name:'StatCard', reusable:true, layout:'column', gap:8, p:20, bg:'#FFFFFF', corner:12, shadow:'0,2,8,0,#0000001A', w:240, height:'hug'})\nlbl = text(sc, {name:'label', size:14, fill:'#64748B'}, 'Label')\nval = text(sc, {name:'value', size:28, weight:'Bold', fill:'#0F172A'}, '0')"
 })
 ```
 
@@ -110,7 +108,7 @@ design({
 ```json
 design({
   "parentId": "...",
-  "xml": "<frame name='Stats Row' layout='row' gap='16' w='fill' height='hug' bg='transparent'><ref component='StatCard' w='fill' set:label='Revenue' set:value='$48,250'/><ref component='StatCard' w='fill' set:label='Users' set:value='2,420'/><ref component='StatCard' w='fill' set:label='Growth' set:value='+12.5%'/></frame>"
+  "ops": "row = frame(root, {name:'Stats Row', layout:'row', gap:16, w:'fill', height:'hug', bg:'transparent'})\nc1 = ref('StatCard', row, {w:'fill', set:label:'Revenue', set:value:'$48,250'})\nc2 = ref('StatCard', row, {w:'fill', set:label:'Users', set:value:'2,420'})\nc3 = ref('StatCard', row, {w:'fill', set:label:'Growth', set:value:'+12.5%'})"
 })
 ```
 
@@ -119,4 +117,4 @@ After all design work is done, respond with text only — this ends the loop:
 
 "I've created the login form with email/password fields, a sign-in button, and proper card styling. The form uses vertical auto-layout with 16px spacing."
 
-Note: Every frame has explicit `bg` — structural frames use `bg='transparent'` so they don't override the parent's dark background.
+Note: Every frame has explicit `bg` — structural frames use `bg:'transparent'` so they don't override the parent's dark background.

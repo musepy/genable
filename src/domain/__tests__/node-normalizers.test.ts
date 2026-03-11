@@ -28,10 +28,18 @@ describe('normalizeProps', () => {
     expect(result).not.toHaveProperty('width');
   });
 
-  it('keeps text width="fill" untouched so text sizing can be validated explicitly', () => {
+  it('converts text width="fill" → layoutSizingHorizontal + auto-fills textAutoResize on create', () => {
+    const result = normalizeProps({ width: 'fill' }, { nodeType: 'TEXT', isCreate: true });
+    expect(result.layoutSizingHorizontal).toBe('FILL');
+    expect(result.textAutoResize).toBe('HEIGHT');
+    expect(result).not.toHaveProperty('width');
+  });
+
+  it('converts text width="fill" → layoutSizingHorizontal without auto-fill on update', () => {
     const result = normalizeProps({ width: 'fill' }, { nodeType: 'TEXT' });
-    expect(result.width).toBe('fill');
-    expect(result.layoutSizingHorizontal).toBeUndefined();
+    expect(result.layoutSizingHorizontal).toBe('FILL');
+    expect(result.textAutoResize).toBeUndefined();
+    expect(result).not.toHaveProperty('width');
   });
 
   it('converts height: "hug" → layoutSizingVertical', () => {
@@ -40,10 +48,11 @@ describe('normalizeProps', () => {
     expect(result).not.toHaveProperty('height');
   });
 
-  it('keeps text height="hug" untouched', () => {
-    const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT' });
-    expect(result.height).toBe('hug');
-    expect(result.layoutSizingVertical).toBeUndefined();
+  it('converts text height="hug" → layoutSizingVertical + auto-fills textAutoResize on create', () => {
+    const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT', isCreate: true });
+    expect(result.layoutSizingVertical).toBe('HUG');
+    expect(result.textAutoResize).toBe('WIDTH_AND_HEIGHT');
+    expect(result).not.toHaveProperty('height');
   });
 
   it('converts width: "100%" → layoutSizingHorizontal: FILL', () => {

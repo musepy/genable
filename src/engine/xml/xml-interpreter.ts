@@ -21,7 +21,7 @@ import { normalizeProps } from '../../domain/node-normalizers';
 // Tag → Figma Type Mapping
 // ═══════════════════════════════════════════════
 
-const TAG_TO_TYPE: Record<string, string> = {
+export const TAG_TO_TYPE: Record<string, string> = {
   frame: 'FRAME',
   text: 'TEXT',
   rect: 'RECTANGLE',
@@ -41,7 +41,7 @@ const TAG_TO_TYPE: Record<string, string> = {
 // Abbreviation Expansion (same as xmlDesignParser)
 // ═══════════════════════════════════════════════
 
-const ABBREV_EXPANSION: Record<string, string> = {
+export const ABBREV_EXPANSION: Record<string, string> = {
   w: 'width',
   h: 'height',
   size: 'fontSize',
@@ -97,7 +97,7 @@ const NUMERIC_PROPS = new Set([
 /** Properties that use the unitValue spec (lineHeight, letterSpacing) */
 const UNIT_VALUE_PROPS = new Set(['lineHeight', 'letterSpacing']);
 
-function coerceValue(key: string, value: string): string | number {
+export function coerceValue(key: string, value: string): string | number {
   if (STRING_VALUE_PROPS.has(key)) return value;
   if (MIXED_VALUE_PROPS.has(key)) {
     if (value.endsWith('%')) return value;
@@ -118,7 +118,7 @@ function coerceValue(key: string, value: string): string | number {
 // Special format parsers
 // ═══════════════════════════════════════════════
 
-function expandPadding(value: string): Record<string, number> {
+export function expandPadding(value: string): Record<string, number> {
   const parts = value.trim().split(/\s+/).map(Number);
   switch (parts.length) {
     case 1:
@@ -136,7 +136,7 @@ function expandPadding(value: string): Record<string, number> {
 // Helpers
 // ═══════════════════════════════════════════════
 
-function toCamelCase(name: string): string {
+export function toCamelCase(name: string): string {
   return name
     .replace(/[^a-zA-Z0-9\s]/g, '')
     .trim()
@@ -145,7 +145,7 @@ function toCamelCase(name: string): string {
     .join('');
 }
 
-function computeDependsOn(parentRef?: string): string[] {
+export function computeDependsOn(parentRef?: string): string[] {
   if (!parentRef) return [];
   if (parentRef === 'root') return [];
   if (parentRef.includes(':')) return [];
@@ -308,7 +308,7 @@ export function interpretXmlNodes(nodes: XmlNode[], options?: InterpretOptions):
     const symbolBase = props.name ? toCamelCase(String(props.name)) : (tag + (++autoCounter));
     const symbol = uniqueSymbol(symbolBase || tag + (++autoCounter));
 
-    const normalized = normalizeProps(props, { nodeType: figmaType });
+    const normalized = normalizeProps(props, { nodeType: figmaType, isCreate: true });
 
     // Apply sizing defaults for create ops (canonicalize phase)
     if (command === 'create') {

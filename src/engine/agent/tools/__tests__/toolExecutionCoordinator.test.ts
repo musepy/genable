@@ -6,8 +6,6 @@ describe('ToolExecutionCoordinator', () => {
 
   it.each([
     ['outline', {}, 'nodeId'],
-    ['create', {}, 'xml'],
-    ['edit', {}, 'xml'],
     ['query', {}, 'source'],
   ])('flags missing required parameter for %s', (toolName, args, missingParam) => {
     const result = coordinator.validateToolCall(toolName as string, args, 'EXECUTION');
@@ -37,20 +35,6 @@ describe('ToolExecutionCoordinator', () => {
 
     expect(result.error.details.missing).toContain('nodeId');
     expect(result.error.message).toContain('nodeId');
-  });
-
-  it('validates edit requires non-empty xml', () => {
-    const result = coordinator.validateToolCall(
-      'edit',
-      { xml: '' },
-      'EXECUTION'
-    );
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-
-    expect(result.error.details.missing).toContain('xml');
-    expect(result.error.message).toContain('edit');
   });
 
   it('rejects unknown tool names with actionable repair hint', () => {

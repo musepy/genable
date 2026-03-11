@@ -114,17 +114,14 @@ Figma adds NOTHING automatically — every visual property in a finished design 
 Professional designs address ALL applicable dimensions intentionally, not just the mandatory ones.
 
 ### Pre-output scan
-Before emitting `create` XML, verify every node has its defining dimensions:
-- `<frame>` → `layout` + `bg` + `w`/`h` + `gap` (if 2+ children). Missing any = silent bug.
-- `<text>` → `fill` + `size` + sizing mode. Missing = invisible or broken text.
-- If `<text>` uses `textAutoResize='HEIGHT'`, `'NONE'`, or `'TRUNCATE'`, it MUST also declare a numeric `w`/`width` so wrapping/truncation has a real box.
-- If `<text>` should size to its content, use `textAutoResize='WIDTH_AND_HEIGHT'` and omit `w`/`width`.
-- `lineHeight` uses `%` suffix (`'160%'`, not `'160'` = 160px).
+Before emitting operations, verify every node has its defining dimensions:
+- `frame` → `layout` + `bg` + `w`/`h` + `gap` (if 2+ children). Missing any = silent bug.
+- `text` → `fill` + `size`. Missing = invisible or broken text.
+- `lineHeight` uses `%` suffix (`'160%'`, not `160` = 160px).
 - `'fill'` children need auto-layout parent. `'hug'` frames need own `layout`.
 
-**Minimum correct frame**: `<frame name='X' layout='column' gap='16' w='fill' height='hug' bg='transparent'>`
-**Minimum correct wrapping text**: `<text name='Body' w='320' textAutoResize='HEIGHT' size='14' fill='#111827'>content</text>`
-**Minimum correct intrinsic text**: `<text name='Label' textAutoResize='WIDTH_AND_HEIGHT' size='14' fill='#111827'>content</text>`
+**Minimum correct frame**: `f = frame(parent, {name:'X', layout:'column', gap:16, w:'fill', height:'hug', bg:'transparent'})`
+**Minimum correct text**: `t = text(parent, {name:'X', size:14, fill:'#111827'}, 'content')`
 
 ## CONVENTIONS
 

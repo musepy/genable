@@ -48,6 +48,7 @@ const NAME_ALIASES: Record<string, string> = {
 
 export interface NormalizePropsOptions {
   nodeType?: string;
+  isCreate?: boolean;
 }
 
 /**
@@ -94,7 +95,7 @@ export function normalizeProps(
   }
 
   // ── width: "fill"/"hug"/"100%" → layoutSizingHorizontal ──
-  if (!isTextNode && 'width' in result && typeof result.width === 'string') {
+  if ('width' in result && typeof result.width === 'string') {
     const w = result.width.toLowerCase().trim();
     if (w === 'fill' || w === 'hug') {
       result.layoutSizingHorizontal = w.toUpperCase();
@@ -106,7 +107,7 @@ export function normalizeProps(
   }
 
   // ── height: "fill"/"hug"/"100%" → layoutSizingVertical ──
-  if (!isTextNode && 'height' in result && typeof result.height === 'string') {
+  if ('height' in result && typeof result.height === 'string') {
     const h = result.height.toLowerCase().trim();
     if (h === 'fill' || h === 'hug') {
       result.layoutSizingVertical = h.toUpperCase();
@@ -114,6 +115,16 @@ export function normalizeProps(
     } else if (h === '100%') {
       result.layoutSizingVertical = 'FILL';
       delete result.height;
+    }
+  }
+
+  // ── Auto-fill textAutoResize for text creates ──
+  if (isTextNode && options.isCreate && !result.textAutoResize) {
+    // Text with FILL sizing will wrap — use HEIGHT; otherwise hug to content
+    if (result.layoutSizingHorizontal === 'FILL') {
+      result.textAutoResize = 'HEIGHT';
+    } else {
+      result.textAutoResize = 'WIDTH_AND_HEIGHT';
     }
   }
 

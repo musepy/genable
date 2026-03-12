@@ -174,6 +174,39 @@ describe('flatOpsParser', () => {
     });
   });
 
+  describe('variantSet operations', () => {
+    it('parses variantSet with from prop', () => {
+      const input = "sm = frame(root, {name:'Size=Small', reusable:true})\nlg = frame(root, {name:'Size=Large', reusable:true})\nbtnSet = variantSet(root, {name:'Button', from:'sm,lg'})";
+      const ops = lines(input);
+      expect(ops).toHaveLength(3);
+      expect(ops[2].command).toBe('variantSet');
+      expect(ops[2].variantComponents).toEqual(['sm', 'lg']);
+      expect(ops[2].props.name).toBe('Button');
+      expect(ops[2].dependsOn).toContain('sm');
+      expect(ops[2].dependsOn).toContain('lg');
+    });
+
+    it('errors on variantSet without from', () => {
+      const result = parse("vs = variantSet(root, {name:'Button'})");
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].error).toContain('from');
+    });
+  });
+
+  describe('ref with variant selector', () => {
+    it('extracts variant prop into variantSelector', () => {
+      const ops = lines("b1 = ref('Button', root, {variant:'Size=Large', set:Label:'Submit'})");
+      expect(ops[0].command).toBe('instance');
+      expect(ops[0].variantSelector).toBe('Size=Large');
+      expect(ops[0].overrides).toMatchObject({ Label: { characters: 'Submit' } });
+    });
+
+    it('ref without variant has no variantSelector', () => {
+      const ops = lines("c1 = ref('StatCard', root, {set:label:'Revenue'})");
+      expect(ops[0].variantSelector).toBeUndefined();
+    });
+  });
+
   describe('mixed operations', () => {
     it('handles create + update + delete in one input', () => {
       const input = [

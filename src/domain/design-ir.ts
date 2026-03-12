@@ -94,7 +94,7 @@ export interface CanonicalProps {
 
 export interface OperationIR {
   /** The operation to perform */
-  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance';
+  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance' | 'variantSet';
   /** For create: the Figma node type (FRAME, TEXT, RECTANGLE, etc.) */
   nodeType?: string;
   /** Parent node reference (symbol or Figma ID) */
@@ -113,6 +113,10 @@ export interface OperationIR {
   overrides?: Record<string, CanonicalProps>;
   /** If true, creates a ComponentNode instead of a FrameNode */
   reusable?: boolean;
+  /** For variantSet: list of component symbols to combine */
+  variantComponents?: string[];
+  /** For instance: variant selector string (e.g. 'Size=Large') */
+  variantSelector?: string;
   /** 1-based operation index (diagnostic) */
   lineNumber?: number;
   /** JSON summary of the original operation (diagnostic) */

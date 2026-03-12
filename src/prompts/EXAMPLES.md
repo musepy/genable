@@ -112,7 +112,31 @@ design({
 })
 ```
 
-### Example 7: Completion (text-only response, no tool calls)
+### Example 7: Variant ComponentSet (variantSet + variant selection)
+User: "Create a button component with Small, Medium, Large size variants"
+
+**Step 1 — Define each variant component**:
+```json
+design({
+  "ops": "sm = frame(root, {name:'Size=Small', reusable:true, layout:'row', gap:6, p:'6 12', bg:'#4F46E5', corner:6, height:'hug', w:'hug', alignItems:'center', justifyContent:'center'})\nsmLbl = text(sm, {name:'Label', size:13, weight:'Medium', fill:'#FFFFFF'}, 'Button')\nmd = frame(root, {name:'Size=Medium', reusable:true, layout:'row', gap:8, p:'10 20', bg:'#4F46E5', corner:8, height:'hug', w:'hug', alignItems:'center', justifyContent:'center'})\nmdLbl = text(md, {name:'Label', size:14, weight:'Medium', fill:'#FFFFFF'}, 'Button')\nlg = frame(root, {name:'Size=Large', reusable:true, layout:'row', gap:8, p:'14 28', bg:'#4F46E5', corner:10, height:'hug', w:'hug', alignItems:'center', justifyContent:'center'})\nlgLbl = text(lg, {name:'Label', size:16, weight:'Medium', fill:'#FFFFFF'}, 'Button')"
+})
+```
+
+**Step 2 — Combine into a variant set**:
+```json
+design({
+  "ops": "btnSet = variantSet(root, {name:'Button', from:'sm,md,lg'})"
+})
+```
+
+**Step 3 — Use instances with variant selection**:
+```json
+design({
+  "ops": "row = frame(root, {name:'Button Row', pattern:'row', gap:16})\nb1 = ref('Button', row, {variant:'Size=Small', set:Label:'Cancel'})\nb2 = ref('Button', row, {variant:'Size=Large', set:Label:'Submit'})"
+})
+```
+
+### Example 8: Completion (text-only response, no tool calls)
 After all design work is done, respond with text only — this ends the loop:
 
 "I've created the login form with email/password fields, a sign-in button, and proper card styling. The form uses vertical auto-layout with 16px spacing."

@@ -137,7 +137,7 @@ export interface CreateExecutionResult {
  * @internal
  * Exhaustive list of canonical commands understood by the create tool.
  */
-export const VALID_COMMANDS = ['create', 'update', 'delete', 'icon', 'image', 'instance'] as const;
+export const VALID_COMMANDS = ['create', 'update', 'delete', 'icon', 'image', 'instance', 'variantSet'] as const;
 
 /** Union type of all valid create commands. */
 export type CreateCommand = typeof VALID_COMMANDS[number];

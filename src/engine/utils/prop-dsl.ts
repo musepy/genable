@@ -25,6 +25,7 @@ export const TAG_TO_TYPE: Record<string, string> = {
   vector: 'VECTOR',
   delete: 'DELETE',
   ref: 'REF',
+  variantset: 'VARIANT_SET',
 };
 
 // ═══════════════════════════════════════════════

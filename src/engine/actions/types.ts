@@ -12,6 +12,7 @@ export type FigmaAction =
   | CreateShapeAction
   | CreateIconAction
   | CreateComponentAction
+  | CreateComponentSetAction
   | CreateInstanceAction
   | SwapInstanceAction
   | UpdatePropsAction
@@ -130,11 +131,23 @@ export interface CreateComponentAction extends ActionBase {
   };
 }
 
+export interface CreateComponentSetAction extends ActionBase {
+  action: 'createComponentSet';
+  /** tempIds or real IDs of component children to combine */
+  componentIds: string[];
+  props: {
+    name?: string;
+    [key: string]: any;
+  };
+}
+
 export interface CreateInstanceAction extends ActionBase {
   action: 'createInstance';
   source: {
     componentKey?: string;
     nodeId?: string;
+    /** Variant selector string (e.g. 'Size=Large') for ComponentSet targets */
+    variant?: string;
   };
   props?: {
     name?: string;

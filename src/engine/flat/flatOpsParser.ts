@@ -82,9 +82,10 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
   const args = extractArgs(line, m[0].length - 1);
 
   if (tag === 'ref') return parseRef(num, line, sym, args, uniq);
+  if (tag === 'variantset') return parseVariantSet(num, line, sym, args, uniq);
 
   const figmaType = TAG_TO_TYPE[tag];
-  if (!figmaType || figmaType === 'DELETE' || figmaType === 'REF') throw new Error(`Unknown type: ${tag}`);
+  if (!figmaType || figmaType === 'DELETE' || figmaType === 'REF' || figmaType === 'VARIANT_SET') throw new Error(`Unknown type: ${tag}`);
 
   const parent = unquote(args[0] || 'root');
   const rawProps = parsePropsBlock(args[1] || '');
@@ -117,8 +118,10 @@ function parseRef(
 
   const props: Record<string, any> = {};
   const overrides: Record<string, Record<string, any>> = {};
+  let variantSelector: string | undefined;
   for (const [k, v] of Object.entries(rawProps)) {
     if (k === 'name') { props.name = v; continue; }
+    if (k === 'variant') { variantSelector = v; continue; }
     if (k.startsWith('set:')) { overrides[k.substring(4)] = { characters: v }; continue; }
     const exp = ABBREV_EXPANSION[k] ?? k;
     if (exp === 'padding' || k === 'p') { Object.assign(props, expandPadding(v)); continue; }
@@ -134,6 +137,29 @@ function parseRef(
     parentRef: parent, props: normalizeProps(props), dependsOn: deps,
     componentRef: compSym,
     overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+    ...(variantSelector ? { variantSelector } : {}),
+  };
+}
+
+function parseVariantSet(
+  num: number, raw: string, sym: string,
+  args: string[], uniq: (s: string) => string,
+): OperationIR {
+  const parent = unquote(args[0] || 'root');
+  const rawProps = parsePropsBlock(args[1] || '');
+
+  const name = rawProps.name;
+  const fromStr = rawProps.from || '';
+  const componentSymbols = fromStr.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (componentSymbols.length === 0) throw new Error('variantSet requires "from" with component symbols');
+
+  const deps = [...computeDependsOn(parent), ...componentSymbols];
+
+  return {
+    command: 'variantSet', lineNumber: num, raw, symbol: uniq(sym),
+    parentRef: parent, props: { ...(name ? { name } : {}) }, dependsOn: deps,
+    variantComponents: componentSymbols,
   };
 }
 
@@ -388,9 +414,14 @@ function compileLine(
       return { ...base, action: { action: 'createFrame', tempId: line.symbol, parentId, props: { name: placeholder ?? 'Image Placeholder', fills: ['#E0E0E0'], ...dimProps, ...rest }, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
     }
 
+    case 'variantSet': {
+      if (!line.variantComponents || line.variantComponents.length === 0) return { ...base, error: "variantSet command missing 'from' component symbols" };
+      return { ...base, action: { action: 'createComponentSet', tempId: line.symbol, parentId, componentIds: line.variantComponents, props, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
     case 'instance': {
       if (!line.componentRef) return { ...base, error: "instance command missing 'componentRef'" };
-      return { ...base, action: { action: 'createInstance', tempId: line.symbol, parentId, source: { nodeId: line.componentRef }, props: Object.keys(props).length > 0 ? props : undefined, overrides: line.overrides, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+      return { ...base, action: { action: 'createInstance', tempId: line.symbol, parentId, source: { nodeId: line.componentRef, ...(line.variantSelector ? { variant: line.variantSelector } : {}) }, props: Object.keys(props).length > 0 ? props : undefined, overrides: line.overrides, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
     }
 
     default:

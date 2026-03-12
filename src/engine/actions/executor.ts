@@ -713,8 +713,32 @@ export class ActionExecutor {
           }
         }
 
+        case 'createComponentSet': {
+          const components: ComponentNode[] = [];
+          for (const compId of action.componentIds) {
+            const resolvedId = this.resolveId(compId);
+            const finalId = resolvedId !== compId ? resolvedId : (componentRegistry.get(compId) || compId);
+            const node = await figma.getNodeByIdAsync(finalId);
+            if (node && node.type === 'COMPONENT') {
+              components.push(node as ComponentNode);
+            } else {
+              return { success: false, error: `Component "${compId}" not found or not a COMPONENT (resolved to ${finalId})` };
+            }
+          }
+          if (components.length < 2) {
+            return { success: false, error: `variantSet requires at least 2 components, got ${components.length}` };
+          }
+          const setParent = parentNode || figma.currentPage;
+          const componentSet = figma.combineAsVariants(components, setParent as BaseNode & ChildrenMixin);
+          if (action.props.name) componentSet.name = action.props.name;
+          if (action.tempId) {
+            componentRegistry.set(action.tempId, componentSet.id);
+          }
+          return { success: true, nodeId: componentSet.id };
+        }
+
         case 'createInstance': {
-          const master = await this.resolveComponent(action.source.componentKey, action.source.nodeId);
+          const master = await this.resolveComponent(action.source.componentKey, action.source.nodeId, action.source.variant);
           if (!master) {
             return { success: false, error: 'Component source not found' };
           }
@@ -980,7 +1004,7 @@ export class ActionExecutor {
     return node as SceneNode | null;
   }
 
-  private async resolveComponent(key?: string, nodeId?: string): Promise<ComponentNode | null> {
+  private async resolveComponent(key?: string, nodeId?: string, variant?: string): Promise<ComponentNode | null> {
     if (key) {
       try {
         const comp = await figma.importComponentByKeyAsync(key);
@@ -995,7 +1019,17 @@ export class ActionExecutor {
       const finalId = resolvedId !== nodeId ? resolvedId : (componentRegistry.get(nodeId) || nodeId);
       const node = await figma.getNodeByIdAsync(finalId);
       if (node && node.type === 'COMPONENT') return node as ComponentNode;
-      if (node && node.type === 'COMPONENT_SET') return (node as ComponentSetNode).defaultVariant as ComponentNode;
+      if (node && node.type === 'COMPONENT_SET') {
+        const cs = node as ComponentSetNode;
+        if (variant) {
+          // Exact match first, then partial match (variant string contained in component name)
+          const exact = cs.children.find(c => c.type === 'COMPONENT' && c.name === variant);
+          if (exact) return exact as ComponentNode;
+          const partial = cs.children.find(c => c.type === 'COMPONENT' && c.name.includes(variant));
+          if (partial) return partial as ComponentNode;
+        }
+        return cs.defaultVariant as ComponentNode;
+      }
     }
     return null;
   }

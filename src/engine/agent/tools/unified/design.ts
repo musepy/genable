@@ -19,7 +19,7 @@ export const designDefinition: ToolDefinition = {
 - **Delete**: \`delete('nodeId')\` — removes node and children
 - **Instance**: \`symbol = ref('ComponentName', parent, {props})\`
 - **Node types**: frame, text, rect, ellipse, line, icon, image, group, section, vector
-- **frame vs primitives**: Use `frame` for ALL UI elements — buttons, badges, chips, avatars, inputs, icon containers, any element that could have children. Use `rect`/`ellipse`/`line` ONLY for pure decorative shapes that will NEVER have children (dividers, background blobs, decorative dots). When in doubt, use `frame`.
+- **frame vs primitives**: Use \`frame\` for ALL UI elements — buttons, badges, chips, avatars, inputs, icon containers, any element that could have children. Use \`rect\`/\`ellipse\`/\`line\` ONLY for pure decorative shapes that will NEVER have children (dividers, background blobs, decorative dots). When in doubt, use \`frame\`.
 - **Parent**: symbol from previous line, \`root\` for top-level, or \`'200:3'\` (quoted Figma ID)
 - **Comments**: lines starting with \`//\` are ignored
 - **Props**: \`{key:value, key:'string'}\` — single quotes for strings, unquoted numbers
@@ -55,6 +55,14 @@ Text nodes use the same sizing as frames: \`w:'fill'\` to stretch to parent, omi
 ## Reusable Components
 Use \`reusable:true\` on a frame to create a Figma Component.
 Use \`ref('Name', parent, {props})\` to create instances. Use \`set:childName:'text'\` for text overrides.
+
+## Variants (ComponentSet)
+Create variant components with Figma variant naming (\`PropName=Value\`), then combine into a ComponentSet:
+1. Define each variant as \`reusable:true\` with name \`'PropName=Value'\` (multi-axis: \`'Size=Small, Style=Primary'\`)
+2. Combine: \`sym = variantSet(parent, {name:'SetName', from:'comp1,comp2,...'})\`
+3. Instance with variant selection: \`ref('SetName', parent, {variant:'PropName=Value', set:label:'text'})\`
+   - Partial match: \`variant:'Size=Large'\` matches \`Size=Large, Style=Primary\`
+   - Falls back to default variant if no match
 
 ## Edit rules
 - \`update\`/\`delete\` MUST reference a real Figma node ID (from inspect/outline or previous design idMap).

@@ -1053,8 +1053,10 @@ export class ActionExecutor {
     const warnings: any[] = [];
     const diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> = [];
     // Handle font resolution before setting characters
-    const family = props.fontFamily || 'Inter';
-    const style = props.fontWeight || 'Regular';
+    // Read current font from node as fallback — avoid resetting to Inter/Regular
+    const currentFont = node.fontName as FontName;
+    const family = props.fontFamily || currentFont?.family || 'Inter';
+    const style = props.fontWeight || currentFont?.style || 'Regular';
 
     // Default font loading
     const { success, loadedStyle } = await fontBus.getOrLoad(family, style);

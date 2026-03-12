@@ -483,6 +483,7 @@ function hexToRgba(hex: string): { r: number; g: number; b: number } {
 function extractReplacePropertyValue(node: SceneNode, prop: string): string | number | undefined {
   switch (prop) {
     case 'fillColor': {
+      if (node.type === 'TEXT') return undefined;
       const fills = (node as any).fills;
       if (Array.isArray(fills) && fills.length > 0 && fills[0].type === 'SOLID') return rgbaToHex(fills[0].color);
       return undefined;
@@ -522,7 +523,7 @@ function matchesReplaceValue(current: string | number, from: string | number): b
 async function applyReplacePropertyValue(node: SceneNode, prop: string, value: string | number): Promise<void> {
   switch (prop) {
     case 'fillColor':
-      if (typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
+      if (node.type !== 'TEXT' && typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
       break;
     case 'textColor':
       if (node.type === 'TEXT' && typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];

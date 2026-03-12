@@ -119,6 +119,7 @@ Before emitting operations, verify every node has its defining dimensions:
 - `text` → `fill` + `size`. Missing = invisible or broken text.
 - `lineHeight` uses `%` suffix (`'160%'`, not `160` = 160px).
 - `'fill'` children need auto-layout parent. `'hug'` frames need own `layout`.
+- `alignItems`/`justifyContent` (`alignMain`/`alignCross`) REQUIRE `layout` to be set — without it they are silently ignored.
 
 **Minimum correct frame**: `f = frame(parent, {name:'X', layout:'column', gap:16, w:'fill', height:'hug', bg:'transparent'})`
 **Minimum correct text**: `t = text(parent, {name:'X', size:14, fill:'#111827'}, 'content')`

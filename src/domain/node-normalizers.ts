@@ -169,6 +169,24 @@ export function normalizeProps(
     else if (v === 'nowrap' || v === 'no-wrap') result.layoutWrap = 'NO_WRAP';
   }
 
+  // ── Cross-property validation: align requires layoutMode ──
+  // primaryAxisAlignItems / counterAxisAlignItems are only meaningful when
+  // layoutMode is HORIZONTAL or VERTICAL. On a plain frame they are silently
+  // ignored by Figma, so we drop them early and surface a warning so the LLM
+  // can self-correct by adding layout:'row'/'column'.
+  if (options.isCreate) {
+    const hasAlign = 'primaryAxisAlignItems' in result || 'counterAxisAlignItems' in result;
+    const hasLayout = 'layoutMode' in result && result.layoutMode !== 'NONE';
+    if (hasAlign && !hasLayout) {
+      for (const prop of ['primaryAxisAlignItems', 'counterAxisAlignItems'] as const) {
+        if (prop in result) {
+          warn(`${prop} requires layout:'row' or layout:'column' — property ignored. Add layout to enable auto-layout.`);
+          delete result[prop];
+        }
+      }
+    }
+  }
+
   // ── Catch-all enum validation via PROP_METADATA ──
   // Single authority for enum validity. Unknown values are dropped with a warning.
   for (const [prop, meta] of Object.entries(PROP_METADATA)) {

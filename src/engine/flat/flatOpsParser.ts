@@ -297,7 +297,7 @@ export function compileDesignOps(input: string, defaultParentId?: string): Compi
     if (op.symbol) allSymbols.add(op.symbol);
   }
   const diagnostics: DesignDiagnostic[] = propWarnings.map(w => ({
-    code: w.message.includes('not a valid Figma value') ? 'INVALID_ENUM_VALUE' : 'INVALID_PAINT_FORMAT',
+    code: w.message.includes('not a valid Figma value') ? 'INVALID_ENUM_VALUE' : w.message.includes('requires layout') ? 'MISSING_LAYOUT' : 'INVALID_PAINT_FORMAT',
     severity: 'warning' as const,
     message: w.message,
     lineNumber: w.line,

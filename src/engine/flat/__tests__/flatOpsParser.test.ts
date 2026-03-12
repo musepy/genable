@@ -161,7 +161,7 @@ describe('flatOpsParser', () => {
     it('creates instance operations', () => {
       const ops = lines("c1 = ref('StatCard', row, {w:'fill', set:label:'Revenue'})");
       expect(ops[0].command).toBe('instance');
-      expect(ops[0].componentRef).toBe('statcard');
+      expect(ops[0].componentRef).toBe('StatCard');
       expect(ops[0].overrides).toMatchObject({ label: { characters: 'Revenue' } });
     });
 

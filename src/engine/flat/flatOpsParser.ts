@@ -128,7 +128,9 @@ function parseRef(
     props[exp] = coerceValue(exp, v);
   }
 
-  const compSym = toCamelCase(componentName);
+  // Only apply toCamelCase for display names with spaces (e.g. 'Button Primary' → 'buttonPrimary').
+  // Symbol refs ('btnSet') and Figma IDs ('962:7367') must be kept as-is.
+  const compSym = componentName.includes(' ') ? toCamelCase(componentName) : componentName;
   const deps = [...computeDependsOn(parent)];
   if (compSym && !compSym.includes(':')) deps.push(compSym);
 

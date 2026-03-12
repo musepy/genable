@@ -597,6 +597,12 @@ export class ActionExecutor {
           }
           try {
             const { warnings } = await this.applyProps(shape, action.props);
+            // LINE is a 1D geometry (height=0 by default). Set height to strokeWeight
+            // so auto-layout parents allocate correct space for the line.
+            if (action.shapeType === 'LINE' && !action.props.height) {
+              const sw = (shape as LineNode).strokeWeight;
+              shape.resize(shape.width, typeof sw === 'number' ? sw : 1);
+            }
             return { success: true, nodeId: shape.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
             shape.remove();

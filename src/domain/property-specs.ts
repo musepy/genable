@@ -223,7 +223,7 @@ function paintsEqual(a: PaintValue, b: PaintValue): boolean {
   return false;
 }
 
-export const paintSpec: PropertySpec<PaintValue[]> = {
+export const paintSpec = {
   xmlAttrs: ['fill', 'fills', 'stroke', 'strokes', 'background', 'bg'],
 
   parseXml(value: string): PaintValue[] {
@@ -252,6 +252,14 @@ export const paintSpec: PropertySpec<PaintValue[]> = {
   isEqual(a: PaintValue[], b: PaintValue[]): boolean {
     if (a.length !== b.length) return false;
     return a.every((v, i) => paintsEqual(v, b[i]));
+  },
+
+  /** Returns warning strings for any unrecognized paint parts (before parsing). */
+  validate(value: string): string[] {
+    if (value === 'transparent' || value === 'none') return [];
+    return splitRespectingParens(value)
+      .filter(p => !p.startsWith('#') && !p.startsWith('GRADIENT_') && !p.startsWith('IMAGE('))
+      .map(p => `Invalid paint format "${p}". Use "#RRGGBB[AA]" for solid or "GRADIENT_LINEAR(#color@pos,...)" for gradients. Rendered as black.`);
   },
 
   defaultValue: [],

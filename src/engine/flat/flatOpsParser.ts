@@ -139,25 +139,6 @@ function parseRef(
 
 // ── Build canonical props (mirrors xml-interpreter buildProps) ──
 
-function warnIfInvalidPaint(value: string, key: string, warn: (msg: string) => void) {
-  if (value === 'transparent' || value === 'none') return;
-  // Split top-level parts (respects parentheses so GRADIENT_LINEAR(a,b) stays whole)
-  let depth = 0, cur = '', parts: string[] = [];
-  for (const c of value) {
-    if (c === '(') { depth++; cur += c; }
-    else if (c === ')') { depth--; cur += c; }
-    else if (c === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; }
-    else cur += c;
-  }
-  if (cur.trim()) parts.push(cur.trim());
-  for (const part of parts) {
-    if (!part.startsWith('#') && !part.startsWith('GRADIENT_') && !part.startsWith('IMAGE(')) {
-      warn(`Invalid ${key} format "${part}". Use "#RRGGBB[AA]" for solid or "GRADIENT_LINEAR(#color@pos,...)" for gradients. Rendered as black.`);
-      break;
-    }
-  }
-}
-
 function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boolean, warn: (msg: string) => void = () => {}): Record<string, any> {
   const props: Record<string, any> = {};
 
@@ -179,8 +160,8 @@ function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boole
     if (expandedKey === 'shadow' || rawKey === 'shadow') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(rawValue)]; continue; }
     if (rawKey === 'blur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`blur(${rawValue})`)]; continue; }
     if (rawKey === 'bgblur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`bgblur(${rawValue})`)]; continue; }
-    if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text') || rawKey === 'fills') { warnIfInvalidPaint(rawValue, 'fill', warn); props.fills = paintSpec.parseXml(rawValue); continue; }
-    if (rawKey === 'stroke' || rawKey === 'strokes') { warnIfInvalidPaint(rawValue, 'stroke', warn); props.strokes = paintSpec.parseXml(rawValue); continue; }
+    if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text') || rawKey === 'fills') { paintSpec.validate(rawValue).forEach(warn); props.fills = paintSpec.parseXml(rawValue); continue; }
+    if (rawKey === 'stroke' || rawKey === 'strokes') { paintSpec.validate(rawValue).forEach(warn); props.strokes = paintSpec.parseXml(rawValue); continue; }
     if (expandedKey === 'clipsContent') {
       const v = rawValue.toLowerCase();
       props.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
@@ -192,7 +173,7 @@ function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boole
 
   // Text fill from fill attribute
   if (tag === 'text' && rawProps.fill) {
-    warnIfInvalidPaint(rawProps.fill, 'fill', warn);
+    paintSpec.validate(rawProps.fill).forEach(warn);
     props.fills = paintSpec.parseXml(rawProps.fill);
   }
 

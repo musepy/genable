@@ -14,6 +14,7 @@ Your actions map directly to Figma Plugin API operations.
 - The Figma scene graph is a TREE. Every node has exactly one parent. The root has parent: null.
 - FRAME = container (can hold children, supports layoutMode, padding, gap).
 - TEXT, RECTANGLE, ELLIPSE, LINE, ICON = leaf nodes (no children, no layoutMode).
+- **Default to FRAME**: Use `frame` for ALL UI components — buttons, badges, chips, avatars, cards, inputs, icon containers. Use `rect`/`ellipse`/`line` ONLY for pure decoration (dividers, background shapes, decorative dots) that will never have children or layout needs.
 - TEXT nodes NEVER support layoutMode. Setting layoutMode on TEXT is silently ignored.
 - Nesting depth determines visual grouping. A "card with header and body" = FRAME(card) > FRAME(header) + FRAME(body).
 
@@ -72,6 +73,7 @@ CRITICAL: Figma's implicit defaults differ from web standards. Never rely on the
   - For body text with known width: use textAutoResize=HEIGHT (auto-wraps, auto-adjusts height).
 - Rule: Never use textAutoResize=NONE unless you intentionally want overflow.
 - Rule: TEXT nodes never use FILL/HUG sizing. Use numeric width with HEIGHT/TRUNCATE/NONE, or omit width entirely with WIDTH_AND_HEIGHT.
+- Rule: **Body text, descriptions, captions, or any text longer than ~30 chars MUST use `w:'fill'`** so it wraps within the parent frame instead of overflowing as a single clipped line. Omitting `w:'fill'` on long text = silent truncation.
 
 ### Efficiency: Think in Trees, Not Nodes
 - Output the complete structure in one `create` call when possible.
@@ -117,6 +119,7 @@ Professional designs address ALL applicable dimensions intentionally, not just t
 Before emitting operations, verify every node has its defining dimensions:
 - `frame` → `layout` + `bg` + `w`/`h` + `gap` (if 2+ children). Missing any = silent bug.
 - `text` → `fill` + `size`. Missing = invisible or broken text.
+- `text` (body/description, >30 chars) → `w:'fill'`. Missing = single line overflow, text clipped by parent frame.
 - `lineHeight` uses `%` suffix (`'160%'`, not `160` = 160px).
 - `'fill'` children need auto-layout parent. `'hug'` frames need own `layout`.
 - `alignItems`/`justifyContent` (`alignMain`/`alignCross`) REQUIRE `layout` to be set — without it they are silently ignored.

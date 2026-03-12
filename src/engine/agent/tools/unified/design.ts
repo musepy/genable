@@ -19,6 +19,7 @@ export const designDefinition: ToolDefinition = {
 - **Delete**: \`delete('nodeId')\` — removes node and children
 - **Instance**: \`symbol = ref('ComponentName', parent, {props})\`
 - **Node types**: frame, text, rect, ellipse, line, icon, image, group, section, vector
+- **frame vs primitives**: Use `frame` for ALL UI elements — buttons, badges, chips, avatars, inputs, icon containers, any element that could have children. Use `rect`/`ellipse`/`line` ONLY for pure decorative shapes that will NEVER have children (dividers, background blobs, decorative dots). When in doubt, use `frame`.
 - **Parent**: symbol from previous line, \`root\` for top-level, or \`'200:3'\` (quoted Figma ID)
 - **Comments**: lines starting with \`//\` are ignored
 - **Props**: \`{key:value, key:'string'}\` — single quotes for strings, unquoted numbers

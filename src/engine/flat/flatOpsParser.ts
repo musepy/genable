@@ -1,6 +1,6 @@
 /**
  * @file flatOpsParser.ts
- * Parses flat ops format into OperationIR[] for the design pipeline.
+ * Parses flat ops format and compiles to FigmaAction[] in a single pass.
  *
  * Format:
  *   symbol = type(parent, {props}, 'textContent')  — create
@@ -8,11 +8,13 @@
  *   delete('nodeId')                                 — delete
  *   symbol = ref('Component', parent, {props})       — instance
  *
- * Reuses semantic helpers from xml-interpreter (abbreviation expansion,
- * value coercion, padding expansion) and PropertySpecs for paint/effect.
+ * Pipeline: parse → validate refs → compile to FigmaAction
+ * Output goes directly to ActionExecutor — no intermediate layers.
  */
 
 import type { OperationIR } from '../../domain/design-ir';
+import type { FigmaAction } from '../actions/types';
+import type { DesignOp, DesignOpError, DesignDiagnostic } from '../actions/createTypes';
 import { paintSpec, effectSpec } from '../../domain/property-specs';
 import { normalizeProps } from '../../domain/node-normalizers';
 import {
@@ -257,4 +259,127 @@ function unquote(s: string): string {
   if (s.length >= 2 && ((s[0] === "'" && s[s.length - 1] === "'") || (s[0] === '"' && s[s.length - 1] === '"')))
     return s.slice(1, -1).replace(/\\(.)/g, (_, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c);
   return s;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// compileDesignOps — parse + validate + compile in one call
+// Replaces: parseFlatOps() + validateSemantics() + ActionCompiler.compile()
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SHAPE_TYPES = new Set(['RECTANGLE', 'ELLIPSE', 'LINE', 'VECTOR']);
+
+export interface CompileDesignOpsResult {
+  ops: DesignOp[];
+  errors: DesignOpError[];
+  diagnostics: DesignDiagnostic[];
+}
+
+/**
+ * Parse flat ops string → validate symbol references → compile to FigmaAction[].
+ * Single entry point replacing the old 3-step pipeline (parser → validator → compiler).
+ */
+export function compileDesignOps(input: string, defaultParentId?: string): CompileDesignOpsResult {
+  // Step 1: Parse
+  const { lines, errors: parseErrors } = parseFlatOps(input);
+
+  // Step 2: Validate symbol references (inline from semanticValidator)
+  const allSymbols = new Set<string>();
+  for (const op of lines) {
+    if (op.symbol) allSymbols.add(op.symbol);
+  }
+  const diagnostics: DesignDiagnostic[] = [];
+  for (const op of lines) {
+    for (const dep of op.dependsOn) {
+      if (!allSymbols.has(dep) && !dep.includes(':') && dep !== 'root') {
+        diagnostics.push({
+          code: 'REF_NOT_FOUND',
+          severity: 'warning',
+          message: `Symbol "${dep}" referenced by "${op.symbol ?? 'unnamed'}" not found in this batch.`,
+          lineNumber: op.lineNumber ?? 0,
+          symbol: op.symbol,
+        });
+      }
+    }
+  }
+
+  // Step 3: Compile each line to DesignOp (inline from ActionCompiler)
+  const ops: DesignOp[] = [];
+  const opErrors: DesignOpError[] = parseErrors.map(e => ({
+    lineNumber: e.line,
+    raw: e.raw,
+    error: e.error,
+  }));
+
+  for (const line of lines) {
+    const result = compileLine(line, defaultParentId);
+    if ('error' in result) {
+      opErrors.push(result);
+    } else {
+      ops.push(result);
+    }
+  }
+
+  return { ops, errors: opErrors, diagnostics };
+}
+
+// ── Compile a single OperationIR → DesignOp or DesignOpError ──
+
+function compileLine(
+  line: OperationIR,
+  defaultParentId?: string,
+): DesignOp | DesignOpError {
+  const parentId = line.parentRef || defaultParentId;
+  // Cast to any — normalizeProps returns CanonicalProps (PaintValue[], etc.)
+  // but FigmaAction types use string[]. The executor handles both at runtime.
+  const props: Record<string, any> = line.props ?? {};
+  const dependsOn = line.dependsOn.length > 0 ? line.dependsOn : [];
+  const base = { lineNumber: line.lineNumber ?? 0, raw: line.raw ?? '', symbol: line.symbol, dependsOn };
+
+  switch (line.command) {
+    case 'create': {
+      if (line.reusable) {
+        return { ...base, action: { action: 'createComponent', tempId: line.symbol, parentId, props, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+      }
+      const nodeType = (line.nodeType ?? 'FRAME').toUpperCase();
+      if (nodeType === 'TEXT') {
+        return { ...base, action: { action: 'createText', tempId: line.symbol, parentId, props: { characters: '', ...props }, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+      }
+      if (SHAPE_TYPES.has(nodeType)) {
+        return { ...base, action: { action: 'createShape', shapeType: nodeType as any, tempId: line.symbol, parentId, props, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+      }
+      return { ...base, action: { action: 'createFrame', tempId: line.symbol, parentId, props, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'update': {
+      if (!line.targetRef) return { ...base, error: "update command missing 'targetRef'" };
+      if (Object.keys(props).length === 0) return { ...base, error: "update command has no properties to apply" };
+      return { ...base, action: { action: 'updateProps', nodeId: line.targetRef, props, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'delete': {
+      if (!line.targetRef) return { ...base, error: "delete command missing 'targetRef'" };
+      return { ...base, action: { action: 'delete', nodeId: line.targetRef, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'icon': {
+      const { iconName, ...rest } = props;
+      return { ...base, action: { action: 'createIcon', tempId: line.symbol, parentId, props: { iconName, ...rest }, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'image': {
+      const { placeholder, width, height, ...rest } = props;
+      const dimProps: Record<string, any> = {};
+      if (width !== undefined) dimProps.width = width;
+      if (height !== undefined) dimProps.height = height;
+      return { ...base, action: { action: 'createFrame', tempId: line.symbol, parentId, props: { name: placeholder ?? 'Image Placeholder', fills: ['#E0E0E0'], ...dimProps, ...rest }, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'instance': {
+      if (!line.componentRef) return { ...base, error: "instance command missing 'componentRef'" };
+      return { ...base, action: { action: 'createInstance', tempId: line.symbol, parentId, source: { nodeId: line.componentRef }, props: Object.keys(props).length > 0 ? props : undefined, overrides: line.overrides, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    default:
+      return { ...base, error: `Unknown command '${line.command}'` };
+  }
 }

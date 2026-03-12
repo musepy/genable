@@ -1,24 +1,40 @@
 import { ToolDefinition } from '../types';
 
 /**
- * Context tool — canvas overview: page info, top-level skeleton, user selection.
- * No parameters needed. Call this first when you don't know what's on the canvas.
+ * Context tool — focused canvas context around a specific node.
+ * Requires nodeId. Returns page metadata + target node skeleton + selection.
  */
 export const contextDefinition: ToolDefinition = {
   name: 'context',
   category: 'read',
   display: { displayName: 'Context', group: 'inspect' },
-  description: `Get a canvas overview — page name, top-level node skeleton (depth 2), and current user selection.
+  description: `Get canvas context for a specific node — page metadata, the node's structural skeleton (depth 2), and current user selection.
 
-Call this FIRST when you don't know what's on the canvas. Returns a shallow structural skeleton of all top-level nodes plus any currently selected nodes.
+Requires a nodeId. Returns the target node's shallow structure plus page-level info (name, childCount, top-level node names) and any currently selected nodes.
 
-No parameters needed.
+Use this as your entry point when you have a nodeId (from a Figma URL or previous tool call).
+If you don't have a nodeId, use outline() on the page root or inspect the user's selection.
 
-Returns: { page: { name, childCount }, xml (top-level skeleton), selection? }`,
+Returns: { page: { name, childCount, topLevelNodes }, tree (target node skeleton), selection? }`,
   parameters: {
     type: 'object',
-    properties: {},
-    required: []
+    properties: {
+      nodeId: {
+        type: 'string',
+        description: 'Target node ID. Required.',
+      },
+      depth: {
+        type: 'number',
+        description: 'Max depth for hierarchy traversal (default: 2, max: 5).',
+        minimum: 1,
+        maximum: 5,
+      },
+    },
+    required: ['nodeId']
   },
   executionStrategy: 'parallel',
+  errors: {
+    'NODE_NOT_FOUND': 'The specified nodeId does not exist.',
+    'INVALID_NODE_TYPE': 'The nodeId refers to a non-scene node (e.g. Page or Document).',
+  },
 };

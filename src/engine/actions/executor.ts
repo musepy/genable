@@ -6,16 +6,39 @@
  */
 
 import { FigmaAction, ExecutionResult, ActionResult } from './types';
+import { DesignOp, DesignOpError, LineResult, CreateExecutionResult } from './createTypes';
 import { ActionValidator } from './validator';
-// We need to import the fontLoader utility
-import { fontBus } from '../figma-adapter/resources/FontBus'; // Assuming this exists based on progress.md
-import { fetchIconSvg } from '../figma-adapter/assets/iconify';
+import { fontBus } from '../figma-adapter/resources/FontBus';
+import { fetchIconSvg, prefetchIcons } from '../figma-adapter/assets/iconify';
 import { parseActionError } from './errorParser';
 import { ActionErrorSubCategory } from './errorTypes';
 import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
 import { lowerPaints } from '../figma/figma-lowering';
 import { applyProperty } from './handlers';
 import { parseRichText } from '../text/richTextParser';
+
+// ---------------------------------------------------------------------------
+// Progress event (moved from IncrementalExecutor)
+// ---------------------------------------------------------------------------
+
+export interface DesignProgressEvent {
+  lineResult: LineResult;
+  stats: { completed: number; total: number };
+}
+
+export interface DesignExecOptions {
+  onError: 'continue' | 'abort';
+  rollbackMode: 'none' | 'created_nodes';
+  parentId?: string;
+  onProgress?: (event: DesignProgressEvent) => void;
+}
+
+/** Map FigmaAction.action → canonical command name for receipt stats. */
+function actionToCommand(action: string): string {
+  if (action === 'updateProps') return 'update';
+  if (action === 'delete') return 'delete';
+  return 'create';
+}
 
 /**
  * Module-level component registry — maps component symbols to real Figma node IDs.
@@ -37,8 +60,277 @@ export class ActionExecutor {
     componentRegistry.clear();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // executeDesignOps — unified entry point (replaces IncrementalExecutor)
+  // ═══════════════════════════════════════════════════════════════════════════
+
   /**
-   * Main execution entry point. 
+   * Execute compiled design operations with cross-line symbol resolution,
+   * dependency tracking, progress events, degraded fallback, and rollback.
+   *
+   * Replaces the old IncrementalExecutor → ActionExecutor 1:1 wrapper pattern.
+   */
+  async executeDesignOps(
+    ops: DesignOp[],
+    errors: DesignOpError[],
+    options: DesignExecOptions,
+  ): Promise<CreateExecutionResult> {
+    const symbolMap = new Map<string, string>();
+    const statusMap = new Map<string, 'ok' | 'failed' | 'skipped'>();
+    const lineResults: LineResult[] = [];
+    const createdNodes: Array<{ symbol: string; nodeId: string }> = [];
+    const total = ops.length + errors.length;
+    let completed = 0;
+    let aborted = false;
+
+    // 1. Seed lineResults with parse/compile errors
+    for (const e of errors) {
+      const lr: LineResult = {
+        line: e.lineNumber, raw: e.raw, status: 'failed',
+        symbol: e.symbol, error: e.error,
+      };
+      if (e.symbol) statusMap.set(e.symbol, 'failed');
+      lineResults.push(lr);
+      completed++;
+      options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+    }
+
+    // 2. Prefetch icons in parallel before serial execution
+    const iconNames = ops
+      .filter(o => o.action.action === 'createIcon' && o.action.props?.iconName)
+      .map(o => (o.action as any).props.iconName as string);
+    if (iconNames.length > 0) {
+      await prefetchIcons(iconNames);
+    }
+
+    // 3. Execute operations sequentially
+    for (const op of ops) {
+      const command = actionToCommand(op.action.action);
+
+      // 3a. Abort check
+      if (aborted) {
+        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'skipped', command, symbol: op.symbol, skipReason: 'ABORTED' };
+        if (op.symbol) statusMap.set(op.symbol, 'skipped');
+        lineResults.push(lr);
+        completed++;
+        options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+        continue;
+      }
+
+      // 3b. Dependency skip
+      const failedDep = op.dependsOn.find(dep => {
+        const s = statusMap.get(dep);
+        return s === 'failed' || s === 'skipped';
+      });
+      if (failedDep) {
+        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'skipped', command, symbol: op.symbol, skipReason: 'DEPENDENCY_FAILED' };
+        if (op.symbol) statusMap.set(op.symbol, 'skipped');
+        lineResults.push(lr);
+        completed++;
+        options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+        continue;
+      }
+
+      // 3c. Resolve symbol references → real Figma IDs
+      const { action: resolvedAction, warnings: resolveWarnings } = this.resolveSymbolRefs(op.action, symbolMap);
+
+      // 3d. Execute
+      let result: Omit<ActionResult, 'action'>;
+      try {
+        result = await this.executeOneWithRetry(resolvedAction);
+      } catch (e: any) {
+        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'failed', command, symbol: op.symbol, error: e?.message ?? 'Unexpected executor error' };
+        if (op.symbol) statusMap.set(op.symbol, 'failed');
+        lineResults.push(lr);
+        completed++;
+        options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+        if (options.onError === 'abort') aborted = true;
+        continue;
+      }
+
+      let succeeded = result.success ?? false;
+      const allWarnings = [
+        ...resolveWarnings,
+        ...(op.warnings ?? []),
+        ...(result.warnings?.map(w => ({ code: w.code, message: w.message })) ?? []),
+      ];
+
+      const lr: LineResult = {
+        line: op.lineNumber, raw: op.raw,
+        status: succeeded ? 'ok' : 'failed',
+        command, symbol: op.symbol,
+        nodeId: succeeded ? result.nodeId : undefined,
+        error: succeeded ? undefined : (result.error ?? 'Unknown error'),
+        warnings: allWarnings.length > 0 ? allWarnings : undefined,
+      };
+
+      if (succeeded && lr.warnings && lr.warnings.length > 0) lr.status = 'warning';
+
+      // 3e. Degraded fallback for failed frames
+      if (!succeeded && op.symbol && resolvedAction.action === 'createFrame') {
+        const fallbackId = await this.tryDegradedFallback(resolvedAction);
+        if (fallbackId) {
+          succeeded = true;
+          lr.status = 'warning';
+          lr.nodeId = fallbackId;
+          const origError = lr.error || 'unknown';
+          lr.error = undefined;
+          lr.warnings = [...(lr.warnings || []), { code: 'DEGRADED_FALLBACK', message: `Created as minimal frame (original: ${origError}). Use edit to apply styles.` }];
+        }
+      }
+
+      // 3f. Update maps
+      if (succeeded && op.symbol) {
+        const nodeId = lr.nodeId;
+        if (nodeId) {
+          symbolMap.set(op.symbol, nodeId);
+          createdNodes.push({ symbol: op.symbol, nodeId });
+        }
+        statusMap.set(op.symbol, 'ok');
+      } else if (!succeeded && op.symbol) {
+        statusMap.set(op.symbol, 'failed');
+      }
+
+      lineResults.push(lr);
+      completed++;
+      options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+      if (!succeeded && options.onError === 'abort') aborted = true;
+    }
+
+    // 4. Stats — categorize by command type
+    let createdCount = 0, editedCount = 0, deletedCount = 0, failedCount = 0, skippedCount = 0, warningCount = 0;
+    for (const lr of lineResults) {
+      if (lr.status === 'failed') { failedCount++; continue; }
+      if (lr.status === 'skipped') { skippedCount++; continue; }
+      if (lr.status === 'warning') warningCount++;
+      // ok or warning — count by command type
+      if (lr.command === 'update') editedCount++;
+      else if (lr.command === 'delete') deletedCount++;
+      else createdCount++;
+    }
+
+    // 5. Rollback if needed
+    const hasErrors = failedCount > 0;
+    if (options.rollbackMode === 'created_nodes' && hasErrors) {
+      for (const { nodeId } of [...createdNodes].reverse()) {
+        try {
+          const node = await figma.getNodeByIdAsync(nodeId) as SceneNode | null;
+          if (node && !node.removed) node.remove();
+        } catch { /* best-effort */ }
+      }
+    }
+
+    // 6. Build idMap
+    const idMap: Record<string, string> = {};
+    for (const [sym, nodeId] of symbolMap) idMap[sym] = nodeId;
+
+    return {
+      success: !hasErrors,
+      hasErrors,
+      idMap,
+      lineResults,
+      stats: { total: lineResults.length, created: createdCount, edited: editedCount, deleted: deletedCount, failed: failedCount, skipped: skippedCount, warnings: warningCount },
+    };
+  }
+
+  /**
+   * Resolve symbol references in a FigmaAction using the symbolMap.
+   * Returns the resolved action + any UNRESOLVED_SYMBOL warnings.
+   * If a parentId/nodeId can't resolve and doesn't look like a Figma ID, the action
+   * is returned with parentId cleared (fail-safe to page root) instead of passing
+   * garbage to figma.getNodeByIdAsync which can hang.
+   */
+  private resolveSymbolRefs(
+    action: FigmaAction,
+    symbolMap: Map<string, string>,
+  ): { action: FigmaAction; warnings: Array<{ code: string; message: string }> } {
+    const resolved: any = { ...action };
+    const warnings: Array<{ code: string; message: string }> = [];
+
+    if (resolved.parentId) {
+      const original = resolved.parentId;
+      resolved.parentId = symbolMap.get(resolved.parentId)
+        ?? (resolved.parentId === 'root' ? undefined : resolved.parentId);
+      // Unresolved non-ID string → clear to page root (prevents hang)
+      if (resolved.parentId === original && !original.match(/^\d+:\d+$/)) {
+        warnings.push({ code: 'UNRESOLVED_SYMBOL', message: `Parent '${original}' not found. Falling back to page root.` });
+        resolved.parentId = undefined;
+      }
+    }
+    if (resolved.nodeId) {
+      const original = resolved.nodeId;
+      resolved.nodeId = symbolMap.get(resolved.nodeId) ?? resolved.nodeId;
+      if (resolved.nodeId === original && !original.match(/^\d+:\d+$/)) {
+        warnings.push({ code: 'UNRESOLVED_SYMBOL', message: `Node '${original}' not found in current batch.` });
+      }
+    }
+    if (resolved.source?.nodeId) {
+      resolved.source = { ...resolved.source };
+      resolved.source.nodeId = symbolMap.get(resolved.source.nodeId) ?? resolved.source.nodeId;
+    }
+    if (resolved.newComponentNodeId) {
+      resolved.newComponentNodeId = symbolMap.get(resolved.newComponentNodeId) ?? resolved.newComponentNodeId;
+    }
+    delete resolved.dependsOn;
+
+    return { action: resolved as FigmaAction, warnings };
+  }
+
+  /**
+   * Execute one action with auto-retry on known error patterns.
+   */
+  private async executeOneWithRetry(action: FigmaAction): Promise<Omit<ActionResult, 'action'>> {
+    let result = await this.executeOne(action);
+    let retryCount = 0;
+
+    while (!result.success && retryCount < 2) {
+      const rawError = result.error || 'Unknown error';
+      const subCategory = parseActionError(rawError);
+      if (subCategory === ActionErrorSubCategory.UNKNOWN || action.action === 'delete') break;
+
+      retryCount++;
+      const props = (action as any).props;
+      if (props) {
+        if (subCategory === ActionErrorSubCategory.NODE_TYPE_CONSTRAINT) break;
+        else if (subCategory === ActionErrorSubCategory.FONT_UNLOADED) { props.fontFamily = 'Inter'; props.fontWeight = 'Regular'; }
+        else if (subCategory === ActionErrorSubCategory.PAINT_INVALID) { delete props.fills; delete props.strokes; }
+        else if (subCategory === ActionErrorSubCategory.EFFECT_INVALID) { delete props.effects; }
+        else if (subCategory === ActionErrorSubCategory.PROPERTY_INVALID) {
+          for (const [k, v] of Object.entries(props)) {
+            if (v === undefined || (typeof v === 'number' && isNaN(v))) delete props[k];
+          }
+        }
+      }
+      result = await this.executeOne(action);
+    }
+    return result;
+  }
+
+  /**
+   * Degraded fallback: create a minimal frame when the original failed,
+   * so child nodes aren't cascade-skipped.
+   */
+  private async tryDegradedFallback(originalAction: FigmaAction): Promise<string | null> {
+    const origProps = 'props' in originalAction ? (originalAction as any).props : {};
+    const fallbackAction: FigmaAction = {
+      action: 'createFrame',
+      tempId: originalAction.tempId,
+      parentId: originalAction.parentId,
+      props: { name: origProps?.name || 'Fallback' },
+    };
+    try {
+      const result = await this.executeOne(fallbackAction);
+      if (result.success && result.nodeId) return result.nodeId;
+    } catch { /* fallback failed too */ }
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Legacy execute() — kept for direct ActionExecutor usage (e.g. update path)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Main execution entry point.
    * Topologically sorts actions based on dependsOn, then executes.
    */
   async execute(actions: FigmaAction[]): Promise<ExecutionResult> {

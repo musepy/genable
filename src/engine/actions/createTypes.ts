@@ -10,6 +10,7 @@
  */
 
 import type { OperationIR } from '../../domain/design-ir';
+import type { FigmaAction } from './types';
 
 // ==========================================
 // ParsedLine (alias for OperationIR)
@@ -17,9 +18,41 @@ import type { OperationIR } from '../../domain/design-ir';
 
 /**
  * Type alias — ParsedLine is OperationIR.
- * Both represent a single design operation ready for ActionCompiler.
+ * Both represent a single design operation ready for compilation.
  */
 export type ParsedLine = OperationIR;
+
+// ==========================================
+// Compiled types (Parser → Executor contract)
+// ==========================================
+
+/** A single design operation compiled to a FigmaAction, ready for execution. */
+export interface DesignOp {
+  action: FigmaAction;
+  lineNumber: number;
+  raw: string;
+  symbol?: string;
+  dependsOn: string[];
+  /** Non-fatal warnings from compilation (e.g. sizing defaults). */
+  warnings?: Array<{ code: string; message: string }>;
+}
+
+/** A line that failed to parse or compile. */
+export interface DesignOpError {
+  lineNumber: number;
+  raw: string;
+  symbol?: string;
+  error: string;
+}
+
+/** Semantic diagnostic (e.g., unresolved symbol reference warning). */
+export interface DesignDiagnostic {
+  code: string;
+  severity: 'error' | 'warning';
+  message: string;
+  lineNumber: number;
+  symbol?: string;
+}
 
 // ==========================================
 // Tool Parameters
@@ -88,6 +121,8 @@ export interface CreateExecutionResult {
   stats: {
     total: number;
     created: number;
+    edited: number;
+    deleted: number;
     failed: number;
     skipped: number;
     warnings: number;

@@ -4,9 +4,6 @@
  */
 
 export { ActionExecutor } from './executor';
-export { ActionCompiler } from './compiler';
-export { IncrementalExecutor } from './incrementalExecutor';
+export type { DesignProgressEvent, DesignExecOptions } from './executor';
 export type { FigmaAction, ExecutionResult, ActionResult } from './types';
-export type { CreateParams, CreateExecutionResult, LineResult, ParsedLine } from './createTypes';
-export type { CompiledEntry, CompilationError, CompilationResult } from './compiler';
-export type { IncrementalExecutorOptions, IncrementalProgressEvent } from './incrementalExecutor';
+export type { CreateParams, CreateExecutionResult, LineResult, ParsedLine, DesignOp, DesignOpError, DesignDiagnostic } from './createTypes';

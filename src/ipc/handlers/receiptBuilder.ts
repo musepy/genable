@@ -95,6 +95,8 @@ export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<str
     idMap: result.idMap,
     created: result.stats.created,
   };
+  if (result.stats.edited > 0) receipt.edited = result.stats.edited;
+  if (result.stats.deleted > 0) receipt.deleted = result.stats.deleted;
 
   // Collect errors
   if (result.hasErrors) {
@@ -124,6 +126,18 @@ export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<str
   if (defaultsApplied.length > 0) {
     receipt.defaultsApplied = defaultsApplied.slice(0, MAX_DEFAULTS_APPLIED);
     receipt.defaultsAppliedCount = defaultsApplied.length;
+  }
+
+  // Per-node warnings (all non-default warnings, same pattern as buildEditReceipt)
+  const allWarnings = result.lineResults
+    .filter(lr => lr.warnings && lr.warnings.some(w => !DEFAULT_CODES.has(w.code)))
+    .map(lr => ({
+      node: lr.symbol || lr.nodeId || `line${lr.line}`,
+      warnings: lr.warnings!.filter(w => !DEFAULT_CODES.has(w.code)),
+    }));
+  if (allWarnings.length > 0) {
+    receipt.warnings = allWarnings.slice(0, 15);
+    receipt.warningCount = allWarnings.reduce((sum, w) => sum + w.warnings.length, 0);
   }
 
   if (violations && violations.length > 0) {

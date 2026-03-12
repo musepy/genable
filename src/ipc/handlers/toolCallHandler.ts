@@ -7,24 +7,18 @@
  */
 
 import { ToolResultHandler } from '../../types';
-import { nodeLayoutService } from '../../engine/services';
 import { ToolResponse, ToolContext } from '../../engine/agent/tools/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
 
 import { ActionExecutor } from '../../engine/actions/executor';
-import { FigmaAction } from '../../engine/actions/types';
-import { ActionCompiler } from '../../engine/actions/compiler';
-import { IncrementalExecutor } from '../../engine/actions/incrementalExecutor';
 import { collectTreeViolations } from '../../engine/validation/postOpValidator';
-import { normalizeProps } from '../../domain/node-normalizers';
-import { validateSemantics } from '../../engine/validation/semanticValidator';
-import { parseFlatOps } from '../../engine/flat/flatOpsParser';
+import { compileDesignOps } from '../../engine/flat/flatOpsParser';
 import { logger } from '../../utils/logger';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { fontBus } from '../../engine/figma-adapter/resources/FontBus';
-import { buildCreateReceipt, buildEditReceipt } from './receiptBuilder';
+import { buildCreateReceipt } from './receiptBuilder';
 import type { ValidationViolation } from '../../engine/validation/postOpValidator';
 
 export interface ToolCallData {
@@ -138,18 +132,33 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       // ==========================================
 
       case 'context': {
-        // Canvas overview: page info + top-level skeleton + user selection
-        const page = figma.currentPage;
-        const childTrees: string[] = [];
-        for (const child of page.children) {
-          const hSerialized = NodeSerializer.serializeWithCompression(child, {
-            maxDepth: 2,
-            pruneDefaults: true
-          });
-          childTrees.push(FlatOpsSerializer.serialize(hSerialized, { maxDepth: 2, structural: true }));
-        }
+        // Focused context: page metadata + target node skeleton + selection
+        const { nodeId: contextNodeId, depth: contextDepth } = parameters;
+        const contextDepthClamped = Math.min(contextDepth || 2, 5);
 
-        const selection = page.selection.map(n => ({
+        const contextResolved = await resolveSceneNode(contextNodeId);
+        if (!contextResolved.ok) { response = contextResolved.response; break; }
+        const contextNode = contextResolved.node;
+
+        // Target node skeleton
+        const contextSerialized = NodeSerializer.serializeWithCompression(contextNode, {
+          maxDepth: contextDepthClamped,
+          pruneDefaults: true
+        });
+        const contextTree = FlatOpsSerializer.serialize(contextSerialized, {
+          maxDepth: contextDepthClamped,
+          structural: true,
+        });
+
+        // Page metadata: name, childCount, top-level node names (lightweight)
+        const page = figma.currentPage;
+        const topLevelNodes = page.children.map(n => ({
+          id: n.id,
+          name: n.name,
+          type: n.type,
+        }));
+
+        const contextSelection = page.selection.map(n => ({
           id: n.id,
           name: n.name,
           type: n.type,
@@ -158,9 +167,9 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         response = {
           success: true,
           data: {
-            page: { name: page.name, childCount: page.children.length },
-            tree: childTrees.join('\n'),
-            ...(selection.length > 0 && { selection }),
+            page: { name: page.name, childCount: page.children.length, topLevelNodes },
+            tree: contextTree,
+            ...(contextSelection.length > 0 && { selection: contextSelection }),
           }
         };
         break;
@@ -257,25 +266,16 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
           break;
         }
 
-        let designParsedLines;
-        let droppedDiagnostics: Array<{ code: string; message: string; symbol?: string }> = [];
+        // Parse + validate + compile in one call
+        let compiled;
         try {
-          const { lines: rawOps, errors: parseErrors } = parseFlatOps(designOps);
-          if (rawOps.length === 0 && parseErrors.length > 0) {
-            response = { success: false, error: { code: 'PARSE_ERROR', message: parseErrors.map(e => `L${e.line}: ${e.error}`).join('; ') } };
+          compiled = compileDesignOps(designOps, designParentId);
+          if (compiled.ops.length === 0 && compiled.errors.length > 0) {
+            response = { success: false, error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
             break;
           }
-          // Pass 3: semantic validation
-          const { validated, diagnostics } = validateSemantics(rawOps);
-          designParsedLines = validated;
-          if (diagnostics.length > 0) {
-            logger.info('Semantic validation diagnostics', { diagnostics });
-            droppedDiagnostics = diagnostics
-              .filter(d => d.severity === 'error')
-              .map(d => ({ code: d.code, message: d.message, symbol: d.symbol }));
-          }
-          if (parseErrors.length > 0) {
-            logger.info('Flat ops parse errors (skipped lines)', { parseErrors: parseErrors.slice(0, 8) });
+          if (compiled.diagnostics.length > 0) {
+            logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
           }
         } catch (e: any) {
           response = { success: false, error: { code: 'PARSE_ERROR', message: e.message } };
@@ -283,106 +283,41 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         }
 
         try {
-          const createLines = designParsedLines.filter(l => l.command === 'create' || l.command === 'icon' || l.command === 'image' || l.command === 'instance');
-          const updateLines = designParsedLines.filter(l => l.command === 'update');
-          const deleteLines = designParsedLines.filter(l => l.command === 'delete');
-
           const SOFT_CREATE_LIMIT = 20;
 
-          const receipt: Record<string, any> = {};
-          let hasAnyError = false;
+          // Execute all ops (create, update, delete) in one unified pass
+          const executor = new ActionExecutor();
+          const result = await executor.executeDesignOps(compiled.ops, compiled.errors, {
+            onError: 'continue', rollbackMode: 'none', parentId: designParentId,
+          });
 
-          // Phase 1: Execute creates
-          if (createLines.length > 0) {
-            const compiler = new ActionCompiler();
-            const { actions, errors } = compiler.compile(createLines, designParentId);
-            const createExec = new IncrementalExecutor();
-            const createResult = await createExec.execute(actions, errors, {
-              onError: 'continue', rollbackMode: 'none', parentId: designParentId,
-            });
+          // Post-op validation on root
+          const rootId = designParentId || Object.values(result.idMap)[0];
+          const violations = await collectViolationsForNodeIds([rootId], 5);
 
-            // Post-op validation on root
-            const createRootId = designParentId || Object.values(createResult.idMap)[0];
-            const createViolations = await collectViolationsForNodeIds([createRootId], 5);
+          const receipt = buildCreateReceipt({
+            result,
+            violations,
+            softCreateLimit: SOFT_CREATE_LIMIT,
+            createLineCount: compiled.ops.length,
+          });
 
-            const createReceipt = buildCreateReceipt({
-              result: createResult,
-              violations: createViolations,
-              softCreateLimit: SOFT_CREATE_LIMIT,
-              createLineCount: createLines.length,
-            });
-
-            Object.assign(receipt, createReceipt);
-            if (createResult.hasErrors) hasAnyError = true;
-          }
-
-          // Phase 2: Execute updates
-          if (updateLines.length > 0) {
-            const patchActions: FigmaAction[] = updateLines.map(line => ({
-              action: 'updateProps' as const,
-              nodeId: line.targetRef!,
-              props: line.props ? normalizeProps(line.props) : {}
+          // Surface diagnostics as warnings in receipt
+          if (compiled.diagnostics.length > 0) {
+            receipt.diagnostics = compiled.diagnostics.slice(0, 10).map(d => ({
+              code: d.code,
+              severity: d.severity,
+              message: d.message,
             }));
-            const updateExec = new ActionExecutor({ onError: 'skip-dependents' });
-            const updateResult = await updateExec.execute(patchActions);
-
-            const updateViolations = await collectViolationsForNodeIds(
-              updateLines.map(line => line.targetRef),
-              3
-            );
-            const editReceipt = buildEditReceipt({
-              allResults: updateResult.results,
-              violations: updateViolations,
-            });
-            receipt.edited = editReceipt.edited;
-            if (editReceipt.unchanged) receipt.unchanged = editReceipt.unchanged;
-            if (editReceipt.unchangedHint) receipt.unchangedHint = editReceipt.unchangedHint;
-            if (editReceipt.changeSummary) receipt.changeSummary = editReceipt.changeSummary;
-            if (editReceipt.failed) {
-              hasAnyError = true;
-              receipt.editFailed = editReceipt.failed;
-              receipt.editErrors = editReceipt.errors;
-            }
-            if (editReceipt.warnings) receipt.warnings = editReceipt.warnings;
-            if (editReceipt.warningCount) receipt.warningCount = editReceipt.warningCount;
-            if (editReceipt.violations) {
-              const priorViolations = Array.isArray(receipt.violations) ? receipt.violations : [];
-              receipt.violations = [...priorViolations, ...editReceipt.violations].slice(0, 10);
-            }
           }
 
-          // Phase 3: Execute deletes
-          if (deleteLines.length > 0) {
-            let deletedCount = 0;
-            const deleteErrors: any[] = [];
-            for (const line of deleteLines) {
-              try {
-                const delResult = await nodeLayoutService.deleteNode(line.targetRef!);
-                if (delResult.success) deletedCount++;
-                else deleteErrors.push({ op: line.targetRef, error: delResult.error?.message || 'unknown' });
-              } catch (e: any) {
-                deleteErrors.push({ op: line.targetRef, error: e.message });
-              }
-            }
-            receipt.deleted = deletedCount;
-            if (deleteErrors.length > 0) { hasAnyError = true; receipt.deleteErrors = deleteErrors; }
-          }
-
-          // Surface rejected ops from semantic validation
-          if (droppedDiagnostics.length > 0) {
-            receipt.rejected = droppedDiagnostics.length;
-            receipt.rejectedReasons = droppedDiagnostics.slice(0, 5).map(d => d.message);
-            hasAnyError = true;
-          }
-
-          if (hasAnyError) {
+          if (result.hasErrors) {
             const parts: string[] = [];
-            if (receipt.created) parts.push(`${receipt.created} created`);
-            if (receipt.edited) parts.push(`${receipt.edited} edited`);
-            if (receipt.deleted) parts.push(`${receipt.deleted} deleted`);
-            if (receipt.failed) parts.push(`${receipt.failed} create failed`);
-            if (receipt.editFailed) parts.push(`${receipt.editFailed} edit failed`);
-            if (receipt.rejected) parts.push(`${receipt.rejected} rejected by validation`);
+            if (result.stats.created) parts.push(`${result.stats.created} created`);
+            if (result.stats.edited) parts.push(`${result.stats.edited} edited`);
+            if (result.stats.deleted) parts.push(`${result.stats.deleted} deleted`);
+            if (result.stats.failed) parts.push(`${result.stats.failed} failed`);
+            if (result.stats.skipped) parts.push(`${result.stats.skipped} skipped`);
             response = { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
           } else {
             response = { success: true, data: receipt };

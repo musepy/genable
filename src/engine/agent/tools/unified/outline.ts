@@ -17,8 +17,8 @@ Text nodes show content inline if short, otherwise chars="N".
 Returns \`suggestedReads\` — IDs of complex children worth inspecting in detail.
 
 Progressive reading pattern:
-1. \`context()\` — see page overview, find root node IDs
-2. \`outline(rootId)\` — discover structure, get child IDs + suggestedReads
+1. \`context(nodeId)\` — get page metadata + target node skeleton + selection
+2. \`outline(nodeId)\` — discover structure, get child IDs + suggestedReads
 3. \`inspect(childId)\` — get full details for specific subtrees`,
   parameters: {
     type: 'object',

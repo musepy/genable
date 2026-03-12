@@ -1,52 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { ActionCompiler } from '../compiler';
-import type { ParsedLine } from '../createTypes';
+import { compileDesignOps } from '../../flat/flatOpsParser';
 
-function makeCreateLine(props: Record<string, any>): ParsedLine {
-  return {
-    lineNumber: 1,
-    raw: '{"command":"create"}',
-    symbol: 'title',
-    command: 'create',
-    nodeType: 'TEXT',
-    parentRef: 'card',
-    props,
-    dependsOn: ['card'],
-  };
-}
-
-describe('ActionCompiler text sizing contract', () => {
+describe('compileDesignOps — text compilation', () => {
   it('compiles text with explicit intrinsic sizing', () => {
-    const compiler = new ActionCompiler();
-    const result = compiler.compile([
-      makeCreateLine({
-        name: 'Title',
-        characters: 'Settings',
-        fontSize: 20,
-        fills: ['#111827'],
-        textAutoResize: 'WIDTH_AND_HEIGHT',
-      }),
-    ]);
+    const input = `title = text(card, {name: 'Title', characters: 'Settings', fontSize: 20, fill: '#111827', textAutoResize: 'WIDTH_AND_HEIGHT'})`;
+    const { ops, errors } = compileDesignOps(input);
 
-    expect(result.errors).toEqual([]);
-    expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].action.action).toBe('createText');
-    expect(result.actions[0].warnings).toBeUndefined();
+    expect(errors).toEqual([]);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].action.action).toBe('createText');
   });
 
-  it('passes through text without textAutoResize (validation moved to semanticValidator)', () => {
-    const compiler = new ActionCompiler();
-    const result = compiler.compile([
-      makeCreateLine({
-        name: 'Title',
-        characters: 'Settings',
-        fontSize: 20,
-        fills: ['#111827'],
-      }),
-    ]);
+  it('compiles text without textAutoResize', () => {
+    const input = `title = text(card, {name: 'Title', characters: 'Settings', fontSize: 20, fill: '#111827'})`;
+    const { ops, errors } = compileDesignOps(input);
 
-    expect(result.errors).toEqual([]);
-    expect(result.actions).toHaveLength(1);
-    expect(result.actions[0].action.action).toBe('createText');
+    expect(errors).toEqual([]);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].action.action).toBe('createText');
   });
 });

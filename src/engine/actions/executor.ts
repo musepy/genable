@@ -819,25 +819,52 @@ export class ActionExecutor {
       const h = p.height !== undefined ? p.height : defaultHeight;
 
       if (typeof figma !== 'undefined' && figma.viewport) {
-        // Find rightmost edge of existing top-level nodes to avoid overlap
+        const vp = figma.viewport.bounds; // visible canvas area
+        const vpCx = vp.x + vp.width / 2;
+        const vpCy = vp.y + vp.height / 2;
+        const GAP = 100;
+
+        // First candidate: center of viewport
+        const candX = Math.round(vpCx - w / 2);
+        const candY = Math.round(vpCy - h / 2);
+
+        // Check if viewport center area overlaps any existing top-level node
         const topChildren = figma.currentPage.children;
-        let maxRight = -Infinity;
+        const margin = GAP / 2;
+        let overlaps = false;
         for (const child of topChildren) {
-          if ('x' in child && 'width' in child) {
-            const right = child.x + child.width;
-            if (right > maxRight) maxRight = right;
+          if ('x' in child && 'width' in child && 'y' in child && 'height' in child) {
+            const cx = (child as any).x, cy = (child as any).y;
+            const cw = (child as any).width, ch = (child as any).height;
+            if (candX < cx + cw + margin && candX + w > cx - margin &&
+                candY < cy + ch + margin && candY + h > cy - margin) {
+              overlaps = true;
+              break;
+            }
           }
         }
 
-        const GAP = 100; // spacing between designs
-        if (maxRight > -Infinity) {
-          // Place to the right of all existing content
-          p.x = Math.round(maxRight + GAP);
-          p.y = Math.round(figma.viewport.center.y - h / 2);
+        if (!overlaps) {
+          // Viewport center is free — place there
+          p.x = candX;
+          p.y = candY;
         } else {
-          // Empty canvas: center in viewport
-          p.x = Math.round(figma.viewport.center.x - w / 2);
-          p.y = Math.round(figma.viewport.center.y - h / 2);
+          // Find rightmost edge among nodes currently visible in the viewport
+          let maxRight = -Infinity;
+          for (const child of topChildren) {
+            if ('x' in child && 'width' in child && 'y' in child && 'height' in child) {
+              const cy = (child as any).y, ch = (child as any).height;
+              // Only nodes that vertically overlap the visible viewport
+              if (cy < vp.y + vp.height && cy + ch > vp.y) {
+                const right = (child as any).x + (child as any).width;
+                if (right > maxRight) maxRight = right;
+              }
+            }
+          }
+          p.x = maxRight > -Infinity
+            ? Math.round(maxRight + GAP)
+            : Math.round(vp.x + vp.width + GAP); // nothing visible — place past viewport right edge
+          p.y = Math.round(vpCy - h / 2);
         }
       }
     }

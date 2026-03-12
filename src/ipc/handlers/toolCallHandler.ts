@@ -311,6 +311,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             }));
           }
 
+          // Auto-pan viewport to newly created root node so the user can see it immediately
+          if (!designParentId && Object.keys(result.idMap).length > 0) {
+            const newRootId = Object.values(result.idMap)[0] as string;
+            const newRootNode = await figma.getNodeByIdAsync(newRootId);
+            if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);
+          }
+
           if (result.hasErrors) {
             const parts: string[] = [];
             if (result.stats.created) parts.push(`${result.stats.created} created`);

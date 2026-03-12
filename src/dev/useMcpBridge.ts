@@ -17,11 +17,31 @@ const RECONNECT_INTERVAL_MS = 5_000
 
 type McpBridgeStatus = 'disconnected' | 'connected'
 
+/**
+ * Detect if we're running inside a real Figma plugin iframe (not a Vite preview or standalone browser).
+ * Figma plugin iframes have `parent !== window` and the Figma postMessage bridge available.
+ */
+function isInsideFigmaPlugin(): boolean {
+  try {
+    // In Figma plugin UI, the iframe is embedded and parent !== self.
+    // In a Vite preview or standalone page, parent === self (top-level window).
+    return typeof window !== 'undefined' && window.parent !== window
+  } catch {
+    return false
+  }
+}
+
 export function useMcpBridge(): { mcpBridgeStatus: McpBridgeStatus } {
   const [status, setStatus] = useState<McpBridgeStatus>('disconnected')
   const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
+    // Only connect in real Figma plugin context — not in Vite preview or standalone browser
+    if (!isInsideFigmaPlugin()) {
+      console.log('[McpBridge] Skipping — not inside Figma plugin iframe')
+      return
+    }
+
     let disposed = false
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     // Track IPC listeners so we can clean them up
@@ -36,6 +56,8 @@ export function useMcpBridge(): { mcpBridgeStatus: McpBridgeStatus } {
 
         ws.onopen = () => {
           if (disposed) { ws.close(); return }
+          // Send identify handshake — relay requires this before accepting tool calls
+          ws.send(JSON.stringify({ type: 'identify', name: 'figma-plugin' }))
           console.log('[McpBridge] Connected to MCP relay')
           setStatus('connected')
         }
@@ -51,6 +73,8 @@ export function useMcpBridge(): { mcpBridgeStatus: McpBridgeStatus } {
 
             if (!requestId || !toolName) return
 
+            console.log(`[McpBridge] ← WS received: ${toolName} (${requestId})`)
+
             // Listen for the matching TOOL_RESULT from main thread
             const cleanup = on<ToolResultHandler>('TOOL_RESULT', (data) => {
               if (data.requestId !== requestId) return
@@ -59,14 +83,20 @@ export function useMcpBridge(): { mcpBridgeStatus: McpBridgeStatus } {
               const idx = ipcCleanups.indexOf(cleanup)
               if (idx !== -1) ipcCleanups.splice(idx, 1)
 
+              console.log(`[McpBridge] ← IPC result: ${toolName} (${requestId}), success=${data.response?.success}`)
+
               // Send result back to MCP server over WebSocket
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ requestId, response: data.response }))
+                console.log(`[McpBridge] → WS sent result: ${toolName} (${requestId})`)
+              } else {
+                console.warn(`[McpBridge] WS not open when trying to send result for ${requestId}`)
               }
             })
             ipcCleanups.push(cleanup)
 
             // Forward to Figma main thread via IPC
+            console.log(`[McpBridge] → IPC emit TOOL_CALL: ${toolName} (${requestId})`)
             emit<ToolCallHandler>('TOOL_CALL', {
               requestId,
               toolName,

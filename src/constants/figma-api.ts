@@ -267,6 +267,24 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.iconName]: { figmaKey: 'iconName', type: 'virtual' },
 };
 
+// ── Property scope: node-type whitelist ──
+
+/** Properties exclusive to TEXT nodes — invalid on frames/shapes/vectors */
+export const TEXT_ONLY_PROPS: ReadonlySet<string> = new Set([
+  PROPS.characters, PROPS.fontName, PROPS.fontSize, PROPS.fontWeight, PROPS.fontFamily,
+  PROPS.textAlignHorizontal, PROPS.textAlignVertical, PROPS.textAutoResize,
+  PROPS.lineHeight, PROPS.letterSpacing, PROPS.textCase, PROPS.textDecoration,
+  PROPS.textTruncation, PROPS.maxLines, PROPS.paragraphSpacing, PROPS.paragraphIndent,
+]);
+
+/** All property keys accepted by the system (canonical + virtuals).
+ *  Anything not in this set is unknown/unsupported and should be dropped. */
+export const KNOWN_PROP_KEYS: ReadonlySet<string> = new Set([
+  ...Object.keys(PROP_METADATA),
+  ...Object.values(PROPS),
+  ...Object.values(PROP_METADATA).map(m => m.figmaKey),
+]);
+
 // Derived Types
 export type FigmaProp = typeof PROPS[keyof typeof PROPS];
 

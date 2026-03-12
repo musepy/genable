@@ -14,8 +14,16 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { execSync } from 'child_process';
 
 const WS_PORT = 3458;
-const CALL_TIMEOUT_MS = 30_000;
 const KEEPALIVE_INTERVAL_MS = 15_000;
+const HANDSHAKE_TIMEOUT_MS = 5_000;
+
+// Per-tool timeout: heavy tools (design, replace) need more headroom than reads.
+const TOOL_TIMEOUTS: Record<string, number> = {
+  design: 120_000,   // creates many nodes + font loading + icon fetch
+  replace: 90_000,   // recursive tree traversal + font loading per text node
+  inspect: 60_000,   // exportAsync for screenshot can be slow on complex nodes
+};
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 interface PendingRequest {
   resolve: (response: any) => void;
@@ -52,25 +60,53 @@ function setupClient(
   pending: Map<string, PendingRequest>,
 ) {
   wss.on('connection', (ws) => {
-    if (state.client && state.client.readyState === WebSocket.OPEN) {
-      state.client.close();
-    }
-    if (state.pingTimer) {
-      clearInterval(state.pingTimer);
-    }
-    state.client = ws;
-    console.error('[MCP] Plugin connected via WebSocket');
+    let identified = false;
+    let clientName = '(unknown)';
 
-    // Keepalive ping — prevents idle connection drops by OS/firewall/proxy
-    state.pingTimer = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.ping();
+    // Require handshake: client must send { type: 'identify', name: '...' } within timeout.
+    // This prevents non-plugin clients (Vite preview, browser tabs) from stealing the connection.
+    const handshakeTimer = setTimeout(() => {
+      if (!identified) {
+        console.error(`[MCP] Client failed to identify within ${HANDSHAKE_TIMEOUT_MS / 1000}s — closing`);
+        ws.close();
       }
-    }, KEEPALIVE_INTERVAL_MS);
+    }, HANDSHAKE_TIMEOUT_MS);
 
     ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw.toString());
+
+        // Handle handshake message
+        if (!identified && msg.type === 'identify') {
+          clearTimeout(handshakeTimer);
+          identified = true;
+          clientName = msg.name || '(unnamed)';
+
+          // Accept this client — replace any existing connection
+          if (state.client && state.client !== ws && state.client.readyState === WebSocket.OPEN) {
+            console.error(`[MCP] Replacing previous client with "${clientName}"`);
+            state.client.close();
+          }
+          if (state.pingTimer) {
+            clearInterval(state.pingTimer);
+          }
+          state.client = ws;
+
+          // Keepalive ping — prevents idle connection drops by OS/firewall/proxy
+          state.pingTimer = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.ping();
+            }
+          }, KEEPALIVE_INTERVAL_MS);
+
+          console.error(`[MCP] Plugin connected: "${clientName}"`);
+          return;
+        }
+
+        // Ignore messages from unidentified clients
+        if (!identified) return;
+
+        // Handle tool result response
         const { requestId, response } = msg;
         const req = pending.get(requestId);
         if (req) {
@@ -84,13 +120,14 @@ function setupClient(
     });
 
     ws.on('close', () => {
+      clearTimeout(handshakeTimer);
       if (state.client === ws) {
         state.client = null;
         if (state.pingTimer) {
           clearInterval(state.pingTimer);
           state.pingTimer = null;
         }
-        console.error('[MCP] Plugin disconnected');
+        console.error(`[MCP] Plugin disconnected: "${clientName}"`);
       }
     });
 
@@ -136,13 +173,28 @@ export function createWsRelay(): WsRelay {
           return;
         }
 
+        const timeoutMs = TOOL_TIMEOUTS[toolName] ?? DEFAULT_TIMEOUT_MS;
         const requestId = `mcp_${Date.now()}_${++reqCounter}`;
+        const startTime = Date.now();
+
+        console.error(`[MCP] → ${toolName} (${requestId}, timeout ${timeoutMs / 1000}s)`);
+
         const timer = setTimeout(() => {
           pending.delete(requestId);
-          reject(new Error(`Tool call "${toolName}" timed out after ${CALL_TIMEOUT_MS / 1000}s`));
-        }, CALL_TIMEOUT_MS);
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          reject(new Error(`Tool call "${toolName}" timed out after ${elapsed}s (limit: ${timeoutMs / 1000}s)`));
+        }, timeoutMs);
 
-        pending.set(requestId, { resolve, reject, timer });
+        const originalResolve = resolve;
+        pending.set(requestId, {
+          resolve: (response: any) => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.error(`[MCP] ← ${toolName} (${requestId}, ${elapsed}s)`);
+            originalResolve(response);
+          },
+          reject,
+          timer,
+        });
 
         state.client.send(JSON.stringify({ requestId, toolName, parameters }));
       });

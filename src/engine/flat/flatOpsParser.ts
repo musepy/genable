@@ -23,10 +23,12 @@ import {
 } from '../utils/prop-dsl';
 
 export interface ParseError { line: number; raw: string; error: string }
+export interface ParseWarning { line: number; message: string }
 
-export function parseFlatOps(input: string): { lines: OperationIR[]; errors: ParseError[] } {
+export function parseFlatOps(input: string): { lines: OperationIR[]; errors: ParseError[]; propWarnings: ParseWarning[] } {
   const lines: OperationIR[] = [];
   const errors: ParseError[] = [];
+  const propWarnings: ParseWarning[] = [];
   const used = new Set<string>();
   let counter = 0;
   let lineNum = 0;
@@ -43,18 +45,22 @@ export function parseFlatOps(input: string): { lines: OperationIR[]; errors: Par
     if (!t || t.startsWith('//')) continue;
     lineNum++;
     try {
-      lines.push(parseLine(t, lineNum, uniq));
+      const lineWarnings: string[] = [];
+      lines.push(parseLine(t, lineNum, uniq, lineWarnings));
+      for (const msg of lineWarnings) propWarnings.push({ line: lineNum, message: msg });
     } catch (e: any) {
       errors.push({ line: lineNum, raw: t, error: e.message });
     }
   }
 
-  return { lines, errors };
+  return { lines, errors, propWarnings };
 }
 
 // ── Line parser ──
 
-function parseLine(line: string, num: number, uniq: (s: string) => string): OperationIR {
+function parseLine(line: string, num: number, uniq: (s: string) => string, warn: string[] = []): OperationIR {
+  const pushWarn = (msg: string) => warn.push(msg);
+
   // delete('nodeId')
   const del = line.match(/^delete\(\s*'([^']+)'\s*\)\s*$/);
   if (del) return { command: 'delete', targetRef: del[1], dependsOn: [], props: {}, lineNumber: num, raw: line };
@@ -63,7 +69,7 @@ function parseLine(line: string, num: number, uniq: (s: string) => string): Oper
   if (line.startsWith('update(')) {
     const args = extractArgs(line, 6);
     const nodeId = unquote(args[0]);
-    const props = buildProps(parsePropsBlock(args[1] || ''), '', false);
+    const props = buildProps(parsePropsBlock(args[1] || ''), '', false, pushWarn);
     return { command: 'update', targetRef: nodeId, props: normalizeProps(props), dependsOn: [], lineNumber: num, raw: line };
   }
 
@@ -89,7 +95,7 @@ function parseLine(line: string, num: number, uniq: (s: string) => string): Oper
   const isReusable = rawProps.reusable === 'true';
   const command = isIcon ? 'icon' : isImage ? 'image' : 'create';
 
-  const props = buildProps(rawProps, tag, isIcon);
+  const props = buildProps(rawProps, tag, isIcon, pushWarn);
   if (textContent && figmaType === 'TEXT') props.characters = textContent;
 
   return {
@@ -133,7 +139,26 @@ function parseRef(
 
 // ── Build canonical props (mirrors xml-interpreter buildProps) ──
 
-function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boolean): Record<string, any> {
+function warnIfInvalidPaint(value: string, key: string, warn: (msg: string) => void) {
+  if (value === 'transparent' || value === 'none') return;
+  // Split top-level parts (respects parentheses so GRADIENT_LINEAR(a,b) stays whole)
+  let depth = 0, cur = '', parts: string[] = [];
+  for (const c of value) {
+    if (c === '(') { depth++; cur += c; }
+    else if (c === ')') { depth--; cur += c; }
+    else if (c === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  if (cur.trim()) parts.push(cur.trim());
+  for (const part of parts) {
+    if (!part.startsWith('#') && !part.startsWith('GRADIENT_') && !part.startsWith('IMAGE(')) {
+      warn(`Invalid ${key} format "${part}". Use "#RRGGBB[AA]" for solid or "GRADIENT_LINEAR(#color@pos,...)" for gradients. Rendered as black.`);
+      break;
+    }
+  }
+}
+
+function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boolean, warn: (msg: string) => void = () => {}): Record<string, any> {
   const props: Record<string, any> = {};
 
   for (const [rawKey, rawValue] of Object.entries(rawProps)) {
@@ -154,8 +179,8 @@ function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boole
     if (expandedKey === 'shadow' || rawKey === 'shadow') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(rawValue)]; continue; }
     if (rawKey === 'blur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`blur(${rawValue})`)]; continue; }
     if (rawKey === 'bgblur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`bgblur(${rawValue})`)]; continue; }
-    if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text') || rawKey === 'fills') { props.fills = paintSpec.parseXml(rawValue); continue; }
-    if (rawKey === 'stroke' || rawKey === 'strokes') { props.strokes = paintSpec.parseXml(rawValue); continue; }
+    if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text') || rawKey === 'fills') { warnIfInvalidPaint(rawValue, 'fill', warn); props.fills = paintSpec.parseXml(rawValue); continue; }
+    if (rawKey === 'stroke' || rawKey === 'strokes') { warnIfInvalidPaint(rawValue, 'stroke', warn); props.strokes = paintSpec.parseXml(rawValue); continue; }
     if (expandedKey === 'clipsContent') {
       const v = rawValue.toLowerCase();
       props.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
@@ -167,6 +192,7 @@ function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boole
 
   // Text fill from fill attribute
   if (tag === 'text' && rawProps.fill) {
+    warnIfInvalidPaint(rawProps.fill, 'fill', warn);
     props.fills = paintSpec.parseXml(rawProps.fill);
   }
 
@@ -282,14 +308,19 @@ export interface CompileDesignOpsResult {
  */
 export function compileDesignOps(input: string, defaultParentId?: string): CompileDesignOpsResult {
   // Step 1: Parse
-  const { lines, errors: parseErrors } = parseFlatOps(input);
+  const { lines, errors: parseErrors, propWarnings } = parseFlatOps(input);
 
   // Step 2: Validate symbol references (inline from semanticValidator)
   const allSymbols = new Set<string>();
   for (const op of lines) {
     if (op.symbol) allSymbols.add(op.symbol);
   }
-  const diagnostics: DesignDiagnostic[] = [];
+  const diagnostics: DesignDiagnostic[] = propWarnings.map(w => ({
+    code: 'INVALID_PAINT_FORMAT',
+    severity: 'warning' as const,
+    message: w.message,
+    lineNumber: w.line,
+  }));
   for (const op of lines) {
     for (const dep of op.dependsOn) {
       if (!allSymbols.has(dep) && !dep.includes(':') && dep !== 'root') {

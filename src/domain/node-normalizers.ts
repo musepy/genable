@@ -12,7 +12,7 @@
  * Replaces the logic from cssCompiler.ts.
  */
 
-import { PROP_METADATA } from '../constants/figma-api';
+import { PROP_METADATA, TEXT_ONLY_PROPS, KNOWN_PROP_KEYS } from '../constants/figma-api';
 
 // ── Normalize helper: strip hyphens/underscores + lowercase ──
 const norm = (s: string) => s.toLowerCase().replace(/[-_]/g, '');
@@ -95,10 +95,11 @@ export function normalizeProps(
   if ('pattern' in result) {
     const expansion = LAYOUT_PATTERNS[String(result.pattern).toLowerCase()];
     if (expansion) {
-      // If LLM already set an explicit fill (fills key from paintSpec), skip bg default
-      const hasExplicitFill = 'fills' in result || 'fill' in result;
+      // On update: skip bg default (never reset an existing node's fill)
+      // On create: skip bg default only if LLM already set an explicit fill
+      const skipBg = !options.isCreate || 'fills' in result || 'fill' in result;
       for (const [k, v] of Object.entries(expansion)) {
-        if (k === 'background' && hasExplicitFill) continue;
+        if (k === 'background' && skipBg) continue;
         if (!(k in result)) result[k] = v;
       }
     } else {
@@ -218,6 +219,12 @@ export function normalizeProps(
     }
   }
 
+  // ── LINE nodes: height is always 0 — visual thickness comes from strokeWeight ──
+  if (options.nodeType?.toUpperCase() === 'LINE' && 'height' in result) {
+    warn(`LINE nodes don't support height — visual thickness comes from strokeWeight. Prop ignored.`);
+    delete result.height;
+  }
+
   // ── Catch-all enum validation via PROP_METADATA ──
   // Single authority for enum validity. Unknown values are dropped with a warning.
   for (const [prop, meta] of Object.entries(PROP_METADATA)) {
@@ -239,6 +246,24 @@ export function normalizeProps(
       const validValues = Object.keys(meta.enumMap).join(', ');
       warn(`${prop}:'${rawValue}' is not a valid Figma value. Valid: ${validValues}. Dropped.`);
       delete result[prop];
+    }
+  }
+
+  // ── Node-type property filter: drop text-only props from non-text nodes ──
+  if (options.nodeType && !isTextNode) {
+    for (const key of Object.keys(result)) {
+      if (TEXT_ONLY_PROPS.has(key)) {
+        warn(`${key} is a text-only property — dropped from ${options.nodeType}`);
+        delete result[key];
+      }
+    }
+  }
+
+  // ── Unknown property filter: drop anything not in the capability manifest ──
+  for (const key of Object.keys(result)) {
+    if (!KNOWN_PROP_KEYS.has(key)) {
+      warn(`'${key}' is not a supported property — dropped`);
+      delete result[key];
     }
   }
 

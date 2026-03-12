@@ -64,9 +64,10 @@ export interface ValidationViolation {
 export function validatePostOp(node: SceneNode, intended?: PostOpIntended): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
-  // 1. Zero dimensions
+  // 1. Zero dimensions (LINE is always h=0 — skip height check)
   if ('width' in node && 'height' in node) {
-    if (node.width === 0 || node.height === 0) {
+    const isLine = node.type === 'LINE';
+    if (node.width === 0 || (!isLine && node.height === 0)) {
       const zeroDim = node.width === 0 ? 'width' : 'height';
       violations.push({
         code: 'ZERO_DIM',

@@ -70,7 +70,7 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
     const args = extractArgs(line, 6);
     const nodeId = unquote(args[0]);
     const props = buildProps(parsePropsBlock(args[1] || ''), '', false, pushWarn);
-    return { command: 'update', targetRef: nodeId, props: normalizeProps(props), dependsOn: [], lineNumber: num, raw: line };
+    return { command: 'update', targetRef: nodeId, props: normalizeProps(props, {}, pushWarn), dependsOn: [], lineNumber: num, raw: line };
   }
 
   // symbol = type(parent, {props}, 'text')  or  symbol = ref(...)
@@ -101,7 +101,7 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
   return {
     command, lineNumber: num, raw: line, symbol: uniq(sym),
     ...(command === 'create' ? { nodeType: figmaType } : {}),
-    parentRef: parent, props: normalizeProps(props, { nodeType: figmaType, isCreate: true }),
+    parentRef: parent, props: normalizeProps(props, { nodeType: figmaType, isCreate: true }, pushWarn),
     dependsOn: computeDependsOn(parent),
     ...(isReusable ? { reusable: true } : {}),
   };
@@ -297,7 +297,7 @@ export function compileDesignOps(input: string, defaultParentId?: string): Compi
     if (op.symbol) allSymbols.add(op.symbol);
   }
   const diagnostics: DesignDiagnostic[] = propWarnings.map(w => ({
-    code: 'INVALID_PAINT_FORMAT',
+    code: w.message.includes('not a valid Figma value') ? 'INVALID_ENUM_VALUE' : 'INVALID_PAINT_FORMAT',
     severity: 'warning' as const,
     message: w.message,
     lineNumber: w.line,

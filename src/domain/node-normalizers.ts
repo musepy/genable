@@ -3,9 +3,11 @@
  * @description Cross-property rewrite rules that transform CSS-semantic
  * attributes into Figma-native canonical properties.
  *
- * Each normalizer is a pure function: (rawAttrs) → Partial<CanonicalProps>
- * They handle properties that cannot be mapped 1:1 (value depends on
- * other properties or requires splitting/merging).
+ * Responsibilities split:
+ *   - CSS alias blocks: rename properties (alignItems → counterAxisAlignItems)
+ *     and translate known CSS values (flex-start → MIN). Unknown values pass through.
+ *   - Catch-all enum normalizer: validates ALL enum values against PROP_METADATA.
+ *     Unknown values are dropped with a warning — never passed to Figma.
  *
  * Replaces the logic from cssCompiler.ts.
  */
@@ -15,7 +17,7 @@ import { PROP_METADATA } from '../constants/figma-api';
 // ── Normalize helper: strip hyphens/underscores + lowercase ──
 const norm = (s: string) => s.toLowerCase().replace(/[-_]/g, '');
 
-// ── Value maps ──
+// ── CSS → Figma value maps (conceptual translation, not just casing) ──
 
 const LAYOUT_VALUES: Record<string, string> = {
   row: 'HORIZONTAL',
@@ -64,11 +66,12 @@ export interface NormalizePropsOptions {
  *   6. Name aliases (gap→itemSpacing, borderRadius→cornerRadius)
  *   7. clipsContent string → boolean
  *   8. layoutWrap string → Figma enum
- *   9. Catch-all enum normalization via PROP_METADATA
+ *   9. Catch-all enum validation via PROP_METADATA (drop unknown values)
  */
 export function normalizeProps(
   props: Record<string, any>,
   options: NormalizePropsOptions = {},
+  warn: (msg: string) => void = () => {},
 ): Record<string, any> {
   const result: Record<string, any> = { ...props };
   const isTextNode = options.nodeType?.toUpperCase() === 'TEXT';
@@ -166,21 +169,27 @@ export function normalizeProps(
     else if (v === 'nowrap' || v === 'no-wrap') result.layoutWrap = 'NO_WRAP';
   }
 
-  // ── Catch-all enum normalization ──
+  // ── Catch-all enum validation via PROP_METADATA ──
+  // Single authority for enum validity. Unknown values are dropped with a warning.
   for (const [prop, meta] of Object.entries(PROP_METADATA)) {
     if (meta.type !== 'enum' || !meta.enumMap || result[prop] === undefined) continue;
     // Skip boolean layout props — already converted above
     if (typeof result[prop] === 'boolean') continue;
-    const upper = String(result[prop]).toUpperCase();
+    const rawValue = String(result[prop]);
+    const upper = rawValue.toUpperCase();
     let mapped = meta.enumMap[upper];
     if (!mapped) {
-      const n = norm(String(result[prop]));
+      const n = norm(rawValue);
       for (const [key, val] of Object.entries(meta.enumMap)) {
         if (norm(key) === n) { mapped = val; break; }
       }
     }
     if (mapped) {
       result[prop] = mapped;
+    } else {
+      const validValues = Object.keys(meta.enumMap).join(', ');
+      warn(`${prop}:'${rawValue}' is not a valid Figma value. Valid: ${validValues}. Dropped.`);
+      delete result[prop];
     }
   }
 

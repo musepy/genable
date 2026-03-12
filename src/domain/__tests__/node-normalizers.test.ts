@@ -22,6 +22,15 @@ describe('normalizeProps', () => {
     expect(normalizeProps({ alignItems: 'center' })).not.toHaveProperty('alignItems');
   });
 
+  it('drops unknown enum values and warns', () => {
+    const warnings: string[] = [];
+    const result = normalizeProps({ alignItems: 'stretch' }, {}, msg => warnings.push(msg));
+    expect(result).not.toHaveProperty('alignItems');
+    expect(result).not.toHaveProperty('counterAxisAlignItems');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('not a valid Figma value');
+  });
+
   it('converts width: "fill" → layoutSizingHorizontal', () => {
     const result = normalizeProps({ width: 'fill' });
     expect(result.layoutSizingHorizontal).toBe('FILL');

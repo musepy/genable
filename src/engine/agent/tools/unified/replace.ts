@@ -38,7 +38,7 @@ replace({
 \`\`\`
 → \`{ replaced: 12, details: { fillColor: 8, fontSize: 4 } }\`
 
-**Supported properties** (8): fillColor, textColor, strokeColor, cornerRadius, gap, fontSize, fontFamily, fontWeight
+**Supported properties** (10): fillColor, textColor, strokeColor, strokeWeight, opacity, cornerRadius, gap, fontSize, fontFamily, fontWeight
 
 Use search mode first to discover current values, then replace mode to batch-update them. Much more efficient than multiple \`design\` edit calls for bulk style changes (e.g., rebranding colors, adjusting typography scale).`,
   parameters: {
@@ -76,8 +76,8 @@ Use search mode first to discover current values, then replace mode to batch-upd
 
 /** Supported property names for replace tool. */
 export const REPLACE_PROPERTIES = [
-  'fillColor', 'textColor', 'strokeColor', 'cornerRadius',
-  'gap', 'fontSize', 'fontFamily', 'fontWeight',
+  'fillColor', 'textColor', 'strokeColor', 'strokeWeight', 'opacity',
+  'cornerRadius', 'gap', 'fontSize', 'fontFamily', 'fontWeight',
 ] as const;
 
 export type ReplaceProperty = (typeof REPLACE_PROPERTIES)[number];

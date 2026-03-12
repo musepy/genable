@@ -352,8 +352,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
             function collectValues(node: SceneNode): void {
               for (const prop of replaceProps) {
-                const val = extractReplacePropertyValue(node, prop);
-                if (val !== undefined && val !== null) uniqueValues[prop].add(val);
+                for (const val of extractAllReplacePropertyValues(node, prop)) uniqueValues[prop].add(val);
               }
               if ('children' in node) {
                 for (const child of (node as any).children) collectValues(child);
@@ -377,12 +376,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
               for (const [prop, rules] of Object.entries(replacements)) {
                 if (!Array.isArray(rules)) continue;
                 for (const rule of rules) {
-                  const currentVal = extractReplacePropertyValue(node, prop);
-                  if (currentVal !== undefined && matchesReplaceValue(currentVal, rule.from)) {
-                    await applyReplacePropertyValue(node, prop, rule.to);
-                    totalReplaced++;
-                    details[prop] = (details[prop] || 0) + 1;
-                  }
+                  const n = await applyReplacePropertyValue(node, prop, rule.from, rule.to);
+                  if (n > 0) { totalReplaced += n; details[prop] = (details[prop] || 0) + n; }
                 }
               }
               if ('children' in node) {
@@ -480,37 +475,34 @@ function hexToRgba(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-function extractReplacePropertyValue(node: SceneNode, prop: string): string | number | undefined {
+/** For search mode: returns ALL values for this prop on the node (multiple for multi-fill). */
+function extractAllReplacePropertyValues(node: SceneNode, prop: string): (string | number)[] {
   switch (prop) {
     case 'fillColor': {
-      if (node.type === 'TEXT') return undefined;
+      if (node.type === 'TEXT') return [];
       const fills = (node as any).fills;
-      if (Array.isArray(fills) && fills.length > 0 && fills[0].type === 'SOLID') return rgbaToHex(fills[0].color);
-      return undefined;
+      if (!Array.isArray(fills)) return [];
+      return fills.filter((f: any) => f.type === 'SOLID').map((f: any) => rgbaToHex(f.color));
     }
     case 'textColor': {
-      if (node.type !== 'TEXT') return undefined;
+      if (node.type !== 'TEXT') return [];
       const fills = (node as any).fills;
-      if (Array.isArray(fills) && fills.length > 0 && fills[0].type === 'SOLID') return rgbaToHex(fills[0].color);
-      return undefined;
+      if (!Array.isArray(fills)) return [];
+      return fills.filter((f: any) => f.type === 'SOLID').map((f: any) => rgbaToHex(f.color));
     }
     case 'strokeColor': {
       const strokes = (node as any).strokes;
-      if (Array.isArray(strokes) && strokes.length > 0 && strokes[0].type === 'SOLID') return rgbaToHex(strokes[0].color);
-      return undefined;
+      if (!Array.isArray(strokes)) return [];
+      return strokes.filter((s: any) => s.type === 'SOLID').map((s: any) => rgbaToHex(s.color));
     }
-    case 'cornerRadius':
-      return typeof (node as any).cornerRadius === 'number' ? (node as any).cornerRadius : undefined;
-    case 'gap':
-      return typeof (node as any).itemSpacing === 'number' ? (node as any).itemSpacing : undefined;
-    case 'fontSize':
-      return node.type === 'TEXT' && typeof (node as any).fontSize === 'number' ? (node as any).fontSize : undefined;
-    case 'fontFamily':
-      return node.type === 'TEXT' && typeof (node as any).fontName === 'object' ? (node as any).fontName.family : undefined;
-    case 'fontWeight':
-      return node.type === 'TEXT' && typeof (node as any).fontName === 'object' ? (node as any).fontName.style : undefined;
-    default:
-      return undefined;
+    case 'cornerRadius': { const v = (node as any).cornerRadius; return typeof v === 'number' ? [v] : []; }
+    case 'gap': { const v = (node as any).itemSpacing; return typeof v === 'number' ? [v] : []; }
+    case 'fontSize': { if (node.type !== 'TEXT') return []; const v = (node as any).fontSize; return typeof v === 'number' ? [v] : []; }
+    case 'fontFamily': { if (node.type !== 'TEXT') return []; const v = (node as any).fontName; return typeof v === 'object' ? [v.family] : []; }
+    case 'fontWeight': { if (node.type !== 'TEXT') return []; const v = (node as any).fontName; return typeof v === 'object' ? [v.style] : []; }
+    case 'strokeWeight': { const v = (node as any).strokeWeight; return typeof v === 'number' ? [v] : []; }
+    case 'opacity': { const v = (node as any).opacity; return typeof v === 'number' ? [v] : []; }
+    default: return [];
   }
 }
 
@@ -520,39 +512,90 @@ function matchesReplaceValue(current: string | number, from: string | number): b
   return String(current) === String(from);
 }
 
-async function applyReplacePropertyValue(node: SceneNode, prop: string, value: string | number): Promise<void> {
+/** Apply replacement. Returns 1 if node was changed, 0 if no match. */
+async function applyReplacePropertyValue(node: SceneNode, prop: string, from: string | number, to: string | number): Promise<number> {
   switch (prop) {
-    case 'fillColor':
-      if (node.type !== 'TEXT' && typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
-      break;
-    case 'textColor':
-      if (node.type === 'TEXT' && typeof value === 'string') (node as any).fills = [{ type: 'SOLID', color: hexToRgba(value) }];
-      break;
-    case 'strokeColor':
-      if (typeof value === 'string') (node as any).strokes = [{ type: 'SOLID', color: hexToRgba(value) }];
-      break;
-    case 'cornerRadius':
-      if (typeof value === 'number') (node as any).cornerRadius = value;
-      break;
-    case 'gap':
-      if (typeof value === 'number') (node as any).itemSpacing = value;
-      break;
-    case 'fontSize':
-      if (node.type === 'TEXT' && typeof value === 'number') (node as any).fontSize = value;
-      break;
-    case 'fontFamily':
-      if (node.type === 'TEXT' && typeof value === 'string') {
-        const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
-        const { loadedStyle } = await fontBus.getOrLoad(value, cur.style);
-        (node as any).fontName = { family: value, style: loadedStyle };
+    case 'fillColor': {
+      if (node.type === 'TEXT' || typeof to !== 'string') return 0;
+      const fills = [...((node as any).fills || [])];
+      let changed = false;
+      for (let i = 0; i < fills.length; i++) {
+        if (fills[i].type === 'SOLID' && matchesReplaceValue(rgbaToHex(fills[i].color), from)) {
+          fills[i] = { ...fills[i], color: hexToRgba(to) };
+          changed = true;
+        }
       }
-      break;
-    case 'fontWeight':
-      if (node.type === 'TEXT' && typeof value === 'string') {
-        const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
-        const { loadedStyle } = await fontBus.getOrLoad(cur.family, value);
-        (node as any).fontName = { family: cur.family, style: loadedStyle };
+      if (changed) (node as any).fills = fills;
+      return changed ? 1 : 0;
+    }
+    case 'textColor': {
+      if (node.type !== 'TEXT' || typeof to !== 'string') return 0;
+      const fills = [...((node as any).fills || [])];
+      let changed = false;
+      for (let i = 0; i < fills.length; i++) {
+        if (fills[i].type === 'SOLID' && matchesReplaceValue(rgbaToHex(fills[i].color), from)) {
+          fills[i] = { ...fills[i], color: hexToRgba(to) };
+          changed = true;
+        }
       }
-      break;
+      if (changed) (node as any).fills = fills;
+      return changed ? 1 : 0;
+    }
+    case 'strokeColor': {
+      if (typeof to !== 'string') return 0;
+      const strokes = [...((node as any).strokes || [])];
+      let changed = false;
+      for (let i = 0; i < strokes.length; i++) {
+        if (strokes[i].type === 'SOLID' && matchesReplaceValue(rgbaToHex(strokes[i].color), from)) {
+          strokes[i] = { ...strokes[i], color: hexToRgba(to) };
+          changed = true;
+        }
+      }
+      if (changed) (node as any).strokes = strokes;
+      return changed ? 1 : 0;
+    }
+    case 'cornerRadius': {
+      const cur = (node as any).cornerRadius;
+      if (typeof to === 'number' && typeof cur === 'number' && matchesReplaceValue(cur, from)) { (node as any).cornerRadius = to; return 1; }
+      return 0;
+    }
+    case 'gap': {
+      const cur = (node as any).itemSpacing;
+      if (typeof to === 'number' && typeof cur === 'number' && matchesReplaceValue(cur, from)) { (node as any).itemSpacing = to; return 1; }
+      return 0;
+    }
+    case 'fontSize': {
+      if (node.type !== 'TEXT') return 0;
+      const cur = (node as any).fontSize;
+      if (typeof to === 'number' && typeof cur === 'number' && matchesReplaceValue(cur, from)) { (node as any).fontSize = to; return 1; }
+      return 0;
+    }
+    case 'fontFamily': {
+      if (node.type !== 'TEXT' || typeof to !== 'string') return 0;
+      const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
+      if (!matchesReplaceValue(cur.family, from)) return 0;
+      const { loadedStyle } = await fontBus.getOrLoad(to, cur.style);
+      (node as any).fontName = { family: to, style: loadedStyle };
+      return 1;
+    }
+    case 'fontWeight': {
+      if (node.type !== 'TEXT' || typeof to !== 'string') return 0;
+      const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
+      if (!matchesReplaceValue(cur.style, from)) return 0;
+      const { loadedStyle } = await fontBus.getOrLoad(cur.family, to);
+      (node as any).fontName = { family: cur.family, style: loadedStyle };
+      return 1;
+    }
+    case 'strokeWeight': {
+      const cur = (node as any).strokeWeight;
+      if (typeof to === 'number' && typeof cur === 'number' && matchesReplaceValue(cur, from)) { (node as any).strokeWeight = to; return 1; }
+      return 0;
+    }
+    case 'opacity': {
+      const cur = (node as any).opacity;
+      if (typeof to === 'number' && typeof cur === 'number' && matchesReplaceValue(cur, from)) { (node as any).opacity = Math.max(0, Math.min(1, to)); return 1; }
+      return 0;
+    }
+    default: return 0;
   }
 }

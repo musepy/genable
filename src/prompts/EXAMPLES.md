@@ -5,7 +5,7 @@ User: "Create a card with a title"
 
 ```json
 design({
-  "ops": "card = frame(root, {name:'Card', layout:'column', gap:12, p:16, w:360, height:'hug', bg:'#FFFFFF', corner:12})\ntitle = text(card, {name:'Title', size:20, weight:'Bold', fill:'#111827', w:'fill'}, 'Card Title')\nsub = text(card, {name:'Subtitle', size:14, fill:'#6B7280', w:'fill'}, 'Description text')"
+  "ops": "card = frame(root, {name:'Card', pattern:'column', gap:12, p:16, w:360, bg:'#FFFFFF', corner:12})\ntitle = text(card, {name:'Title', size:20, weight:'Bold', fill:'#111827', w:'fill'}, 'Card Title')\nsub = text(card, {name:'Subtitle', size:14, fill:'#6B7280', w:'fill'}, 'Description text')"
 })
 ```
 
@@ -15,7 +15,7 @@ User: "Create a login page"
 **Step 1 — Skeleton**: outer container + major sections as empty frames.
 ```json
 design({
-  "ops": "page = frame(root, {name:'Login Page', layout:'column', alignItems:'center', justifyContent:'center', w:1440, h:900, bg:'#F9FAFB'})\ncard = frame(page, {name:'Card', layout:'column', gap:24, p:40, w:420, height:'hug', bg:'#FFFFFF', corner:16, shadow:'0,4,24,0,#0000000F'})\nhdr = frame(card, {name:'Header', layout:'column', gap:8, alignItems:'center', w:'fill', height:'hug', bg:'transparent'})\nfrm = frame(card, {name:'Form', layout:'column', gap:16, w:'fill', height:'hug', bg:'transparent'})\nftr = frame(card, {name:'Footer', layout:'column', gap:12, alignItems:'center', w:'fill', height:'hug', bg:'transparent'})"
+  "ops": "page = frame(root, {name:'Login Page', layout:'column', alignItems:'center', justifyContent:'center', w:1440, h:900, bg:'#F9FAFB'})\ncard = frame(page, {name:'Card', pattern:'column', gap:24, p:40, w:420, bg:'#FFFFFF', corner:16, shadow:'0,4,24,0,#0000000F'})\nhdr = frame(card, {name:'Header', pattern:'column', gap:8, alignItems:'center', w:'fill'})\nfrm = frame(card, {name:'Form', pattern:'column', gap:16, w:'fill'})\nftr = frame(card, {name:'Footer', pattern:'column', gap:12, alignItems:'center', w:'fill'})"
 })
 ```
 → idMap returns: `{ "loginPage": "200:1", "card": "200:2", "hdr": "200:3", "frm": "200:4", "ftr": "200:5" }`
@@ -89,7 +89,7 @@ User: "Create a button with bold title"
 
 ```json
 design({
-  "ops": "btn = frame(root, {name:'Button', layout:'row', p:12, w:'hug', h:44, corner:8, bg:'#4F46E5', justifyContent:'center', alignItems:'center'})\nlbl = text(btn, {name:'Label', size:16, weight:'Bold', fill:'#FFFFFF'}, 'Sign In')"
+  "ops": "btn = frame(root, {name:'Button', pattern:'row', p:12, h:44, corner:8, bg:'#4F46E5', justifyContent:'center', alignItems:'center'})\nlbl = text(btn, {name:'Label', size:16, weight:'Bold', fill:'#FFFFFF'}, 'Sign In')"
 })
 design({"ops": "update('100:2', {weight:'Medium'})"})
 ```
@@ -108,7 +108,7 @@ design({
 ```json
 design({
   "parentId": "...",
-  "ops": "row = frame(root, {name:'Stats Row', layout:'row', gap:16, w:'fill', height:'hug', bg:'transparent'})\nc1 = ref('StatCard', row, {w:'fill', set:label:'Revenue', set:value:'$48,250'})\nc2 = ref('StatCard', row, {w:'fill', set:label:'Users', set:value:'2,420'})\nc3 = ref('StatCard', row, {w:'fill', set:label:'Growth', set:value:'+12.5%'})"
+  "ops": "row = frame(root, {name:'Stats Row', pattern:'row-fill', gap:16})\nc1 = ref('StatCard', row, {w:'fill', set:label:'Revenue', set:value:'$48,250'})\nc2 = ref('StatCard', row, {w:'fill', set:label:'Users', set:value:'2,420'})\nc3 = ref('StatCard', row, {w:'fill', set:label:'Growth', set:value:'+12.5%'})"
 })
 ```
 

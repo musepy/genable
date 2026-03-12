@@ -46,20 +46,26 @@ For medium/complex designs, break creation into semantic steps:
 - `p:24` → uniform padding; `p:'16 24'` → V H; `p:'10 20 30 40'` → T R B L
 - `shadow:'0,4,16,0,#0000001A'` → DROP_SHADOW; `'inset,...'` → INNER_SHADOW; `';'` separates multiple
 - `fill:'#FFF'` → fills array; `stroke:'#D1D5DB'` → strokes array
+- **`pattern`** → layout shorthand that sets structure + sizing + transparent bg in one prop:
+  - `pattern:'column'` = layout:column + w:hug + h:hug + transparent bg
+  - `pattern:'row'` = layout:row + w:hug + h:hug + transparent bg
+  - `pattern:'row-fill'` = layout:row + **w:fill** + h:hug + transparent bg
+  - `pattern:'column-fill'` = layout:column + w:hug + **h:fill** + transparent bg
+  - `pattern:'stack'` = layout:none (absolute positioning)
+  - Explicit props always override pattern defaults: `{pattern:'column', bg:'#FFF'}` → white bg
 
 **Key rules**:
 1. **Explicit Sizing**: Every frame MUST have explicit `w` and `h` (or `height`). Omitting them causes unpredictable defaults.
    - **Root container**: pixel value (`w:360`, `w:1440`)
-   - **Content containers / inputs**: `w:'fill', height:'hug'`
+   - **Layout frames** (structural wrappers, transparent containers): use `pattern` — `pattern:'column'`, `pattern:'row-fill'`, etc. This sets layout + sizing + transparent bg in one prop, preventing omissions.
    - **Sibling cards/tiles in a row**: `w:'fill', height:'fill'` — ensures equal width AND equal height
-   - **Buttons / badges / tags**: `w:'hug', height:'hug'` (or fixed `h:44`)
-   - **Structural wrappers** (transparent layout frames): `w:'fill', height:'hug'`
+   - **Buttons / badges / tags**: `pattern:'row'` with explicit `p` and `bg`, or fixed `h:44`
 2. **Typography**: For `weight` (fontWeight), prioritize `Regular`, `Medium`, and `Bold`. **AVOID** `Semi Bold`.
 
 **Example** — a polished card:
 ```json
 design({
-  "ops": "card = frame(root, {name:'Card', layout:'column', gap:16, p:24, bg:'#FFFFFF', corner:16, w:360, height:'hug', shadow:'0,4,16,0,#0000001A'})\ntitle = text(card, {name:'Title', size:20, weight:'Bold', fill:'#111827', w:'fill'}, 'Card Title')\nbody = text(card, {name:'Body', size:14, fill:'#6B7280', w:'fill'}, 'Body text goes here')"
+  "ops": "card = frame(root, {name:'Card', pattern:'column', gap:16, p:24, bg:'#FFFFFF', corner:16, w:360, shadow:'0,4,16,0,#0000001A'})\ntitle = text(card, {name:'Title', size:20, weight:'Bold', fill:'#111827', w:'fill'}, 'Card Title')\nbody = text(card, {name:'Body', size:14, fill:'#6B7280', w:'fill'}, 'Body text goes here')"
 })
 ```
 

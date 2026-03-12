@@ -32,6 +32,8 @@ export const designDefinition: ToolDefinition = {
 - \`p:24\` → uniform padding; \`p:'16 24'\` → V H; \`p:'10 20 30 40'\` → T R B L
 - \`shadow:'0,4,16,0,#0000001A'\` → DROP_SHADOW; \`'inset,...'\` → INNER_SHADOW; \`';'\` separates multiple
 - \`fill:'#FFF'\` → fills array; \`stroke:'#D1D5DB'\` → strokes array
+- \`pattern:'row'\` → layout:row + width:hug + height:hug + transparent bg (explicit props override defaults)
+  - Patterns: \`row\`, \`column\`, \`row-fill\` (w:fill), \`column-fill\` (h:fill), \`stack\` (no auto-layout)
 
 **Example** (create + edit + delete in one call):
 \`\`\`

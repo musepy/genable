@@ -48,6 +48,20 @@ const NAME_ALIASES: Record<string, string> = {
   borderRadius: 'cornerRadius',
 };
 
+// ── Layout patterns — semantic shortcuts that set structural defaults ──
+// Pattern defaults are overridable: explicit props always win.
+// bg:transparent is skipped if an explicit fill was already set.
+//
+// Usage: frame(parent, {pattern:'row', gap:8, p:16})
+//   → layout:'row', width:'hug', height:'hug', bg:transparent + explicit gap/padding
+const LAYOUT_PATTERNS: Record<string, Record<string, string>> = {
+  'row':         { layout: 'row',    width: 'hug',  height: 'hug',  background: 'transparent' },
+  'column':      { layout: 'column', width: 'hug',  height: 'hug',  background: 'transparent' },
+  'row-fill':    { layout: 'row',    width: 'fill', height: 'hug',  background: 'transparent' },
+  'column-fill': { layout: 'column', width: 'hug',  height: 'fill', background: 'transparent' },
+  'stack':       { layout: 'none' },
+};
+
 export interface NormalizePropsOptions {
   nodeType?: string;
   isCreate?: boolean;
@@ -58,6 +72,7 @@ export interface NormalizePropsOptions {
  * Returns a new object — does not mutate input.
  *
  * Rules applied (in order):
+ *   0. pattern → expand layout/sizing/bg defaults (explicit props override)
  *   1. layout → layoutMode (with value mapping)
  *   2. justifyContent → primaryAxisAlignItems
  *   3. alignItems → counterAxisAlignItems
@@ -75,6 +90,22 @@ export function normalizeProps(
 ): Record<string, any> {
   const result: Record<string, any> = { ...props };
   const isTextNode = options.nodeType?.toUpperCase() === 'TEXT';
+
+  // ── Step 0: pattern expansion — sets structural defaults, explicit props win ──
+  if ('pattern' in result) {
+    const expansion = LAYOUT_PATTERNS[String(result.pattern).toLowerCase()];
+    if (expansion) {
+      // If LLM already set an explicit fill (fills key from paintSpec), skip bg default
+      const hasExplicitFill = 'fills' in result || 'fill' in result;
+      for (const [k, v] of Object.entries(expansion)) {
+        if (k === 'background' && hasExplicitFill) continue;
+        if (!(k in result)) result[k] = v;
+      }
+    } else {
+      warn(`pattern:'${result.pattern}' is not recognized. Valid: ${Object.keys(LAYOUT_PATTERNS).join(', ')}.`);
+    }
+    delete result.pattern;
+  }
 
   // ── layout → layoutMode ──
   if ('layout' in result) {

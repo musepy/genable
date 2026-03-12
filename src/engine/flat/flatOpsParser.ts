@@ -258,7 +258,7 @@ function findKeySep(entry: string): number {
     if (!rest) continue;
     const c = rest[0];
     if (c === "'" || c === '"' || /[\d\-+#.]/.test(c)) return i;
-    if (/^(true|false|fill|hug|row|column|none|center|left|right|wrap|visible|hidden|transparent|auto)/i.test(rest)) return i;
+    if (/^(true|false|fill|hug|row|column|none|center|left|right|wrap|visible|hidden|transparent|auto|stack)/i.test(rest)) return i;
   }
   return -1;
 }

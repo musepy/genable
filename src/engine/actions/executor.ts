@@ -613,9 +613,20 @@ export class ActionExecutor {
              }
            }
 
+           const iconWarnings: import('./handlers/types').Warning[] = [];
            let svgData = action.props.svgData;
            if (!svgData && action.props.iconName) {
-             svgData = await fetchIconSvg(action.props.iconName) || undefined;
+             const fetched = await fetchIconSvg(action.props.iconName);
+             if (fetched) {
+               svgData = fetched;
+             } else {
+               iconWarnings.push({
+                 code: 'ICON_FETCH_FAILED',
+                 severity: 'warning',
+                 message: `Icon "${action.props.iconName}" could not be loaded. Use "prefix:name" format (e.g. "lucide:home", "mdi:star"). Rendered as empty placeholder.`,
+                 iconName: action.props.iconName,
+               });
+             }
            }
            const iconParam = svgData || `<svg width="${action.props.width || 24}" height="${action.props.height || 24}"></svg>`;
            const iconNode = figma.createNodeFromSvg(iconParam);
@@ -643,6 +654,8 @@ export class ActionExecutor {
              delete propsForFrame.strokeWeight;
              delete propsForFrame.width;
              delete propsForFrame.height;
+             delete propsForFrame.iconName;
+             delete propsForFrame.svgData;
 
              const { warnings } = await this.applyProps(iconNode, propsForFrame);
 
@@ -673,7 +686,8 @@ export class ActionExecutor {
                }
              }
 
-             return { success: true, nodeId: iconNode.id, warnings: warnings.length ? warnings : undefined };
+             const allWarnings = [...iconWarnings, ...warnings];
+             return { success: true, nodeId: iconNode.id, warnings: allWarnings.length ? allWarnings : undefined };
            } catch (e: any) {
              iconNode.remove();
              throw e;

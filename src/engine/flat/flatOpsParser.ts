@@ -151,7 +151,9 @@ function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boole
     const expandedKey = ABBREV_EXPANSION[rawKey] ?? rawKey;
 
     if (expandedKey === 'padding' || rawKey === 'p') { Object.assign(props, expandPadding(rawValue)); continue; }
-    if (expandedKey === 'shadow' || rawKey === 'shadow') { props.effects = effectSpec.parseXml(rawValue); continue; }
+    if (expandedKey === 'shadow' || rawKey === 'shadow') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(rawValue)]; continue; }
+    if (rawKey === 'blur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`blur(${rawValue})`)]; continue; }
+    if (rawKey === 'bgblur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`bgblur(${rawValue})`)]; continue; }
     if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text') || rawKey === 'fills') { props.fills = paintSpec.parseXml(rawValue); continue; }
     if (rawKey === 'stroke' || rawKey === 'strokes') { props.strokes = paintSpec.parseXml(rawValue); continue; }
     if (expandedKey === 'clipsContent') {

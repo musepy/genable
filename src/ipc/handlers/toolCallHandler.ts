@@ -372,6 +372,47 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
             let totalReplaced = 0;
             const details: Record<string, number> = {};
 
+            // Phase 1: Collect all needed fonts and preload in parallel
+            const fontsToPreload = new Set<string>();
+            const hasFontRules = replacements['fontFamily'] || replacements['fontWeight'];
+            if (hasFontRules) {
+              function collectFonts(node: SceneNode): void {
+                if (node.type === 'TEXT') {
+                  const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
+                  const familyRules = replacements['fontFamily'];
+                  if (Array.isArray(familyRules)) {
+                    for (const rule of familyRules) {
+                      if (matchesReplaceValue(cur.family, rule.from) && typeof rule.to === 'string') {
+                        fontsToPreload.add(`${rule.to}\0${cur.style}`);
+                      }
+                    }
+                  }
+                  const weightRules = replacements['fontWeight'];
+                  if (Array.isArray(weightRules)) {
+                    for (const rule of weightRules) {
+                      if (matchesReplaceValue(cur.style, rule.from) && typeof rule.to === 'string') {
+                        fontsToPreload.add(`${cur.family}\0${rule.to}`);
+                      }
+                    }
+                  }
+                }
+                if ('children' in node) {
+                  for (const child of (node as any).children) collectFonts(child);
+                }
+              }
+              collectFonts(replaceRoot);
+
+              if (fontsToPreload.size > 0) {
+                await Promise.all(
+                  [...fontsToPreload].map(key => {
+                    const [family, style] = key.split('\0');
+                    return fontBus.getOrLoad(family, style);
+                  })
+                );
+              }
+            }
+
+            // Phase 2: Apply replacements (font loads hit cache)
             async function doReplace(node: SceneNode): Promise<void> {
               for (const [prop, rules] of Object.entries(replacements)) {
                 if (!Array.isArray(rules)) continue;

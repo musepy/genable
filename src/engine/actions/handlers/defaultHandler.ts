@@ -12,6 +12,11 @@ export const defaultHandler: PropertyHandler = {
   },
 
   async apply(node, key, value): Promise<Warning[]> {
+    // ComponentSet cannot have layoutMode=NONE — Figma API hangs or throws
+    if (key === 'layoutMode' && (value === 'NONE' || value === 'none') && node.type === 'COMPONENT_SET') {
+      return [{ code: 'SKIPPED_PROP', severity: 'warning', message: `Skipped layoutMode=NONE on COMPONENT_SET — not supported` }];
+    }
+
     if (!canAssignProperty(node, key)) {
       return [{ code: 'SKIPPED_READONLY', severity: 'warning', message: `Skipped readonly property '${key}'` }];
     }

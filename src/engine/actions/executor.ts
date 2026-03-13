@@ -730,11 +730,14 @@ export class ActionExecutor {
           }
           const setParent = parentNode || figma.currentPage;
           const componentSet = figma.combineAsVariants(components, setParent as BaseNode & ChildrenMixin);
-          if (action.props.name) componentSet.name = action.props.name;
+          // combineAsVariants leaves children at absolute positions (NONE layout).
+          // Default to HORIZONTAL so itemSpacing/layoutWrap actually take effect.
+          const propsWithLayout = { layoutMode: 'HORIZONTAL', ...action.props };
+          const { warnings } = await this.applyProps(componentSet, propsWithLayout);
           if (action.tempId) {
             componentRegistry.set(action.tempId, componentSet.id);
           }
-          return { success: true, nodeId: componentSet.id };
+          return { success: true, nodeId: componentSet.id, warnings: warnings.length ? warnings : undefined };
         }
 
         case 'createInstance': {

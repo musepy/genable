@@ -150,17 +150,19 @@ function parseVariantSet(
   const parent = unquote(args[0] || 'root');
   const rawProps = parsePropsBlock(args[1] || '');
 
-  const name = rawProps.name;
-  const fromStr = rawProps.from || '';
+  const { from: fromStr = '', ...restRawProps } = rawProps;
   const componentSymbols = fromStr.split(',').map(s => s.trim()).filter(Boolean);
 
   if (componentSymbols.length === 0) throw new Error('variantSet requires "from" with component symbols');
 
   const deps = [...computeDependsOn(parent), ...componentSymbols];
+  // Forward all props (except 'from') through buildProps so CSS normalizations
+  // like layout:'row'→layoutMode, gap→itemSpacing apply to the ComponentSet too.
+  const builtProps = buildProps(restRawProps, 'frame', false);
 
   return {
     command: 'variantSet', lineNumber: num, raw, symbol: uniq(sym),
-    parentRef: parent, props: { ...(name ? { name } : {}) }, dependsOn: deps,
+    parentRef: parent, props: builtProps, dependsOn: deps,
     variantComponents: componentSymbols,
   };
 }
@@ -318,6 +320,23 @@ export interface CompileDesignOpsResult {
 export function compileDesignOps(input: string, defaultParentId?: string): CompileDesignOpsResult {
   // Step 1: Parse
   const { lines, errors: parseErrors, propWarnings } = parseFlatOps(input);
+
+  // Step 1.5: For each variantSet, add all ops whose parent is one of the variant
+  // components as implicit dependencies. This ensures combineAsVariants runs AFTER
+  // all children (e.g. text nodes) have been appended to those components.
+  for (const op of lines) {
+    if (op.command === 'variantSet' && op.variantComponents && op.variantComponents.length > 0) {
+      const componentSet = new Set(op.variantComponents);
+      for (const other of lines) {
+        if (other === op) continue;
+        if (other.symbol && other.parentRef && componentSet.has(other.parentRef)) {
+          if (!op.dependsOn.includes(other.symbol)) {
+            op.dependsOn.push(other.symbol);
+          }
+        }
+      }
+    }
+  }
 
   // Step 2: Validate symbol references (inline from semanticValidator)
   const allSymbols = new Set<string>();

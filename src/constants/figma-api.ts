@@ -36,7 +36,8 @@ export const PROPS = {
   paddingRight: 'paddingRight',
   paddingBottom: 'paddingBottom',
   paddingLeft: 'paddingLeft',
-  gap: 'gap',                             
+  gap: 'gap',
+  counterAxisSpacing: 'counterAxisSpacing',
   layoutGrow: 'layoutGrow',
   layoutAlign: 'layoutAlign',
   layoutPositioning: 'layoutPositioning',  // AUTO | ABSOLUTE (child of auto-layout parent)
@@ -170,6 +171,7 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
     defaultValue: 'MIN'
   },
   [PROPS.gap]: { figmaKey: 'itemSpacing', type: 'scalar', defaultValue: 0, min: 0, max: 1000 }, // Note: itemSpacing in Figma API
+  [PROPS.counterAxisSpacing]: { figmaKey: 'counterAxisSpacing', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },

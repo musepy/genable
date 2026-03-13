@@ -501,6 +501,14 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
     };
   }
 
+  // Inject file metadata into every response so MCP consumers can verify connection target
+  if (response && response.data && typeof response.data === 'object') {
+    response.data._file = {
+      name: figma.root?.name ?? 'Untitled',
+      currentPage: figma.currentPage?.name ?? 'Unknown',
+    };
+  }
+
   emit<ToolResultHandler>('TOOL_RESULT', { requestId, response: response! });
 }
 

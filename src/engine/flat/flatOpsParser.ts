@@ -317,7 +317,7 @@ export interface CompileDesignOpsResult {
  * Parse flat ops string → validate symbol references → compile to FigmaAction[].
  * Single entry point replacing the old 3-step pipeline (parser → validator → compiler).
  */
-export function compileDesignOps(input: string, defaultParentId?: string): CompileDesignOpsResult {
+export function compileDesignOps(input: string, defaultParentId?: string, knownSymbols?: ReadonlySet<string>): CompileDesignOpsResult {
   // Step 1: Parse
   const { lines, errors: parseErrors, propWarnings } = parseFlatOps(input);
 
@@ -351,7 +351,7 @@ export function compileDesignOps(input: string, defaultParentId?: string): Compi
   }));
   for (const op of lines) {
     for (const dep of op.dependsOn) {
-      if (!allSymbols.has(dep) && !dep.includes(':') && dep !== 'root') {
+      if (!allSymbols.has(dep) && !dep.includes(':') && dep !== 'root' && !knownSymbols?.has(dep)) {
         diagnostics.push({
           code: 'REF_NOT_FOUND',
           severity: 'warning',

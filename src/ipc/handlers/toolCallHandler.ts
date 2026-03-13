@@ -269,7 +269,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         // Parse + validate + compile in one call
         let compiled;
         try {
-          compiled = compileDesignOps(designOps, designParentId);
+          compiled = compileDesignOps(designOps, designParentId, ActionExecutor.getRegisteredSymbols());
           if (compiled.ops.length === 0 && compiled.errors.length > 0) {
             response = { success: false, error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
             break;

@@ -60,6 +60,11 @@ export class ActionExecutor {
     componentRegistry.clear();
   }
 
+  /** Returns the set of known cross-batch symbols for compile-time validation. */
+  static getRegisteredSymbols(): ReadonlySet<string> {
+    return new Set(componentRegistry.keys());
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // executeDesignOps — unified entry point (replaces IncrementalExecutor)
   // ═══════════════════════════════════════════════════════════════════════════

@@ -186,6 +186,16 @@ describe('flatOpsParser', () => {
       expect(ops[2].dependsOn).toContain('lg');
     });
 
+    it('normalizes CSS props on variantSet', () => {
+      const input = "a = frame(root, {name:'V=A', reusable:true})\nb = frame(root, {name:'V=B', reusable:true})\nvs = variantSet(root, {name:'Set', from:'a,b', layout:'row', gap:10, crossGap:8, wrap:'wrap'})";
+      const ops = lines(input);
+      expect(ops[2].props.layoutMode).toBe('HORIZONTAL');
+      expect(ops[2].props.itemSpacing).toBe(10);
+      expect(ops[2].props.counterAxisSpacing).toBe(8);
+      expect(ops[2].props.layoutWrap).toBe('WRAP');
+      expect(ops[2].props.layout).toBeUndefined();
+    });
+
     it('errors on variantSet without from', () => {
       const result = parse("vs = variantSet(root, {name:'Button'})");
       expect(result.errors).toHaveLength(1);

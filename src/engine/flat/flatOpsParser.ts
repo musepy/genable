@@ -156,13 +156,14 @@ function parseVariantSet(
   if (componentSymbols.length === 0) throw new Error('variantSet requires "from" with component symbols');
 
   const deps = [...computeDependsOn(parent), ...componentSymbols];
-  // Forward all props (except 'from') through buildProps so CSS normalizations
-  // like layout:'row'→layoutMode, gap→itemSpacing apply to the ComponentSet too.
+  // Forward all props (except 'from') through buildProps (abbreviation expansion)
+  // then normalizeProps (CSS→Figma conversion: layout:'row'→layoutMode, etc.)
   const builtProps = buildProps(restRawProps, 'frame', false);
+  const normProps = normalizeProps(builtProps, { nodeType: 'FRAME', isCreate: true });
 
   return {
     command: 'variantSet', lineNumber: num, raw, symbol: uniq(sym),
-    parentRef: parent, props: builtProps, dependsOn: deps,
+    parentRef: parent, props: normProps, dependsOn: deps,
     variantComponents: componentSymbols,
   };
 }

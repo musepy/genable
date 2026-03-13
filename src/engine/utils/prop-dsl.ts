@@ -63,6 +63,8 @@ export const ABBREV_EXPANSION: Record<string, string> = {
   bg: 'background',
   sizingH: 'layoutSizingHorizontal',
   sizingV: 'layoutSizingVertical',
+  gap: 'itemSpacing',
+  crossGap: 'counterAxisSpacing',
   overflow: 'clipsContent',
   wrap: 'layoutWrap',
   strokesInLayout: 'strokesIncludedInLayout',
@@ -92,7 +94,7 @@ const STRING_VALUE_PROPS = new Set([
 const MIXED_VALUE_PROPS = new Set(['width', 'height']);
 
 const NUMERIC_PROPS = new Set([
-  'fontSize', 'cornerRadius', 'strokeWeight', 'itemSpacing', 'gap',
+  'fontSize', 'cornerRadius', 'strokeWeight', 'itemSpacing', 'counterAxisSpacing', 'gap', 'crossGap',
   'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'letterSpacing', 'lineHeight', 'opacity',
   'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius',

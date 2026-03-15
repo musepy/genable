@@ -73,6 +73,11 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
     return { command: 'update', targetRef: nodeId, props: normalizeProps(props, {}, pushWarn), dependsOn: [], lineNumber: num, raw: line };
   }
 
+  // setProperty(componentRef, {name:'Label', type:'text', target:nodeRef, default:'Button'})
+  if (line.startsWith('setProperty(')) {
+    return parseSetProperty(line, num, uniq);
+  }
+
   // symbol = type(parent, {props}, 'text')  or  symbol = ref(...)
   const m = line.match(/^(\w+)\s*=\s*(\w+)\(/);
   if (!m) throw new Error('Unrecognized format');
@@ -241,6 +246,50 @@ function parseClone(
     props: normalizeProps(props, { nodeType: 'FRAME', isCreate: true }),
     overrides: Object.keys(normOverrides).length > 0 ? normOverrides : undefined,
     dependsOn: deps,
+  };
+}
+
+/**
+ * setProperty(componentRef, {name:'Label', type:'text', target:nodeRef, default:'Button'})
+ * Adds a Figma component property (TEXT, BOOLEAN, INSTANCE_SWAP) and links it to a child node.
+ */
+function parseSetProperty(
+  line: string, num: number, uniq: (s: string) => string,
+): OperationIR {
+  const args = extractArgs(line, 11); // 'setProperty('.length - 1
+  const componentRef = unquote(args[0] || '');
+  const rawProps = parsePropsBlock(args[1] || '');
+
+  const name = rawProps.name;
+  const type = rawProps.type; // 'text', 'bool', 'swap'
+  const target = rawProps.target;
+  const defaultVal = rawProps.default;
+
+  if (!name) throw new Error('setProperty requires "name"');
+  if (!type) throw new Error('setProperty requires "type" (text|bool|swap)');
+  if (!componentRef) throw new Error('setProperty requires a component reference');
+
+  // Map shorthand types to Figma constants
+  const typeMap: Record<string, string> = { text: 'TEXT', bool: 'BOOLEAN', swap: 'INSTANCE_SWAP' };
+  const figmaType = typeMap[type] || type;
+
+  const props: Record<string, any> = {
+    propertyName: name,
+    propertyType: figmaType,
+    ...(target ? { targetNodeRef: target } : {}),
+    ...(defaultVal !== undefined ? { defaultValue: defaultVal } : {}),
+  };
+
+  const deps = computeDependsOn(componentRef);
+  if (target && !target.includes(':')) deps.push(target);
+
+  return {
+    command: 'componentProperty',
+    targetRef: componentRef,
+    props,
+    dependsOn: deps,
+    lineNumber: num,
+    raw: line,
   };
 }
 
@@ -525,6 +574,24 @@ function compileLine(
     case 'clone': {
       if (!line.sourceRef) return { ...base, error: "clone command missing source symbol" };
       return { ...base, action: { action: 'cloneNode', tempId: line.symbol, parentId, sourceId: line.sourceRef, props: Object.keys(props).length > 0 ? props : undefined, overrides: line.overrides, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'componentProperty': {
+      if (!line.targetRef) return { ...base, error: "setProperty command missing target component" };
+      const { propertyName, propertyType, targetNodeRef, defaultValue } = props;
+      if (!propertyName || !propertyType) return { ...base, error: "setProperty requires 'name' and 'type'" };
+      return {
+        ...base,
+        action: {
+          action: 'componentProperty',
+          nodeId: line.targetRef,
+          propertyName,
+          propertyType,
+          defaultValue,
+          targetNodeId: targetNodeRef,
+          dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+        },
+      };
     }
 
     default:

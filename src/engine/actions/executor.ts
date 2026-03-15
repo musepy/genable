@@ -499,7 +499,7 @@ export class ActionExecutor {
 
       // Pre-validation
       let targetNode: SceneNode | null = null;
-      if (action.action === 'updateProps' || action.action === 'delete' || action.action === 'move') {
+      if (action.action === 'updateProps' || action.action === 'delete' || action.action === 'move' || action.action === 'componentProperty') {
         const resolvedTargetId = this.resolveId(action.nodeId);
         targetNode = (await figma.getNodeByIdAsync(resolvedTargetId)) as SceneNode;
         if (!targetNode) {
@@ -886,6 +886,51 @@ export class ActionExecutor {
              parentNode.appendChild(targetNode);
           }
           return { success: true, nodeId: targetNode.id };
+        }
+
+        case 'componentProperty': {
+          if (!targetNode) return { success: false, error: 'Component node not found' };
+          if (targetNode.type !== 'COMPONENT' && targetNode.type !== 'COMPONENT_SET') {
+            return { success: false, error: `Target ${action.nodeId} is not a COMPONENT or COMPONENT_SET (is ${targetNode.type})` };
+          }
+
+          const compNode = targetNode as ComponentNode | ComponentSetNode;
+          const propType = action.propertyType as 'TEXT' | 'BOOLEAN' | 'INSTANCE_SWAP';
+
+          // Resolve default value
+          let defaultValue: any;
+          if (propType === 'BOOLEAN') {
+            defaultValue = action.defaultValue === 'false' || action.defaultValue === false ? false : true;
+          } else if (propType === 'TEXT') {
+            defaultValue = action.defaultValue ?? '';
+          } else if (propType === 'INSTANCE_SWAP') {
+            // For instance swap, default value should be the component ID of the default instance
+            // If targetNodeId is provided and is an instance, use its main component
+            defaultValue = '';
+          }
+
+          // Add the component property
+          const propKey = compNode.addComponentProperty(action.propertyName, propType, defaultValue);
+
+          // Link to target node if specified
+          if (action.targetNodeId) {
+            const targetRefId = this.resolveId(action.targetNodeId);
+            const linkedNode = await figma.getNodeByIdAsync(targetRefId);
+            if (linkedNode) {
+              const refs = (linkedNode as any).componentPropertyReferences || {};
+              if (propType === 'TEXT') {
+                (linkedNode as any).componentPropertyReferences = { ...refs, characters: propKey };
+              } else if (propType === 'BOOLEAN') {
+                (linkedNode as any).componentPropertyReferences = { ...refs, visible: propKey };
+              } else if (propType === 'INSTANCE_SWAP') {
+                (linkedNode as any).componentPropertyReferences = { ...refs, mainComponent: propKey };
+              }
+            } else {
+              return { success: true, nodeId: compNode.id, warnings: [{ code: 'PROP_LINK_FAILED', severity: 'warning', message: `Target node ${action.targetNodeId} not found for property linking` }] };
+            }
+          }
+
+          return { success: true, nodeId: compNode.id };
         }
 
         default:

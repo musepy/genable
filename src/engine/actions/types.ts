@@ -18,7 +18,8 @@ export type FigmaAction =
   | CloneNodeAction
   | UpdatePropsAction
   | DeleteNodeAction
-  | MoveNodeAction;
+  | MoveNodeAction
+  | ComponentPropertyAction;
 
 export interface ActionBase {
   /** Unique action identifier / type */
@@ -195,6 +196,20 @@ export interface MoveNodeAction extends ActionBase {
   nodeId: string;   // Real figma ID or tempId
   parentId: string; // New parent ID or tempId
   index?: number;   // Position in parent's children array
+}
+
+export interface ComponentPropertyAction extends ActionBase {
+  action: 'componentProperty';
+  /** The component (or component set) to add the property to */
+  nodeId: string;
+  /** Human-readable property name (e.g. 'Label', 'Has Icon Start') */
+  propertyName: string;
+  /** Property type: 'TEXT', 'BOOLEAN', or 'INSTANCE_SWAP' */
+  propertyType: 'TEXT' | 'BOOLEAN' | 'INSTANCE_SWAP';
+  /** Default value for the property */
+  defaultValue?: string | boolean;
+  /** The child node to link the property to (tempId or real ID) */
+  targetNodeId?: string;
 }
 
 // ==========================================

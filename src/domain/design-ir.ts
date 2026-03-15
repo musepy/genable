@@ -94,7 +94,7 @@ export interface CanonicalProps {
 
 export interface OperationIR {
   /** The operation to perform */
-  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance' | 'variantSet' | 'clone';
+  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance' | 'variantSet' | 'clone' | 'componentProperty';
   /** For create: the Figma node type (FRAME, TEXT, RECTANGLE, etc.) */
   nodeType?: string;
   /** Parent node reference (symbol or Figma ID) */

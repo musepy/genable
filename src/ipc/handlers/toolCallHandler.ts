@@ -466,7 +466,10 @@ async function executeSingleMk(
   const propsWithName = injectNameProp(propsInner, nodeName);
 
   let ops: string;
-  if (refComponent) {
+  if (type === 'variantset') {
+    // variantSet: mk /ButtonSet/ variantset from:id1,id2,id3
+    ops = `n1 = variantSet(root, {${propsWithName}})`;
+  } else if (refComponent) {
     const escapedComp = escapeFlatOpsStr(refComponent);
     ops = `n1 = ref('${escapedComp}', root, {${propsWithName}})`;
   } else if (type === 'text' || textContent) {
@@ -492,7 +495,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { success: false, error: { code: 'EMPTY_BATCH', message: 'No mk commands in batch input.' } };
   }
 
-  const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector']);
+  const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'variantset']);
 
   // Phase 1: Parse all lines with inline parser
   interface MkLine {
@@ -627,7 +630,11 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
 
     const sym = getSymbol(line.path);
 
-    if (line.refComponent) {
+    if (line.type === 'variantset') {
+      // variantSet: resolve from: paths/IDs to symbols
+      // The from: prop in propsWithName already contains the IDs/symbols
+      opsLines.push(`${sym} = variantSet(${parentRef}, {${propsWithName}})`);
+    } else if (line.refComponent) {
       const escaped = escapeFlatOpsStr(line.refComponent);
       opsLines.push(`${sym} = ref('${escaped}', ${parentRef}, {${propsWithName}})`);
     } else if (line.type === 'text' || line.textContent) {

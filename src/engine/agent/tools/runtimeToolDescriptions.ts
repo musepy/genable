@@ -100,7 +100,32 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     }],
     repairHint: `provide "source" as one of ${QUERY_SOURCES.join(', ')} and a non-empty "query" (except for "style-tags" and "help" which can omit query)`,
   },
-  // FS write commands — path-based
+  // New Unix CLI commands
+  {
+    tool: 'mk',
+    mode: 'EXECUTION',
+    required: [],
+    repairHint: 'provide a path and props. Example: mk /Card/ frame w:400 layout:column',
+  },
+  {
+    tool: 'grep',
+    mode: 'EXECUTION',
+    required: [],
+    repairHint: 'provide a search query or path with properties. Example: grep Button or grep /Card/ fillColor',
+  },
+  {
+    tool: 'sed',
+    mode: 'EXECUTION',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a path and replacement rules. Example: sed /Card/ fillColor:#FFF/#000',
+  },
+  {
+    tool: 'man',
+    mode: 'EXECUTION',
+    required: [],
+    repairHint: 'optionally provide a topic. Example: man components or man guidelines dashboard',
+  },
+  // FS write commands — path-based (legacy)
   {
     tool: 'mkdir',
     mode: 'EXECUTION',

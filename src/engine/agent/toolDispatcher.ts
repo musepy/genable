@@ -362,7 +362,7 @@ export class ToolDispatcher {
         results.push({
           command: cmd.raw,
           success: false,
-          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}". Available: ls, tree, cat, mkdir, mktext, write, rm, cp, ln, design, replace, query` },
+          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man` },
         });
         break;
       }

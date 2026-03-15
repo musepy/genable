@@ -118,6 +118,14 @@ function parseSingleCommand(raw: string): ParsedCommand {
       } else {
         flags[flagName] = true;
       }
+    } else if (token === '--') {
+      // End of options / separator — remaining tokens are positional
+      for (let j = i + 1; j < tokens.length; j++) {
+        positionalArgs.push(tokens[j]);
+      }
+      // Mark that we hit the separator so mapToToolArgs can detect it
+      flags['--'] = true;
+      break;
     } else if (token.startsWith('-') && token.length === 2 && !token.startsWith('-/')) {
       // Short flag: -s or -d 3
       const flagName = token.slice(1);
@@ -183,6 +191,9 @@ export function parseCommandString(input: string): ParsedChain {
 
 // ── Arg mapping ────────────────────────────────────────────────────
 
+/** Known mk node types. */
+const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector']);
+
 /**
  * Map parsed CLI command to internal tool args based on command name.
  * Returns null if the command can't be mapped (triggers help mode).
@@ -197,6 +208,8 @@ export function mapToToolArgs(
   const { name, positionalArgs: pos, flags } = parsed;
 
   switch (name) {
+    // ── VFS read commands ──
+
     case 'ls':
       return { path: pos[0] || '/' };
 
@@ -215,9 +228,78 @@ export function mapToToolArgs(
       return args;
     }
 
+    // ── New Unix CLI commands ──
+
+    case 'mk': {
+      if (input) {
+        // Batch mode: multiple mk lines in input
+        return { batch: input };
+      }
+      if (pos.length === 0) return null; // help mode
+      return parseMkArgs(pos, flags);
+    }
+
+    case 'grep': {
+      if (pos.length === 0) return null;
+      const firstArg = pos[0];
+      if (firstArg.startsWith('/')) {
+        // Property discovery: grep /path/ prop1,prop2
+        const grepProps = pos[1] ? pos[1].split(',') : [];
+        return { path: firstArg, properties: grepProps, mode: 'properties' };
+      }
+      // Node search: grep <query> [path]
+      return { query: firstArg, path: pos[1] || '/', mode: 'nodes' };
+    }
+
+    case 'sed': {
+      const sedPath = pos[0];
+      if (!sedPath) return null;
+
+      const replacements: Record<string, Array<{ from: string | number; to: string | number }>> = {};
+      for (let i = 1; i < pos.length; i++) {
+        const token = pos[i];
+        const colonIdx = token.indexOf(':');
+        if (colonIdx < 0) continue;
+        const prop = token.slice(0, colonIdx);
+        const rest = token.slice(colonIdx + 1);
+        const slashIdx = rest.lastIndexOf('/');
+        if (slashIdx < 0) continue;
+        const fromVal = rest.slice(0, slashIdx);
+        const toVal = rest.slice(slashIdx + 1);
+        if (!replacements[prop]) replacements[prop] = [];
+        const numFrom = Number(fromVal);
+        const numTo = Number(toVal);
+        replacements[prop].push({
+          from: !isNaN(numFrom) && fromVal !== '' ? numFrom : fromVal,
+          to: !isNaN(numTo) && toVal !== '' ? numTo : toVal,
+        });
+      }
+      if (input) {
+        try {
+          const parsed = JSON.parse(input);
+          for (const [prop, rules] of Object.entries(parsed)) {
+            if (!replacements[prop]) replacements[prop] = [];
+            replacements[prop].push(...(rules as any[]));
+          }
+        } catch { /* CLI syntax is primary */ }
+      }
+      return { path: sedPath, replacements };
+    }
+
+    case 'man': {
+      if (pos.length === 0) return { source: 'help' };
+      const manFirst = pos[0];
+      if (manFirst === 'guidelines') return { source: 'guidelines', query: pos.slice(1).join(' ') || undefined };
+      if (manFirst === 'style-tags') return { source: 'style-tags' };
+      if (manFirst === 'style') return { source: 'style', query: pos.slice(1).join(',') || undefined };
+      return { source: 'help', query: pos.join(' ') };
+    }
+
+    // ── Legacy commands (backward compat — handler still uses these names) ──
+
     case 'design': {
       const ops = input || pos.join('\n') || '';
-      if (!ops) return null; // trigger help
+      if (!ops) return null;
       const args: Record<string, any> = { ops };
       const parentId = flags['p'] || flags['parent'];
       if (parentId) args.parentId = parentId;
@@ -225,37 +307,29 @@ export function mapToToolArgs(
     }
 
     case 'replace': {
-      const mode = pos[0]; // 'search' or 'replace'
+      const mode = pos[0];
       const rootId = pos[1];
-      if (!mode || !rootId) return null; // trigger help
-
+      if (!mode || !rootId) return null;
       if (mode === 'search') {
-        // replace search <rootId> prop1,prop2
         const props = pos[2] ? pos[2].split(',') : [];
         return { mode: 'search', rootId, properties: props };
       } else if (mode === 'replace' || mode === 'apply') {
-        // replace apply <rootId> — replacements via input
         const raw = input || pos.slice(2).join(' ');
         if (!raw) return null;
-        try {
-          return { mode: 'replace', rootId, replacements: JSON.parse(raw) };
-        } catch {
-          return { mode: 'replace', rootId, replacements: raw };
-        }
+        try { return { mode: 'replace', rootId, replacements: JSON.parse(raw) }; }
+        catch { return { mode: 'replace', rootId, replacements: raw }; }
       }
       return null;
     }
 
     case 'query': {
       const source = pos[0];
-      if (!source) return null; // trigger help
+      if (!source) return null;
       const query = pos.slice(1).join(' ') || (typeof flags['q'] === 'string' ? flags['q'] : undefined);
       const args: Record<string, any> = { source };
       if (query) args.query = query;
       return args;
     }
-
-    // ── FS write commands ──
 
     case 'mkdir': {
       const path = pos[0] || '/';
@@ -268,7 +342,6 @@ export function mapToToolArgs(
       const path = pos[0] || '/';
       const propsIdx = pos.findIndex(p => p.startsWith('{'));
       const propsRaw = propsIdx >= 0 ? pos[propsIdx] : '';
-      // Text content = everything after props block (or after path if no props)
       const afterIdx = propsIdx >= 0 ? propsIdx + 1 : 1;
       const textContent = pos.slice(afterIdx).join(' ');
       return { path, propsRaw, textContent: textContent || undefined };
@@ -292,16 +365,74 @@ export function mapToToolArgs(
 
     case 'ln': {
       const path = pos[0] || '';
-      // Component name is the first positional arg that's not a path or props block
       const component = pos.find((p, i) => i > 0 && !p.startsWith('/') && !p.startsWith('{')) || '';
       const propsRaw = pos.find(p => p.startsWith('{')) || '';
       return { path, component, propsRaw: propsRaw || undefined };
     }
 
     default:
-      // Unknown command — check if it's a valid command name (no args = help)
       if (isValidCommand(name) && pos.length === 0) return null;
       return null;
   }
+}
+
+// ── mk arg parser (extracted for batch reuse) ──
+
+/**
+ * Parse mk positional args into structured args.
+ * Used by single mk command and by batch line parsing.
+ */
+export function parseMkArgs(
+  pos: string[],
+  flags: Record<string, string | boolean>,
+): Record<string, any> {
+  const path = pos[0] || '/';
+  let type: string | undefined;
+  let refComponent: string | undefined;
+  let propsStart = 1;
+
+  if (pos[1]) {
+    if (MK_TYPES.has(pos[1])) {
+      type = pos[1];
+      propsStart = 2;
+    } else if (pos[1].startsWith('ref:')) {
+      refComponent = pos[1].slice(4);
+      propsStart = 2;
+    }
+  }
+
+  // Collect prop tokens (key:value) and text content
+  const propTokens: string[] = [];
+  const textParts: string[] = [];
+  const hasSeparator = flags['--'] === true;
+
+  // When -- is present, parseSingleCommand pushes all tokens after -- into positionalArgs
+  // and sets flags['--']=true. All those post-separator tokens are already in pos.
+  // We need to find where the separator was. Prop tokens are key:value format.
+  for (let i = propsStart; i < pos.length; i++) {
+    const t = pos[i];
+    if (hasSeparator && !t.includes(':')) {
+      // After separator: non-prop tokens are text content
+      textParts.push(t);
+    } else if (t.includes(':')) {
+      propTokens.push(t);
+    } else {
+      // Non-prop, no separator — could be text content for text type
+      textParts.push(t);
+    }
+  }
+
+  let textContent: string | undefined;
+  if (textParts.length > 0) {
+    textContent = textParts.join(' ');
+  }
+
+  return {
+    path,
+    ...(type && { type }),
+    ...(refComponent && { refComponent }),
+    propTokens,
+    ...(textContent && { textContent }),
+  };
 }
 

@@ -398,6 +398,246 @@ async function exportNodeToBase64(
   };
 }
 
+// ── mk command helpers ──
+
+/**
+ * Convert a key:value prop token to flat ops format.
+ * Quotes non-numeric values with single quotes for the flat ops parser.
+ */
+function mkPropToFlatOps(token: string): string {
+  const colonIdx = token.indexOf(':');
+  if (colonIdx < 0) return token;
+  const key = token.slice(0, colonIdx);
+  const val = token.slice(colonIdx + 1);
+  if (/^-?\d+(\.\d+)?$/.test(val)) return `${key}:${val}`;
+  return `${key}:'${val.replace(/'/g, "\\'")}'`;
+}
+
+/**
+ * Execute a single mk command by converting to flat ops.
+ * - Path exists → update
+ * - Path doesn't exist → create
+ */
+async function executeSingleMk(
+  path: string,
+  type?: string,
+  refComponent?: string,
+  propTokens: string[] = [],
+  textContent?: string,
+): Promise<ToolResponse> {
+  const { parentPath, nodeName } = splitPath(path);
+  if (!nodeName) {
+    return { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' } };
+  }
+
+  // Try to resolve the full path to check if node exists (for upsert)
+  const existing = await resolvePathToNode(path);
+  if (existing.ok && !existing.isPage) {
+    // Node exists → update mode (ignore type)
+    const nodeId = existing.node.id;
+    const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
+    if (!propsBlock && !textContent) {
+      return { success: true, data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
+    }
+    let ops = `update('${nodeId}', {${propsBlock}})`;
+    // If textContent is provided for an existing text node, update characters too
+    if (textContent) {
+      const escaped = escapeFlatOpsStr(textContent);
+      ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
+    }
+    return await executeFlatOps(ops);
+  }
+
+  // Node doesn't exist → create mode
+  const parentResolved = await resolvePathToNode(parentPath);
+  if (!parentResolved.ok) return parentResolved.response;
+
+  const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
+  const propsInner = propTokens.map(mkPropToFlatOps).join(', ');
+  const propsWithName = injectNameProp(propsInner, nodeName);
+
+  let ops: string;
+  if (refComponent) {
+    const escapedComp = escapeFlatOpsStr(refComponent);
+    ops = `n1 = ref('${escapedComp}', root, {${propsWithName}})`;
+  } else if (type === 'text' || textContent) {
+    const nodeType = type || 'text';
+    const textArg = textContent ? `, '${escapeFlatOpsStr(textContent)}'` : '';
+    ops = `n1 = ${nodeType}(root, {${propsWithName}}${textArg})`;
+  } else {
+    const nodeType = type || 'frame';
+    ops = `n1 = ${nodeType}(root, {${propsWithName}})`;
+  }
+
+  return await executeFlatOps(ops, parentId);
+}
+
+/**
+ * Execute a batch of mk commands.
+ * Parses each line → resolves parents → builds flat ops with cross-references.
+ */
+async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
+  const lines = batchInput.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('//'));
+
+  if (lines.length === 0) {
+    return { success: false, error: { code: 'EMPTY_BATCH', message: 'No mk commands in batch input.' } };
+  }
+
+  const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector']);
+
+  // Phase 1: Parse all lines with inline parser
+  interface MkLine {
+    path: string;
+    parentPath: string;
+    nodeName: string;
+    type?: string;
+    refComponent?: string;
+    propTokens: string[];
+    textContent?: string;
+  }
+
+  const parsed: MkLine[] = [];
+  for (const line of lines) {
+    // Strip leading "mk " if present
+    const stripped = line.startsWith('mk ') ? line.slice(3).trim() : line;
+
+    // Simple tokenizer: split by spaces, respecting single-quoted strings
+    const tokens: string[] = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < stripped.length; i++) {
+      const ch = stripped[i];
+      if (inQ) {
+        if (ch === "'") { inQ = false; } else { cur += ch; }
+      } else if (ch === "'") {
+        inQ = true;
+      } else if (ch === ' ' || ch === '\t') {
+        if (cur) { tokens.push(cur); cur = ''; }
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur) tokens.push(cur);
+
+    if (tokens.length === 0) continue;
+
+    const path = tokens[0];
+    let type: string | undefined;
+    let refComponent: string | undefined;
+    let propsStart = 1;
+
+    if (tokens[1]) {
+      if (MK_TYPES.has(tokens[1])) { type = tokens[1]; propsStart = 2; }
+      else if (tokens[1].startsWith('ref:')) { refComponent = tokens[1].slice(4); propsStart = 2; }
+    }
+
+    const propTokens: string[] = [];
+    const textParts: string[] = [];
+    let hitSep = false;
+    for (let i = propsStart; i < tokens.length; i++) {
+      if (tokens[i] === '--') { hitSep = true; continue; }
+      if (hitSep) { textParts.push(tokens[i]); }
+      else if (tokens[i].includes(':')) { propTokens.push(tokens[i]); }
+      else { textParts.push(tokens[i]); }
+    }
+
+    const { parentPath, nodeName } = splitPath(path);
+    if (!nodeName) continue;
+
+    parsed.push({
+      path, parentPath, nodeName, type, refComponent, propTokens,
+      textContent: textParts.length > 0 ? textParts.join(' ') : undefined,
+    });
+  }
+
+  if (parsed.length === 0) {
+    return { success: false, error: { code: 'PARSE_ERROR', message: 'No valid mk commands parsed from batch input.' } };
+  }
+
+  // Phase 2: Pre-resolve all unique parent paths
+  // Build a symbol table: path → symbol name (for cross-referencing within batch)
+  const pathToSymbol = new Map<string, string>();
+  const pathToNodeId = new Map<string, string>();
+  let symbolCounter = 0;
+
+  function getSymbol(path: string): string {
+    if (pathToSymbol.has(path)) return pathToSymbol.get(path)!;
+    const sym = `n${++symbolCounter}`;
+    pathToSymbol.set(path, sym);
+    return sym;
+  }
+
+  // Resolve existing paths
+  const uniquePaths = new Set<string>();
+  for (const line of parsed) {
+    uniquePaths.add(line.path);
+    uniquePaths.add(line.parentPath);
+  }
+
+  for (const p of uniquePaths) {
+    const resolved = await resolvePathToNode(p);
+    if (resolved.ok) {
+      pathToNodeId.set(p, resolved.isPage ? 'PAGE_ROOT' : resolved.node.id);
+    }
+  }
+
+  // Phase 3: Generate flat ops
+  const opsLines: string[] = [];
+  let defaultParentId: string | undefined;
+
+  for (const line of parsed) {
+    const propsInner = line.propTokens.map(mkPropToFlatOps).join(', ');
+    const propsWithName = injectNameProp(propsInner, line.nodeName);
+
+    // Check if target exists → update
+    const existingId = pathToNodeId.get(line.path);
+    if (existingId && existingId !== 'PAGE_ROOT') {
+      if (line.textContent) {
+        const escaped = escapeFlatOpsStr(line.textContent);
+        opsLines.push(`update('${existingId}', {${propsWithName ? propsWithName + ', ' : ''}characters:'${escaped}'})`);
+      } else if (propsWithName) {
+        opsLines.push(`update('${existingId}', {${propsWithName}})`);
+      }
+      continue;
+    }
+
+    // Determine parent reference
+    let parentRef: string;
+    const parentId = pathToNodeId.get(line.parentPath);
+    if (parentId === 'PAGE_ROOT') {
+      parentRef = 'root';
+      // Don't set defaultParentId — root means page root
+    } else if (parentId) {
+      parentRef = `'${parentId}'`;
+    } else if (pathToSymbol.has(line.parentPath)) {
+      // Parent was created earlier in this batch
+      parentRef = pathToSymbol.get(line.parentPath)!;
+    } else {
+      parentRef = 'root';
+    }
+
+    const sym = getSymbol(line.path);
+
+    if (line.refComponent) {
+      const escaped = escapeFlatOpsStr(line.refComponent);
+      opsLines.push(`${sym} = ref('${escaped}', ${parentRef}, {${propsWithName}})`);
+    } else if (line.type === 'text' || line.textContent) {
+      const nodeType = line.type || 'text';
+      const textArg = line.textContent ? `, '${escapeFlatOpsStr(line.textContent)}'` : '';
+      opsLines.push(`${sym} = ${nodeType}(${parentRef}, {${propsWithName}}${textArg})`);
+    } else {
+      const nodeType = line.type || 'frame';
+      opsLines.push(`${sym} = ${nodeType}(${parentRef}, {${propsWithName}})`);
+    }
+  }
+
+  if (opsLines.length === 0) {
+    return { success: true, data: { message: 'All nodes already exist. No changes needed.' } };
+  }
+
+  return await executeFlatOps(opsLines.join('\n'), defaultParentId);
+}
+
 /**
  * Handle TOOL_CALL IPC events.
  * Routes to the unified tool implementations.
@@ -607,6 +847,191 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         }
 
         response = { success: true, data: catData };
+        break;
+      }
+
+      // ==========================================
+      // NEW UNIX CLI COMMANDS — mk, grep, sed, man
+      // ==========================================
+
+      case 'mk': {
+        const { batch, path: mkPath, type: mkType, refComponent, propTokens, textContent } = parameters;
+
+        if (batch) {
+          // Batch mode: parse multiple mk lines → flat ops
+          response = await executeMkBatch(batch);
+          break;
+        }
+
+        if (!mkPath) {
+          response = { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a path. Usage: mk /Card/ frame w:400 layout:column' } };
+          break;
+        }
+
+        response = await executeSingleMk(mkPath, mkType, refComponent, propTokens || [], textContent);
+        break;
+      }
+
+      case 'grep': {
+        const { mode: grepMode, query: grepQuery, path: grepPath, properties: grepProps } = parameters;
+
+        if (grepMode === 'properties') {
+          // Property discovery mode — reuse replace search logic
+          if (!grepPath) {
+            response = { success: false, error: { code: 'MISSING_PATH', message: 'Property discovery requires a path. Usage: grep /Card/ fillColor,fontSize' } };
+            break;
+          }
+          if (!grepProps || !Array.isArray(grepProps) || grepProps.length === 0) {
+            response = { success: false, error: { code: 'MISSING_PROPERTIES', message: 'Specify properties to discover. Usage: grep /Card/ fillColor,fontSize' } };
+            break;
+          }
+
+          const grepResolved = await resolvePathToNode(grepPath);
+          if (!grepResolved.ok) { response = grepResolved.response; break; }
+
+          const grepRoot = grepResolved.isPage
+            ? figma.currentPage.children[0] as SceneNode
+            : grepResolved.node;
+
+          if (!grepRoot) {
+            response = { success: false, error: { code: 'NO_RESULTS', message: 'No nodes found to search.' } };
+            break;
+          }
+
+          const uniqueValues: Record<string, Set<string | number>> = {};
+          for (const prop of grepProps) uniqueValues[prop] = new Set();
+
+          function collectGrepValues(node: SceneNode): void {
+            for (const prop of grepProps!) {
+              for (const val of extractAllReplacePropertyValues(node, prop)) uniqueValues[prop].add(val);
+            }
+            if ('children' in node) {
+              for (const child of (node as any).children) collectGrepValues(child);
+            }
+          }
+
+          if (grepResolved.isPage) {
+            for (const child of figma.currentPage.children) collectGrepValues(child);
+          } else {
+            collectGrepValues(grepRoot);
+          }
+
+          const grepResult: Record<string, (string | number)[]> = {};
+          for (const [prop, valueSet] of Object.entries(uniqueValues)) grepResult[prop] = Array.from(valueSet);
+          response = { success: true, data: grepResult };
+        } else {
+          // Node search mode
+          const searchQuery = (grepQuery || '').toLowerCase();
+          const MAX_RESULTS = 20;
+          const matches: Array<{ id: string; name: string; type: string; x: number; y: number; width: number; height: number }> = [];
+
+          const allNodes = figma.currentPage.findAll(node => {
+            return node.name.toLowerCase().includes(searchQuery)
+              || node.type.toLowerCase() === searchQuery;
+          });
+
+          for (const node of allNodes.slice(0, MAX_RESULTS)) {
+            matches.push({
+              id: node.id, name: node.name, type: node.type,
+              x: Math.round(node.x), y: Math.round(node.y),
+              width: Math.round(node.width), height: Math.round(node.height),
+            });
+          }
+
+          response = { success: true, data: { results: matches, total: allNodes.length, truncated: allNodes.length > MAX_RESULTS } };
+        }
+        break;
+      }
+
+      case 'sed': {
+        const { path: sedPath, replacements: sedReplacements } = parameters;
+
+        if (!sedPath) {
+          response = { success: false, error: { code: 'MISSING_PATH', message: 'sed requires a path. Usage: sed /Card/ fillColor:#FFF/#000' } };
+          break;
+        }
+        if (!sedReplacements || typeof sedReplacements !== 'object' || Object.keys(sedReplacements).length === 0) {
+          response = { success: false, error: { code: 'MISSING_REPLACEMENTS', message: 'sed requires replacement rules. Usage: sed /Card/ prop:from/to' } };
+          break;
+        }
+
+        const sedResolved = await resolvePathToNode(sedPath);
+        if (!sedResolved.ok) { response = sedResolved.response; break; }
+        if (sedResolved.isPage) {
+          response = { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot sed page root. Target a specific node.' } };
+          break;
+        }
+        const sedRoot = sedResolved.node;
+
+        try {
+          // Phase 1: Preload fonts
+          const fontsToPreload = new Set<string>();
+          const hasFontRules = sedReplacements['fontFamily'] || sedReplacements['fontWeight'];
+          if (hasFontRules) {
+            function collectFontsForSed(node: SceneNode): void {
+              if (node.type === 'TEXT') {
+                const cur = (node as any).fontName || { family: 'Inter', style: 'Regular' };
+                if (Array.isArray(sedReplacements['fontFamily'])) {
+                  for (const rule of sedReplacements['fontFamily']) {
+                    if (matchesReplaceValue(cur.family, rule.from) && typeof rule.to === 'string') {
+                      fontsToPreload.add(`${rule.to}\0${cur.style}`);
+                    }
+                  }
+                }
+                if (Array.isArray(sedReplacements['fontWeight'])) {
+                  for (const rule of sedReplacements['fontWeight']) {
+                    if (matchesReplaceValue(cur.style, rule.from) && typeof rule.to === 'string') {
+                      fontsToPreload.add(`${cur.family}\0${rule.to}`);
+                    }
+                  }
+                }
+              }
+              if ('children' in node) {
+                for (const child of (node as any).children) collectFontsForSed(child);
+              }
+            }
+            collectFontsForSed(sedRoot);
+            if (fontsToPreload.size > 0) {
+              await Promise.all([...fontsToPreload].map(key => {
+                const [family, style] = key.split('\0');
+                return fontBus.getOrLoad(family, style);
+              }));
+            }
+          }
+
+          // Phase 2: Apply replacements
+          let totalReplaced = 0;
+          const details: Record<string, number> = {};
+          async function doSedReplace(node: SceneNode): Promise<void> {
+            for (const [prop, rules] of Object.entries(sedReplacements)) {
+              if (!Array.isArray(rules)) continue;
+              for (const rule of rules) {
+                const n = await applyReplacePropertyValue(node, prop, rule.from, rule.to);
+                if (n > 0) { totalReplaced += n; details[prop] = (details[prop] || 0) + n; }
+              }
+            }
+            if ('children' in node) {
+              for (const child of (node as any).children) await doSedReplace(child);
+            }
+          }
+          await doSedReplace(sedRoot);
+          response = { success: true, data: { replaced: totalReplaced, details } };
+        } catch (e: any) {
+          response = { success: false, error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error during sed' } };
+        }
+        break;
+      }
+
+      case 'man': {
+        // man is handled locally in sandbox (query sources: guidelines, style-tags, style, help)
+        // It should NOT arrive at the IPC handler. If it does, return helpful error.
+        response = {
+          success: false,
+          error: {
+            code: 'LOCAL_ONLY',
+            message: 'man command is handled locally. This is an internal routing error.',
+          },
+        };
         break;
       }
 
@@ -1069,7 +1494,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       default:
         response = {
           success: false,
-          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}". Available: ls, tree, cat, design, replace, query, mkdir, mktext, write, rm, cp, ln` }
+          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man` }
         };
         break;
     }

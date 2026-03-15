@@ -11,7 +11,13 @@
 // VFS read commands — filesystem metaphor
 export { lsDefinition, catDefinition, treeDefinition } from './vfs';
 
-// Write commands — batch
+// New Unix CLI commands
+export { mkDefinition } from './mk';
+export { grepDefinition } from './grep';
+export { sedDefinition } from './sed';
+export { manDefinition } from './man';
+
+// Legacy write commands — kept for backward compat
 export { designDefinition } from './design';
 export { replaceDefinition } from './replace';
 export { queryDefinition } from './query';
@@ -35,6 +41,7 @@ export {
 export {
   parseCommandString,
   mapToToolArgs,
+  parseMkArgs,
   type ParsedCommand,
   type ParsedChain,
 } from './commandParser';

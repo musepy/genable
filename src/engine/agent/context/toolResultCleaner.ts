@@ -40,20 +40,20 @@ export class ToolResultCleaner {
     if (!cleaned.data) return cleaned;
 
     // read tools: truncate oversized XML at safe boundary
-    const READ_TOOLS = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat']);
+    const READ_TOOLS = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat', 'grep']);
     if (READ_TOOLS.has(cleaned.name)) {
       cleaned.data = this.cleanInspectResult(cleaned.data);
       return cleaned;
     }
 
-    // create/edit/design + FS write commands: data is already a compact receipt from executor — pass through
-    const WRITE_TOOLS = new Set(['create', 'edit', 'design', 'mkdir', 'mktext', 'write', 'rm', 'cp', 'ln']);
+    // create/edit/design + write commands: data is already a compact receipt from executor — pass through
+    const WRITE_TOOLS = new Set(['create', 'edit', 'design', 'mkdir', 'mktext', 'write', 'rm', 'cp', 'ln', 'mk', 'sed']);
     if (WRITE_TOOLS.has(cleaned.name)) {
       return cleaned;
     }
 
-    // query: results already bounded by executor (knowledge: BM25 top-k, guidelines: single topic doc)
-    if (cleaned.name === 'query') {
+    // query/man: results already bounded by executor (knowledge: BM25 top-k, guidelines: single topic doc)
+    if (cleaned.name === 'query' || cleaned.name === 'man') {
       return cleaned;
     }
 

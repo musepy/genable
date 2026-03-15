@@ -17,23 +17,33 @@ import {
   mkdirDefinition, mktextDefinition, writeDefinition,
   rmDefinition, cpDefinition, lnDefinition,
 } from './fs';
+// New Unix CLI commands
+import { mkDefinition } from './mk';
+import { grepDefinition } from './grep';
+import { sedDefinition } from './sed';
+import { manDefinition } from './man';
 
 /** All command definitions, keyed by command name. */
 const COMMAND_MAP = new Map<string, ToolDefinition>([
-  // VFS read commands (replaces context/outline/inspect)
+  // VFS read commands
   [lsDefinition.name, lsDefinition],
   [treeDefinition.name, treeDefinition],
   [catDefinition.name, catDefinition],
-  // Write commands
+  // New Unix CLI commands
+  [mkDefinition.name, mkDefinition],
+  [grepDefinition.name, grepDefinition],
+  [sedDefinition.name, sedDefinition],
+  [manDefinition.name, manDefinition],
+  // FS write commands — path-based
+  [rmDefinition.name, rmDefinition],
+  [cpDefinition.name, cpDefinition],
+  // Legacy commands (backward compat — will be removed in future)
   [designDefinition.name, designDefinition],
   [replaceDefinition.name, replaceDefinition],
   [queryDefinition.name, queryDefinition],
-  // FS write commands — path-based create/modify/delete
   [mkdirDefinition.name, mkdirDefinition],
   [mktextDefinition.name, mktextDefinition],
   [writeDefinition.name, writeDefinition],
-  [rmDefinition.name, rmDefinition],
-  [cpDefinition.name, cpDefinition],
   [lnDefinition.name, lnDefinition],
 ]);
 
@@ -81,6 +91,69 @@ export function getCommandHelp(commandName: string): string {
 
 /** CLI-style help text for each command. */
 const COMMAND_CLI_HELP: Record<string, string> = {
+  mk: `mk — Create or update a design node (upsert).
+
+Usage:
+  mk /Card/ frame w:400 layout:column gap:16 p:24 bg:#FFF corner:12
+  mk /Card/Title text size:24 weight:Bold fill:#111 -- Card Title
+  mk /Card/ corner:16                                  # update existing
+  mk /Card/Btn ref:Button variant:'Size=Large'          # component instance
+
+Rules:
+  - Path exists → UPDATE (only listed props change, type ignored)
+  - Path doesn't exist → CREATE (type defaults to frame)
+  - Props: space-separated key:value. Quote complex values.
+  - -- separates props from text content
+  - ref:Name creates a component instance
+
+Batch (multiple lines via input):
+  run({command: "mk", input: "/Card/ frame w:400\\n/Card/Title text size:24 -- Hello"})
+
+See also: cat (read before writing), grep (find nodes), man (usage guides)`,
+
+  grep: `grep — Search nodes or discover property values.
+
+Usage:
+  grep Button                        search nodes by name
+  grep frame                         search nodes by type
+  grep /Card/ fillColor,fontSize     discover property values in subtree
+
+Modes:
+  Node search — first arg is NOT a path: grep <query> [/scope/]
+  Property discovery — first arg IS a path: grep /path/ prop1,prop2
+
+Properties: fillColor, textColor, strokeColor, strokeWeight, opacity,
+            cornerRadius, gap, fontSize, fontFamily, fontWeight
+
+See also: cat (inspect found node), sed (replace discovered values)`,
+
+  sed: `sed — Batch search-and-replace properties across a subtree.
+
+Usage:
+  sed /Card/ fillColor:#3B82F6/#8B5CF6
+  sed /Card/ fontSize:14/16 cornerRadius:8/12
+  sed /100:5/ textColor:#000/#FFF fillColor:#FFF/#1A1A2E
+
+Syntax: sed /path/ prop:from/to [prop:from/to ...]
+
+Use grep first to discover current values, then sed to replace them.
+
+See also: grep (discover values first), cat (verify changes)`,
+
+  man: `man — Get design guidelines, style guides, and help documentation.
+
+Usage:
+  man                           list all help topics
+  man components                help topic: components
+  man variants                  help topic: variant matrices
+  man guidelines dashboard      design guidelines for dashboards
+  man style-tags                list available visual style tags
+  man style dark-mode,minimal   get visual style guide by tags
+
+Sources: help (default), guidelines, style-tags, style
+
+See also: grep (find nodes), mk (create/update)`,
+
   ls: `ls — List children of a design node.
 
 Usage:
@@ -234,6 +307,10 @@ See also: cp (clone without components), design (batch instances)`,
 
 /** Cross-references between commands for progressive discovery. */
 const COMMAND_SEE_ALSO: Record<string, string> = {
+  mk: 'cat (read before writing), grep (find nodes), man (usage guides)',
+  grep: 'cat (inspect found node), sed (replace values)',
+  sed: 'grep (discover values first), cat (verify changes)',
+  man: 'grep (find nodes), mk (create/update)',
   ls: 'tree (structural hierarchy), cat (full properties)',
   tree: 'cat (full details for specific nodes), ls (quick listing)',
   cat: 'tree (overview first), write (modify what you see)',

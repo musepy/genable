@@ -26,7 +26,7 @@ export class LoopDetector {
   private signatureHistory: string[] = [];
   private identicalGraceGiven = false;
   private readonly maxHistoryLength = 10;
-  private readonly readTools = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat']);
+  private readonly readTools = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat', 'grep', 'man']);
 
   /**
    * Record this iteration's tool calls and run all loop detection checks.
@@ -105,11 +105,21 @@ export class LoopDetector {
         fingerprint = `|depth:${depth}`;
       } else if (tc.name === 'context') {
         fingerprint = `|static`;
-      } else if (tc.name === 'ls' || tc.name === 'tree' || tc.name === 'cat') {
-        // VFS commands: fingerprint by path
-        const path = tc.args?.path || '/';
+      } else if (tc.name === 'ls' || tc.name === 'tree' || tc.name === 'cat' || tc.name === 'grep' || tc.name === 'man') {
+        // VFS/read commands: fingerprint by path
+        const path = tc.args?.path || tc.args?.query || '/';
         const depth = tc.args?.depth ?? 5;
         fingerprint = `|path:${this.truncate(path, 64)}|depth:${depth}`;
+      } else if (tc.name === 'mk') {
+        // mk: fingerprint by path + batch hash
+        const path = tc.args?.path || '';
+        const batch = tc.args?.batch;
+        fingerprint = batch
+          ? `|batch:${this.hashString(String(batch).slice(0, 256))}`
+          : `|path:${this.truncate(path, 64)}`;
+      } else if (tc.name === 'sed') {
+        const path = tc.args?.path || '';
+        fingerprint = `|path:${this.truncate(path, 64)}|args:${this.hashString(JSON.stringify(tc.args?.replacements ?? {}))}`;
       } else {
         fingerprint = `${nameSample}${contextSample}|args:${this.hashString(JSON.stringify(tc.args ?? {}))}`;
       }

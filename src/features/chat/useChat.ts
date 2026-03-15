@@ -384,6 +384,54 @@ export function useChat({
           }
           return null
         },
+        man: async (params: any) => {
+          // man reuses the same local knowledge sources as query
+          const source = params.source || 'help'
+          if (source === 'guidelines') {
+            const topic = (params.query || '').toLowerCase().trim()
+            const content = (guidelinesCatalog as Record<string, string>)[topic]
+            if (!content) {
+              return { success: false, error: { code: 'UNKNOWN_TOPIC',
+                message: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` } }
+            }
+            return { success: true, data: { topic, content } }
+          }
+          if (source === 'style-tags') {
+            return { success: true, data: { tags: (styleCatalog as any).tags } }
+          }
+          if (source === 'style') {
+            const queryTags = normalizeStyleTags(params.query || '')
+            const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
+            const match = matchStyleGuide(queryTags, guides)
+            if (!match) {
+              return { success: false, error: { code: 'NO_STYLE_MATCH',
+                message: `No style guide matched tags "${queryTags.join(', ')}". Use man style-tags to see available tags.` } }
+            }
+            return {
+              success: true,
+              data: { name: match.name, tags: match.guide.tags, content: match.guide.content }
+            }
+          }
+          if (source === 'help') {
+            const query = (params.query || '').trim()
+            if (!query) {
+              return { success: true, data: { topics: helpIndex.listTopics() } }
+            }
+            const exact = helpIndex.getById(query)
+            if (exact) {
+              return { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } }
+            }
+            const results = helpIndex.search(query, 2)
+            if (results.length === 0) {
+              return { success: true, data: {
+                message: `No help article matched "${query}".`,
+                availableTopics: helpIndex.listTopics()
+              } }
+            }
+            return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
+          }
+          return null
+        },
       }
 
       await activeOrchestratorRef.current.generate(normalizedPrompt, { toolExecutors: localExecutors })

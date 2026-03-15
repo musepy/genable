@@ -205,6 +205,16 @@ async function main() {
       }
     }
 
+    // man command → local execution (same sources as query: guidelines, style-tags, style, help)
+    if (commandName === 'man') {
+      const manSource = args.source || 'help';
+      const local = executeQueryLocally({ source: manSource, query: args.query });
+      if (local.handled) {
+        return buildMcpContent(local.result);
+      }
+      // 'nodes' source falls through to relay (shouldn't happen for man)
+    }
+
     // All other commands → WebSocket relay to Figma plugin
     if (!relay.isPluginConnected()) {
       return {
@@ -242,13 +252,13 @@ async function main() {
       for (const cmd of chain.commands) {
         if (!cmd.name) {
           return {
-            content: [{ type: 'text', text: 'Empty command. Available: ls, tree, cat, design, replace, query' }],
+            content: [{ type: 'text', text: 'Empty command. Available: ls, tree, cat, mk, rm, cp, grep, sed, man' }],
             isError: true,
           };
         }
         if (!isValidCommand(cmd.name)) {
           return {
-            content: [{ type: 'text', text: `Unknown command "${cmd.name}". Available: ls, tree, cat, design, replace, query` }],
+            content: [{ type: 'text', text: `Unknown command "${cmd.name}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man` }],
             isError: true,
           };
         }

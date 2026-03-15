@@ -34,10 +34,10 @@ describe('AgentRuntime Refactor Verification', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         toolCalls: [
-          { name: 'p1', args: {} },
-          { name: 'p2', args: {} },
-          { name: 's1', args: {} },
-          { name: 'p3', args: {} }
+          { name: 'p1', args: { action: 'go' } },
+          { name: 'p2', args: { action: 'go' } },
+          { name: 's1', args: { action: 'go' } },
+          { name: 'p3', args: { action: 'go' } }
         ]
       })
       .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });

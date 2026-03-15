@@ -100,12 +100,20 @@ Take a screenshot of the ComponentSet and compare dimensions with target.
 
 #### Icon nodes
 
-The `icon()` type creates `frame(name) > vector('Vector')`. To override icon color in clone:
+The `icon()` type creates `frame(name) > vector('Vector')`. Clone overrides on icon frames **auto-propagate fills/strokes to vector children** (same as icon creation). Use the icon node's name directly — no need to target the internal `Vector` node.
 
-| Wrong | Right | Why |
-|-------|-------|-----|
-| `Star.stroke:'#1E1E1E'` | `Vector.stroke:'#1E1E1E'` | `Star` is the wrapper frame, `Vector` is the actual icon path |
-| `Star.fill:'#1E1E1E'` | `Vector.stroke:'#1E1E1E'` | Lucide icons use stroke, not fill |
+```
+// Create icon with a name
+myIcon = icon(base, {name:'MyIcon', icon:'lucide:star', w:20, h:20, stroke:'#F5F5F5'})
+
+// Clone override — use the icon's name
+variant = clone(base, root, {name:'...', MyIcon.stroke:'#1E1E1E'})
+```
+
+| Icon library | Color prop | Example |
+|-------------|-----------|---------|
+| Lucide / Tabler (outline) | `stroke` | `MyIcon.stroke:'#1E1E1E'` |
+| MDI / Phosphor (filled) | `fill` | `MyIcon.fill:'#1E1E1E'` |
 
 #### variantSet
 

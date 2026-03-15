@@ -40,14 +40,15 @@ export class ToolResultCleaner {
     if (!cleaned.data) return cleaned;
 
     // read tools: truncate oversized XML at safe boundary
-    const READ_TOOLS = new Set(['context', 'outline', 'inspect']);
+    const READ_TOOLS = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat']);
     if (READ_TOOLS.has(cleaned.name)) {
       cleaned.data = this.cleanInspectResult(cleaned.data);
       return cleaned;
     }
 
-    // create/edit/design: data is already a compact receipt from executor — pass through
-    if (cleaned.name === 'create' || cleaned.name === 'edit' || cleaned.name === 'design') {
+    // create/edit/design + FS write commands: data is already a compact receipt from executor — pass through
+    const WRITE_TOOLS = new Set(['create', 'edit', 'design', 'mkdir', 'mktext', 'write', 'rm', 'cp', 'ln']);
+    if (WRITE_TOOLS.has(cleaned.name)) {
       return cleaned;
     }
 
@@ -83,6 +84,13 @@ export class ToolResultCleaner {
     if (data.page) result.page = data.page;
     if (data.selection) result.selection = data.selection;
     if (data.suggestedReads) result.suggestedReads = data.suggestedReads;
+    // VFS fields
+    if (data.path) result.path = data.path;
+    if (data.listing) result.listing = data.listing;
+    if (data.container) result.container = data.container;
+    if (data.count !== undefined) result.count = data.count;
+    if (data.footer) result.footer = data.footer;
+    if (data.children) result.children = data.children;
 
     const MAX_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
     if (result.tree && result.tree.length > MAX_CHARS) {

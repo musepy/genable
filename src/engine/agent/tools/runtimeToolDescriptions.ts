@@ -1,5 +1,6 @@
 import { RuntimeRequiredParamSpec, RuntimeValidationMode } from './types';
 import { QUERY_SOURCES } from './unified/query';
+import { isValidCommand } from './unified/commandRegistry';
 
 interface RuntimeConditionalRequiredRule {
   when: (args: any) => boolean;
@@ -25,23 +26,33 @@ const VALID_SOURCES = new Set<string>(QUERY_SOURCES);
 
 export const runtimeToolDescriptions: RuntimeToolDescription[] = [
   {
-    tool: 'context',
+    tool: 'run',
     mode: 'EXECUTION',
-    required: [],
-    repairHint: 'no parameters needed',
+    required: [{ name: 'command', trim: true, check: 'required' }],
+    // No invalidRules — command is now a free-form CLI string, not an enum.
+    // Validation happens after parsing in unwrapRunCommand → per-command validation.
+    repairHint: 'provide "command" as a CLI string (e.g. "ls /", "cat /Card/ -s", "design")',
+  },
+  // VFS read commands — path-based
+  {
+    tool: 'ls',
+    mode: 'EXECUTION',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a "path" (e.g. "/" for page root, "/Card/" for a named node)',
   },
   {
-    tool: 'outline',
+    tool: 'tree',
     mode: 'EXECUTION',
-    required: [{ name: 'nodeId', trim: true, check: 'required' }],
-    repairHint: 'provide a non-empty "nodeId"',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a "path" (e.g. "/" for page root, "/Card/" for a named node)',
   },
   {
-    tool: 'inspect',
+    tool: 'cat',
     mode: 'EXECUTION',
-    required: [{ name: 'nodeId', trim: true, check: 'required' }],
-    repairHint: 'provide a non-empty "nodeId"',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a "path" (e.g. "/Card/" or "/Card/Header/Title")',
   },
+  // Write commands — unchanged
   {
     tool: 'design',
     mode: 'EXECUTION',
@@ -88,5 +99,51 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
       isValid: (args) => typeof args?.source === 'string' && VALID_SOURCES.has(args.source),
     }],
     repairHint: `provide "source" as one of ${QUERY_SOURCES.join(', ')} and a non-empty "query" (except for "style-tags" and "help" which can omit query)`,
+  },
+  // FS write commands — path-based
+  {
+    tool: 'mkdir',
+    mode: 'EXECUTION',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a "path" for the node to create (e.g. "/Card/" or "/Card/Header/")',
+  },
+  {
+    tool: 'mktext',
+    mode: 'EXECUTION',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a "path" for the text node (e.g. "/Card/Title") and optionally text content',
+  },
+  {
+    tool: 'write',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'path', trim: true, check: 'required' },
+      { name: 'propsRaw', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide a "path" and "propsRaw" with properties to update (e.g. {bg:#000})',
+  },
+  {
+    tool: 'rm',
+    mode: 'EXECUTION',
+    required: [{ name: 'path', trim: true, check: 'required' }],
+    repairHint: 'provide a "path" to the node to delete (e.g. "/Card/OldSection/")',
+  },
+  {
+    tool: 'cp',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'sourcePath', trim: true, check: 'required' },
+      { name: 'destPath', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide "sourcePath" and "destPath" (e.g. cp /Card/Default/ /Card/Hover/ {overrides})',
+  },
+  {
+    tool: 'ln',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'path', trim: true, check: 'required' },
+      { name: 'component', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide a "path" and "component" name (e.g. ln /Card/BtnInst Button)',
   },
 ];

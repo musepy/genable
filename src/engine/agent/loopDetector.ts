@@ -26,7 +26,7 @@ export class LoopDetector {
   private signatureHistory: string[] = [];
   private identicalGraceGiven = false;
   private readonly maxHistoryLength = 10;
-  private readonly readTools = new Set(['context', 'outline', 'inspect']);
+  private readonly readTools = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat']);
 
   /**
    * Record this iteration's tool calls and run all loop detection checks.
@@ -105,6 +105,11 @@ export class LoopDetector {
         fingerprint = `|depth:${depth}`;
       } else if (tc.name === 'context') {
         fingerprint = `|static`;
+      } else if (tc.name === 'ls' || tc.name === 'tree' || tc.name === 'cat') {
+        // VFS commands: fingerprint by path
+        const path = tc.args?.path || '/';
+        const depth = tc.args?.depth ?? 5;
+        fingerprint = `|path:${this.truncate(path, 64)}|depth:${depth}`;
       } else {
         fingerprint = `${nameSample}${contextSample}|args:${this.hashString(JSON.stringify(tc.args ?? {}))}`;
       }

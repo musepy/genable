@@ -60,9 +60,11 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('## EXAMPLES');
     });
 
-    it('should include error handling', () => {
+    it('should include workflow guides (error handling moved to on-demand help)', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('ERROR HANDLING');
+        // ERROR HANDLING section moved to help system (query on-demand)
+        // The WORKFLOW section now contains a WORKFLOW GUIDES table that references error-handling
+        expect(prompt).toContain('WORKFLOW GUIDES');
     });
 
     it('should include provider tool instructions', () => {

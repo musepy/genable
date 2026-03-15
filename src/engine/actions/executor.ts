@@ -840,6 +840,17 @@ export class ActionExecutor {
                   } else {
                     const pw = await this.applyProps(child, overrideProps);
                     if (pw.warnings.length) cloneWarnings.push(...pw.warnings);
+                    // Propagate fills/strokes to vector descendants of icon-like frames
+                    // (mirrors icon creation behavior at line 667-692)
+                    if (child.type === 'FRAME' && 'findAll' in child && (overrideProps.fills || overrideProps.strokes)) {
+                      const vectors = (child as FrameNode).findAll(n => 'fills' in n && 'strokes' in n);
+                      if (vectors.length > 0) {
+                        for (const vec of vectors) {
+                          if (overrideProps.strokes) (vec as any).strokes = overrideProps.strokes;
+                          if (overrideProps.fills) (vec as any).fills = overrideProps.fills;
+                        }
+                      }
+                    }
                   }
                 } catch (e: any) {
                   cloneWarnings.push({ code: 'CLONE_OVERRIDE_FAILED', severity: 'warning', message: `Override for '${childName}' failed: ${e.message}` });

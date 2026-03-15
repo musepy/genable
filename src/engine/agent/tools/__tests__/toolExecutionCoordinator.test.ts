@@ -5,7 +5,7 @@ describe('ToolExecutionCoordinator', () => {
   const coordinator = new ToolExecutionCoordinator();
 
   it.each([
-    ['outline', {}, 'nodeId'],
+    ['tree', {}, 'path'],
     ['query', {}, 'source'],
   ])('flags missing required parameter for %s', (toolName, args, missingParam) => {
     const result = coordinator.validateToolCall(toolName as string, args, 'EXECUTION');
@@ -25,16 +25,16 @@ describe('ToolExecutionCoordinator', () => {
 
   it('treats blank strings as missing required values', () => {
     const result = coordinator.validateToolCall(
-      'outline',
-      { nodeId: '   ' },
+      'tree',
+      { path: '   ' },
       'EXECUTION'
     );
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
 
-    expect(result.error.details.missing).toContain('nodeId');
-    expect(result.error.message).toContain('nodeId');
+    expect(result.error.details.missing).toContain('path');
+    expect(result.error.message).toContain('path');
   });
 
   it('rejects unknown tool names with actionable repair hint', () => {
@@ -42,7 +42,7 @@ describe('ToolExecutionCoordinator', () => {
       'complete_task',
       { summary: 'done' },
       'EXECUTION',
-      ['context', 'outline', 'inspect', 'design', 'replace', 'query']
+      ['ls', 'tree', 'cat', 'design', 'replace', 'query']
     );
 
     expect(result.ok).toBe(false);

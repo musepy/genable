@@ -35,13 +35,297 @@ type NodeResolved = { ok: true; node: SceneNode } | { ok: false; response: ToolR
 async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
-    return { ok: false, response: { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` } } };
+    return { ok: false, response: { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node "${nodeId}" not found. Use ls("/") to discover available nodes.` } } };
   }
   // SceneNode always has 'visible'; PageNode / DocumentNode don't
   if (!('visible' in node)) {
-    return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `Node ${nodeId} (type: ${node.type}) is not a SceneNode.` } } };
+    return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `"${nodeId}" is a ${node.type}, not a design node. Use ls("/") to find design nodes.` } } };
   }
   return { ok: true, node: node as SceneNode };
+}
+
+// ── VFS path resolution ──
+// Resolves filesystem-style paths to Figma nodes.
+// "/" = current page, "/NodeName/" = named child, "/Parent/Child/" = nested path.
+// Segments containing ":" are treated as Figma node IDs.
+
+type PathResolved =
+  | { ok: true; isPage: true; page: PageNode }
+  | { ok: true; isPage: false; node: SceneNode }
+  | { ok: false; response: ToolResponse };
+
+async function resolvePathToNode(path: string): Promise<PathResolved> {
+  const segments = path.split('/').filter(s => s.length > 0);
+
+  // "/" → current page
+  if (segments.length === 0) {
+    return { ok: true, isPage: true, page: figma.currentPage };
+  }
+
+  let current: BaseNode = figma.currentPage;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    // If segment looks like a Figma node ID (contains ':'), resolve directly
+    if (segment.includes(':')) {
+      const node = await figma.getNodeByIdAsync(segment);
+      if (!node) {
+        return {
+          ok: false,
+          response: {
+            success: false,
+            error: {
+              code: 'PATH_NOT_FOUND',
+              message: `Node ID "${segment}" not found in path "${path}". Use ls("/") to discover available nodes.`,
+            },
+          },
+        };
+      }
+      current = node;
+      continue;
+    }
+
+    // Otherwise, find child by name
+    if (!('children' in current)) {
+      return {
+        ok: false,
+        response: {
+          success: false,
+          error: {
+            code: 'NOT_A_CONTAINER',
+            message: `"${current.name}" (${current.type.toLowerCase()}) has no children — cannot navigate to "${segment}". Use cat to read its properties instead.`,
+          },
+        },
+      };
+    }
+
+    const children = (current as any).children as readonly BaseNode[];
+    const match = children.find(c => c.name === segment);
+    if (!match) {
+      // Actionable error: show available children (Unix-style)
+      const available = children.slice(0, 15).map(c => c.name);
+      const suffix = children.length > 15 ? `, ... (${children.length} total)` : '';
+      return {
+        ok: false,
+        response: {
+          success: false,
+          error: {
+            code: 'PATH_NOT_FOUND',
+            message: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}${suffix}`,
+          },
+        },
+      };
+    }
+    current = match;
+  }
+
+  // Check if it's a scene node
+  if (!('visible' in current)) {
+    return {
+      ok: false,
+      response: {
+        success: false,
+        error: {
+          code: 'INVALID_NODE_TYPE',
+          message: `"${current.name}" (${current.type}) is not a design node. Use ls on parent path to find valid design nodes.`,
+        },
+      },
+    };
+  }
+
+  return { ok: true, isPage: false, node: current as SceneNode };
+}
+
+/** Build the path string for a node (for ls/tree output). */
+function buildNodePath(node: BaseNode): string {
+  const parts: string[] = [];
+  let current: BaseNode | null = node;
+  while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+    parts.unshift(current.name);
+    current = current.parent;
+  }
+  return '/' + parts.join('/');
+}
+
+/** Build tree lines recursively (for page-root tree). */
+function buildTreeLines(
+  node: SceneNode,
+  lines: string[],
+  prefix: string,
+  childPrefix: string,
+  remainingDepth: number,
+  suggestedReads: string[],
+): void {
+  const hasChildren = 'children' in node && (node as any).children.length > 0;
+  const type = node.type.toLowerCase();
+  const w = Math.round(node.width);
+  const h = Math.round(node.height);
+
+  let info = `${type} ${w}×${h}`;
+  if ('layoutMode' in node && (node as any).layoutMode !== 'NONE') {
+    info += `, layout:${(node as any).layoutMode === 'HORIZONTAL' ? 'row' : 'column'}`;
+  }
+  if (node.type === 'TEXT') {
+    const text = (node as any).characters as string;
+    const preview = text.length > 20 ? text.slice(0, 17) + '...' : text;
+    info += ` "${preview}"`;
+  }
+
+  const dirSlash = hasChildren ? '/' : '';
+  lines.push(`${prefix}${node.name}${dirSlash} (${info})`);
+
+  if (hasChildren && remainingDepth > 0) {
+    const children = (node as any).children as SceneNode[];
+    if (children.length > 3) {
+      suggestedReads.push(node.id);
+    }
+    for (let i = 0; i < children.length; i++) {
+      const isLast = i === children.length - 1;
+      buildTreeLines(
+        children[i],
+        lines,
+        childPrefix + (isLast ? '└── ' : '├── '),
+        childPrefix + (isLast ? '    ' : '│   '),
+        remainingDepth - 1,
+        suggestedReads,
+      );
+    }
+  } else if (hasChildren) {
+    const count = (node as any).children.length;
+    lines.push(`${childPrefix}... (${count} children, use tree with more depth)`);
+  }
+}
+
+/** Format a single ls entry: "Name/    type  WxH  [key props]" */
+function formatLsEntry(node: SceneNode): string {
+  const hasChildren = 'children' in node && (node as any).children.length > 0;
+  const name = hasChildren ? `${node.name}/` : node.name;
+  const type = node.type.toLowerCase();
+
+  // Dimensions
+  const w = Math.round(node.width);
+  const h = Math.round(node.height);
+  let dims = `${w}×${h}`;
+
+  // Key properties for quick scanning
+  const props: string[] = [];
+  if ('layoutMode' in node && (node as any).layoutMode !== 'NONE') {
+    props.push(`layout:${(node as any).layoutMode === 'HORIZONTAL' ? 'row' : 'column'}`);
+  }
+  if ('itemSpacing' in node && typeof (node as any).itemSpacing === 'number' && (node as any).itemSpacing > 0) {
+    props.push(`gap:${(node as any).itemSpacing}`);
+  }
+  if (node.type === 'TEXT') {
+    const text = (node as any).characters as string;
+    const preview = text.length > 30 ? text.slice(0, 27) + '...' : text;
+    props.push(`"${preview}"`);
+  }
+
+  const propsStr = props.length > 0 ? `  ${props.join('  ')}` : '';
+  return `${name.padEnd(24)} ${type.padEnd(8)} ${dims}${propsStr}`;
+}
+
+// ── FS command helpers ──
+
+/** Split a path into parent path and node name. */
+function splitPath(path: string): { parentPath: string; nodeName: string } {
+  const segments = path.split('/').filter(s => s.length > 0);
+  const nodeName = segments.pop() || '';
+  const parentPath = '/' + segments.join('/') + (segments.length > 0 ? '/' : '');
+  return { parentPath, nodeName };
+}
+
+/** Strip outer {} from a props raw string. */
+function stripBraces(propsRaw: string): string {
+  let s = propsRaw.trim();
+  if (s.startsWith('{')) s = s.slice(1);
+  if (s.endsWith('}')) s = s.slice(0, -1);
+  return s.trim();
+}
+
+/** Escape single quotes for flat ops string embedding. */
+function escapeFlatOpsStr(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+/** Inject name prop into props inner string if not already present. */
+function injectNameProp(propsInner: string, name: string): string {
+  if (/\bname\s*:/.test(propsInner)) return propsInner;
+  const escaped = escapeFlatOpsStr(name);
+  return propsInner
+    ? `name:'${escaped}', ${propsInner}`
+    : `name:'${escaped}'`;
+}
+
+/**
+ * Shared flat ops execution pipeline.
+ * Parses ops string → compiles → executes → returns receipt.
+ * Used by `design` and all FS write commands.
+ */
+async function executeFlatOps(
+  opsStr: string,
+  parentId?: string,
+): Promise<ToolResponse> {
+  let compiled;
+  try {
+    compiled = compileDesignOps(opsStr, parentId, ActionExecutor.getRegisteredSymbols());
+    if (compiled.ops.length === 0 && compiled.errors.length > 0) {
+      return { success: false, error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
+    }
+    if (compiled.diagnostics.length > 0) {
+      logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
+    }
+  } catch (e: any) {
+    return { success: false, error: { code: 'PARSE_ERROR', message: e.message } };
+  }
+
+  try {
+    const SOFT_CREATE_LIMIT = 20;
+    const executor = new ActionExecutor();
+    const result = await executor.executeDesignOps(compiled.ops, compiled.errors, {
+      onError: 'continue', rollbackMode: 'none', parentId,
+    });
+
+    const rootId = parentId || Object.values(result.idMap)[0];
+    const violations = await collectViolationsForNodeIds([rootId], 5);
+
+    const receipt = buildCreateReceipt({
+      result,
+      violations,
+      softCreateLimit: SOFT_CREATE_LIMIT,
+      createLineCount: compiled.ops.length,
+    });
+
+    if (compiled.diagnostics.length > 0) {
+      receipt.diagnostics = compiled.diagnostics.slice(0, 10).map(d => ({
+        code: d.code,
+        severity: d.severity,
+        message: d.message,
+      }));
+    }
+
+    // Auto-pan viewport to newly created root node
+    if (!parentId && Object.keys(result.idMap).length > 0) {
+      const newRootId = Object.values(result.idMap)[0] as string;
+      const newRootNode = await figma.getNodeByIdAsync(newRootId);
+      if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);
+    }
+
+    if (result.hasErrors) {
+      const parts: string[] = [];
+      if (result.stats.created) parts.push(`${result.stats.created} created`);
+      if (result.stats.edited) parts.push(`${result.stats.edited} edited`);
+      if (result.stats.deleted) parts.push(`${result.stats.deleted} deleted`);
+      if (result.stats.failed) parts.push(`${result.stats.failed} failed`);
+      if (result.stats.skipped) parts.push(`${result.stats.skipped} skipped`);
+      return { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
+    }
+
+    return { success: true, data: receipt };
+  } catch (e: any) {
+    return { success: false, error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
+  }
 }
 
 async function collectViolationsForNodeIds(
@@ -128,7 +412,206 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   try {
     switch (toolName) {
       // ==========================================
-      // UNIFIED TOOLS — 6-tool API
+      // VFS READ COMMANDS — filesystem metaphor
+      // ==========================================
+
+      case 'ls': {
+        // List children at a path — like Unix ls
+        const lsPath = parameters.path || '/';
+        const resolved = await resolvePathToNode(lsPath);
+        if (!resolved.ok) { response = resolved.response; break; }
+
+        // Get the container (page or scene node)
+        let children: readonly SceneNode[];
+        let containerName: string;
+
+        if (resolved.isPage) {
+          children = resolved.page.children;
+          containerName = resolved.page.name;
+        } else {
+          const node = resolved.node;
+          if (!('children' in node)) {
+            response = {
+              success: false,
+              error: {
+                code: 'NOT_A_CONTAINER',
+                message: `"${node.name}" (${node.type.toLowerCase()}) has no children. Use cat("${lsPath}") to see its properties.`,
+              },
+            };
+            break;
+          }
+          children = (node as any).children as SceneNode[];
+          containerName = node.name;
+        }
+
+        // Format ls output
+        const lines: string[] = [];
+        for (const child of children) {
+          lines.push(formatLsEntry(child));
+        }
+
+        // Page metadata footer
+        const page = figma.currentPage;
+        const footer = `[${children.length} items | page: "${page.name}"]`;
+
+        // Selection info if on page root
+        let selectionInfo = '';
+        if (resolved.isPage && page.selection.length > 0) {
+          const sel = page.selection.slice(0, 5).map(n => n.name).join(', ');
+          const more = page.selection.length > 5 ? ` (+${page.selection.length - 5} more)` : '';
+          selectionInfo = `\nSelection: ${sel}${more}`;
+        }
+
+        response = {
+          success: true,
+          data: {
+            listing: lines.join('\n'),
+            path: lsPath,
+            container: containerName,
+            count: children.length,
+            footer: footer + selectionInfo,
+          },
+        };
+        break;
+      }
+
+      case 'tree': {
+        // Structural tree at a path — like Unix tree
+        const treePath = parameters.path || '/';
+        const treeDepth = Math.min(parameters.depth || 5, 10);
+
+        const resolved = await resolvePathToNode(treePath);
+        if (!resolved.ok) { response = resolved.response; break; }
+
+        // For page root, we need to handle differently
+        if (resolved.isPage) {
+          const page = resolved.page;
+          const lines: string[] = [`${page.name}/ (page, ${page.children.length} children)`];
+
+          // Build tree for each top-level child
+          const suggestedReads: string[] = [];
+          for (let i = 0; i < page.children.length; i++) {
+            const child = page.children[i];
+            const isLast = i === page.children.length - 1;
+            buildTreeLines(child, lines, isLast ? '└── ' : '├── ', isLast ? '    ' : '│   ', treeDepth - 1, suggestedReads);
+          }
+
+          const treeData: any = {
+            tree: lines.join('\n'),
+            path: treePath,
+          };
+          if (suggestedReads.length > 0) {
+            treeData.suggestedReads = suggestedReads.map(id => {
+              const n = page.findOne(node => node.id === id);
+              return n ? `${buildNodePath(n)} (${id})` : id;
+            });
+          }
+
+          response = { success: true, data: treeData };
+          break;
+        }
+
+        // Scene node — use existing serialization for consistency
+        const treeNode = resolved.node;
+        const treeSerialized = NodeSerializer.serializeWithCompression(treeNode, {
+          maxDepth: treeDepth,
+          pruneDefaults: true,
+        });
+        const treeXml = FlatOpsSerializer.serialize(treeSerialized, {
+          maxDepth: treeDepth,
+          structural: true,
+        });
+
+        // Compute suggestedReads: children with 3+ own children (as paths)
+        const suggestedReads: string[] = [];
+        if ('children' in treeNode) {
+          for (const child of (treeNode as any).children) {
+            if ('children' in child && child.children.length > 3) {
+              suggestedReads.push(`${treePath.replace(/\/$/, '')}/${child.name}/ (${child.id})`);
+            }
+          }
+        }
+
+        const treeData: any = { tree: treeXml, path: treePath };
+        if (suggestedReads.length > 0) treeData.suggestedReads = suggestedReads;
+
+        response = { success: true, data: treeData };
+        break;
+      }
+
+      case 'cat': {
+        // Full properties at a path — like Unix cat
+        const catPath = parameters.path || '/';
+        const catDepth = Math.min(parameters.depth || 5, 10);
+        const wantScreenshot = parameters.screenshot;
+
+        const resolved = await resolvePathToNode(catPath);
+        if (!resolved.ok) { response = resolved.response; break; }
+
+        if (resolved.isPage) {
+          // For page root, return page-level info
+          const page = resolved.page;
+          const topLevel = page.children.map(n => ({
+            name: n.name,
+            id: n.id,
+            type: n.type.toLowerCase(),
+            w: Math.round(n.width),
+            h: Math.round(n.height),
+          }));
+          response = {
+            success: true,
+            data: {
+              path: '/',
+              page: { name: page.name, childCount: page.children.length },
+              children: topLevel,
+              hint: 'Use ls("/") or tree("/") to navigate, cat("/NodeName/") for full details.',
+            },
+          };
+          break;
+        }
+
+        const catNode = resolved.node;
+        const catSerialized = NodeSerializer.serializeWithCompression(catNode, {
+          maxDepth: catDepth,
+          pruneDefaults: true,
+        });
+
+        // Full mode with auto-degradation
+        const catFullXml = FlatOpsSerializer.serialize(catSerialized, {
+          maxDepth: catDepth,
+        });
+
+        const catData: any = { path: catPath };
+        const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
+
+        if (catFullXml.length > AUTO_DEGRADE_CHARS) {
+          const catStructuralXml = FlatOpsSerializer.serialize(catSerialized, {
+            maxDepth: catDepth,
+            structural: true,
+          });
+          catData.tree = catStructuralXml;
+          const childCount = 'children' in catNode ? (catNode as any).children.length : 0;
+          catData.hint = `Large node (${childCount} children, ${catFullXml.length} chars). Use tree("${catPath}") to discover structure, then cat specific children.`;
+        } else {
+          catData.tree = catFullXml;
+        }
+
+        // Bundle screenshot if requested
+        if (wantScreenshot && catNode.visible && catNode.width > 0 && catNode.height > 0) {
+          try {
+            const ssResult = await exportNodeToBase64(catNode);
+            catData.__image = ssResult.__image;
+          } catch (e: any) {
+            logger.info(`Screenshot bundling failed for ${catPath}: ${e?.message}`);
+          }
+        }
+
+        response = { success: true, data: catData };
+        break;
+      }
+
+      // ==========================================
+      // LEGACY READ TOOLS — kept for backward compatibility
       // ==========================================
 
       case 'context': {
@@ -262,76 +745,11 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         const { ops: designOps, parentId: designParentId } = parameters;
 
         if (!designOps || typeof designOps !== 'string' || designOps.trim().length === 0) {
-          response = { success: false, error: { code: 'EMPTY_OPS', message: 'A non-empty "ops" string must be provided.' } };
+          response = { success: false, error: { code: 'EMPTY_OPS', message: 'No ops provided. Example: card = frame(root, {w:400, h:\'hug\', bg:\'#FFF\'})\ntitle = text(card, {}, \'Hello\')' } };
           break;
         }
 
-        // Parse + validate + compile in one call
-        let compiled;
-        try {
-          compiled = compileDesignOps(designOps, designParentId, ActionExecutor.getRegisteredSymbols());
-          if (compiled.ops.length === 0 && compiled.errors.length > 0) {
-            response = { success: false, error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
-            break;
-          }
-          if (compiled.diagnostics.length > 0) {
-            logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
-          }
-        } catch (e: any) {
-          response = { success: false, error: { code: 'PARSE_ERROR', message: e.message } };
-          break;
-        }
-
-        try {
-          const SOFT_CREATE_LIMIT = 20;
-
-          // Execute all ops (create, update, delete) in one unified pass
-          const executor = new ActionExecutor();
-          const result = await executor.executeDesignOps(compiled.ops, compiled.errors, {
-            onError: 'continue', rollbackMode: 'none', parentId: designParentId,
-          });
-
-          // Post-op validation on root
-          const rootId = designParentId || Object.values(result.idMap)[0];
-          const violations = await collectViolationsForNodeIds([rootId], 5);
-
-          const receipt = buildCreateReceipt({
-            result,
-            violations,
-            softCreateLimit: SOFT_CREATE_LIMIT,
-            createLineCount: compiled.ops.length,
-          });
-
-          // Surface diagnostics as warnings in receipt
-          if (compiled.diagnostics.length > 0) {
-            receipt.diagnostics = compiled.diagnostics.slice(0, 10).map(d => ({
-              code: d.code,
-              severity: d.severity,
-              message: d.message,
-            }));
-          }
-
-          // Auto-pan viewport to newly created root node so the user can see it immediately
-          if (!designParentId && Object.keys(result.idMap).length > 0) {
-            const newRootId = Object.values(result.idMap)[0] as string;
-            const newRootNode = await figma.getNodeByIdAsync(newRootId);
-            if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);
-          }
-
-          if (result.hasErrors) {
-            const parts: string[] = [];
-            if (result.stats.created) parts.push(`${result.stats.created} created`);
-            if (result.stats.edited) parts.push(`${result.stats.edited} edited`);
-            if (result.stats.deleted) parts.push(`${result.stats.deleted} deleted`);
-            if (result.stats.failed) parts.push(`${result.stats.failed} failed`);
-            if (result.stats.skipped) parts.push(`${result.stats.skipped} skipped`);
-            response = { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
-          } else {
-            response = { success: true, data: receipt };
-          }
-        } catch (e: any) {
-          response = { success: false, error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error in design pipeline' } };
-        }
+        response = await executeFlatOps(designOps, designParentId);
         break;
       }
 
@@ -446,7 +864,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         if (querySource !== 'nodes') {
           // 'knowledge' is handled locally in sandbox — should not arrive here
-          response = { success: false, error: { code: 'INVALID_SOURCE', message: `Source "${querySource}" should be handled locally, not via IPC.` } };
+          response = { success: false, error: { code: 'INVALID_SOURCE', message: `Source "${querySource}" not available via IPC. Use query({source: "nodes", query: "..."}) to search the canvas.` } };
           break;
         }
 
@@ -484,12 +902,174 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       }
 
       // ==========================================
+      // FS WRITE COMMANDS — path-based create/modify/delete
+      // ==========================================
+
+      case 'mkdir': {
+        const mkdirPath = parameters.path || '/';
+        const mkdirType = parameters.type || 'frame';
+        const mkdirPropsRaw = parameters.propsRaw || '';
+
+        const { parentPath: mkdirParentPath, nodeName: mkdirName } = splitPath(mkdirPath);
+        if (!mkdirName) {
+          response = { success: false, error: { code: 'INVALID_PATH', message: 'mkdir requires a target name in path, e.g. mkdir /Card/ or mkdir /Card/Header/' } };
+          break;
+        }
+
+        const mkdirParentResolved = await resolvePathToNode(mkdirParentPath);
+        if (!mkdirParentResolved.ok) { response = mkdirParentResolved.response; break; }
+
+        const mkdirParentId = mkdirParentResolved.isPage ? undefined : mkdirParentResolved.node.id;
+        const mkdirPropsInner = stripBraces(mkdirPropsRaw);
+        const mkdirPropsWithName = injectNameProp(mkdirPropsInner, mkdirName);
+
+        const mkdirOps = `n1 = ${mkdirType}(root, {${mkdirPropsWithName}})`;
+        response = await executeFlatOps(mkdirOps, mkdirParentId);
+        break;
+      }
+
+      case 'mktext': {
+        const mktextPath = parameters.path || '/';
+        const mktextPropsRaw = parameters.propsRaw || '';
+        const mktextContent = parameters.textContent || '';
+
+        const { parentPath: mktextParentPath, nodeName: mktextName } = splitPath(mktextPath);
+        if (!mktextName) {
+          response = { success: false, error: { code: 'INVALID_PATH', message: 'mktext requires a target name in path, e.g. mktext /Card/Title' } };
+          break;
+        }
+
+        const mktextParentResolved = await resolvePathToNode(mktextParentPath);
+        if (!mktextParentResolved.ok) { response = mktextParentResolved.response; break; }
+
+        const mktextParentId = mktextParentResolved.isPage ? undefined : mktextParentResolved.node.id;
+        const mktextPropsInner = stripBraces(mktextPropsRaw);
+        const mktextPropsWithName = injectNameProp(mktextPropsInner, mktextName);
+
+        const mktextEscaped = escapeFlatOpsStr(mktextContent);
+        const mktextTextArg = mktextContent ? `, '${mktextEscaped}'` : '';
+        const mktextOps = `n1 = text(root, {${mktextPropsWithName}}${mktextTextArg})`;
+        response = await executeFlatOps(mktextOps, mktextParentId);
+        break;
+      }
+
+      case 'write': {
+        const writePath = parameters.path || '/';
+        const writePropsRaw = parameters.propsRaw || '';
+
+        if (!writePropsRaw || stripBraces(writePropsRaw) === '') {
+          response = { success: false, error: { code: 'EMPTY_PROPS', message: 'write requires properties to update. Example: write /Card/ {bg:#000}' } };
+          break;
+        }
+
+        const writeResolved = await resolvePathToNode(writePath);
+        if (!writeResolved.ok) { response = writeResolved.response; break; }
+        if (writeResolved.isPage) {
+          response = { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot write to page root. Target a specific node, e.g. write /Card/ {bg:#000}' } };
+          break;
+        }
+
+        const writeNodeId = writeResolved.node.id;
+        const writePropsBlock = writePropsRaw.trim().startsWith('{') ? writePropsRaw : `{${writePropsRaw}}`;
+        const writeOps = `update('${writeNodeId}', ${writePropsBlock})`;
+        response = await executeFlatOps(writeOps);
+        break;
+      }
+
+      case 'rm': {
+        const rmPath = parameters.path || '/';
+
+        const rmResolved = await resolvePathToNode(rmPath);
+        if (!rmResolved.ok) { response = rmResolved.response; break; }
+        if (rmResolved.isPage) {
+          response = { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' } };
+          break;
+        }
+
+        const rmNodeId = rmResolved.node.id;
+        const rmOps = `delete('${rmNodeId}')`;
+        response = await executeFlatOps(rmOps);
+        break;
+      }
+
+      case 'cp': {
+        const { sourcePath: cpSourcePath, destPath: cpDestPath, propsRaw: cpPropsRaw } = parameters;
+
+        if (!cpSourcePath) {
+          response = { success: false, error: { code: 'MISSING_SOURCE', message: 'cp requires a source path. Usage: cp /Source/ /Dest/ {overrides}' } };
+          break;
+        }
+        if (!cpDestPath) {
+          response = { success: false, error: { code: 'MISSING_DEST', message: 'cp requires a destination path. Usage: cp /Source/ /Dest/ {overrides}' } };
+          break;
+        }
+
+        // Resolve source
+        const cpSourceResolved = await resolvePathToNode(cpSourcePath);
+        if (!cpSourceResolved.ok) { response = cpSourceResolved.response; break; }
+        if (cpSourceResolved.isPage) {
+          response = { success: false, error: { code: 'INVALID_SOURCE', message: 'Cannot clone page root.' } };
+          break;
+        }
+        const cpSourceId = cpSourceResolved.node.id;
+
+        // Resolve destination parent
+        const { parentPath: cpParentPath, nodeName: cpCloneName } = splitPath(cpDestPath);
+        if (!cpCloneName) {
+          response = { success: false, error: { code: 'INVALID_PATH', message: 'Destination path must include a name, e.g. /Card/Hover/' } };
+          break;
+        }
+
+        const cpParentResolved = await resolvePathToNode(cpParentPath);
+        if (!cpParentResolved.ok) { response = cpParentResolved.response; break; }
+
+        const cpParentId = cpParentResolved.isPage ? undefined : cpParentResolved.node.id;
+        const cpPropsInner = stripBraces(cpPropsRaw || '');
+        const cpPropsWithName = injectNameProp(cpPropsInner, cpCloneName);
+
+        const cpOps = `n1 = clone('${cpSourceId}', root, {${cpPropsWithName}})`;
+        response = await executeFlatOps(cpOps, cpParentId);
+        break;
+      }
+
+      case 'ln': {
+        const { path: lnPath, component: lnComponent, propsRaw: lnPropsRaw } = parameters;
+
+        if (!lnPath) {
+          response = { success: false, error: { code: 'MISSING_PATH', message: 'ln requires a path. Usage: ln /Card/BtnInst Button {overrides}' } };
+          break;
+        }
+        if (!lnComponent) {
+          response = { success: false, error: { code: 'MISSING_COMPONENT', message: 'ln requires a component name. Usage: ln /Card/BtnInst Button' } };
+          break;
+        }
+
+        const { parentPath: lnParentPath, nodeName: lnInstName } = splitPath(lnPath);
+        if (!lnInstName) {
+          response = { success: false, error: { code: 'INVALID_PATH', message: 'Path must include an instance name, e.g. /Card/BtnInst' } };
+          break;
+        }
+
+        const lnParentResolved = await resolvePathToNode(lnParentPath);
+        if (!lnParentResolved.ok) { response = lnParentResolved.response; break; }
+
+        const lnParentId = lnParentResolved.isPage ? undefined : lnParentResolved.node.id;
+        const lnPropsInner = stripBraces(lnPropsRaw || '');
+        const lnPropsWithName = injectNameProp(lnPropsInner, lnInstName);
+
+        const lnEscapedComponent = escapeFlatOpsStr(lnComponent);
+        const lnOps = `n1 = ref('${lnEscapedComponent}', root, {${lnPropsWithName}})`;
+        response = await executeFlatOps(lnOps, lnParentId);
+        break;
+      }
+
+      // ==========================================
       // DEFAULT — Unknown Tool
       // ==========================================
       default:
         response = {
           success: false,
-          error: { code: 'UNKNOWN_TOOL', message: `Tool '${toolName}' not found in main registry.` }
+          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}". Available: ls, tree, cat, design, replace, query, mkdir, mktext, write, rm, cp, ln` }
         };
         break;
     }
@@ -497,7 +1077,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
     console.error(`[Agent] Tool Execution Error (${toolName}):`, e);
     response = {
       success: false,
-      error: { code: 'EXECUTION_ERROR', message: e.message }
+      error: { code: 'EXECUTION_ERROR', message: `${toolName}: ${e.message}. Try a simpler operation or check parameters.` }
     };
   }
 

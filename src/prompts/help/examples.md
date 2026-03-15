@@ -1,7 +1,7 @@
 ---
 id: examples
 title: Tool Usage Examples
-keywords: [example, card, login, progressive, read, outline, inspect, context, component, ref, variant, clone, variantSet, query, edit, update, FONT_FALLBACK, completion, button-group]
+keywords: [example, card, login, progressive, read, ls, tree, cat, path, component, ref, variant, clone, variantSet, query, edit, update, FONT_FALLBACK, completion, button-group]
 whenToUse: When you need concrete examples of how to use design tools for various scenarios
 ---
 
@@ -53,28 +53,28 @@ design({
 
 **Step 5 — Verify + complete.**
 ```json
-inspect({"nodeId":"200:1","depth":3,"screenshot":true})
+cat({"path":"/Login Page/","depth":3,"screenshot":true})
 ```
 → Check layout looks correct, then respond with text to complete.
 
-### Example 3: Progressive read (context → outline → inspect)
+### Example 3: Progressive read (ls → tree → cat)
 User: "Update the header section in this complex page"
 
 **Step 1 — Get canvas overview**:
 ```json
-context()
+ls({"path":"/"})
 ```
-→ Returns page name, top-level skeleton, and selection. Find the root node ID.
+→ Returns page children listing and selection. Find the root node name.
 
-**Step 2 — Outline the structure**:
+**Step 2 — See the structure**:
 ```json
-outline({"nodeId":"100:1"})
+tree({"path":"/Dashboard/"})
 ```
-→ Returns structural skeleton with IDs and `suggestedReads`. Identify the header section ID.
+→ Returns structural tree with IDs and `suggestedReads`. Identify the header section.
 
 **Step 3 — Inspect the specific section**:
 ```json
-inspect({"nodeId":"100:3"})
+cat({"path":"/Dashboard/Header/"})
 ```
 → Returns full XML with styles for the header section only.
 
@@ -87,7 +87,7 @@ design({"ops": "update('100:5', {fill:'#4F46E5', size:24})"})
 User: "Change the button in the existing card to green and add rounded corners"
 
 ```json
-outline({"nodeId":"100:1","depth":2})
+tree({"path":"/Card/","depth":2})
 design({"ops": "update('100:8', {fill:'#10B981', corner:10})"})
 ```
 

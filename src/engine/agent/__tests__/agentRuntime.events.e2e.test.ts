@@ -115,8 +115,8 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       {
         text: '',
         toolCalls: [
-          { id: 'c1', name: 'slow_tool', args: {} },
-          { id: 'c2', name: 'after_tool', args: {} },
+          { id: 'c1', name: 'slow_tool', args: { action: 'run' } },
+          { id: 'c2', name: 'after_tool', args: { action: 'follow' } },
         ],
       },
     ]);

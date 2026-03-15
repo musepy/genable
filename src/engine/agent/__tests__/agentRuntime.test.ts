@@ -95,10 +95,12 @@ describe('AgentRuntime', () => {
   });
 
   it('should short-circuit unified validation errors and keep actionable details in tool result history', async () => {
+    // LLM sends run({command: "query nodes"}) → unwraps to query with {source: "nodes"}
+    // but missing required "query" param → validation error before IPC
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
-        text: 'try create',
-        toolCalls: [{ name: 'create', args: {} }]
+        text: 'try query',
+        toolCalls: [{ name: 'run', args: { command: 'query nodes' } }]
       })
       .mockResolvedValueOnce({
         text: 'Recovered',
@@ -113,13 +115,13 @@ describe('AgentRuntime', () => {
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'create', description: 'Create', parameters: { type: 'object', properties: {} } },
+        { name: 'run', description: 'Run', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } },
       ],
       ipcBridge: mockIpcBridge,
       loopPolicy: { useSkillSystem: false } as any
     });
 
-    const result = await runtime.run('Create something');
+    const result = await runtime.run('Query something');
 
     expect(result).toBe('Recovered');
     expect(mockIpcBridge.callTool).not.toHaveBeenCalled();
@@ -129,12 +131,12 @@ describe('AgentRuntime', () => {
 
     expect(firstResponse.success).toBe(false);
     expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
-    expect(firstResponse.error.message).toContain('Validation Error: create');
-    expect(firstResponse.error.message).toContain('xml');
+    expect(firstResponse.error.message).toContain('Validation Error: query');
+    expect(firstResponse.error.message).toContain('query');
     expect(firstResponse.error.details).toMatchObject({
-      tool: 'create',
+      tool: 'query',
       mode: 'EXECUTION',
-      missing: ['xml']
+      missing: ['query']
     });
   });
 

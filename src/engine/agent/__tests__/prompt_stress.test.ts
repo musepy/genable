@@ -226,27 +226,42 @@ class MockFigmaState {
 // ─── Mock Executors (unified 4-tool API) ─────────────────────────────────────
 
 function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor> {
+  // Command names match unified tool definitions after run() unwrapping:
+  // run({command: "design", input: "..."}) → design
+  // run({command: "ls /"}) → ls
+  // run({command: "cat /path/"}) → cat
+  // run({command: "tree /"}) → tree
+  // run({command: "query nodes button"}) → query
   return {
-    create: async (params: any) => {
-      const xml = params.xml || '';
-      if (!xml || xml.trim().length === 0) {
-        return { success: false, error: { code: 'EMPTY_XML', message: 'Empty XML' } };
+    design: async (params: any) => {
+      const ops = params.ops || '';
+      if (!ops || ops.trim().length === 0) {
+        return { success: false, error: { code: 'EMPTY_OPS', message: 'Empty ops' } };
       }
-      const result = state.processCreate(xml, params.parentId);
+      // Design ops may contain create, update, or delete operations
+      // For mock purposes, treat as create XML
+      const result = state.processCreate(ops, params.parentId);
       return { success: true, data: result };
     },
 
-    edit: async (params: any) => {
-      const xml = params.xml || '';
-      if (!xml || xml.trim().length === 0) {
-        return { success: false, error: { code: 'EMPTY_XML', message: 'Empty XML' } };
-      }
-      const result = state.processEdit(xml);
-      return { success: true, data: result };
+    ls: async (params: any) => {
+      const xml = state.generateReadXml(undefined, 1);
+      return {
+        success: true,
+        data: { xml, nodeCount: state.nodes.size },
+      };
     },
 
-    read: async (params: any) => {
-      const xml = state.generateReadXml(params.nodeId, params.depth || 5);
+    cat: async (params: any) => {
+      const xml = state.generateReadXml(undefined, params.depth || 5);
+      return {
+        success: true,
+        data: { xml, nodeCount: state.nodes.size },
+      };
+    },
+
+    tree: async (params: any) => {
+      const xml = state.generateReadXml(undefined, params.depth || 3);
       return {
         success: true,
         data: { xml, nodeCount: state.nodes.size },
@@ -255,7 +270,7 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
 
     query: async (params: any) => {
       const source = params.source || 'knowledge';
-      if (source === 'knowledge') {
+      if (source === 'knowledge' || source === 'help') {
         return {
           success: true,
           data: {
@@ -383,7 +398,8 @@ function validateXml(xml: string, turn: number): Violation[] {
 // ─── Multi-turn compliance checks ────────────────────────────────────────────
 
 /**
- * Check if the agent properly used 'edit' (not 'create') for a follow-up modification.
+ * Check if the agent properly used the design tool for follow-up modifications.
+ * With the unified `run` tool, both create and edit go through `design` command.
  */
 function checkFollowUpCompliance(
   turnRecord: TurnRecord,
@@ -397,7 +413,7 @@ function checkFollowUpCompliance(
   const violations: Violation[] = [];
   const toolNames = turnRecord.toolCalls.map(tc => tc.name);
 
-  if (expectation.shouldUseEdit && !toolNames.includes('edit')) {
+  if (expectation.shouldUseEdit && !toolNames.includes('design')) {
     violations.push({
       turn: turnIndex,
       rule: 'FOLLOW_UP_SHOULD_EDIT',
@@ -407,7 +423,7 @@ function checkFollowUpCompliance(
   }
 
   if (expectation.shouldNotRecreate) {
-    const createCalls = turnRecord.toolCalls.filter(tc => tc.name === 'create');
+    const createCalls = turnRecord.toolCalls.filter(tc => tc.name === 'design');
     if (createCalls.length > 0) {
       // Check if create is creating an entirely new root (recreation) vs adding a child
       const totalCreateXmlLength = createCalls.reduce((sum, tc) => sum + (tc.xml?.length || 0), 0);
@@ -424,7 +440,7 @@ function checkFollowUpCompliance(
   }
 
   if (expectation.shouldReferenceExistingIds) {
-    const editCalls = turnRecord.toolCalls.filter(tc => tc.name === 'edit');
+    const editCalls = turnRecord.toolCalls.filter(tc => tc.name === 'design');
     const hasIdReferences = editCalls.some(tc => tc.xml && /id=['"][^'"]+['"]/.test(tc.xml));
     if (editCalls.length > 0 && !hasIdReferences) {
       violations.push({
@@ -504,7 +520,7 @@ function createStressHarness(testName: string) {
         iteration: currentIteration,
         name: tc.name,
         args: tc.args,
-        xml: tc.args?.xml,
+        xml: tc.args?.xml || tc.args?.ops,
         resultSuccess: result?.success !== false,
         resultData: result?.data,
         durationMs: Date.now() - toolCallStart,
@@ -653,7 +669,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn.toolCalls.length).toBeGreaterThan(0);
 
         // Should have at least one create call
-        const createCalls = turn.toolCalls.filter(tc => tc.name === 'create');
+        const createCalls = turn.toolCalls.filter(tc => tc.name === 'design');
         expect(createCalls.length).toBeGreaterThan(0);
 
         // Count XML violations
@@ -682,7 +698,7 @@ describe('Prompt Engineering Stress Test', () => {
         printStressReport(report);
 
         expect(turn.response).toBeTruthy();
-        expect(turn.toolCalls.filter(tc => tc.name === 'create').length).toBeGreaterThan(0);
+        expect(turn.toolCalls.filter(tc => tc.name === 'design').length).toBeGreaterThan(0);
 
         const errors = report.violations.filter(v => v.severity === 'error');
         expect(errors.length).toBeLessThanOrEqual(5);
@@ -708,7 +724,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn.response).toBeTruthy();
 
         // Check that the create XML includes the specified text
-        const createCalls = turn.toolCalls.filter(tc => tc.name === 'create' && tc.xml);
+        const createCalls = turn.toolCalls.filter(tc => tc.name === 'design' && tc.xml);
         const allXml = createCalls.map(tc => tc.xml!).join('\n');
 
         // At least some of the key content should appear
@@ -737,7 +753,7 @@ describe('Prompt Engineering Stress Test', () => {
         printStressReport(report);
 
         expect(turn.response).toBeTruthy();
-        expect(turn.toolCalls.filter(tc => tc.name === 'create').length).toBeGreaterThan(0);
+        expect(turn.toolCalls.filter(tc => tc.name === 'design').length).toBeGreaterThan(0);
 
         // For a simple form, should have zero error-level violations
         const errors = report.violations.filter(v => v.severity === 'error');
@@ -762,7 +778,7 @@ describe('Prompt Engineering Stress Test', () => {
           'Create a simple card with a title "Original Title", a description paragraph, and a "Learn More" button.'
         );
         expect(turn1.response).toBeTruthy();
-        expect(turn1.toolCalls.filter(tc => tc.name === 'create').length).toBeGreaterThan(0);
+        expect(turn1.toolCalls.filter(tc => tc.name === 'design').length).toBeGreaterThan(0);
 
         // Turn 2: Change the title
         const turn2 = await runTurn(
@@ -787,7 +803,7 @@ describe('Prompt Engineering Stress Test', () => {
         }
 
         // Should use edit, not recreate
-        const editUsed = turn2.toolCalls.some(tc => tc.name === 'edit');
+        const editUsed = turn2.toolCalls.some(tc => tc.name === 'design');
         console.log(`  Used edit tool: ${editUsed}`);
         console.log(`  Tools used: [${turn2.toolCalls.map(tc => tc.name).join(', ')}]`);
       },
@@ -815,7 +831,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // Check that edit was used
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
         console.log(`\n  Edit calls: ${editCalls.length}`);
 
         if (editCalls.length > 0) {
@@ -860,7 +876,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // Check edit usage
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
         console.log(`\n  Edit calls for icon change: ${editCalls.length}`);
 
         if (editCalls.length > 0) {
@@ -903,7 +919,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // For a color scheme change, edit should be used (modifying existing nodes)
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
         console.log(`\n  Edit calls for color scheme: ${editCalls.length}`);
 
         // Multiple edits expected for a full color scheme change
@@ -947,7 +963,7 @@ describe('Prompt Engineering Stress Test', () => {
         // Adding new elements should use create (with parentId) or a mix of create+edit
         const toolNames = turn2.toolCalls.map(tc => tc.name);
         const hasCreate = toolNames.includes('create');
-        const hasEdit = toolNames.includes('edit');
+        const hasEdit = toolNames.includes('design');
         console.log(`\n  Used create: ${hasCreate}, edit: ${hasEdit}`);
         console.log(`  Tools: [${toolNames.join(', ')}]`);
 
@@ -979,7 +995,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // Should use edit with delete='true' attribute
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
         console.log(`\n  Edit calls for deletion: ${editCalls.length}`);
 
         if (editCalls.length > 0) {

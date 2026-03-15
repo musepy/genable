@@ -11,7 +11,7 @@
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
-import { ToolDefinition, ToolParameter } from './tools';
+import { ToolDefinition, ToolParameter, allToolDefinitions } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
@@ -23,6 +23,7 @@ import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
+import { COMMAND_NAMES } from './tools/unified/commandRegistry';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,7 +109,9 @@ export class AgentRuntime {
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
     this.staticSystemPrompt = options.systemPrompt || '';
-    this.cleaner = new ToolResultCleaner(options.tools);
+    // ToolResultCleaner uses command definitions (not the `run` wrapper)
+    // so it can route to the correct cleaning strategy per command.
+    this.cleaner = new ToolResultCleaner(allToolDefinitions);
     this.llmCoordinator = new LLMGenerationCoordinator(
       options.provider,
       this.cleaner,
@@ -120,7 +123,11 @@ export class AgentRuntime {
         throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
       },
     );
-    this.allowedExecutionToolNames = new Set(options.tools.map((tool) => tool.name));
+    // Allow both the `run` wrapper AND all command names (unwrapped by dispatcher)
+    this.allowedExecutionToolNames = new Set([
+      ...options.tools.map((tool) => tool.name),
+      ...COMMAND_NAMES,
+    ]);
     this.toolDispatcher = new ToolDispatcher(
       options.toolExecutors || {},
       options.ipcBridge,
@@ -413,11 +420,14 @@ export class AgentRuntime {
       }
 
       // ──── HOOK: afterLLMResponse ────
+      // Unwrap `run` tool calls so loop detection sees command names (not all 'run')
+      const rawCalls = rawToolCallsForLoopDetection.length > 0 ? rawToolCallsForLoopDetection : toolCallsForExecution;
+      const unwrappedCalls = rawCalls.map(tc => ToolDispatcher.unwrapRunCommand(tc));
       const hookCtx: HookContext = {
         iteration,
         maxIterations: this.maxIterations,
         responseText: response.text,
-        toolCalls: rawToolCallsForLoopDetection.length > 0 ? rawToolCallsForLoopDetection : toolCallsForExecution,
+        toolCalls: unwrappedCalls,
         messages: this.turnMessages,
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),

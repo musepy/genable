@@ -22,6 +22,13 @@ import { createWsRelay } from './wsRelay.js';
 // ── Tool definitions (for schema registration) ──
 import { unifiedTools } from '../../src/engine/agent/tools/unified/index.js';
 
+// ── CLI command parsing (run → individual commands) ──
+import {
+  parseCommandString,
+  mapToToolArgs,
+} from '../../src/engine/agent/tools/unified/commandParser.js';
+import { isValidCommand, getCommandHelp } from '../../src/engine/agent/tools/unified/commandRegistry.js';
+
 // ── Local execution imports (query: guidelines, style-tags, style, help) ──
 import guidelinesCatalog from '../../src/generated/guidelines-catalog.json';
 import styleCatalog from '../../src/generated/style-catalog.json';
@@ -185,19 +192,20 @@ async function main() {
     })),
   }));
 
-  // Call tool — route to local executor or WebSocket relay
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name: toolName, arguments: params = {} } = request.params;
-
+  // ── Execute a single parsed command (local or relay) ──
+  async function executeCommand(
+    commandName: string,
+    args: Record<string, any>,
+  ): Promise<{ content: any[]; isError?: boolean }> {
     // Try local execution for query tool
-    if (toolName === 'query') {
-      const local = executeQueryLocally(params as Record<string, any>);
+    if (commandName === 'query') {
+      const local = executeQueryLocally(args);
       if (local.handled) {
         return buildMcpContent(local.result);
       }
     }
 
-    // All other tools → WebSocket relay to Figma plugin
+    // All other commands → WebSocket relay to Figma plugin
     if (!relay.isPluginConnected()) {
       return {
         content: [
@@ -210,9 +218,75 @@ async function main() {
       };
     }
 
+    const response = await relay.callTool(commandName, args);
+    return buildMcpContent(response);
+  }
+
+  // Call tool — parse CLI command string, route to local executor or WebSocket relay
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name: toolName, arguments: params = {} } = request.params;
+    const { command, input } = params as { command?: string; input?: string };
+
+    // `run` tool — parse CLI command string and dispatch
+    if (toolName === 'run') {
+      if (!command) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: command' }],
+          isError: true,
+        };
+      }
+
+      const chain = parseCommandString(command);
+
+      // Validate all commands in chain before executing
+      for (const cmd of chain.commands) {
+        if (!cmd.name) {
+          return {
+            content: [{ type: 'text', text: 'Empty command. Available: ls, tree, cat, design, replace, query' }],
+            isError: true,
+          };
+        }
+        if (!isValidCommand(cmd.name)) {
+          return {
+            content: [{ type: 'text', text: `Unknown command "${cmd.name}". Available: ls, tree, cat, design, replace, query` }],
+            isError: true,
+          };
+        }
+      }
+
+      // Execute chain sequentially, stop on failure
+      const results: any[] = [];
+      for (const cmd of chain.commands) {
+        // Map CLI args to tool parameters (input only applies to last/only command)
+        const cmdInput = chain.commands.length === 1 ? input : undefined;
+        const args = mapToToolArgs(cmd, cmdInput);
+
+        // null args = help mode (command name with no required args)
+        if (args === null) {
+          results.push({ type: 'text', text: getCommandHelp(cmd.name) });
+          continue;
+        }
+
+        try {
+          const result = await executeCommand(cmd.name, args);
+          // Collect all content items
+          results.push(...result.content);
+          // Stop chain on error
+          if (result.isError) {
+            return { content: results, isError: true };
+          }
+        } catch (err: any) {
+          results.push({ type: 'text', text: err.message || String(err) });
+          return { content: results, isError: true };
+        }
+      }
+
+      return { content: results };
+    }
+
+    // Direct tool call (non-`run`) — backward compatibility
     try {
-      const response = await relay.callTool(toolName, params as Record<string, any>);
-      return buildMcpContent(response);
+      return await executeCommand(toolName, params as Record<string, any>);
     } catch (err: any) {
       return {
         content: [{ type: 'text', text: err.message || String(err) }],

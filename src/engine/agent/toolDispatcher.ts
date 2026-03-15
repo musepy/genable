@@ -3,6 +3,9 @@
  * @description Extracted from agentRuntime.ts — encapsulates tool validation,
  * execution dispatch, timeout handling, and result cleaning. Pure class with
  * injected dependencies, no reference to AgentRuntime.
+ *
+ * CLI form: unwrapRunCommand() now parses CLI strings (e.g. "ls /Card/ -s")
+ * and maps them to structured args. Supports && chains.
  */
 
 import { LLMToolCall, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
@@ -19,6 +22,12 @@ import {
   canonicalizeCreateParams,
 } from './idempotencyStore';
 import { toolDisplayMap, allToolDefinitions } from './tools';
+import { getCommandHelp, isValidCommand } from './tools/unified/commandRegistry';
+import {
+  parseCommandString,
+  mapToToolArgs,
+  type ParsedChain,
+} from './tools/unified/commandParser';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,6 +100,53 @@ export class ToolDispatcher {
     Object.assign(this.toolExecutors, executors);
   }
 
+  // ─── Run command unwrapping ────────────────────────────────────
+
+  /**
+   * Unwrap a `run` tool call into the underlying command.
+   *
+   * CLI format:
+   *   run({command: "ls /"})              → {name: "ls", args: {path: "/"}}
+   *   run({command: "cat /Card/ -s"})     → {name: "cat", args: {path: "/Card/", screenshot: true}}
+   *   run({command: "design", input: "ops..."}) → {name: "design", args: {ops: "ops..."}}
+   *
+   * Chain format (returns with __chain metadata, handled in executeTool):
+   *   run({command: "tree / && cat /Card/"}) → {name: "run", args: {__chain: ..., input: ...}}
+   *
+   * Non-`run` tool calls pass through unchanged.
+   */
+  public static unwrapRunCommand(tc: LLMToolCall): LLMToolCall {
+    if (tc.name !== 'run') return tc;
+
+    const command = tc.args?.command;
+    if (!command || typeof command !== 'string') return tc;
+
+    const chain = parseCommandString(command);
+
+    // Chain: keep as 'run' with __chain metadata, handled in executeTool
+    if (chain.commands.length > 1) {
+      return { ...tc, args: { __chain: chain, input: tc.args?.input } };
+    }
+
+    // Single command
+    const parsed = chain.commands[0];
+    if (!parsed || !parsed.name) {
+      return { ...tc, args: { __help: true } };
+    }
+
+    // Command name only (no positional args, no flags) → help mode
+    if (parsed.positionalArgs.length === 0 && Object.keys(parsed.flags).length === 0 && !tc.args?.input) {
+      return { ...tc, name: parsed.name, args: { __help: true } };
+    }
+
+    const args = mapToToolArgs(parsed, tc.args?.input);
+    if (!args) {
+      return { ...tc, name: parsed.name, args: { __help: true } };
+    }
+
+    return { ...tc, name: parsed.name, args };
+  }
+
   /**
    * Dispatch an array of tool calls — handles terminal signals, execution,
    * timeout, error classification, and result cleaning.
@@ -106,23 +162,29 @@ export class ToolDispatcher {
       tc.id = this.config.normalizeToolCallId(tc, 'call');
       const startedAt = Date.now();
 
-      // ── Dispatch tool to executor ──
-      const displayMeta = toolDisplayMap[tc.name];
+      // ── Unwrap `run` → command name ──
+      // Keep original name for LLMToolResult (Gemini requires functionResponse.name to match)
+      const originalName = tc.name;
+      const unwrapped = ToolDispatcher.unwrapRunCommand(tc);
+      const commandName = unwrapped.name;
+
+      // ── Dispatch tool to executor (using command name for events/display) ──
+      const displayMeta = toolDisplayMap[commandName];
       this.config.emitRuntimeEvent({
         type: 'tool_call',
         iteration: iteration + 1,
 
         phase: 'execution',
-        toolCall: { id: tc.id, name: tc.name, displayName: displayMeta?.displayName, group: displayMeta?.group, args: tc.args },
+        toolCall: { id: tc.id, name: commandName, displayName: displayMeta?.displayName, group: displayMeta?.group, args: unwrapped.args },
       });
-      this.config.onToolCall?.(tc);
+      this.config.onToolCall?.(unwrapped);
 
-      const result = await this.executeToolWithTimeout(tc);
+      const result = await this.executeToolWithTimeout(unwrapped);
 
       const durationMs = Date.now() - startedAt;
       const resultSuccess = result?.success !== false;
 
-      this.config.onToolResult?.(tc, result);
+      this.config.onToolResult?.(unwrapped, result);
       const errorMessage = resultSuccess ? undefined : (result?.error?.message || result?.error?.code || 'Tool execution failed');
       this.config.emitRuntimeEvent({
         type: 'tool_result',
@@ -131,7 +193,7 @@ export class ToolDispatcher {
         phase: 'execution',
         toolResult: {
           id: tc.id,
-          name: tc.name,
+          name: commandName,
           displayName: displayMeta?.displayName,
           group: displayMeta?.group,
           success: resultSuccess,
@@ -142,8 +204,8 @@ export class ToolDispatcher {
       });
 
       // Log design/create failures with per-line details for real-time debugging
-      if (!resultSuccess && (tc.name === 'design' || tc.name === 'create') && errorMessage) {
-        console.warn(`[${tc.name}] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
+      if (!resultSuccess && (commandName === 'design' || commandName === 'create') && errorMessage) {
+        console.warn(`[${commandName}] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
       }
 
       // Extract image attachment before cleaning (prevents base64 truncation by cleaner)
@@ -153,10 +215,15 @@ export class ToolDispatcher {
         delete result.data.__image;
       }
 
+      // Clean result and add execution metadata footer for LLM cost awareness
+      const cleaned = this.cleanToolResult(result, commandName);
+      cleaned._meta = `[${resultSuccess ? 'ok' : 'err'} | ${durationMs}ms]`;
+
       toolResults.push({
-        name: tc.name,
+        // Use original name ('run') for Gemini functionResponse.name matching
+        name: originalName,
         id: tc.id,
-        response: this.cleanToolResult(result, tc.name),
+        response: cleaned,
         thought_signature: tc.thought_signature,
         imageAttachment,
       });
@@ -177,7 +244,7 @@ export class ToolDispatcher {
     return Promise.race([
       this.executeTool(tc),
       new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Tool execution timed out after ${timeout}ms: ${tc.name}`)), timeout);
+        setTimeout(() => reject(new Error(`"${tc.name}" timed out after ${timeout}ms. Try a simpler operation or retry.`)), timeout);
       }),
     ]).catch(e => {
       // Re-throw cancellation errors so the caller can handle them
@@ -197,6 +264,17 @@ export class ToolDispatcher {
 
   private async executeTool(tc: LLMToolCall): Promise<any> {
     this.config.throwIfCanceled();
+
+    // ── Help mode: return command documentation ──
+    if (tc.args?.__help) {
+      return { success: true, data: getCommandHelp(tc.name) };
+    }
+
+    // ── Chain mode: execute multiple commands sequentially ──
+    if (tc.args?.__chain) {
+      return this.executeChain(tc.args.__chain as ParsedChain, tc.args?.input);
+    }
+
     const toolExec = this.toolExecutors[tc.name];
 
     const validation = this.coordinator.validateToolCall(
@@ -226,7 +304,7 @@ export class ToolDispatcher {
         result = await this.ipcBridge.callTool(tc.name, tc.args);
       }
       if (result == null) {
-        return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `No executor found for tool '${tc.name}'` } };
+        return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `Command "${tc.name}" not available. Available: ${[...this.allowedToolNames].join(', ')}` } };
       }
 
       // ── Store result for idempotent replay ──
@@ -236,9 +314,88 @@ export class ToolDispatcher {
     } catch (e: any) {
       return {
         success: false,
-        error: { code: 'TOOL_EXEC_EXCEPTION', message: e.message },
+        error: { code: 'TOOL_EXEC_EXCEPTION', message: `${tc.name}: ${e.message}` },
       };
     }
+  }
+
+  // ─── Chain execution ────────────────────────────────────────
+
+  /**
+   * Execute a chain of commands sequentially with && semantics.
+   * "tree / && cat /Card/" → execute tree, if ok execute cat, return combined.
+   *
+   * Each command goes through validation and IPC independently.
+   * Returns a single combined result for the chain.
+   */
+  private async executeChain(chain: ParsedChain, input?: string): Promise<any> {
+    const results: any[] = [];
+
+    for (let i = 0; i < chain.commands.length; i++) {
+      this.config.throwIfCanceled();
+
+      const cmd = chain.commands[i];
+
+      // && semantics: stop on failure
+      if (i > 0 && chain.operators[i - 1] === '&&' && results[i - 1]?.success === false) {
+        results.push({
+          command: cmd.raw,
+          success: false,
+          error: { code: 'CHAIN_SKIPPED', message: `Skipped — previous command "${chain.commands[i - 1].raw}" failed.` },
+        });
+        continue;
+      }
+
+      // Map CLI args
+      const args = mapToToolArgs(cmd, i === 0 ? input : undefined);
+      if (!args) {
+        results.push({
+          command: cmd.raw,
+          success: false,
+          error: { code: 'PARSE_ERROR', message: `Cannot parse: "${cmd.raw}". Use command name alone for help.` },
+        });
+        break; // can't continue chain
+      }
+
+      // Validate command name
+      if (!isValidCommand(cmd.name)) {
+        results.push({
+          command: cmd.raw,
+          success: false,
+          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}". Available: ls, tree, cat, mkdir, mktext, write, rm, cp, ln, design, replace, query` },
+        });
+        break;
+      }
+
+      // Execute via local executor or IPC
+      let result: any;
+      try {
+        const toolExec = this.toolExecutors[cmd.name];
+        if (toolExec) {
+          result = await toolExec(args);
+        }
+        if (result == null && this.ipcBridge) {
+          result = await this.ipcBridge.callTool(cmd.name, args);
+        }
+        if (result == null) {
+          result = { success: false, error: { code: 'NO_EXECUTOR', message: `No executor for "${cmd.name}".` } };
+        }
+      } catch (e: any) {
+        result = { success: false, error: { code: 'EXEC_ERROR', message: `${cmd.name}: ${e.message}` } };
+      }
+
+      results.push({ command: cmd.raw, ...result });
+    }
+
+    // Single command in chain → flatten (don't wrap in chain array)
+    if (results.length === 1) {
+      return results[0];
+    }
+
+    return {
+      success: results.every(r => r.success !== false),
+      data: { chain: results },
+    };
   }
 
   // ─── Idempotency helpers ──────────────────────────────────

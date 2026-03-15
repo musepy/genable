@@ -170,6 +170,9 @@ function summarizeArgs(toolName: string, args: any): string {
   if (toolName === 'outline' || toolName === 'inspect') {
     return args.nodeId || args.id || '';
   }
+  if (toolName === 'ls' || toolName === 'tree' || toolName === 'cat') {
+    return args.path || '/';
+  }
   if (toolName === 'query' || toolName === 'query_knowledge') {
     return `${args.source || ''}:${truncate(args.query || '', 40)}`;
   }
@@ -204,6 +207,14 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
   }
   if (toolName === 'outline' || toolName === 'inspect') {
     const tree = resp.data?.tree ?? resp.data?.xml ?? resp.data;
+    if (typeof tree === 'string') return `${tree.length} chars`;
+    return 'ok';
+  }
+  if (toolName === 'ls') {
+    return resp.data?.count !== undefined ? `${resp.data.count} items` : 'ok';
+  }
+  if (toolName === 'tree' || toolName === 'cat') {
+    const tree = resp.data?.tree ?? resp.data?.listing ?? resp.data;
     if (typeof tree === 'string') return `${tree.length} chars`;
     return 'ok';
   }

@@ -28,6 +28,13 @@ import {
   mapToToolArgs,
   type ParsedChain,
 } from './tools/unified/commandParser';
+import {
+  computeExitCode,
+  formatMeta,
+  extractStderr,
+  truncateOverflow,
+  guardBinary,
+} from './tools/unified/exitCode';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -217,7 +224,28 @@ export class ToolDispatcher {
 
       // Clean result and add execution metadata footer for LLM cost awareness
       const cleaned = this.cleanToolResult(result, commandName);
-      cleaned._meta = `[${resultSuccess ? 'ok' : 'err'} | ${durationMs}ms]`;
+      const exitCode = computeExitCode(result);
+      cleaned._meta = formatMeta(exitCode, durationMs);
+
+      // Layer 2: stderr — surface warnings/errors as separate signal
+      const stderr = extractStderr(result);
+      if (stderr) cleaned._stderr = stderr;
+
+      // Layer 2: overflow guard — truncate oversized text output
+      if (cleaned.data?.listing && typeof cleaned.data.listing === 'string') {
+        cleaned.data.listing = truncateOverflow(cleaned.data.listing, 'Use tree -d 2 for overview or cat /path/ for specific node.');
+      }
+      if (cleaned.data?.tree && typeof cleaned.data.tree === 'string') {
+        cleaned.data.tree = truncateOverflow(cleaned.data.tree, 'Use cat /path/ for specific subtree.');
+      }
+
+      // Layer 2: binary guard — intercept garbled data before LLM sees it
+      if (cleaned.data?.listing && typeof cleaned.data.listing === 'string') {
+        cleaned.data.listing = guardBinary(cleaned.data.listing);
+      }
+      if (cleaned.data?.tree && typeof cleaned.data.tree === 'string') {
+        cleaned.data.tree = guardBinary(cleaned.data.tree);
+      }
 
       toolResults.push({
         // Use original name ('run') for Gemini functionResponse.name matching
@@ -341,7 +369,7 @@ export class ToolDispatcher {
         results.push({
           command: cmd.raw,
           success: false,
-          error: { code: 'CHAIN_SKIPPED', message: `Skipped — previous command "${chain.commands[i - 1].raw}" failed.` },
+          error: { code: 'CHAIN_SKIPPED', message: `Skipped — previous command "${chain.commands[i - 1].raw}" failed. Fix the failing command first, then retry the chain.` },
         });
         continue;
       }
@@ -352,7 +380,7 @@ export class ToolDispatcher {
         results.push({
           command: cmd.raw,
           success: false,
-          error: { code: 'PARSE_ERROR', message: `Cannot parse: "${cmd.raw}". Use command name alone for help.` },
+          error: { code: 'PARSE_ERROR', message: `Cannot parse: "${cmd.raw}". Run "${cmd.name}" alone for usage help.` },
         });
         break; // can't continue chain
       }
@@ -362,7 +390,7 @@ export class ToolDispatcher {
         results.push({
           command: cmd.raw,
           success: false,
-          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man` },
+          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man. Run "man" for help.` },
         });
         break;
       }

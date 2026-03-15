@@ -43,6 +43,8 @@ Path: "/" = page root, "/Card/" = by name, "/100:5/" = by Figma ID.
 Chain: "mk /Card/ frame w:400 && mk /Card/Title text size:24 -- Hello" — sequential.
 Help: command name only (e.g. "mk") for detailed usage.
 
+Output metadata: [exit:N | Xs] — exit:0 success, exit:1 error, exit:127 not found.
+
 Examples:
   run({command: "ls /"})
   run({command: "mk /Card/ frame w:400 layout:column p:24 bg:#FFF corner:12"})

@@ -18,6 +18,7 @@ export const designDefinition: ToolDefinition = {
 - **Edit**: \`update('nodeId', {props})\` — only listed properties change
 - **Delete**: \`delete('nodeId')\` — removes node and children
 - **Instance**: \`symbol = ref('ComponentName', parent, {props})\`
+- **Clone**: \`symbol = clone(source, parent, {overrideProps, ChildName.prop:value})\` — deep-copy a node, override only what differs
 - **Node types**: frame, text, rect, ellipse, line, icon, image, group, section, vector
 - **frame vs primitives**: Use \`frame\` for ALL UI elements — buttons, badges, chips, avatars, inputs, icon containers, any element that could have children. Use \`rect\`/\`ellipse\`/\`line\` ONLY for pure decorative shapes that will NEVER have children (dividers, background blobs, decorative dots). When in doubt, use \`frame\`.
 - **Parent**: symbol from previous line, \`root\` for top-level, or \`'200:3'\` (quoted Figma ID)
@@ -56,10 +57,23 @@ Text nodes use the same sizing as frames: \`w:'fill'\` to stretch to parent, omi
 Use \`reusable:true\` on a frame to create a Figma Component.
 Use \`ref('Name', parent, {props})\` to create instances. Use \`set:childName:'text'\` for text overrides.
 
+## Clone (variant matrices)
+Deep-copy a component to create variants efficiently — define a base, then clone with only the differences:
+\`\`\`
+base = frame(root, {name:'State=Default', reusable:true, layout:'row', p:12, bg:'#2C2C2C', ...})
+lbl = text(base, {name:'Label', size:16, fill:'#FFF'}, 'Button')
+hover = clone(base, root, {name:'State=Hover', bg:'#1E1E1E'})
+disabled = clone(base, root, {name:'State=Disabled', bg:'#D9D9D9', Label.fill:'#B3B3B3'})
+\`\`\`
+- Inherits ALL properties from source — only specify overrides
+- \`ChildName.prop:value\` — override a child node's property (e.g. \`Label.fill:'#999'\`)
+- Source Component → clone is also a Component (usable in variantSet)
+- Cascading: clone from a clone to layer overrides (e.g. Small = clone Medium with \`p:8\`)
+
 ## Variants (ComponentSet)
 Create variant components with Figma variant naming (\`PropName=Value\`), then combine into a ComponentSet:
-1. Define each variant as \`reusable:true\` with name \`'PropName=Value'\` (multi-axis: \`'Size=Small, Style=Primary'\`)
-2. Combine: \`sym = variantSet(parent, {name:'SetName', from:'comp1,comp2,...'})\`
+1. Define a base variant as \`reusable:true\`, clone others with \`clone(base, root, {name:'...', ...diffs})\`
+2. Combine: \`sym = variantSet(parent, {name:'SetName', from:'base,hover,disabled,...'})\`
 3. Instance with variant selection: \`ref('SetName', parent, {variant:'PropName=Value', set:label:'text'})\`
    - Partial match: \`variant:'Size=Large'\` matches \`Size=Large, Style=Primary\`
    - Falls back to default variant if no match

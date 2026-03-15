@@ -26,6 +26,7 @@ export const TAG_TO_TYPE: Record<string, string> = {
   delete: 'DELETE',
   ref: 'REF',
   variantset: 'VARIANT_SET',
+  clone: 'CLONE',
 };
 
 // ═══════════════════════════════════════════════

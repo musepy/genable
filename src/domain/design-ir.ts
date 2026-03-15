@@ -94,7 +94,7 @@ export interface CanonicalProps {
 
 export interface OperationIR {
   /** The operation to perform */
-  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance' | 'variantSet';
+  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance' | 'variantSet' | 'clone';
   /** For create: the Figma node type (FRAME, TEXT, RECTANGLE, etc.) */
   nodeType?: string;
   /** Parent node reference (symbol or Figma ID) */
@@ -117,6 +117,8 @@ export interface OperationIR {
   variantComponents?: string[];
   /** For instance: variant selector string (e.g. 'Size=Large') */
   variantSelector?: string;
+  /** For clone: the source node symbol or ID to deep-copy */
+  sourceRef?: string;
   /** 1-based operation index (diagnostic) */
   lineNumber?: number;
   /** JSON summary of the original operation (diagnostic) */

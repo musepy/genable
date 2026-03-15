@@ -112,27 +112,20 @@ design({
 })
 ```
 
-### Example 7: Variant ComponentSet (variantSet + variant selection)
-User: "Create a button component with Small, Medium, Large size variants"
+### Example 7: Variant ComponentSet with clone (multi-axis)
+User: "Create a Button component with Primary/Neutral/Subtle variants, Default/Hover/Disabled states, and Medium/Small sizes"
 
-**Step 1 — Define each variant component**:
+**Step 1 — Define base + clone all variants + combine** (single call):
 ```json
 design({
-  "ops": "sm = frame(root, {name:'Size=Small', reusable:true, layout:'row', gap:6, p:'6 12', bg:'#4F46E5', corner:6, height:'hug', w:'hug', alignItems:'center', justifyContent:'center'})\nsmLbl = text(sm, {name:'Label', size:13, weight:'Medium', fill:'#FFFFFF'}, 'Button')\nmd = frame(root, {name:'Size=Medium', reusable:true, layout:'row', gap:8, p:'10 20', bg:'#4F46E5', corner:8, height:'hug', w:'hug', alignItems:'center', justifyContent:'center'})\nmdLbl = text(md, {name:'Label', size:14, weight:'Medium', fill:'#FFFFFF'}, 'Button')\nlg = frame(root, {name:'Size=Large', reusable:true, layout:'row', gap:8, p:'14 28', bg:'#4F46E5', corner:10, height:'hug', w:'hug', alignItems:'center', justifyContent:'center'})\nlgLbl = text(lg, {name:'Label', size:16, weight:'Medium', fill:'#FFFFFF'}, 'Button')"
+  "ops": "base = frame(root, {name:'Variant=Primary, State=Default, Size=Medium', reusable:true, layout:'row', gap:8, p:12, corner:8, bg:'#2C2C2C', stroke:'#2C2C2C', strokeW:1, w:'hug', height:'hug', alignItems:'center', justifyContent:'center'})\nlbl = text(base, {name:'Label', size:16, fill:'#F5F5F5'}, 'Button')\nph = clone(base, root, {name:'Variant=Primary, State=Hover, Size=Medium', bg:'#1E1E1E'})\npd = clone(base, root, {name:'Variant=Primary, State=Disabled, Size=Medium', bg:'#D9D9D9', stroke:'#B3B3B3', Label.fill:'#B3B3B3'})\nnm = clone(base, root, {name:'Variant=Neutral, State=Default, Size=Medium', bg:'#E3E3E3', stroke:'#767676', Label.fill:'#1E1E1E'})\nnh = clone(nm, root, {name:'Variant=Neutral, State=Hover, Size=Medium', bg:'#CDCDCD'})\nnd = clone(base, root, {name:'Variant=Neutral, State=Disabled, Size=Medium', bg:'#D9D9D9', stroke:'#B3B3B3', Label.fill:'#B3B3B3'})\nsm = clone(base, root, {name:'Variant=Subtle, State=Default, Size=Medium', bg:'transparent', stroke:'transparent', Label.fill:'#303030'})\nsh = clone(sm, root, {name:'Variant=Subtle, State=Hover, Size=Medium', stroke:'#D9D9D9', Label.fill:'#1E1E1E'})\nsd = clone(sm, root, {name:'Variant=Subtle, State=Disabled, Size=Medium', Label.fill:'#B3B3B3'})\nps = clone(base, root, {name:'Variant=Primary, State=Default, Size=Small', p:8})\nphs = clone(ph, root, {name:'Variant=Primary, State=Hover, Size=Small', p:8})\npds = clone(pd, root, {name:'Variant=Primary, State=Disabled, Size=Small', p:8})\nns = clone(nm, root, {name:'Variant=Neutral, State=Default, Size=Small', p:8})\nnhs = clone(nh, root, {name:'Variant=Neutral, State=Hover, Size=Small', p:8})\nnds = clone(nd, root, {name:'Variant=Neutral, State=Disabled, Size=Small', p:8})\nss = clone(sm, root, {name:'Variant=Subtle, State=Default, Size=Small', p:8})\nshs = clone(sh, root, {name:'Variant=Subtle, State=Hover, Size=Small', p:8})\nsds = clone(sd, root, {name:'Variant=Subtle, State=Disabled, Size=Small', p:8})\nbtnSet = variantSet(root, {name:'Button', from:'base,ph,pd,nm,nh,nd,sm,sh,sd,ps,phs,pds,ns,nhs,nds,ss,shs,sds'})"
 })
 ```
 
-**Step 2 — Combine into a variant set**:
+**Step 2 — Create a Button Group using Button instances**:
 ```json
 design({
-  "ops": "btnSet = variantSet(root, {name:'Button', from:'sm,md,lg'})"
-})
-```
-
-**Step 3 — Use instances with variant selection**:
-```json
-design({
-  "ops": "row = frame(root, {name:'Button Row', pattern:'row', gap:16})\nb1 = ref('Button', row, {variant:'Size=Small', set:Label:'Cancel'})\nb2 = ref('Button', row, {variant:'Size=Large', set:Label:'Submit'})"
+  "ops": "grpJ = frame(root, {name:'Align=Justify', reusable:true, layout:'row', gap:16, w:240, height:'hug', bg:'transparent'})\ngj1 = ref('btnSet', grpJ, {variant:'Variant=Subtle, State=Default, Size=Medium', w:'fill', set:Label:'Cancel'})\ngj2 = ref('btnSet', grpJ, {variant:'Variant=Primary, State=Default, Size=Medium', w:'fill', set:Label:'Submit'})\ngrpS = frame(root, {name:'Align=Start', reusable:true, layout:'row', gap:16, w:240, height:'hug', bg:'transparent'})\ngs1 = ref('btnSet', grpS, {variant:'Variant=Subtle, State=Default, Size=Medium', set:Label:'Cancel'})\ngs2 = ref('btnSet', grpS, {variant:'Variant=Primary, State=Default, Size=Medium', set:Label:'Submit'})\nbtnGrp = variantSet(root, {name:'Button Group', from:'grpJ,grpS'})"
 })
 ```
 

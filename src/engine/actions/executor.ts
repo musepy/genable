@@ -522,7 +522,7 @@ export class ActionExecutor {
       }
 
       // Root node centering for newly created elements
-      if (!parentNode && ['createFrame', 'createText', 'createShape', 'createIcon', 'createComponent', 'createInstance'].includes(action.action)) {
+      if (!parentNode && ['createFrame', 'createText', 'createShape', 'createIcon', 'createComponent', 'createInstance', 'cloneNode'].includes(action.action)) {
         (action as any).props = this.centerNodeInViewport((action as any).props, action.action);
       }
 
@@ -796,6 +796,62 @@ export class ActionExecutor {
           // figma plugin API swap components:
           targetNode.swapComponent(newMaster);
           return { success: true, nodeId: targetNode.id };
+        }
+
+        case 'cloneNode': {
+          // Resolve source: tempIdMap (current batch) → componentRegistry (cross-batch) → raw ID
+          const srcId = this.resolveId(action.sourceId);
+          const finalSrcId = srcId !== action.sourceId ? srcId : (componentRegistry.get(action.sourceId) || action.sourceId);
+          const srcNode = await figma.getNodeByIdAsync(finalSrcId);
+          if (!srcNode) {
+            return { success: false, error: `Clone source "${action.sourceId}" not found (resolved to ${finalSrcId})` };
+          }
+          // All SceneNode types support clone() — use type assertion
+          const cloned = (srcNode as any).clone() as SceneNode;
+          if (parentNode && 'appendChild' in parentNode) {
+            parentNode.appendChild(cloned);
+          }
+          let cloneWarnings: any[] = [];
+          // Apply root-level prop overrides
+          if (action.props) {
+            try {
+              if (cloned.type === 'TEXT') {
+                const tw = await this.applyTextProps(cloned as TextNode, action.props);
+                cloneWarnings.push(...tw.warnings);
+              } else {
+                const pw = await this.applyProps(cloned, action.props);
+                cloneWarnings.push(...pw.warnings);
+              }
+            } catch (e: any) {
+              cloned.remove();
+              throw e;
+            }
+          }
+          // Apply child overrides (dot notation: 'ChildName' → find by name, apply props)
+          if (action.overrides) {
+            for (const [childName, overrideProps] of Object.entries(action.overrides)) {
+              if (!('findOne' in cloned)) continue;
+              const child = (cloned as FrameNode).findOne(n => n.name === childName);
+              if (child) {
+                try {
+                  if (child.type === 'TEXT') {
+                    const tw = await this.applyTextProps(child as TextNode, overrideProps);
+                    if (tw.warnings.length) cloneWarnings.push(...tw.warnings);
+                  } else {
+                    const pw = await this.applyProps(child, overrideProps);
+                    if (pw.warnings.length) cloneWarnings.push(...pw.warnings);
+                  }
+                } catch (e: any) {
+                  cloneWarnings.push({ code: 'CLONE_OVERRIDE_FAILED', severity: 'warning', message: `Override for '${childName}' failed: ${e.message}` });
+                }
+              }
+            }
+          }
+          // If source was a Component, register clone in componentRegistry for variantSet
+          if (cloned.type === 'COMPONENT' && action.tempId) {
+            componentRegistry.set(action.tempId, cloned.id);
+          }
+          return { success: true, nodeId: cloned.id, warnings: cloneWarnings.length ? cloneWarnings : undefined };
         }
 
         case 'updateProps': {

@@ -288,4 +288,47 @@ describe('flatOpsParser', () => {
       expect(ops[0].props.strokeWeight).toBe(1);
     });
   });
+
+  describe('clone operations', () => {
+    it('parses basic clone with root overrides', () => {
+      const ops = lines("v2 = clone(base, root, {name:'State=Hover', bg:'#1E1E1E'})");
+      expect(ops).toHaveLength(1);
+      expect(ops[0].command).toBe('clone');
+      expect(ops[0].sourceRef).toBe('base');
+      expect(ops[0].parentRef).toBe('root');
+      expect(ops[0].props.name).toBe('State=Hover');
+      expect(ops[0].props.fills).toBeDefined();
+    });
+
+    it('parses clone with child overrides (dot notation)', () => {
+      const ops = lines("v3 = clone(base, root, {name:'State=Disabled', bg:'#D9D9D9', Label.fill:'#B3B3B3'})");
+      expect(ops[0].command).toBe('clone');
+      expect(ops[0].overrides).toBeDefined();
+      expect(ops[0].overrides!['Label']).toBeDefined();
+      expect(ops[0].overrides!['Label'].fills).toBeDefined();
+    });
+
+    it('depends on source symbol', () => {
+      const ops = lines("v2 = clone(base, root, {name:'Hover'})");
+      expect(ops[0].dependsOn).toContain('base');
+    });
+
+    it('handles clone without parent (defaults to root)', () => {
+      const ops = lines("v2 = clone(base, {name:'Hover', bg:'#333'})");
+      expect(ops[0].sourceRef).toBe('base');
+      expect(ops[0].parentRef).toBe('root');
+      expect(ops[0].props.fills).toBeDefined();
+    });
+
+    it('normalizes stroke in root overrides', () => {
+      const ops = lines("v2 = clone(base, root, {stroke:'#767676'})");
+      expect(ops[0].props.strokes).toBeDefined();
+    });
+
+    it('normalizes padding shorthand', () => {
+      const ops = lines("v2 = clone(base, root, {p:8})");
+      expect(ops[0].props.paddingTop).toBe(8);
+      expect(ops[0].props.paddingLeft).toBe(8);
+    });
+  });
 });

@@ -83,9 +83,10 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
 
   if (tag === 'ref') return parseRef(num, line, sym, args, uniq);
   if (tag === 'variantset') return parseVariantSet(num, line, sym, args, uniq);
+  if (tag === 'clone') return parseClone(num, line, sym, args, uniq);
 
   const figmaType = TAG_TO_TYPE[tag];
-  if (!figmaType || figmaType === 'DELETE' || figmaType === 'REF' || figmaType === 'VARIANT_SET') throw new Error(`Unknown type: ${tag}`);
+  if (!figmaType || figmaType === 'DELETE' || figmaType === 'REF' || figmaType === 'VARIANT_SET' || figmaType === 'CLONE') throw new Error(`Unknown type: ${tag}`);
 
   const parent = unquote(args[0] || 'root');
   const rawProps = parsePropsBlock(args[1] || '');
@@ -165,6 +166,81 @@ function parseVariantSet(
     command: 'variantSet', lineNumber: num, raw, symbol: uniq(sym),
     parentRef: parent, props: normProps, dependsOn: deps,
     variantComponents: componentSymbols,
+  };
+}
+
+/**
+ * clone(source, parent?, {overrideProps, 'ChildName.prop':value})
+ * Deep-clones a node (preserving Component type). Dot-notation keys
+ * are split into child overrides.
+ */
+function parseClone(
+  num: number, raw: string, sym: string,
+  args: string[], uniq: (s: string) => string,
+): OperationIR {
+  // clone(source, parent, {props})  or  clone(source, {props})
+  let sourceRef: string;
+  let parent: string;
+  let rawProps: Record<string, string>;
+
+  if (args.length >= 3) {
+    sourceRef = unquote(args[0] || '');
+    parent = unquote(args[1] || 'root');
+    rawProps = parsePropsBlock(args[2] || '');
+  } else if (args.length === 2) {
+    sourceRef = unquote(args[0] || '');
+    // If second arg looks like a props block (starts with { or contains ':'), treat as props
+    const second = (args[1] || '').trim();
+    if (second.startsWith('{') || second.includes(':')) {
+      parent = 'root';
+      rawProps = parsePropsBlock(second);
+    } else {
+      parent = unquote(second);
+      rawProps = {};
+    }
+  } else {
+    sourceRef = unquote(args[0] || '');
+    parent = 'root';
+    rawProps = {};
+  }
+
+  if (!sourceRef) throw new Error('clone requires a source symbol');
+
+  // Separate dot-notation keys (child overrides) from root-level keys
+  const rootRaw: Record<string, string> = {};
+  const childRaw: Record<string, Record<string, string>> = {};
+  for (const [k, v] of Object.entries(rawProps)) {
+    if (k === 'reusable') continue; // clone inherits component status from source
+    const dotIdx = k.indexOf('.');
+    if (dotIdx > 0) {
+      const childName = k.substring(0, dotIdx);
+      const childProp = k.substring(dotIdx + 1);
+      if (!childRaw[childName]) childRaw[childName] = {};
+      childRaw[childName][childProp] = v;
+    } else {
+      rootRaw[k] = v;
+    }
+  }
+
+  // Run root props through buildProps (handles stroke→paintSpec, bg→fills, etc.)
+  const props = buildProps(rootRaw, 'frame', false);
+  // Run each child's overrides through buildProps (tag='' for generic handling, then fill→fills)
+  const normOverrides: Record<string, Record<string, any>> = {};
+  for (const [childName, childProps] of Object.entries(childRaw)) {
+    // Use 'text' tag hint so fill→fills conversion works for text children
+    const built = buildProps(childProps, 'text', false);
+    normOverrides[childName] = normalizeProps(built);
+  }
+
+  const deps = [...computeDependsOn(parent)];
+  if (sourceRef && !sourceRef.includes(':')) deps.push(sourceRef);
+
+  return {
+    command: 'clone', lineNumber: num, raw, symbol: uniq(sym),
+    parentRef: parent, sourceRef,
+    props: normalizeProps(props, { nodeType: 'FRAME', isCreate: true }),
+    overrides: Object.keys(normOverrides).length > 0 ? normOverrides : undefined,
+    dependsOn: deps,
   };
 }
 
@@ -444,6 +520,11 @@ function compileLine(
     case 'instance': {
       if (!line.componentRef) return { ...base, error: "instance command missing 'componentRef'" };
       return { ...base, action: { action: 'createInstance', tempId: line.symbol, parentId, source: { nodeId: line.componentRef, ...(line.variantSelector ? { variant: line.variantSelector } : {}) }, props: Object.keys(props).length > 0 ? props : undefined, overrides: line.overrides, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
+    }
+
+    case 'clone': {
+      if (!line.sourceRef) return { ...base, error: "clone command missing source symbol" };
+      return { ...base, action: { action: 'cloneNode', tempId: line.symbol, parentId, sourceId: line.sourceRef, props: Object.keys(props).length > 0 ? props : undefined, overrides: line.overrides, dependsOn: dependsOn.length > 0 ? dependsOn : undefined } };
     }
 
     default:

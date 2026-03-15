@@ -15,6 +15,7 @@ export type FigmaAction =
   | CreateComponentSetAction
   | CreateInstanceAction
   | SwapInstanceAction
+  | CloneNodeAction
   | UpdatePropsAction
   | DeleteNodeAction
   | MoveNodeAction;
@@ -166,6 +167,16 @@ export interface SwapInstanceAction extends ActionBase {
   nodeId: string; // The instance node ID or tempId to swap
   newComponentKey?: string;
   newComponentNodeId?: string;
+}
+
+export interface CloneNodeAction extends ActionBase {
+  action: 'cloneNode';
+  /** Source node to clone: tempId, componentRegistry key, or real Figma ID */
+  sourceId: string;
+  /** Props to override on the cloned root node */
+  props?: Record<string, any>;
+  /** Child name → props to override on children of the clone (e.g. text fill) */
+  overrides?: Record<string, Record<string, any>>;
 }
 
 export interface UpdatePropsAction extends ActionBase {

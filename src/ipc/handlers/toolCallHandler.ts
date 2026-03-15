@@ -589,14 +589,14 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     const propsInner = line.propTokens.map(mkPropToFlatOps).join(', ');
     const propsWithName = injectNameProp(propsInner, line.nodeName);
 
-    // Check if target exists → update
+    // Check if target exists → update (use propsInner, not propsWithName — don't rename on update)
     const existingId = pathToNodeId.get(line.path);
     if (existingId && existingId !== 'PAGE_ROOT') {
       if (line.textContent) {
         const escaped = escapeFlatOpsStr(line.textContent);
-        opsLines.push(`update('${existingId}', {${propsWithName ? propsWithName + ', ' : ''}characters:'${escaped}'})`);
-      } else if (propsWithName) {
-        opsLines.push(`update('${existingId}', {${propsWithName}})`);
+        opsLines.push(`update('${existingId}', {${propsInner ? propsInner + ', ' : ''}characters:'${escaped}'})`);
+      } else if (propsInner) {
+        opsLines.push(`update('${existingId}', {${propsInner}})`);
       }
       continue;
     }

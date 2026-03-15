@@ -23,6 +23,7 @@ export const TAG_TO_TYPE: Record<string, string> = {
   group: 'GROUP',
   section: 'SECTION',
   vector: 'VECTOR',
+  component: 'FRAME',  // Alias — auto-sets reusable:true in parser
   delete: 'DELETE',
   ref: 'REF',
   variantset: 'VARIANT_SET',
@@ -137,7 +138,7 @@ export function coerceValue(key: string, value: string): string | number | boole
 // ═══════════════════════════════════════════════
 
 export function expandPadding(value: string): Record<string, number> {
-  const parts = value.trim().split(/\s+/).map(Number);
+  const parts = value.trim().split(/[\s,]+/).map(Number);
   switch (parts.length) {
     case 1:
       return { paddingTop: parts[0], paddingRight: parts[0], paddingBottom: parts[0], paddingLeft: parts[0] };

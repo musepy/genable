@@ -5,6 +5,7 @@ import { PluginData } from '../../hooks/usePluginData'
 import guidelinesCatalog from '../../generated/guidelines-catalog.json'
 import styleCatalog from '../../generated/style-catalog.json'
 import { matchStyleGuide, normalizeStyleTags, StyleGuideEntry } from './styleGuideMatcher'
+import { helpIndex } from '../../engine/agent/tools/helpIndex'
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -362,6 +363,24 @@ export function useChat({
               success: true,
               data: { name: match.name, tags: match.guide.tags, content: match.guide.content }
             }
+          }
+          if (params.source === 'help') {
+            const query = (params.query || '').trim()
+            if (!query) {
+              return { success: true, data: { topics: helpIndex.listTopics() } }
+            }
+            const exact = helpIndex.getById(query)
+            if (exact) {
+              return { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } }
+            }
+            const results = helpIndex.search(query, 2)
+            if (results.length === 0) {
+              return { success: true, data: {
+                message: `No help article matched "${query}".`,
+                availableTopics: helpIndex.listTopics()
+              } }
+            }
+            return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
           }
           return null
         },

@@ -4,7 +4,7 @@
  * Architecture:
  *   Claude Code (MCP client, stdio)
  *     → This MCP Server (Node.js, stdio transport)
- *       ├─ query(guidelines|style-tags|style) → local execution (catalogs + matcher)
+ *       ├─ query(guidelines|style-tags|style|help) → local execution (catalogs + matcher + helpIndex)
  *       └─ all other calls → WebSocket relay (localhost:3458) → Figma Plugin
  *
  * IMPORTANT: Use console.error() for logging — stdout is reserved for MCP JSON-RPC.
@@ -22,7 +22,7 @@ import { createWsRelay } from './wsRelay.js';
 // ── Tool definitions (for schema registration) ──
 import { unifiedTools } from '../../src/engine/agent/tools/unified/index.js';
 
-// ── Local execution imports (query: guidelines, style-tags, style) ──
+// ── Local execution imports (query: guidelines, style-tags, style, help) ──
 import guidelinesCatalog from '../../src/generated/guidelines-catalog.json';
 import styleCatalog from '../../src/generated/style-catalog.json';
 import {
@@ -30,6 +30,7 @@ import {
   normalizeStyleTags,
   type StyleGuideEntry,
 } from '../../src/features/chat/styleGuideMatcher.js';
+import { helpIndex } from '../../src/engine/agent/tools/helpIndex.js';
 
 // ── Convert ToolDefinition.parameters → MCP inputSchema ──
 function toMcpInputSchema(def: (typeof unifiedTools)[number]) {
@@ -92,6 +93,37 @@ function executeQueryLocally(
       result: {
         success: true,
         data: { name: match.name, tags: match.guide.tags, content: match.guide.content },
+      },
+    };
+  }
+
+  if (source === 'help') {
+    const query = (params.query || '').trim();
+    if (!query) {
+      return { handled: true, result: { success: true, data: { topics: helpIndex.listTopics() } } };
+    }
+    const exact = helpIndex.getById(query);
+    if (exact) {
+      return { handled: true, result: { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } } };
+    }
+    const results = helpIndex.search(query, 2);
+    if (results.length === 0) {
+      return {
+        handled: true,
+        result: {
+          success: true,
+          data: {
+            message: `No help article matched "${query}".`,
+            availableTopics: helpIndex.listTopics(),
+          },
+        },
+      };
+    }
+    return {
+      handled: true,
+      result: {
+        success: true,
+        data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) },
       },
     };
   }

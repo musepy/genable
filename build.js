@@ -83,6 +83,7 @@ if (isWatch) {
     execSync(`node scripts/generate-skills-registry.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-knowledge.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-prompt-catalog.js`, { stdio: 'inherit' });
+    execSync(`node scripts/generate-help-catalog.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-guidelines-catalog.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-style-catalog.js`, { stdio: 'inherit' });
 

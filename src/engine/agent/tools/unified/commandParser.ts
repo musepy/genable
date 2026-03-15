@@ -243,8 +243,10 @@ export function mapToToolArgs(
       if (pos.length === 0) return null;
       const firstArg = pos[0];
       if (firstArg.startsWith('/')) {
-        // Property discovery: grep /path/ prop1,prop2
-        const grepProps = pos[1] ? pos[1].split(',') : [];
+        // Property discovery: grep /path/ prop1,prop2  or  grep /path/ props (all)
+        const ALL_GREP_PROPS = ['fillColor', 'textColor', 'strokeColor', 'cornerRadius', 'gap', 'fontSize', 'fontFamily', 'fontWeight'];
+        const rawProps = pos[1] ? pos[1].split(',') : [];
+        const grepProps = (rawProps.length === 1 && rawProps[0] === 'props') ? ALL_GREP_PROPS : rawProps;
         return { path: firstArg, properties: grepProps, mode: 'properties' };
       }
       // Node search: grep <query> [path]

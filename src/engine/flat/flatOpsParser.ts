@@ -99,6 +99,8 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
 
   const isIcon = tag === 'icon';
   const isImage = tag === 'image';
+  // component() tag auto-sets reusable:true
+  if (tag === 'component') rawProps.reusable = 'true';
   const isReusable = rawProps.reusable === 'true';
   const command = isIcon ? 'icon' : isImage ? 'image' : 'create';
 
@@ -515,7 +517,10 @@ function compileLine(
   line: OperationIR,
   defaultParentId?: string,
 ): DesignOp | DesignOpError {
-  const parentId = line.parentRef || defaultParentId;
+  // When -p is specified, 'root' refers to the -p parent, not page root
+  const parentId = (defaultParentId && line.parentRef === 'root')
+    ? defaultParentId
+    : (line.parentRef || defaultParentId);
   // Cast to any — normalizeProps returns CanonicalProps (PaintValue[], etc.)
   // but FigmaAction types use string[]. The executor handles both at runtime.
   const props: Record<string, any> = line.props ?? {};

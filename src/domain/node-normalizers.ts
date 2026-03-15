@@ -153,13 +153,18 @@ export function normalizeProps(
     }
   }
 
-  // ── Auto-fill textAutoResize for text creates ──
-  if (isTextNode && options.isCreate && !result.textAutoResize) {
-    // Text with FILL sizing will wrap — use HEIGHT; otherwise hug to content
-    if (result.layoutSizingHorizontal === 'FILL') {
-      result.textAutoResize = 'HEIGHT';
-    } else {
-      result.textAutoResize = 'WIDTH_AND_HEIGHT';
+  // ── Auto-fill textAutoResize for text nodes ──
+  // Text sizing is controlled by textAutoResize, not layoutSizing*.
+  // Sync textAutoResize when sizing modes change (both create AND update).
+  if (isTextNode && !result.textAutoResize) {
+    const hasSizingChange = result.layoutSizingHorizontal !== undefined || result.layoutSizingVertical !== undefined;
+    if (options.isCreate || hasSizingChange) {
+      // Text with FILL sizing will wrap — use HEIGHT; otherwise hug to content
+      if (result.layoutSizingHorizontal === 'FILL') {
+        result.textAutoResize = 'HEIGHT';
+      } else {
+        result.textAutoResize = 'WIDTH_AND_HEIGHT';
+      }
     }
   }
 

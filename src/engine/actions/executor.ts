@@ -16,6 +16,7 @@ import { normalizeSizing, type SizingMode } from '../utils/LayoutValidator';
 import { lowerPaints } from '../figma/figma-lowering';
 import { applyProperty } from './handlers';
 import { parseRichText } from '../text/richTextParser';
+import { toCamelCase } from '../utils/prop-dsl';
 
 // ---------------------------------------------------------------------------
 // Progress event (moved from IncrementalExecutor)
@@ -47,6 +48,8 @@ function actionToCommand(action: string): string {
  * Call ActionExecutor.clearComponentRegistry() on session reset ("New Design").
  */
 const componentRegistry = new Map<string, string>();
+/** Maps toCamelCase(nodeName) → real Figma ID for name-based instance lookup */
+const componentNameRegistry = new Map<string, string>();
 
 export class ActionExecutor {
   private tempIdMap = new Map<string, string>(); // tempId → realFigmaId
@@ -58,6 +61,7 @@ export class ActionExecutor {
   /** Clear the persistent component registry (call on session reset / "New Design") */
   static clearComponentRegistry() {
     componentRegistry.clear();
+    componentNameRegistry.clear();
   }
 
   /** Returns the set of known cross-batch symbols for compile-time validation. */
@@ -515,7 +519,8 @@ export class ActionExecutor {
       // Pre-execution: normalize sizing props to prevent Figma API exceptions
       const props = (action as any).props;
       if (props) {
-        const sizingWarnings = this.normalizeSizingInProps(props, targetNode, parentNode);
+        const isText = action.action === 'createText' || targetNode?.type === 'TEXT';
+        const sizingWarnings = this.normalizeSizingInProps(props, targetNode, parentNode, isText);
         if (sizingWarnings.length > 0) {
           console.warn(`[ActionExecutor] Sizing normalized for ${action.action}:`, sizingWarnings.map(w => w.message));
         }
@@ -711,6 +716,10 @@ export class ActionExecutor {
             if (action.tempId) {
               componentRegistry.set(action.tempId, comp.id);
             }
+            // Also register by name for name-based ref() lookup
+            if (comp.name) {
+              componentNameRegistry.set(toCamelCase(comp.name), comp.id);
+            }
             return { success: true, nodeId: comp.id, warnings: warnings.length ? warnings : undefined };
           } catch (e: any) {
             comp.remove();
@@ -741,6 +750,10 @@ export class ActionExecutor {
           const { warnings } = await this.applyProps(componentSet, propsWithLayout);
           if (action.tempId) {
             componentRegistry.set(action.tempId, componentSet.id);
+          }
+          // Also register by name for name-based ref() lookup
+          if (componentSet.name) {
+            componentNameRegistry.set(toCamelCase(componentSet.name), componentSet.id);
           }
           return { success: true, nodeId: componentSet.id, warnings: warnings.length ? warnings : undefined };
         }
@@ -1018,15 +1031,23 @@ export class ActionExecutor {
   /**
    * Pre-execution: normalize sizing props (HUG/FILL/FIXED) based on layout context.
    * Prevents Figma API exceptions like "HUG can only be set on auto-layout frames".
+   *
+   * @param isText — true for TEXT nodes. Text sizing is controlled by textAutoResize,
+   *   so HUG→FIXED demotion and fallback dimensions are skipped.
    */
   private normalizeSizingInProps(
     props: Record<string, any>,
     targetNode: SceneNode | null,
     parentNode: SceneNode | null,
+    isText?: boolean,
   ): Array<{ code: string; severity: 'warning'; message: string }> {
     if (props.layoutSizingHorizontal === undefined && props.layoutSizingVertical === undefined) {
       return [];
     }
+
+    // TEXT nodes control sizing via textAutoResize, not layoutSizing*.
+    // HUG→FIXED demotion and fallback dimensions would conflict with textAutoResize.
+    if (isText) return [];
 
     const warnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
 
@@ -1134,9 +1155,11 @@ export class ActionExecutor {
       }
     }
     if (nodeId) {
-      // Resolution chain: tempIdMap (current batch) → componentRegistry (cross-batch) → raw ID
+      // Resolution chain: tempIdMap (current batch) → componentRegistry (cross-batch) → componentNameRegistry (name-based) → raw ID
       const resolvedId = this.resolveId(nodeId);
-      const finalId = resolvedId !== nodeId ? resolvedId : (componentRegistry.get(nodeId) || nodeId);
+      const finalId = resolvedId !== nodeId
+        ? resolvedId
+        : (componentRegistry.get(nodeId) || componentNameRegistry.get(nodeId) || componentNameRegistry.get(toCamelCase(nodeId)) || nodeId);
       const node = await figma.getNodeByIdAsync(finalId);
       if (node && node.type === 'COMPONENT') return node as ComponentNode;
       if (node && node.type === 'COMPONENT_SET') {
@@ -1207,6 +1230,8 @@ export class ActionExecutor {
     fontWeight: 6,
     // Text content last among text props
     characters: 7,
+    // textAutoResize must be applied AFTER dimensions — resize() can reset it
+    textAutoResize: 8,
   };
 
   private static sortPropsByDependency(entries: [string, any][]): [string, any][] {
@@ -1247,6 +1272,16 @@ export class ActionExecutor {
   private async applyTextProps(node: TextNode, props: Record<string, any>): Promise<{ warnings: any[]; diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> }> {
     const warnings: any[] = [];
     const diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> = [];
+
+    // Sync textAutoResize when sizing mode changes on update (parser can't know node type)
+    if (!props.textAutoResize && (props.layoutSizingHorizontal !== undefined || props.layoutSizingVertical !== undefined)) {
+      if (props.layoutSizingHorizontal === 'FILL') {
+        props.textAutoResize = 'HEIGHT';
+      } else {
+        props.textAutoResize = 'WIDTH_AND_HEIGHT';
+      }
+    }
+
     // Handle font resolution before setting characters
     // Read current font from node as fallback — avoid resetting to Inter/Regular
     const currentFont = node.fontName as FontName;

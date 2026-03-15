@@ -68,9 +68,9 @@ describe('normalizeProps (was compileCssProps)', () => {
     expect(result).not.toHaveProperty('width');
   });
 
-  it('TEXT width: "fill" converts to layoutSizingHorizontal', () => {
+  it('TEXT width: "fill" converts to layoutSizingHorizontal + syncs textAutoResize', () => {
     const result = normalizeProps({ width: 'fill' }, { nodeType: 'TEXT' });
-    expect(result).toEqual({ layoutSizingHorizontal: 'FILL' });
+    expect(result).toEqual({ layoutSizingHorizontal: 'FILL', textAutoResize: 'HEIGHT' });
   });
 
   it('width: "hug" → layoutSizingHorizontal: "HUG", width deleted', () => {
@@ -95,9 +95,9 @@ describe('normalizeProps (was compileCssProps)', () => {
     expect(result).not.toHaveProperty('height');
   });
 
-  it('TEXT height: "hug" converts to layoutSizingVertical', () => {
+  it('TEXT height: "hug" converts to layoutSizingVertical + syncs textAutoResize', () => {
     const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT' });
-    expect(result).toEqual({ layoutSizingVertical: 'HUG' });
+    expect(result).toEqual({ layoutSizingVertical: 'HUG', textAutoResize: 'WIDTH_AND_HEIGHT' });
   });
 
   it('height: 44 → height: 44 (number pass-through)', () => {

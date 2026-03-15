@@ -44,10 +44,10 @@ describe('normalizeProps', () => {
     expect(result).not.toHaveProperty('width');
   });
 
-  it('converts text width="fill" → layoutSizingHorizontal without auto-fill on update', () => {
+  it('converts text width="fill" → layoutSizingHorizontal + auto-fills textAutoResize on update', () => {
     const result = normalizeProps({ width: 'fill' }, { nodeType: 'TEXT' });
     expect(result.layoutSizingHorizontal).toBe('FILL');
-    expect(result.textAutoResize).toBeUndefined();
+    expect(result.textAutoResize).toBe('HEIGHT'); // sizing change syncs textAutoResize
     expect(result).not.toHaveProperty('width');
   });
 

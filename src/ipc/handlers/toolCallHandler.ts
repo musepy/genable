@@ -409,6 +409,15 @@ function mkPropToFlatOps(token: string): string {
   if (colonIdx < 0) return token;
   const key = token.slice(0, colonIdx);
   const val = token.slice(colonIdx + 1);
+  // set:ChildName:text → split on second colon: key="set:ChildName", val="text"
+  if (key === 'set') {
+    const secondColon = val.indexOf(':');
+    if (secondColon >= 0) {
+      const childName = val.slice(0, secondColon);
+      const text = val.slice(secondColon + 1);
+      return `set:${childName}:'${escapeFlatOpsStr(text)}'`;
+    }
+  }
   if (/^-?\d+(\.\d+)?$/.test(val)) return `${key}:${val}`;
   return `${key}:'${val.replace(/'/g, "\\'")}'`;
 }

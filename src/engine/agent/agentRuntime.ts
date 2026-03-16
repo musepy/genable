@@ -24,6 +24,7 @@ import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
 import { COMMAND_NAMES } from './tools/unified/commandRegistry';
 import { getContextProfile } from './context/constants';
+import { clearOverflows } from './overflowStore';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -313,6 +314,7 @@ export class AgentRuntime {
     let consecutiveFailIterations = 0;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
+    clearOverflows();
     this.idCounter = 0;
     this.runStats = {
       toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
@@ -582,15 +584,8 @@ export class AgentRuntime {
           }
         }
 
-        // ──── P4: ITERATION BUDGET AWARENESS ────
-        const remaining = this.maxIterations - (iteration + 1);
-        if (remaining <= 5 && remaining > 0) {
-          this.turnMessages.push({
-            id: this.generateId('budget'),
-            role: 'user',
-            content: `[Iteration ${iteration + 1}/${this.maxIterations} — ${remaining} remaining] Converge: fix existing issues before creating new content.`,
-          });
-        }
+        // Note: no iteration budget injection. The agent stops naturally via
+        // text-only response. Safety net is maxIterations=200 (ceiling, not target).
 
         iteration++;
         continue;

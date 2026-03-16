@@ -10,6 +10,7 @@
 
 import { LLMToolCall, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
 import { classifyError, categoryToErrorCode } from './retryPolicy';
+import { getOverflow } from './overflowStore';
 
 import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
@@ -287,6 +288,19 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const suggestion = findClosestCommand(tc.name);
       const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
       return { success: false, error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${tc.name}".${hint}` } };
+    }
+
+    // ── Built-in: `more` reads from overflow store (no IPC) ──
+    if (tc.name === 'more') {
+      const id = Number(tc.args?.id);
+      if (!id || isNaN(id)) {
+        return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: more <id>. The id comes from a truncated output message (overflow/N).' } };
+      }
+      const content = getOverflow(id);
+      if (!content) {
+        return { success: false, error: { code: 'NOT_FOUND', message: `Overflow ${id} not found or expired. Only the last 5 truncated outputs are kept.` } };
+      }
+      return { success: true, data: { listing: content } };
     }
 
     // ── Execute via local executor or IPC ──

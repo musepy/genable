@@ -24,6 +24,16 @@ import { grepDefinition } from './grep';
 import { sedDefinition } from './sed';
 import { manDefinition } from './man';
 
+/** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
+const moreDefinition: ToolDefinition = {
+  name: 'more',
+  category: 'read',
+  display: { displayName: 'More', group: 'read' },
+  executionStrategy: 'sequential',
+  description: 'Page through truncated output. Usage: more <id>. Supports pipe: more <id> | grep <pattern>',
+  parameters: { type: 'object', properties: { id: { type: 'string', description: 'Overflow ID from truncated output' } }, required: ['id'] },
+};
+
 /** All command definitions, keyed by command name. */
 const COMMAND_MAP = new Map<string, ToolDefinition>([
   // VFS read commands
@@ -36,6 +46,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [grepDefinition.name, grepDefinition],
   [sedDefinition.name, sedDefinition],
   [manDefinition.name, manDefinition],
+  [moreDefinition.name, moreDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],
@@ -360,6 +371,18 @@ Deep-copies the source. ChildName.prop:value overrides child properties.
 
 See also: mkdir (create from scratch), ln (component instances)`,
 
+  more: `more — Page through truncated output.
+
+Usage:
+  more 1                          view full output of overflow/1
+  more 1 | grep ERROR             search in truncated output
+  more 1 | tail 50                last 50 lines
+
+When a command output exceeds 200 lines, it is truncated and saved.
+The truncation message includes "overflow/N" — use more N to retrieve it.
+
+See also: cat (read nodes), grep (search), tree (structure)`,
+
   ln: `ln — Create a component instance at a path.
 
 Usage:
@@ -390,4 +413,5 @@ const COMMAND_SEE_ALSO: Record<string, string> = {
   rm: 'ls (check before deleting), cp (clone instead)',
   cp: 'mkdir (create from scratch), ln (component instances)',
   ln: 'cp (clone without components), design (batch instances)',
+  more: 'cat (read nodes), grep (search), tree (structure)',
 };

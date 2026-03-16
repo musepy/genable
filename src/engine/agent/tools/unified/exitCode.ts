@@ -12,6 +12,8 @@
  * - ≥1000ms → "3.2s" (moderate/expensive, mind frequency)
  */
 
+import { saveOverflow } from '../../overflowStore';
+
 // ── Exit code mapping ──────────────────────────────────────────────
 
 /** Standard Unix exit codes. */
@@ -106,17 +108,22 @@ export const MAX_OUTPUT_LINES = 200;
 
 /**
  * Truncate text output if it exceeds MAX_OUTPUT_LINES.
- * Cuts at line boundary, appends hint about how to get full data.
+ * Saves full output to overflow store for progressive retrieval.
+ * LLM can explore via: more <id> | grep <pattern>
  */
 export function truncateOverflow(text: string, hint?: string): string {
   const lines = text.split('\n');
   if (lines.length <= MAX_OUTPUT_LINES) return text;
 
+  // Save full output for progressive retrieval
+  const overflowId = saveOverflow(text);
+
   const truncated = lines.slice(0, MAX_OUTPUT_LINES).join('\n');
   const remaining = lines.length - MAX_OUTPUT_LINES;
+  const explore = `Saved as overflow/${overflowId}. Explore: more ${overflowId} | grep <pattern>`;
   const suffix = hint
-    ? `\n[+${remaining} lines truncated. ${hint}]`
-    : `\n[+${remaining} lines truncated]`;
+    ? `\n[+${remaining} lines truncated. ${explore} ${hint}]`
+    : `\n[+${remaining} lines truncated. ${explore}]`;
   return truncated + suffix;
 }
 

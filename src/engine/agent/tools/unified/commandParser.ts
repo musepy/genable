@@ -306,6 +306,9 @@ export function mapToToolArgs(
       return { path: sedPath, replacements };
     }
 
+    case 'more':
+      return { id: pos[0] || '' };
+
     case 'man': {
       if (pos.length === 0) return { source: 'help' };
       const manFirst = pos[0];

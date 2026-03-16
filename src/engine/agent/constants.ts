@@ -4,8 +4,12 @@
  */
 
 export const AGENT_RUNTIME_CONSTANTS = {
-  /** Default maximum number of iterations for the agentic loop */
-  DEFAULT_MAX_ITERATIONS: 40,
+  /**
+   * Safety-net iteration ceiling. NOT a behavioral limit.
+   * The agent stops when it produces a text-only response (natural turn end).
+   * This ceiling exists only to prevent runaway token spend.
+   */
+  DEFAULT_MAX_ITERATIONS: 200,
   
   /** Default maximum prompt tokens before triggering context compression (real LLM token count) */
   DEFAULT_MAX_CONTEXT_TOKENS: 200000,

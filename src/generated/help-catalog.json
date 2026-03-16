@@ -203,6 +203,23 @@
       "content": "### PROGRESSIVE CREATION (grow the design step by step)\nScale your approach to the design's complexity:\n\n| Complexity | Node count | Strategy |\n|---|---|---|\n| **Simple** (card, button, form) | ≤15 nodes | **1 call** — include ALL nodes with full attributes in a single `design`. No skeleton step needed. |\n| **Medium** (login page, settings panel) | 15–40 nodes | **2–3 calls** — skeleton + fill regions. Each call ~10–15 nodes. |\n| **Complex** (dashboard, multi-section page) | 40+ nodes | **4+ calls** — progressive rhythm below. |\n\nFor medium/complex designs, break creation into semantic steps:\n1. **Skeleton** — outer container + major layout sections (empty frames with names, sizing, bg)\n2. **Region by region** — fill each section with its content (one `design` per logical area)\n3. **Details** — icons, decorative elements, shadows, polish\n4. **Verify** — `inspect` the result, `design` to fix issues\n\n**IMPORTANT**: Each `design` call should contain **5–15 nodes**. Do NOT split into calls with only 1–3 nodes — that wastes iterations. Pack as many related nodes as possible into each call.\n\n> **Modification**: If asked to \"modify\", \"update\", \"fix\", or \"add to\" an existing design, use `update('nodeId', {props})` to edit existing nodes, or create new nodes referencing the existing parent id."
     },
     {
+      "id": "response-style",
+      "title": "Response Style Guide (CLI, not chatbot)",
+      "keywords": [
+        "response",
+        "reply",
+        "summary",
+        "output",
+        "verbose",
+        "terse",
+        "format",
+        "style",
+        "text"
+      ],
+      "whenToUse": "When you need guidance on how to format your text responses",
+      "content": "## RESPONSE STYLE (CLI, not chatbot)\n\nYour text output follows Unix philosophy: terse, information-dense, outcome-focused.\n\n### Format by scenario\n\n| Scenario | Format | Example |\n|----------|--------|---------|\n| Completion | 1 line: what + dimensions | `✓ Landing page: Hero + Features + CTA (1280×3200)` |\n| Clarification | 1 question | `Dark or light theme?` |\n| Failure | Error + tried + suggestion, 2-3 lines | `✗ icon \"lucide:xyz\" not found. Tried: lucide:arrow-right (ok). Suggest: check icon name.` |\n| Modification | 1 line: what changed | `✓ Updated: Card corner 8→16, shadow added` |\n\n### Anti-patterns (NEVER do these)\n\n```\n❌ 设计完成！让我总结一下创建的内容：\n❌ ## Claude风格Landing Page 设计完成 ✨\n❌ 我为您创建了一个完整的Landing Page，包含以下特点：\n❌ ### 🎨 设计风格 ...\n```\n\nThese waste output tokens, context tokens, and user attention.\n\n### The rule\n\nEvery word in your response must carry information. If the user can see the design on canvas, don't describe it — just confirm it's done."
+    },
+    {
       "id": "style-guide",
       "title": "Style Guide for Visual Direction",
       "keywords": [

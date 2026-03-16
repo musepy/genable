@@ -541,6 +541,11 @@ async function executeSingleMk(
   const parentResolved = await resolvePathToNode(parentPath);
   if (!parentResolved.ok) return parentResolved.response;
 
+  // Guard: parent must be a container (frame/group/component/page), not text/rect/etc.
+  if (!parentResolved.isPage && !('children' in parentResolved.node)) {
+    return { success: false, error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
+  }
+
   const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
   const adjustedTokens = injectLayoutDefaults(type, propTokens);
   const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');

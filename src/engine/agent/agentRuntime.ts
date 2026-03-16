@@ -310,6 +310,7 @@ export class AgentRuntime {
     let iteration = 0;
     let emptyArgsCount = 0;
     let truncationCount = 0;
+    let consecutiveFailIterations = 0;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
     this.idCounter = 0;
@@ -531,10 +532,20 @@ export class AgentRuntime {
         }
         this.turnMessages.push(dispatchResult.toolResultsMessage);
 
-        // ──── P2: MANDATORY REPAIR INJECTION ────
-        // When design/edit tools return PARTIAL_FAILURE, inject a mandatory
-        // repair instruction so LLM cannot ignore failures and move on.
+        // ──── GUARDRAIL: MANDATORY REPAIR + CONSECUTIVE FAILURE TRACKING ────
         if (Array.isArray(content)) {
+          // Check if ALL tool calls in this iteration failed
+          const allFailed = content.every((part: any) =>
+            part.functionResponse?.response?.success === false
+          );
+
+          if (allFailed) {
+            consecutiveFailIterations++;
+          } else {
+            consecutiveFailIterations = 0;
+          }
+
+          // P2: PARTIAL_FAILURE → inject mandatory repair instruction
           const partialFailures = content
             .filter((part: any) => part.functionResponse?.response?.error?.code === 'PARTIAL_FAILURE')
             .map((part: any) => part.functionResponse.response);
@@ -557,10 +568,21 @@ export class AgentRuntime {
               });
             }
           }
+
+          // Consecutive failure escalation: after N consecutive all-fail iterations,
+          // inject a strategy-change directive
+          if (consecutiveFailIterations >= AGENT_RUNTIME_CONSTANTS.CONSECUTIVE_FAILURE_THRESHOLD) {
+            this.turnMessages.push({
+              id: this.generateId('strategy'),
+              role: 'user',
+              content: `⚠ ${consecutiveFailIterations} consecutive iterations have ALL failed. Your current approach is not working. `
+                + `STOP and change strategy: use context/outline to re-examine the canvas state, `
+                + `verify node IDs exist, or explain the blocker to the user.`,
+            });
+          }
         }
 
         // ──── P4: ITERATION BUDGET AWARENESS ────
-        // When approaching iteration limit, inject urgency signal.
         const remaining = this.maxIterations - (iteration + 1);
         if (remaining <= 5 && remaining > 0) {
           this.turnMessages.push({

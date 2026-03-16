@@ -266,6 +266,34 @@ function injectNameProp(propsInner: string, name: string): string {
     : `name:'${escaped}'`;
 }
 
+// ── Layout defaults ──
+// Figma UI defaults layout frames to hug on both axes.
+// The API defaults to fixed 100px. Bridge this gap for mk.
+
+/**
+ * Inject sensible sizing defaults for layout frames.
+ * If a frame has `layout` but no explicit w/h, default to `hug`.
+ */
+function injectLayoutDefaults(type: string | undefined, propTokens: string[]): string[] {
+  const effectiveType = type || 'frame';
+  if (effectiveType !== 'frame' && effectiveType !== 'section') return propTokens;
+
+  const hasLayout = propTokens.some(t => t.startsWith('layout:') || t.startsWith('layoutMode:'));
+  if (!hasLayout) return propTokens;
+
+  const hasExplicitH = propTokens.some(t =>
+    t.startsWith('h:') || t.startsWith('height:') || t.startsWith('sizingV:')
+  );
+  const hasExplicitW = propTokens.some(t =>
+    t.startsWith('w:') || t.startsWith('width:') || t.startsWith('sizingH:')
+  );
+
+  const result = [...propTokens];
+  if (!hasExplicitH) result.push('h:hug');
+  if (!hasExplicitW) result.push('w:hug');
+  return result;
+}
+
 // ── Glob support ──
 // Enables wildcard patterns in paths: rm /Card/Placeholder*, cat /Card/Btn*
 
@@ -514,7 +542,8 @@ async function executeSingleMk(
   if (!parentResolved.ok) return parentResolved.response;
 
   const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
-  const propsInner = propTokens.map(mkPropToFlatOps).join(', ');
+  const adjustedTokens = injectLayoutDefaults(type, propTokens);
+  const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
   const propsWithName = injectNameProp(propsInner, nodeName);
 
   let ops: string;
@@ -650,7 +679,8 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   let defaultParentId: string | undefined;
 
   for (const line of parsed) {
-    const propsInner = line.propTokens.map(mkPropToFlatOps).join(', ');
+    const adjustedTokens = injectLayoutDefaults(line.type, line.propTokens);
+    const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
     const propsWithName = injectNameProp(propsInner, line.nodeName);
 
     // Check if target exists → update (use propsInner, not propsWithName — don't rename on update)

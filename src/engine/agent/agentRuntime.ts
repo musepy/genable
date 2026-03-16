@@ -521,6 +521,46 @@ export class AgentRuntime {
           }
         }
         this.turnMessages.push(dispatchResult.toolResultsMessage);
+
+        // ──── P2: MANDATORY REPAIR INJECTION ────
+        // When design/edit tools return PARTIAL_FAILURE, inject a mandatory
+        // repair instruction so LLM cannot ignore failures and move on.
+        if (Array.isArray(content)) {
+          const partialFailures = content
+            .filter((part: any) => part.functionResponse?.response?.error?.code === 'PARTIAL_FAILURE')
+            .map((part: any) => part.functionResponse.response);
+
+          if (partialFailures.length > 0) {
+            const errorSummaries: string[] = [];
+            for (const pf of partialFailures) {
+              const errors = pf.data?.errors;
+              if (Array.isArray(errors)) {
+                for (const e of errors.slice(0, 5)) {
+                  errorSummaries.push(`- ${e.op}: ${e.error}`);
+                }
+              }
+            }
+            if (errorSummaries.length > 0) {
+              this.turnMessages.push({
+                id: this.generateId('repair'),
+                role: 'user',
+                content: `⚠ PARTIAL_FAILURE detected. Before proceeding, you MUST fix these errors:\n${errorSummaries.join('\n')}\nUse the idMap from successful nodes to reference them. Do NOT create new content until these are resolved.`,
+              });
+            }
+          }
+        }
+
+        // ──── P4: ITERATION BUDGET AWARENESS ────
+        // When approaching iteration limit, inject urgency signal.
+        const remaining = this.maxIterations - (iteration + 1);
+        if (remaining <= 5 && remaining > 0) {
+          this.turnMessages.push({
+            id: this.generateId('budget'),
+            role: 'user',
+            content: `[Iteration ${iteration + 1}/${this.maxIterations} — ${remaining} remaining] Converge: fix existing issues before creating new content.`,
+          });
+        }
+
         iteration++;
         continue;
       } else {

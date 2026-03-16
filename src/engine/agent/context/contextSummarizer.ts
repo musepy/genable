@@ -60,16 +60,28 @@ export function buildCompressionSummary(messagesToSummarize: LLMMessage[]): stri
 
 /**
  * Cap summary length by dropping oldest turns.
- * Preserves the most recent conversation history within the budget.
+ * Error-priority: turns with failures are retained longer than success-only turns.
  */
 export function capSummary(summary: string, maxChars: number): string {
   if (summary.length <= maxChars) return summary;
   // Split by turn boundaries (User: lines)
   const turns = summary.split(/(?=^User: )/m);
-  // Drop oldest turns until fits
+
+  // Two-pass drop: first drop success-only old turns, then error turns
+  const hasError = (turn: string) => /\bFAIL\b|PARTIAL_FAILURE|failed \d|errors \[/.test(turn);
+
+  // Pass 1: drop oldest success-only turns
+  while (turns.length > 1 && turns.join('').length > maxChars) {
+    const dropIdx = turns.findIndex(t => !hasError(t));
+    if (dropIdx < 0) break; // all turns have errors
+    turns.splice(dropIdx, 1);
+  }
+
+  // Pass 2: if still over budget, drop oldest error turns
   while (turns.length > 1 && turns.join('').length > maxChars) {
     turns.shift();
   }
+
   return '[Earlier history truncated]\n' + turns.join('');
 }
 
@@ -147,7 +159,7 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
     const ok = resp.success !== false;
     const brief = ok
       ? summarizeSuccessResult(name, resp)
-      : `FAIL: ${truncate(String(resp.error?.message || resp.error || ''), 80)}`;
+      : summarizeFailResult(name, resp);
 
     // Replace the last matching "→ name(...)" with result, or append
     let pendingIdx = -1;
@@ -197,6 +209,42 @@ function summarizeArgs(toolName: string, args: any): string {
     if (typeof val === 'string' && val.length > 0) return truncate(val, 40);
   }
   return '';
+}
+
+/**
+ * Summarize a failed tool result with error details preserved.
+ * Error details are critical for cross-turn learning — the LLM must know
+ * WHY something failed, not just THAT it failed.
+ */
+function summarizeFailResult(toolName: string, resp: any): string {
+  const errorCode = resp.error?.code || '';
+  const errorMsg = truncate(String(resp.error?.message || resp.error || ''), 100);
+
+  // PARTIAL_FAILURE: include per-op errors + surviving idMap
+  if (errorCode === 'PARTIAL_FAILURE' && resp.data) {
+    const parts: string[] = [`PARTIAL_FAILURE: ${errorMsg}`];
+
+    // Per-op error details
+    if (Array.isArray(resp.data.errors)) {
+      const errorDetails = resp.data.errors
+        .slice(0, 3)
+        .map((e: any) => `${e.op}: ${truncate(String(e.error || ''), 50)}`)
+        .join('; ');
+      parts.push(`errors [${errorDetails}]`);
+    }
+
+    // Surviving idMap (successful nodes from partial failure)
+    appendIdMapSummary(parts, resp.data.idMap);
+
+    return parts.join(', ');
+  }
+
+  // BATCH_TOO_LARGE: preserve the specific count so LLM knows to split
+  if (errorCode === 'BATCH_TOO_LARGE') {
+    return `FAIL(BATCH_TOO_LARGE): ${errorMsg}`;
+  }
+
+  return `FAIL: ${errorMsg}`;
 }
 
 function summarizeSuccessResult(toolName: string, resp: any): string {
@@ -280,6 +328,15 @@ function summarizeDesignResult(data: any): string {
 
   appendIdMapSummary(parts, data.idMap);
   appendReceiptSignals(parts, data);
+
+  // Preserve per-op error details — critical for cross-turn learning
+  if (Array.isArray(data.errors) && data.errors.length > 0) {
+    const errorDetails = data.errors
+      .slice(0, 5)
+      .map((e: any) => `${e.op}: ${truncate(String(e.error || ''), 60)}`)
+      .join('; ');
+    parts.push(`errors [${errorDetails}]`);
+  }
 
   return parts.join(', ') || 'ok';
 }

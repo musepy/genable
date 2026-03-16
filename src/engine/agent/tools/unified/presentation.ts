@@ -41,8 +41,8 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   // Info
   man:     null,                        // pass through
   // Legacy tool names
-  design:  ['idMap', 'created', 'edited', 'deleted', 'failed', 'degraded', 'degradedHint'],
-  edit:    ['idMap', 'edited', 'failed', 'changeSummary'],
+  design:  ['idMap', 'created', 'edited', 'deleted', 'failed', 'errors', 'degraded', 'degradedHint'],
+  edit:    ['idMap', 'edited', 'failed', 'errors', 'changeSummary'],
   create:  ['idMap'],
 };
 

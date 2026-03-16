@@ -297,6 +297,108 @@ describe('buildCompressionSummary', () => {
     const summary = buildCompressionSummary(messages);
     expect(summary).toContain('deleted 3');
   });
+
+  it('preserves PARTIAL_FAILURE error details in summary', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Create a settings panel' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'design', args: { ops: 'frame(...) text(...)' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          {
+            functionResponse: {
+              name: 'design',
+              response: {
+                success: false,
+                error: { code: 'PARTIAL_FAILURE', message: '3 created, 2 failed' },
+                data: {
+                  created: 3,
+                  failed: 2,
+                  idMap: { panel: '100:1', title: '100:2' },
+                  errors: [
+                    { op: 'buttons', error: 'Unknown property: cornerRadii (did you mean cornerRadius?)' },
+                    { op: 'footer', error: 'FONT_UNLOADED: Figma Sans not available' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    // Must contain PARTIAL_FAILURE status
+    expect(summary).toContain('PARTIAL_FAILURE');
+    // Must contain per-op error details (not just "failed 2")
+    expect(summary).toContain('buttons');
+    expect(summary).toContain('cornerRadii'); // the actual error property name
+    expect(summary).toContain('footer');
+    expect(summary).toContain('FONT_UNLOADED');
+    // Must still contain surviving idMap
+    expect(summary).toContain('panel=100:1');
+  });
+
+  it('preserves BATCH_TOO_LARGE error in summary', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Create everything' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'design', args: { ops: 'frame(...)' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          {
+            functionResponse: {
+              name: 'design',
+              response: {
+                success: false,
+                error: { code: 'BATCH_TOO_LARGE', message: '45 operations exceeds the hard limit of 30' },
+              },
+            },
+          },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('BATCH_TOO_LARGE');
+    expect(summary).toContain('45');
+  });
+
+  it('preserves per-op error details in design result summary', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Build a card' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'design', args: { ops: 'many ops' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          {
+            functionResponse: {
+              name: 'design',
+              response: {
+                success: true,
+                data: {
+                  created: 5,
+                  idMap: { a: '1:1', b: '1:2' },
+                  errors: [
+                    { op: 'icon', error: 'ICON_FETCH_FAILED: magnifying-glass' },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('errors [icon: ICON_FETCH_FAILED');
+  });
 });
 
 describe('capSummary', () => {
@@ -318,5 +420,21 @@ describe('capSummary', () => {
     const capped = capSummary(summary, 10);
     expect(capped).toContain('[Earlier history truncated]');
     expect(capped).toContain('User: A very long');
+  });
+
+  it('drops success-only turns before error turns (error-priority)', () => {
+    const summary = [
+      'User: First (success)',
+      '  → design → created 5',
+      'User: Second (failed)',
+      '  → design → PARTIAL_FAILURE: 3 created, 2 failed',
+      'User: Third (success)',
+      '  → design → created 3',
+    ].join('\n');
+    // Set limit small enough that one turn must be dropped
+    const capped = capSummary(summary, summary.length - 20);
+    // Should drop a success turn, not the error turn
+    expect(capped).toContain('PARTIAL_FAILURE');
+    expect(capped).toContain('[Earlier history truncated]');
   });
 });

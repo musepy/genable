@@ -84,6 +84,13 @@ export function extractStderr(result: any): string | null {
     }
   }
 
+  // Per-op errors from receipt (PARTIAL_FAILURE details)
+  if (result?.data?.errors && Array.isArray(result.data.errors)) {
+    for (const e of result.data.errors) {
+      parts.push(`[error] ${e.op}: ${e.error}`);
+    }
+  }
+
   // Error message (only for failed results)
   if (result?.success === false && result?.error?.message) {
     parts.push(`[error] ${result.error.message}`);

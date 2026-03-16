@@ -126,7 +126,10 @@ export class ToolDispatcher {
     if (tc.name !== 'run') return tc;
 
     const command = tc.args?.command;
-    if (!command || typeof command !== 'string') return tc;
+    if (!command || typeof command !== 'string') {
+      // No command → return tool overview as help
+      return { ...tc, args: { __help: true } };
+    }
 
     const chain = parseCommandString(command);
 
@@ -295,6 +298,20 @@ export class ToolDispatcher {
 
     // ── Help mode: return command documentation ──
     if (tc.args?.__help) {
+      // run with no command → return tool overview
+      if (tc.name === 'run') {
+        return {
+          success: true,
+          data: `9 commands available. Run any command name alone for detailed usage.
+
+Read:   ls /path/          tree /path/        cat /path/ [-s]
+Write:  mk /path/ [type]   rm /path/          cp /src/ /dest/
+Search: grep <query>       sed /path/ prop    man [topic]
+
+Operators: cmd1 && cmd2 (and)  cmd1 ; cmd2 (seq)  cmd1 || cmd2 (or)
+Exit codes: 0 = success, 1 = error, 127 = not found`,
+        };
+      }
       return { success: true, data: getCommandHelp(tc.name) };
     }
 

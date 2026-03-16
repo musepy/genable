@@ -40,6 +40,18 @@ export function buildStaticSystemPrompt(
         parts.push(WORKFLOW.trim());
     }
 
+    // 5. Persistent memory hint
+    parts.push(
+`## PERSISTENT MEMORY
+You have persistent memory at \`/.agent/memory/\`. Use standard commands to read and write:
+- \`ls /.agent/memory/\` — list stored memories
+- \`cat /.agent/memory/\` — read all memories
+- \`cat /.agent/memory/key\` — read a specific memory
+- \`mk /.agent/memory/key text -- value\` — save a memory (persists across sessions)
+- \`rm /.agent/memory/key\` — delete a memory
+Use this to remember user preferences, design patterns, or anything useful across conversations.`
+    );
+
     // 6. Tool definitions (serialized, with category grouping)
     if (tools.length > 0) {
         const hasCategories = tools.some(t => t.category);

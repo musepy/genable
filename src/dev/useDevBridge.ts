@@ -43,13 +43,13 @@ async function fetchBridge(path: string, options?: RequestInit): Promise<Respons
   }
 }
 
-/** Extract root node IDs from create tool results. Result shape: { idMap: { symbol: "802:1526", ... } } */
+/** Extract root node IDs from design/create tool results. Result shape: { idMap: { symbol: "802:1526", ... } } */
 function extractRootNodeIds(history: ChatMessage[]): string[] {
   const ids: string[] = []
   for (const msg of history) {
     if (!msg.toolCalls) continue
     for (const tc of msg.toolCalls) {
-      if (tc.name !== 'create' || tc.status !== 'success' || !tc.result) continue
+      if ((tc.name !== 'design' && tc.name !== 'create') || tc.status !== 'success' || !tc.result) continue
       const result = typeof tc.result === 'string' ? (() => { try { return JSON.parse(tc.result) } catch { return null } })() : tc.result
       if (result?.idMap && typeof result.idMap === 'object') {
         // First entry in idMap is the root node
@@ -114,66 +114,103 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     triggerIdRef.current = null
     triggerStartTimeRef.current = 0
 
-    // Extract final text from last model message
-    const lastModel = [...state.history].reverse().find(m => m.role === 'model')
-    const finalText = lastModel?.text || ''
+    console.log(`[DevBridge] Run ended (${prev} → ${curr}), posting result for ${triggerId}`)
 
-    // Collect tool call details (including per-call results for debugging)
-    const allToolCalls = state.history.flatMap(m => m.toolCalls || [])
-    const toolCallSummary = {
-      total: allToolCalls.length,
-      errors: allToolCalls.filter(tc => tc.status === 'error').length,
-    }
-    const toolCallDetails = allToolCalls.map(tc => ({
-      name: tc.name,
-      status: tc.status,
-      durationMs: tc.endTime && tc.startTime ? tc.endTime - tc.startTime : undefined,
-      params: tc.parameters ? JSON.stringify(tc.parameters) : undefined,
-      result: tc.result ? JSON.stringify(tc.result) : undefined,
-      error: tc.error,
-    }))
+    try {
+      // Extract final text from last model message
+      const lastModel = [...state.history].reverse().find(m => m.role === 'model')
+      const finalText = lastModel?.text || ''
 
-    const logs = generateLogDigest(state.history, { modelName: state.modelName })
-    const rootNodeIds = extractRootNodeIds(state.history)
-
-    // Request node tree + screenshots from main thread, then POST everything
-    requestExport(rootNodeIds).then(({ nodeTree, screenshots }) => {
-      // Serialize full conversation history for debugging LLM decisions
-      const conversationHistory = state.history.map(m => ({
-        role: m.role,
-        text: m.text,
-        toolCalls: m.toolCalls?.map(tc => ({
-          name: tc.name,
-          parameters: tc.parameters,
-          result: tc.result,
-          status: tc.status,
-          error: tc.error,
-        })),
-      }))
-
-      const payload = {
-        triggerId,
-        status: curr,
-        finalText,
-        durationMs,
-        modelName: state.modelName,
-        toolCallSummary,
-        toolCallDetails,
-        conversationHistory,
-        runtimeEvents: stateRef.current.eventBufferRef.current,
-        logs,
-        nodeTree,
-        screenshots,
+      // Collect tool call details (including per-call results for debugging)
+      const allToolCalls = state.history.flatMap(m => m.toolCalls || [])
+      const toolCallSummary = {
+        total: allToolCalls.length,
+        errors: allToolCalls.filter(tc => tc.status === 'error').length,
       }
-
-      return fetchBridge('/result', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      const toolCallDetails = allToolCalls.map(tc => {
+        let params: string | undefined
+        let result: string | undefined
+        try { params = tc.parameters ? JSON.stringify(tc.parameters) : undefined } catch { params = '[unserializable]' }
+        try { result = tc.result ? JSON.stringify(tc.result) : undefined } catch { result = '[unserializable]' }
+        return {
+          name: tc.name,
+          status: tc.status,
+          durationMs: tc.endTime && tc.startTime ? tc.endTime - tc.startTime : undefined,
+          params,
+          result,
+          error: tc.error,
+        }
       })
-    }).then(() => {
-      setStatus('connected')
-    })
+
+      const logs = generateLogDigest(state.history, { modelName: state.modelName })
+      const rootNodeIds = extractRootNodeIds(state.history)
+
+      // Request node tree + screenshots from main thread, then POST everything
+      requestExport(rootNodeIds).then(({ nodeTree, screenshots }) => {
+        // Serialize full conversation history for debugging LLM decisions
+        const conversationHistory = state.history.map(m => ({
+          role: m.role,
+          text: m.text,
+          toolCalls: m.toolCalls?.map(tc => ({
+            name: tc.name,
+            parameters: tc.parameters,
+            result: tc.result,
+            status: tc.status,
+            error: tc.error,
+          })),
+        }))
+
+        let body: string
+        try {
+          body = JSON.stringify({
+            triggerId,
+            status: curr,
+            finalText,
+            durationMs,
+            modelName: state.modelName,
+            toolCallSummary,
+            toolCallDetails,
+            conversationHistory,
+            runtimeEvents: stateRef.current.eventBufferRef.current,
+            logs,
+            nodeTree,
+            screenshots,
+          })
+        } catch (e) {
+          console.error('[DevBridge] Failed to serialize result payload:', e)
+          // Fallback: post minimal result without large fields
+          body = JSON.stringify({
+            triggerId,
+            status: curr,
+            finalText,
+            durationMs,
+            modelName: state.modelName,
+            toolCallSummary,
+            toolCallDetails,
+            logs,
+            error: `Serialization failed: ${e}`,
+          })
+        }
+
+        return fetchBridge('/result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        })
+      }).then((res) => {
+        if (res && res.ok) {
+          console.log(`[DevBridge] Result posted successfully for ${triggerId}`)
+        } else {
+          console.error(`[DevBridge] Result POST failed: ${res ? res.status : 'no response'}`)
+        }
+        setStatus('connected')
+      }).catch((err) => {
+        console.error('[DevBridge] Failed to post result:', err)
+        setStatus('connected')
+      })
+    } catch (err) {
+      console.error('[DevBridge] Error preparing result:', err)
+    }
   }, [state.runtimeState])
 
   // Main lifecycle: health-check → poll loop

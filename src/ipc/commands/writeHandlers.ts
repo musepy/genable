@@ -6,7 +6,7 @@
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath } from './pathResolver';
+import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath, deduplicateName } from './pathResolver';
 import {
   executeFlatOps, escapeFlatOpsStr, injectNameProp, injectLayoutDefaults,
   mkPropToFlatOps, stripBraces,
@@ -26,23 +26,46 @@ async function executeSingleMk(
     return { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' } };
   }
 
+  // ID-based path: if nodeName looks like a Figma ID (contains ':'), resolve and update directly
+  if (nodeName.includes(':')) {
+    const node = await figma.getNodeByIdAsync(nodeName);
+    if (node && 'visible' in node) {
+      const nodeId = node.id;
+      const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
+      if (!propsBlock && !textContent) {
+        return { success: true, data: { message: `Node "${node.name}" (${nodeId}) — no properties to update.`, idMap: {} } };
+      }
+      let ops = textContent
+        ? `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escapeFlatOpsStr(textContent)}'})`
+        : `update('${nodeId}', {${propsBlock}})`;
+      return await executeFlatOps(ops);
+    }
+    return { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` } };
+  }
+
   // Try to resolve the full path to check if node exists (for upsert)
   const existing = await resolvePathToNode(path);
   if (existing.ok && !existing.isPage) {
-    const nodeId = existing.node.id;
-    const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
-    if (!propsBlock && !textContent) {
-      return { success: true, data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
+    // Page-level collision: skip upsert, create new with deduplicated name
+    const isPageLevel = parentPath === '/' || parentPath === '';
+    if (!isPageLevel) {
+      // Nested node — upsert as before
+      const nodeId = existing.node.id;
+      const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
+      if (!propsBlock && !textContent) {
+        return { success: true, data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
+      }
+      let ops = `update('${nodeId}', {${propsBlock}})`;
+      if (textContent) {
+        const escaped = escapeFlatOpsStr(textContent);
+        ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
+      }
+      return await executeFlatOps(ops);
     }
-    let ops = `update('${nodeId}', {${propsBlock}})`;
-    if (textContent) {
-      const escaped = escapeFlatOpsStr(textContent);
-      ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
-    }
-    return await executeFlatOps(ops);
+    // Page-level: fall through to create mode with deduplication
   }
 
-  // Node doesn't exist → create mode
+  // Node doesn't exist (or page-level collision) → create mode
   const parentResolved = await resolvePathToNode(parentPath);
   if (!parentResolved.ok) return parentResolved.response;
 
@@ -51,10 +74,16 @@ async function executeSingleMk(
     return { success: false, error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
   }
 
+  // Deduplicate name for page-level nodes to avoid collision with existing designs
+  let finalName = nodeName;
+  if (parentResolved.isPage) {
+    finalName = deduplicateName(figma.currentPage.children, nodeName);
+  }
+
   const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
   const adjustedTokens = injectLayoutDefaults(type, propTokens);
   const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
-  const propsWithName = injectNameProp(propsInner, nodeName);
+  const propsWithName = injectNameProp(propsInner, finalName);
 
   let ops: string;
   if (type === 'variantset') {
@@ -71,7 +100,11 @@ async function executeSingleMk(
     ops = `n1 = ${nodeType}(root, {${propsWithName}})`;
   }
 
-  return await executeFlatOps(ops, parentId);
+  const response = await executeFlatOps(ops, parentId);
+  if (finalName !== nodeName && response.success) {
+    response.data = { ...response.data, renamed: { [nodeName]: finalName } };
+  }
+  return response;
 }
 
 async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
@@ -150,64 +183,58 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { success: false, error: { code: 'PARSE_ERROR', message: 'No valid mk commands parsed from batch input.' } };
   }
 
-  // Phase 2: Pre-resolve all unique parent paths
-  const pathToSymbol = new Map<string, string>();
-  const pathToNodeId = new Map<string, string>();
+  // ── Sequential symbol resolution ──
+  // Key invariant: each line ALWAYS creates a new node with a unique symbol.
+  // Parent lookup uses the LATEST symbol for that path (sequential association).
+  // This ensures duplicate sibling names (e.g., multiple /Parent/Item) each get
+  // their own symbol, and children reference the correct (most recent) parent.
+
+  const latestSymbolForPath = new Map<string, string>();
   let symbolCounter = 0;
 
-  function getSymbol(path: string): string {
-    if (pathToSymbol.has(path)) return pathToSymbol.get(path)!;
-    const sym = `n${++symbolCounter}`;
-    pathToSymbol.set(path, sym);
-    return sym;
-  }
-
-  const uniquePaths = new Set<string>();
+  // Pre-resolve page-level root collisions with existing Figma nodes
+  const pageRootNames = new Set<string>();
+  const nameDedup = new Map<string, string>();
   for (const line of parsed) {
-    uniquePaths.add(line.path);
-    uniquePaths.add(line.parentPath);
+    if (line.parentPath === '/') pageRootNames.add(line.nodeName);
   }
-
-  for (const p of uniquePaths) {
-    const resolved = await resolvePathToNode(p);
-    if (resolved.ok) {
-      pathToNodeId.set(p, resolved.isPage ? 'PAGE_ROOT' : resolved.node.id);
+  for (const rootName of pageRootNames) {
+    const resolved = await resolvePathToNode('/' + rootName);
+    if (resolved.ok && !resolved.isPage) {
+      nameDedup.set(rootName, deduplicateName(figma.currentPage.children, rootName));
     }
   }
 
-  // Phase 3: Generate flat ops
+  // Generate flat ops sequentially
   const opsLines: string[] = [];
-  let defaultParentId: string | undefined;
 
   for (const line of parsed) {
+    // Resolve parent: batch-internal symbol first, then Figma tree
+    let parentRef: string;
+    if (latestSymbolForPath.has(line.parentPath)) {
+      parentRef = latestSymbolForPath.get(line.parentPath)!;
+    } else if (line.parentPath === '/' || line.parentPath === '') {
+      parentRef = 'root';
+    } else {
+      const parentResolved = await resolvePathToNode(line.parentPath);
+      if (parentResolved.ok) {
+        parentRef = parentResolved.isPage ? 'root' : `'${parentResolved.node.id}'`;
+      } else {
+        parentRef = 'root';
+      }
+    }
+
+    // Always create a new symbol (never reuse — each line = new node)
+    const sym = `n${++symbolCounter}`;
+    latestSymbolForPath.set(line.path, sym); // Overwrite: children use latest parent
+
+    // Deduplicate page-level names that collide with existing designs
+    const displayName = (line.parentPath === '/' && nameDedup.has(line.nodeName))
+      ? nameDedup.get(line.nodeName)! : line.nodeName;
+
     const adjustedTokens = injectLayoutDefaults(line.type, line.propTokens);
     const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
-    const propsWithName = injectNameProp(propsInner, line.nodeName);
-
-    const existingId = pathToNodeId.get(line.path);
-    if (existingId && existingId !== 'PAGE_ROOT') {
-      if (line.textContent) {
-        const escaped = escapeFlatOpsStr(line.textContent);
-        opsLines.push(`update('${existingId}', {${propsInner ? propsInner + ', ' : ''}characters:'${escaped}'})`);
-      } else if (propsInner) {
-        opsLines.push(`update('${existingId}', {${propsInner}})`);
-      }
-      continue;
-    }
-
-    let parentRef: string;
-    const parentId = pathToNodeId.get(line.parentPath);
-    if (parentId === 'PAGE_ROOT') {
-      parentRef = 'root';
-    } else if (parentId) {
-      parentRef = `'${parentId}'`;
-    } else if (pathToSymbol.has(line.parentPath)) {
-      parentRef = pathToSymbol.get(line.parentPath)!;
-    } else {
-      parentRef = 'root';
-    }
-
-    const sym = getSymbol(line.path);
+    const propsWithName = injectNameProp(propsInner, displayName);
 
     if (line.type === 'variantset') {
       opsLines.push(`${sym} = variantSet(${parentRef}, {${propsWithName}})`);
@@ -228,7 +255,12 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { success: true, data: { message: 'All nodes already exist. No changes needed.' } };
   }
 
-  return await executeFlatOps(opsLines.join('\n'), defaultParentId);
+  const response = await executeFlatOps(opsLines.join('\n'));
+  if (nameDedup.size > 0 && response.success) {
+    const renamed = Object.fromEntries(nameDedup);
+    response.data = { ...response.data, renamed };
+  }
+  return response;
 }
 
 export async function handleMk(parameters: any): Promise<ToolResponse> {

@@ -113,6 +113,20 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
   return { ok: true, isPage: false, node: current as SceneNode };
 }
 
+// ── Name deduplication ──
+
+/**
+ * Returns a unique name among siblings. If `name` already exists,
+ * appends " 2", " 3", etc. until unique.
+ */
+export function deduplicateName(siblings: readonly BaseNode[], name: string): string {
+  const existing = new Set(siblings.map(c => c.name));
+  if (!existing.has(name)) return name;
+  let i = 2;
+  while (existing.has(`${name}_${i}`)) i++;
+  return `${name}_${i}`;
+}
+
 // ── Path helpers ──
 
 export function buildNodePath(node: BaseNode): string {

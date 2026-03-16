@@ -26,8 +26,8 @@ import {
 // ---------------------------------------------------------------------------
 
 const KEEP_FIELDS: Record<string, string[] | null> = {
-  // Write commands — LLM needs IDs to reference created nodes
-  mk:      ['idMap'],
+  // Write commands — LLM needs IDs to reference created nodes + error details for repair
+  mk:      ['idMap', 'created', 'failed', 'errors', 'degraded', 'degradedHint'],
   cp:      ['idMap'],
   rm:      ['deleted'],
   mv:      ['id', 'name'],

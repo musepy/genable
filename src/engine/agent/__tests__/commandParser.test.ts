@@ -139,6 +139,24 @@ describe('mapToToolArgs', () => {
     expect(args).toEqual({ path: '/OldNode/' });
   });
 
+  it('maps mv with source and dest', () => {
+    const chain = parseCommandString('mv /Card/OldTitle /Card/NewTitle');
+    const args = mapToToolArgs(chain.commands[0]);
+    expect(args).toEqual({ sourcePath: '/Card/OldTitle', destPath: '/Card/NewTitle' });
+  });
+
+  it('maps mv returns null with missing dest', () => {
+    const chain = parseCommandString('mv /Card/OldTitle');
+    const args = mapToToolArgs(chain.commands[0]);
+    expect(args).toBeNull();
+  });
+
+  it('maps mv returns null with no args', () => {
+    const chain = parseCommandString('mv');
+    const args = mapToToolArgs(chain.commands[0]);
+    expect(args).toBeNull();
+  });
+
   it('maps man with topic', () => {
     const chain = parseCommandString('man guidelines dashboard');
     const args = mapToToolArgs(chain.commands[0]);
@@ -216,5 +234,9 @@ describe('findClosestCommand', () => {
 
   it('prefix: "ma" → "man"', () => {
     expect(findClosestCommand('ma')).toBe('man');
+  });
+
+  it('prefix: "mv" → "mv"', () => {
+    expect(findClosestCommand('mv')).toBe('mv');
   });
 });

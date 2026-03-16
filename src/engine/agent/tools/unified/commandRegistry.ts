@@ -19,6 +19,7 @@ import {
 } from './fs';
 // New Unix CLI commands
 import { mkDefinition } from './mk';
+import { mvDefinition } from './mv';
 import { grepDefinition } from './grep';
 import { sedDefinition } from './sed';
 import { manDefinition } from './man';
@@ -31,6 +32,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [catDefinition.name, catDefinition],
   // New Unix CLI commands
   [mkDefinition.name, mkDefinition],
+  [mvDefinition.name, mvDefinition],
   [grepDefinition.name, grepDefinition],
   [sedDefinition.name, sedDefinition],
   [manDefinition.name, manDefinition],
@@ -325,11 +327,26 @@ Only listed properties change — unspecified remain unchanged.
 
 See also: cat (read before writing), mkdir (create new)`,
 
+  mv: `mv — Move or rename a design node.
+
+Usage:
+  mv /Card/OldTitle /Card/NewTitle            # rename
+  mv /Card/Header/Logo /Card/Footer/Logo      # move + rename
+  mv /Card/Header/Logo /Card/Footer/          # move into Footer, keep name
+
+Rules:
+  - Dest is existing container → move INTO it (keep original name)
+  - Dest doesn't exist → split into parent + name (rename + reparent)
+  - Same parent → rename only
+
+See also: cp (clone), rm (delete), mk (create/update)`,
+
   rm: `rm — Delete a node and its children.
 
 Usage:
   rm /Card/OldSection/
   rm /Card/Header/Icon
+  rm /Card/Placeholder*                       # glob: delete matching nodes
 
 See also: ls (check before deleting), cp (clone instead)`,
 
@@ -357,6 +374,7 @@ See also: cp (clone without components), design (batch instances)`,
 /** Cross-references between commands for progressive discovery. */
 const COMMAND_SEE_ALSO: Record<string, string> = {
   mk: 'cat (read before writing), grep (find nodes), man (usage guides)',
+  mv: 'cp (clone), rm (delete), mk (create/update)',
   grep: 'cat (inspect found node), sed (replace values)',
   sed: 'grep (discover values first), cat (verify changes)',
   man: 'grep (find nodes), mk (create/update)',

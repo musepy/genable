@@ -212,6 +212,27 @@ function buildMcpContent(
   return { content };
 }
 
+/**
+ * Extract the last created/modified node ID from MCP content blocks.
+ * Used for $LAST variable expansion in chain execution.
+ */
+function extractLastNodeIdFromContent(content: any[]): string | undefined {
+  for (const item of content) {
+    if (item.type !== 'text' || !item.text) continue;
+    try {
+      // Remove metadata footer ([exit:...], [warn]..., [error]...) before parsing JSON
+      const text = item.text.replace(/\n\[(?:exit|warn|error)[^\n]*/g, '').trim();
+      const data = JSON.parse(text);
+      if (data.idMap && typeof data.idMap === 'object') {
+        const ids = Object.values(data.idMap);
+        if (ids.length > 0) return String(ids[ids.length - 1]);
+      }
+      if (data.id) return String(data.id);
+    } catch { /* not parseable JSON — skip */ }
+  }
+  return undefined;
+}
+
 // ── Main ──
 async function main() {
   const relay = createWsRelay();
@@ -298,13 +319,13 @@ async function main() {
       for (const cmd of chain.commands) {
         if (!cmd.name) {
           return {
-            content: [{ type: 'text', text: `Empty command. Available: ls, tree, cat, mk, rm, cp, grep, sed, man\n${formatMeta(EXIT_ERROR, 0)}` }],
+            content: [{ type: 'text', text: `Empty command. Available: ls, tree, cat, mk, mv, rm, cp, grep, sed, man\n${formatMeta(EXIT_ERROR, 0)}` }],
             isError: true,
           };
         }
         if (!isValidCommand(cmd.name)) {
           return {
-            content: [{ type: 'text', text: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, rm, cp, grep, sed, man\n${formatMeta(EXIT_NOT_FOUND, 0)}` }],
+            content: [{ type: 'text', text: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, mv, rm, cp, grep, sed, man\n${formatMeta(EXIT_NOT_FOUND, 0)}` }],
             isError: true,
           };
         }
@@ -313,6 +334,7 @@ async function main() {
       // Execute chain with operator semantics: &&, ||, ;, |
       const results: any[] = [];
       let lastIsError = false;
+      let lastNodeId: string | undefined;
 
       for (let ci = 0; ci < chain.commands.length; ci++) {
         const cmd = chain.commands[ci];
@@ -330,6 +352,15 @@ async function main() {
         }
         // ; : always run
         // | : always run (pipe data is contextual, passed via input)
+
+        // $LAST expansion: replace $LAST in positional args with last node path
+        if (lastNodeId) {
+          for (let j = 0; j < cmd.positionalArgs.length; j++) {
+            if (cmd.positionalArgs[j].includes('$LAST')) {
+              cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/${lastNodeId}/`);
+            }
+          }
+        }
 
         // Map CLI args to tool parameters
         // Pipe: pass previous result as input to next command
@@ -354,6 +385,12 @@ async function main() {
           const result = await executeCommand(cmd.name, args);
           results.push(...result.content);
           lastIsError = !!result.isError;
+
+          // Track $LAST — extract last created/modified node ID from result
+          if (!lastIsError) {
+            const extracted = extractLastNodeIdFromContent(result.content);
+            if (extracted) lastNodeId = extracted;
+          }
 
           // && : stop chain on error
           if (prevOp === '&&' && result.isError) {

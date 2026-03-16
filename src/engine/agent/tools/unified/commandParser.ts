@@ -373,6 +373,13 @@ export function mapToToolArgs(
       return { path, propsRaw };
     }
 
+    case 'mv': {
+      const sourcePath = pos[0] || '';
+      const destPath = pos[1] || '';
+      if (!sourcePath || !destPath) return null;
+      return { sourcePath, destPath };
+    }
+
     case 'rm':
       return { path: pos[0] || '/' };
 

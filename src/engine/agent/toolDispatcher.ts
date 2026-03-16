@@ -92,6 +92,8 @@ const IDEMPOTENT_CACHE_TOOLS = new Set(
 
 export class ToolDispatcher {
   private idempotencyStore = new IdempotencyStore();
+  /** Last created/modified node ID — expanded as $LAST in commands. */
+  private lastNodeId: string | undefined;
 
   constructor(
     private toolExecutors: Record<string, ToolExecutor>,
@@ -172,10 +174,16 @@ export class ToolDispatcher {
       tc.id = this.config.normalizeToolCallId(tc, 'call');
       const startedAt = Date.now();
 
+      // ── Expand $LAST variable in command string ──
+      let expandedTc = tc;
+      if (this.lastNodeId && tc.name === 'run' && typeof tc.args?.command === 'string' && tc.args.command.includes('$LAST')) {
+        expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, `/${this.lastNodeId}/`) } };
+      }
+
       // ── Unwrap `run` → command name ──
       // Keep original name for LLMToolResult (Gemini requires functionResponse.name to match)
-      const originalName = tc.name;
-      const unwrapped = ToolDispatcher.unwrapRunCommand(tc);
+      const originalName = expandedTc.name;
+      const unwrapped = ToolDispatcher.unwrapRunCommand(expandedTc);
       const commandName = unwrapped.name;
 
       // ── Dispatch tool to executor (using command name for events/display) ──
@@ -193,6 +201,9 @@ export class ToolDispatcher {
 
       const durationMs = Date.now() - startedAt;
       const resultSuccess = result?.success !== false;
+
+      // ── Track $LAST — extract last created/modified node ID ──
+      this.extractLastNodeId(result);
 
       this.config.onToolResult?.(unwrapped, result);
       const errorMessage = resultSuccess ? undefined : (result?.error?.message || result?.error?.code || 'Tool execution failed');
@@ -302,12 +313,13 @@ export class ToolDispatcher {
       if (tc.name === 'run') {
         return {
           success: true,
-          data: `9 commands available. Run any command name alone for detailed usage.
+          data: `10 commands available. Run any command name alone for detailed usage.
 
 Read:   ls /path/          tree /path/        cat /path/ [-s]
-Write:  mk /path/ [type]   rm /path/          cp /src/ /dest/
+Write:  mk /path/ [type]   mv /src/ /dest/    rm /path/          cp /src/ /dest/
 Search: grep <query>       sed /path/ prop    man [topic]
 
+Glob: /path/Prefix* matches children by pattern. $LAST = last created node ID.
 Operators: cmd1 && cmd2 (and)  cmd1 ; cmd2 (seq)  cmd1 || cmd2 (or)
 Exit codes: 0 = success, 1 = error, 127 = not found`,
         };
@@ -413,6 +425,15 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       // ; : always run (no skip logic)
       // | : always run (pipe data handled below)
 
+      // $LAST expansion: replace $LAST in positional args with last node path
+      if (this.lastNodeId) {
+        for (let j = 0; j < cmd.positionalArgs.length; j++) {
+          if (cmd.positionalArgs[j].includes('$LAST')) {
+            cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/${this.lastNodeId}/`);
+          }
+        }
+      }
+
       // Map CLI args — pipe operator injects previous result as input
       let cmdInput = i === 0 ? input : undefined;
       if (prevOp === '|' && prevResult) {
@@ -438,7 +459,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
         results.push({
           command: cmd.raw,
           success: false,
-          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, rm, cp, grep, sed, man` },
+          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, mv, rm, cp, grep, sed, man` },
         });
         break;
       }
@@ -465,6 +486,9 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
         result = { success: false, error: { code: 'EXEC_ERROR', message: `${cmd.name}: ${e.message}` } };
       }
 
+      // Track $LAST from chain command results
+      this.extractLastNodeId(result);
+
       results.push({ command: cmd.raw, ...result });
     }
 
@@ -477,6 +501,24 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       success: results.every(r => r.success !== false),
       data: { chain: results },
     };
+  }
+
+  // ─── $LAST variable tracking ────────────────────────────────
+
+  /**
+   * Extract the last created/modified node ID from a tool result.
+   * Sources: idMap (mk/design), id (mv/single-node ops).
+   */
+  private extractLastNodeId(result: any): void {
+    const data = result?.data;
+    if (!data || result?.success === false) return;
+
+    if (data.idMap && typeof data.idMap === 'object') {
+      const ids = Object.values(data.idMap);
+      if (ids.length > 0) this.lastNodeId = String(ids[ids.length - 1]);
+    } else if (data.id) {
+      this.lastNodeId = String(data.id);
+    }
   }
 
   // ─── Pipe data injection ────────────────────────────────────

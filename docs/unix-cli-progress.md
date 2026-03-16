@@ -105,6 +105,21 @@
 |------|------|--------|-------|
 | 2026-03-16 | E2E: login card (pre-fix) | ❌ | Placeholder/Label nodes orphaned to PAGE root |
 | 2026-03-16 | E2E: login card (post-fix) | ✅ | All child nodes correctly parented |
+| 2026-03-16 | E2E: pricing card | ✅ | 20 nodes, all nested correctly. 18 tool calls (agent rebuilt 4x — LLM behavior, not tool bug). Step 7 mk failure: propTokens had embedded `\nmk` batch lines. Added auto-detect guard. |
+| 2026-03-16 | E2E: toast notification | ✅ | 5 nodes, 2 tool calls (efficient). Horizontal layout correct. Icon type creates empty frame (no Lucide support — known limitation). |
+
+### Phase 7: Missing CLI Features — mv, glob, $LAST
+| Item | Status | Notes |
+|------|--------|-------|
+| `mv` command (rename + reparent) | ✅ Done | `mv.ts` definition + IPC handler. Unix semantics: dest is container → move into; dest doesn't exist → split parent + rename |
+| Glob `*` in paths | ✅ Done | `hasGlob()`, `matchGlob()`, `resolveGlobPaths()` in toolCallHandler. Supports `*`, `prefix*`, `*suffix`, `pre*suf`. Last segment only. |
+| Glob in `rm` | ✅ Done | `rm /Card/Placeholder*` → delete all matching |
+| Glob in `ls` | ✅ Done | `ls /Card/Btn*` → list matching nodes |
+| Glob in `cat` | ✅ Done | `cat /Card/Btn*` → serialize up to 10 matching nodes |
+| `$LAST` variable (cross-call) | ✅ Done | Tracked in `ToolDispatcher.lastNodeId`. Expanded in `dispatch()` before unwrapping. Sources: `idMap` (mk/design), `id` (mv). |
+| `$LAST` variable (in chains) | ✅ Done | Expanded in `executeChain()` positional args before `mapToToolArgs`. `mk /Card frame && mk $LAST/Title text` works. |
+| Command count 9→10 | ✅ Done | Updated: run.ts description, toolDispatcher help overview, UNKNOWN_COMMAND error messages |
+| Unit tests | ✅ Done | 38 tests (was 34): +3 mv mapToToolArgs, +1 fuzzy match |
 
 ## Key Files
 

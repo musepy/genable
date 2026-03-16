@@ -21,6 +21,7 @@ import { fontBus } from '../../engine/figma-adapter/resources/FontBus';
 import { buildCreateReceipt } from './receiptBuilder';
 import type { ValidationViolation } from '../../engine/validation/postOpValidator';
 import { findClosestCommand } from '../../engine/agent/tools/unified/commandRegistry';
+import { memoryList, memoryGet, memoryGetAll, memorySet, memoryDelete } from './memoryStore';
 
 export interface ToolCallData {
   toolName: string;
@@ -229,11 +230,17 @@ function formatLsEntry(node: SceneNode): string {
 
 // ── FS command helpers ──
 
+/** Normalize a path: strip trailing slash (except root "/"). */
+function normalizePath(path: string): string {
+  if (path === '/' || path === '') return '/';
+  return path.endsWith('/') ? path.slice(0, -1) : path;
+}
+
 /** Split a path into parent path and node name. */
 function splitPath(path: string): { parentPath: string; nodeName: string } {
   const segments = path.split('/').filter(s => s.length > 0);
   const nodeName = segments.pop() || '';
-  const parentPath = '/' + segments.join('/') + (segments.length > 0 ? '/' : '');
+  const parentPath = segments.length > 0 ? '/' + segments.join('/') : '/';
   return { parentPath, nodeName };
 }
 
@@ -558,7 +565,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     if (!nodeName) continue;
 
     parsed.push({
-      path, parentPath, nodeName, type, refComponent, propTokens,
+      path: normalizePath(path), parentPath: normalizePath(parentPath), nodeName, type, refComponent, propTokens,
       textContent: textParts.length > 0 ? textParts.join(' ') : undefined,
     });
   }
@@ -655,6 +662,92 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   return await executeFlatOps(opsLines.join('\n'), defaultParentId);
 }
 
+// ── Virtual path: /.agent/memory/ → persistent memory store ──
+
+const MEMORY_PREFIX = '/.agent/memory';
+
+function isMemoryPath(path: string | undefined): boolean {
+  if (!path) return false;
+  return path === MEMORY_PREFIX || path === MEMORY_PREFIX + '/' || path.startsWith(MEMORY_PREFIX + '/');
+}
+
+function extractMemoryKey(path: string): string {
+  // "/.agent/memory/foo" → "foo", "/.agent/memory/" → "", "/.agent/memory" → ""
+  const after = path.slice(MEMORY_PREFIX.length);
+  return after.replace(/^\//, '').replace(/\/$/, '');
+}
+
+async function handleMemoryCommand(toolName: string, parameters: any): Promise<ToolResponse | null> {
+  const path: string | undefined = parameters.path;
+  if (!isMemoryPath(path)) return null;
+
+  const key = extractMemoryKey(path!);
+
+  switch (toolName) {
+    case 'ls': {
+      const keys = await memoryList();
+      if (keys.length === 0) {
+        return { success: true, data: { listing: '(empty)', path: MEMORY_PREFIX, count: 0, hint: 'Use mk to create memories: mk /.agent/memory/key text -- value' } };
+      }
+      const listing = keys.map(k => k).join('\n');
+      return { success: true, data: { listing, path: MEMORY_PREFIX, count: keys.length } };
+    }
+
+    case 'tree': {
+      const keys = await memoryList();
+      const lines = ['.agent/memory/'];
+      for (let i = 0; i < keys.length; i++) {
+        const prefix = i === keys.length - 1 ? '└── ' : '├── ';
+        lines.push(prefix + keys[i]);
+      }
+      return { success: true, data: { tree: lines.join('\n'), count: keys.length } };
+    }
+
+    case 'cat': {
+      if (!key) {
+        // cat /.agent/memory/ → dump all memories
+        const all = await memoryGetAll();
+        if (Object.keys(all).length === 0) {
+          return { success: true, data: { memories: {}, hint: 'No memories stored. Use mk /.agent/memory/key text -- value' } };
+        }
+        return { success: true, data: { memories: all } };
+      }
+      const value = await memoryGet(key);
+      if (value === undefined) {
+        const keys = await memoryList();
+        return { success: false, error: { code: 'NOT_FOUND', message: `Memory "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
+      }
+      return { success: true, data: { key, value } };
+    }
+
+    case 'mk': {
+      if (!key) {
+        return { success: false, error: { code: 'MISSING_KEY', message: 'Memory key required. Usage: mk /.agent/memory/my-key text -- value to store' } };
+      }
+      const textContent = parameters.textContent;
+      if (!textContent) {
+        return { success: false, error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/memory/${key} text -- value to store` } };
+      }
+      await memorySet(key, textContent);
+      return { success: true, data: { key, stored: textContent, hint: 'Memory saved. Persists across sessions.' } };
+    }
+
+    case 'rm': {
+      if (!key) {
+        return { success: false, error: { code: 'MISSING_KEY', message: 'Specify which memory to delete. Usage: rm /.agent/memory/key' } };
+      }
+      const existed = await memoryDelete(key);
+      if (!existed) {
+        return { success: false, error: { code: 'NOT_FOUND', message: `Memory "${key}" not found.` } };
+      }
+      return { success: true, data: { key, deleted: true } };
+    }
+
+    default:
+      return { success: false, error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on memory paths. Use ls, cat, mk, rm.` } };
+  }
+}
+
 /**
  * Handle TOOL_CALL IPC events.
  * Routes to the unified tool implementations.
@@ -667,6 +760,12 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   let response: ToolResponse;
 
   try {
+    // ── Virtual path interception: /.agent/memory/ ──
+    const memoryResponse = await handleMemoryCommand(toolName, parameters);
+    if (memoryResponse) {
+      response = memoryResponse;
+    } else {
+
     switch (toolName) {
       // ==========================================
       // VFS READ COMMANDS — filesystem metaphor
@@ -1515,6 +1614,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         };
         break;
     }
+    } // end else (non-memory path)
   } catch (e: any) {
     console.error(`[Agent] Tool Execution Error (${toolName}):`, e);
     response = {

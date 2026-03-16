@@ -77,19 +77,34 @@
 |------|------|--------|-------|
 | 2026-03-16 01:05 | Unit tests (exitCode) | ✅ 30/30 | computeExitCode, formatTiming, formatMeta, extractStderr, truncateOverflow, guardBinary |
 | 2026-03-16 01:19 | Unit tests (commandParser) | ✅ 34/34 | Chain operators, mapToToolArgs, parseMkArgs, fuzzy matching |
-| 2026-03-16 01:07 | MCP ls / | ✅ | `[exit:0 \| 143ms]` |
-| 2026-03-16 01:07 | MCP ls /NonExistent/ | ✅ | `[exit:127 \| 27ms]` + stderr |
-| 2026-03-16 01:07 | MCP unknown command | ✅ | `[exit:127 \| 0ms]` |
-| 2026-03-16 08:01 | MCP fuzzy match "grp" | ✅ | `Did you mean "grep"?` |
-| 2026-03-16 08:01 | MCP fuzzy match "grepp" | ✅ | `Did you mean "grep"?` |
-| 2026-03-16 08:01 | MCP fuzzy match "lss" | ✅ | `Did you mean "ls"?` |
-| 2026-03-16 08:02 | MCP \|\| operator | ✅ | First fails → second runs |
-| 2026-03-16 08:02 | MCP ; operator | ✅ | Both run regardless |
-| 2026-03-16 08:03 | MCP batch mk | ✅ | 4 nodes created, `[exit:0 \| 204ms]` |
-| 2026-03-16 08:03 | MCP chain (tree && grep) | ✅ | Both `[exit:0]` |
-| 2026-03-16 08:03 | MCP sed | ✅ | `[exit:0 \| 41ms]` |
-| 2026-03-16 08:04 | MCP cp with violation | ✅ | `[warn]` stderr: children overflow |
-| 2026-03-16 08:04 | MCP quoted path with spaces | ✅ | `mk "/E2E Test/"` works |
+| 2026-03-16 01:07 | MCP: ls / | ✅ | `[exit:0 \| 143ms]` |
+| 2026-03-16 01:07 | MCP: ls /NonExistent/ | ✅ | `[exit:127 \| 27ms]` + stderr |
+| 2026-03-16 01:07 | MCP: unknown command | ✅ | `[exit:127 \| 0ms]` |
+| 2026-03-16 08:01 | MCP: fuzzy match "grp" | ✅ | `Did you mean "grep"?` |
+| 2026-03-16 08:01 | MCP: fuzzy match "grepp" | ✅ | `Did you mean "grep"?` |
+| 2026-03-16 08:01 | MCP: fuzzy match "lss" | ✅ | `Did you mean "ls"?` |
+| 2026-03-16 08:02 | MCP: \|\| operator | ✅ | First fails → second runs |
+| 2026-03-16 08:02 | MCP: ; operator | ✅ | Both run regardless |
+| 2026-03-16 08:03 | MCP: batch mk | ✅ | 4 nodes created, `[exit:0 \| 204ms]` |
+| 2026-03-16 08:03 | MCP: chain (tree && grep) | ✅ | Both `[exit:0]` |
+| 2026-03-16 08:03 | MCP: sed | ✅ | `[exit:0 \| 41ms]` |
+| 2026-03-16 08:04 | MCP: cp with violation | ✅ | `[warn]` stderr: children overflow |
+| 2026-03-16 08:04 | MCP: quoted path with spaces | ✅ | `mk "/E2E Test/"` works |
+
+> **Note**: "MCP" = MCP server 直接调用单个命令验证。"E2E" = dev bridge server 走完整 agent loop（trigger → agent → result）。
+
+### Phase 6: Bug Fixes from E2E Testing
+| Item | Status | Notes |
+|------|--------|-------|
+| mk batch trailing slash bug | ✅ Fixed | `/Card/Input` vs `/Card/Input/` mismatch → children at page root |
+| `normalizePath()` utility | ✅ Done | Strips trailing slash (except root `/`) |
+| `splitPath()` parentPath fix | ✅ Done | No longer adds trailing slash to parentPath |
+
+### E2E Test Log
+| Date | Test | Result | Notes |
+|------|------|--------|-------|
+| 2026-03-16 | E2E: login card (pre-fix) | ❌ | Placeholder/Label nodes orphaned to PAGE root |
+| 2026-03-16 | E2E: login card (post-fix) | ✅ | All child nodes correctly parented |
 
 ## Key Files
 

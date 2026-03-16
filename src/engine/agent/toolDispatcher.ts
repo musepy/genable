@@ -421,9 +421,23 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       // Execute via local executor or IPC
       let result: any;
       try {
-        const toolExec = this.toolExecutors[cmd.name];
-        if (toolExec) {
-          result = await toolExec(args);
+        // Text pipe: grep on piped text content (Unix-style text filtering)
+        if (args.__pipedText && cmd.name === 'grep') {
+          const text = args.__pipedText as string;
+          const query = args.query || cmd.positionalArgs[0] || '';
+          delete args.__pipedText;
+          if (query) {
+            const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            const matched = text.split('\n').filter(line => pattern.test(line));
+            result = { success: true, data: { listing: matched.join('\n') || '(no matches)' } };
+          }
+        }
+
+        if (result == null) {
+          const toolExec = this.toolExecutors[cmd.name];
+          if (toolExec) {
+            result = await toolExec(args);
+          }
         }
         if (result == null && this.ipcBridge) {
           result = await this.ipcBridge.callTool(cmd.name, args);
@@ -482,6 +496,15 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
    */
   private injectPipeData(commandName: string, args: Record<string, any>, prevResult: any): void {
     const data = prevResult?.data ?? prevResult;
+
+    // Text pipe: listing/tree output → grep does text filtering (Unix-style)
+    if (typeof data?.listing === 'string' && commandName === 'grep') {
+      // Override grep to do text search on piped content instead of canvas search
+      args.__pipedText = data.listing;
+    }
+    if (typeof data?.tree === 'string' && commandName === 'grep') {
+      args.__pipedText = data.tree;
+    }
 
     // grep node search → cat/tree/ls/sed: inject first result's ID as path
     if (data?.results && Array.isArray(data.results) && data.results.length > 0) {

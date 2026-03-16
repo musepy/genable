@@ -18,11 +18,12 @@ import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
-import { buildCompressionSummary } from './context/contextSummarizer';
+import { buildCompressionSummary, capSummary } from './context/contextSummarizer';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
 import { COMMAND_NAMES } from './tools/unified/commandRegistry';
+import { getContextProfile } from './context/constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -251,9 +252,9 @@ export class AgentRuntime {
       messages.push({ id: 'sys_static', role: 'system', content: this.staticSystemPrompt });
     }
 
-    // Layer 2: rolling summary of previous turns
+    // Layer 2: rolling summary of previous turns (system role — distinct from user turns)
     if (this.summary) {
-      messages.push({ id: 'ctx_summary', role: 'user', content: this.summary });
+      messages.push({ id: 'ctx_summary', role: 'system', content: this.summary });
     }
 
     // Layer 3: current turn messages
@@ -273,6 +274,13 @@ export class AgentRuntime {
       this.summary = this.summary
         ? `${this.summary}\n${turnSummary}`
         : turnSummary;
+
+      // Cap summary length — drop oldest turns if exceeded
+      const maxChars = getContextProfile().summaryMaxChars;
+      if (maxChars > 0 && this.summary.length > maxChars) {
+        this.summary = capSummary(this.summary, maxChars);
+      }
+
       console.log(`[Context] Turn summarized (${turnSummary.length} chars). Total summary: ${this.summary.length} chars`);
     }
   }

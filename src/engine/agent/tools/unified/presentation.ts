@@ -105,20 +105,19 @@ export function presentForLLM(result: any, commandName: string, durationMs: numb
  * Unknown commands pass through unchanged.
  */
 function stripForLLM(data: any, commandName: string): any {
-  // Chain results: strip each sub-result individually
+  // Chain results: strip each sub-result's data individually
   if (data.chain && Array.isArray(data.chain)) {
     return {
       chain: data.chain.map((sub: any) => {
         const subCmd = extractCommandName(sub.command);
-        if (!subCmd) return sub;
-        const stripped = stripFields(sub, subCmd);
-        // Preserve chain-level metadata
-        if (sub.command) stripped.command = sub.command;
+        if (!subCmd || !sub.data || typeof sub.data !== 'object') return sub;
+        const result: any = { command: sub.command };
+        result.data = stripFields(sub.data, subCmd);
         if (sub.success === false) {
-          stripped.success = false;
-          if (sub.error) stripped.error = sub.error;
+          result.success = false;
+          if (sub.error) result.error = sub.error;
         }
-        return stripped;
+        return result;
       }),
     };
   }

@@ -101,7 +101,7 @@ export class ProxyProvider implements LLMProvider {
     const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig } = opts;
     const isGemini3 = isGemini3Model(this.modelName);
 
-    const systemMessage = messages.find(m => m.role === 'system');
+    const systemMessages = messages.filter(m => m.role === 'system');
     const chatMessages = messages.filter(m => m.role !== 'system');
     const effectiveMaxTokens = maxTokens || GEMINI_CONFIG.MAX_OUTPUT_TOKENS;
 
@@ -142,8 +142,10 @@ export class ProxyProvider implements LLMProvider {
       };
     }
 
-    const systemInstruction = systemMessage
-      ? { role: 'user', parts: [{ text: typeof systemMessage.content === 'string' ? systemMessage.content : (systemMessage.content as any[]).map(p => p.text).join('\n') }] }
+    const systemInstruction = systemMessages.length > 0
+      ? { role: 'user', parts: [{ text: systemMessages
+          .map(m => typeof m.content === 'string' ? m.content : (m.content as any[]).map(p => p.text).join('\n'))
+          .join('\n\n') }] }
       : undefined;
 
     return {

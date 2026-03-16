@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCompressionSummary } from '../contextSummarizer';
+import { buildCompressionSummary, capSummary } from '../contextSummarizer';
 import type { LLMMessage } from '../../../llm-client/providers/types';
 
 describe('buildCompressionSummary', () => {
@@ -124,7 +124,8 @@ describe('buildCompressionSummary', () => {
     expect(summary).toContain('Agent: Here is your form.');
   });
 
-  it('preserves design receipt details during compression', () => {
+  it('preserves design receipt details during compression (lean format)', () => {
+    // After noise stripping, design results only have: idMap, created, edited, deleted, failed, degraded
     const messages: LLMMessage[] = [
       { id: 'u1', role: 'user', content: 'Create a settings panel' },
       {
@@ -152,16 +153,8 @@ describe('buildCompressionSummary', () => {
                     subtitle: '100:3',
                     toggle: '100:4',
                   },
-                  defaultsApplied: [
-                    { property: 'textAutoResize' },
-                    { property: 'layoutSizingHorizontal' },
-                  ],
-                  defaultsAppliedCount: 6,
-                  violations: [
-                    { code: 'TEXT_OVERFLOW' },
-                    { code: 'SIZING_REVERTED' },
-                  ],
-                  nodeLimitWarning: 'too many nodes',
+                  failed: 1,
+                  degraded: ['toggle'],
                 },
               },
             },
@@ -175,13 +168,13 @@ describe('buildCompressionSummary', () => {
     expect(summary).toContain('parent:200:1');
     expect(summary).toContain('created 4');
     expect(summary).toContain('edited 2');
-    expect(summary).toContain('defaults 6 [textAutoResize, layoutSizingHorizontal]');
-    expect(summary).toContain('violations 2 [TEXT_OVERFLOW, SIZING_REVERTED]');
-    expect(summary).toContain('node-limit warning');
     expect(summary).toContain('panel=100:1');
+    expect(summary).toContain('failed 1');
+    expect(summary).toContain('degraded 1');
   });
 
-  it('uses receipt.edited for edit summaries', () => {
+  it('uses receipt.edited for edit summaries (lean format)', () => {
+    // After noise stripping, edit results only have: idMap, edited, failed, changeSummary
     const messages: LLMMessage[] = [
       { id: 'u1', role: 'user', content: 'Adjust the card spacing' },
       {
@@ -202,9 +195,6 @@ describe('buildCompressionSummary', () => {
                 success: true,
                 data: {
                   edited: 3,
-                  warnings: [{ nodeId: '1:1', warnings: [{ code: 'IGNORED_PROP' }] }],
-                  warningCount: 1,
-                  violations: [{ code: 'SIZING_REVERTED' }],
                 },
               },
             },
@@ -215,7 +205,118 @@ describe('buildCompressionSummary', () => {
 
     const summary = buildCompressionSummary(messages);
     expect(summary).toContain('edited 3');
-    expect(summary).toContain('warnings 1');
-    expect(summary).toContain('violations 1 [SIZING_REVERTED]');
+  });
+
+  it('summarizes CLI mk command with idMap', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Create a card' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'mk', args: { path: '/Card/', type: 'frame' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          { functionResponse: { name: 'mk', response: { success: true, data: { idMap: { Card: '962:1', Title: '962:5' } } } } },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('Card=962:1');
+    expect(summary).toContain('Title=962:5');
+  });
+
+  it('summarizes CLI ls command', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'List nodes' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'ls', args: { path: '/' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          { functionResponse: { name: 'ls', response: { success: true, data: { listing: 'Card\nButton\nHeader\nFooter\nSidebar' } } } },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('5 items');
+  });
+
+  it('summarizes CLI grep command', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Find buttons' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'grep', args: { query: 'Button' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          { functionResponse: { name: 'grep', response: { success: true, data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }] } } } },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('3 matches');
+  });
+
+  it('summarizes CLI sed command', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Replace colors' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'sed', args: { path: '/Card/', property: 'bg' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          { functionResponse: { name: 'sed', response: { success: true, data: { replaced: 5 } } } },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('replaced 5');
+  });
+
+  it('summarizes CLI rm command', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Delete nodes' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'rm', args: { path: '/Card/' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          { functionResponse: { name: 'rm', response: { success: true, data: { deleted: 3 } } } },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('deleted 3');
+  });
+});
+
+describe('capSummary', () => {
+  it('returns unchanged if under limit', () => {
+    const summary = 'User: Hello\nAgent: Hi';
+    expect(capSummary(summary, 100)).toBe(summary);
+  });
+
+  it('drops oldest turns when over limit', () => {
+    const summary = 'User: First request\n  → mk → ok\nAgent: Done first\nUser: Second request\n  → ls → ok\nAgent: Done second';
+    const capped = capSummary(summary, 60);
+    expect(capped).toContain('[Earlier history truncated]');
+    expect(capped).toContain('User: Second request');
+    expect(capped).not.toContain('User: First request');
+  });
+
+  it('keeps last turn even if exceeds limit', () => {
+    const summary = 'User: A very long single turn that exceeds the limit by itself';
+    const capped = capSummary(summary, 10);
+    expect(capped).toContain('[Earlier history truncated]');
+    expect(capped).toContain('User: A very long');
   });
 });

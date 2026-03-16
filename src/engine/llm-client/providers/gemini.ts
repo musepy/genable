@@ -135,12 +135,12 @@ export class GeminiProvider implements LLMProvider {
       config.responseSchema = responseSchema;
     }
 
-    // System instruction
-    const systemMessage = messages.find(m => m.role === 'system');
-    if (systemMessage) {
-      config.systemInstruction = typeof systemMessage.content === 'string'
-        ? systemMessage.content
-        : (systemMessage.content as any[]).map(p => p.text).join('\n');
+    // System instruction — concatenate all system messages
+    const systemMessages = messages.filter(m => m.role === 'system');
+    if (systemMessages.length > 0) {
+      config.systemInstruction = systemMessages
+        .map(m => typeof m.content === 'string' ? m.content : (m.content as any[]).map(p => p.text).join('\n'))
+        .join('\n\n');
     }
 
     // Tools + tool config

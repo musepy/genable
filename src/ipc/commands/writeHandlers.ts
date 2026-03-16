@@ -204,17 +204,24 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   const latestSymbolForPath = new Map<string, string>();
   let symbolCounter = 0;
 
-  // Pre-resolve page-level root collisions with existing Figma nodes
-  const pageRootNames = new Set<string>();
-  const nameDedup = new Map<string, string>();
-  for (const line of parsed) {
-    if (line.parentPath === '/') pageRootNames.add(line.nodeName);
-  }
-  for (const rootName of pageRootNames) {
-    const resolved = await resolvePathToNode('/' + rootName);
-    if (resolved.ok && !resolved.isPage) {
-      nameDedup.set(rootName, deduplicateName(figma.currentPage.children, rootName));
+  // Track used names per parent for batch-internal dedup (Unix: unique names within dir)
+  const usedNamesPerParent = new Map<string, Set<string>>();
+
+  /** Get or initialize the used-names set for a parent, seeding from existing Figma children. */
+  async function getUsedNames(parentRef: string): Promise<Set<string>> {
+    if (usedNamesPerParent.has(parentRef)) return usedNamesPerParent.get(parentRef)!;
+    const names = new Set<string>();
+    if (parentRef === 'root') {
+      for (const child of figma.currentPage.children) names.add(child.name);
+    } else if (parentRef.startsWith("'")) {
+      const node = await figma.getNodeByIdAsync(parentRef.replace(/'/g, ''));
+      if (node && 'children' in node) {
+        for (const child of (node as any).children) names.add(child.name);
+      }
     }
+    // Batch-internal parents (symbols like n1) start empty — no existing Figma children
+    usedNamesPerParent.set(parentRef, names);
+    return names;
   }
 
   // Generate flat ops sequentially
@@ -240,9 +247,15 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     const sym = `n${++symbolCounter}`;
     latestSymbolForPath.set(line.path, sym); // Overwrite: children use latest parent
 
-    // Deduplicate page-level names that collide with existing designs
-    const displayName = (line.parentPath === '/' && nameDedup.has(line.nodeName))
-      ? nameDedup.get(line.nodeName)! : line.nodeName;
+    // Deduplicate name among siblings — Unix-style unique names within parent
+    const usedNames = await getUsedNames(parentRef);
+    let displayName = line.nodeName;
+    if (usedNames.has(displayName)) {
+      let i = 2;
+      while (usedNames.has(`${displayName}_${i}`)) i++;
+      displayName = `${displayName}_${i}`;
+    }
+    usedNames.add(displayName);
 
     const adjustedTokens = injectLayoutDefaults(line.type, line.propTokens);
     const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
@@ -267,12 +280,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { success: true, data: { message: 'All nodes already exist. No changes needed.' } };
   }
 
-  const response = await executeFlatOps(opsLines.join('\n'));
-  if (nameDedup.size > 0 && response.success) {
-    const renamed = Object.fromEntries(nameDedup);
-    response.data = { ...response.data, renamed };
-  }
-  return response;
+  return await executeFlatOps(opsLines.join('\n'));
 }
 
 export async function handleMk(parameters: any): Promise<ToolResponse> {

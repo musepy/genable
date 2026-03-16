@@ -1173,6 +1173,26 @@ export class ActionExecutor {
         }
         return cs.defaultVariant as ComponentNode;
       }
+      // Fallback: search current page by name (handles name mismatch when LLM
+      // overrides node name via name:'Variant=Default' but references by path name)
+      const nameLower = nodeId.toLowerCase();
+      const found = figma.currentPage.findOne(n =>
+        (n.type === 'COMPONENT' || n.type === 'COMPONENT_SET') &&
+        n.name.toLowerCase() === nameLower
+      );
+      if (found) {
+        if (found.type === 'COMPONENT') return found as ComponentNode;
+        if (found.type === 'COMPONENT_SET') {
+          const cs = found as ComponentSetNode;
+          if (variant) {
+            const exact = cs.children.find(c => c.type === 'COMPONENT' && c.name === variant);
+            if (exact) return exact as ComponentNode;
+            const partial = cs.children.find(c => c.type === 'COMPONENT' && c.name.includes(variant));
+            if (partial) return partial as ComponentNode;
+          }
+          return cs.defaultVariant as ComponentNode;
+        }
+      }
     }
     return null;
   }

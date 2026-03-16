@@ -425,6 +425,9 @@ export function parseMkArgs(
     } else if (pos[1].startsWith('ref:')) {
       refComponent = pos[1].slice(4);
       propsStart = 2;
+    } else if (pos[1] === 'ref' && pos[2]) {
+      refComponent = pos[2];
+      propsStart = 3;
     }
   }
 

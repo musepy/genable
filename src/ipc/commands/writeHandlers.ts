@@ -124,6 +124,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     if (tokens[1]) {
       if (MK_TYPES.has(tokens[1])) { type = tokens[1]; propsStart = 2; }
       else if (tokens[1].startsWith('ref:')) { refComponent = tokens[1].slice(4); propsStart = 2; }
+      else if (tokens[1] === 'ref' && tokens[2]) { refComponent = tokens[2]; propsStart = 3; }
     }
 
     const propTokens: string[] = [];

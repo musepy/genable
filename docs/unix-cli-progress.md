@@ -107,6 +107,7 @@
 | 2026-03-16 | E2E: login card (post-fix) | ✅ | All child nodes correctly parented |
 | 2026-03-16 | E2E: pricing card | ✅ | 20 nodes, all nested correctly. 18 tool calls (agent rebuilt 4x — LLM behavior, not tool bug). Step 7 mk failure: propTokens had embedded `\nmk` batch lines. Added auto-detect guard. |
 | 2026-03-16 | E2E: toast notification | ✅ | 5 nodes, 2 tool calls (efficient). Horizontal layout correct. Icon type creates empty frame (no Lucide support — known limitation). |
+| 2026-03-16 | E2E: profile card | ✅ | 16 nodes, 3 tool calls. 3-level nesting (Stats→Posts→Value/Label) all correct. Path normalization fix validated. |
 
 ### Phase 7: Missing CLI Features — mv, glob, $LAST
 | Item | Status | Notes |

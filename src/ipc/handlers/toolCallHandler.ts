@@ -581,7 +581,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { success: false, error: { code: 'EMPTY_BATCH', message: 'No mk commands in batch input.' } };
   }
 
-  const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'variantset']);
+  const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'component', 'variantset']);
 
   // Phase 1: Parse all lines with inline parser
   interface MkLine {

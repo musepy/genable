@@ -210,7 +210,7 @@ export function parseCommandString(input: string): ParsedChain {
 // ── Arg mapping ────────────────────────────────────────────────────
 
 /** Known mk node types. */
-const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'variantset']);
+const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'component', 'variantset']);
 
 /**
  * Map parsed CLI command to internal tool args based on command name.

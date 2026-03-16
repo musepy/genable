@@ -82,10 +82,12 @@ function setupClient(
           identified = true;
           clientName = msg.name || '(unnamed)';
 
-          // Accept this client — replace any existing connection
+          // First-client-wins: reject newcomers while an existing client is healthy.
+          // This prevents flapping when multiple Figma instances connect to the same relay.
           if (state.client && state.client !== ws && state.client.readyState === WebSocket.OPEN) {
-            console.error(`[MCP] Replacing previous client with "${clientName}"`);
-            state.client.close();
+            console.error(`[MCP] Rejecting "${clientName}" — already connected to another client`);
+            ws.close(4001, 'already-connected');
+            return;
           }
           if (state.pingTimer) {
             clearInterval(state.pingTimer);

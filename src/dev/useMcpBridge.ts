@@ -14,6 +14,7 @@ import type { ToolCallHandler, ToolResultHandler } from '../types'
 
 const WS_URL = 'ws://localhost:3458'
 const RECONNECT_INTERVAL_MS = 5_000
+const REJECTED_RECONNECT_INTERVAL_MS = 30_000 // Back off when another client has priority
 
 type McpBridgeStatus = 'disconnected' | 'connected'
 
@@ -107,13 +108,20 @@ export function useMcpBridge(): { mcpBridgeStatus: McpBridgeStatus } {
           }
         }
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           if (wsRef.current === ws) {
             wsRef.current = null
             setStatus('disconnected')
           }
           if (!disposed) {
-            reconnectTimer = setTimeout(connect, RECONNECT_INTERVAL_MS)
+            // If rejected because another client has priority (code 4001), back off longer
+            const interval = event.code === 4001
+              ? REJECTED_RECONNECT_INTERVAL_MS
+              : RECONNECT_INTERVAL_MS
+            if (event.code === 4001) {
+              console.log('[McpBridge] Another client has priority — backing off to 30s reconnect')
+            }
+            reconnectTimer = setTimeout(connect, interval)
           }
         }
 

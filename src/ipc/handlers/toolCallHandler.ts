@@ -21,14 +21,14 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
   const { toolName, parameters, requestId } = data;
 
   try {
-    const result = await dispatchCommand(toolName, parameters);
-    emit('TOOL_RESULT', { requestId, result });
+    const response = await dispatchCommand(toolName, parameters);
+    emit('TOOL_RESULT', { requestId, response });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`[toolCallHandler] ${toolName} threw: ${message}`);
     emit('TOOL_RESULT', {
       requestId,
-      result: {
+      response: {
         success: false,
         error: { code: 'INTERNAL_ERROR', message },
       } as ToolResponse,

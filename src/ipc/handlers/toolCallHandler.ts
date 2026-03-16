@@ -266,6 +266,50 @@ function injectNameProp(propsInner: string, name: string): string {
     : `name:'${escaped}'`;
 }
 
+// ── Glob support ──
+// Enables wildcard patterns in paths: rm /Card/Placeholder*, cat /Card/Btn*
+
+/** Check if a path contains a glob pattern. */
+function hasGlob(path: string): boolean {
+  return path.includes('*');
+}
+
+/** Match a node name against a simple glob pattern (supports *, prefix*, *suffix, pre*suf). */
+function matchGlob(name: string, pattern: string): boolean {
+  if (pattern === '*') return true;
+  if (!pattern.includes('*')) return name === pattern;
+  const parts = pattern.split('*');
+  if (parts.length === 2) {
+    return (parts[0] === '' || name.startsWith(parts[0])) &&
+           (parts[1] === '' || name.endsWith(parts[1]));
+  }
+  // Multiple wildcards: convert to regex
+  const regex = new RegExp('^' + parts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$');
+  return regex.test(name);
+}
+
+/**
+ * Resolve a glob path to matching SceneNodes.
+ * Only supports glob in the LAST segment: /Card/Placeholder* → children of Card matching "Placeholder*".
+ */
+async function resolveGlobPaths(path: string): Promise<SceneNode[]> {
+  const segments = path.split('/').filter(s => s.length > 0);
+  if (segments.length === 0) return [];
+
+  const lastSegment = segments[segments.length - 1];
+  if (!lastSegment.includes('*')) return [];
+
+  // Resolve parent (all segments except last)
+  const parentPath = segments.length > 1 ? '/' + segments.slice(0, -1).join('/') : '/';
+  const parentResolved = await resolvePathToNode(parentPath);
+  if (!parentResolved.ok) return [];
+
+  const parent = parentResolved.isPage ? figma.currentPage : parentResolved.node;
+  if (!('children' in parent)) return [];
+
+  return (parent as any).children.filter((child: SceneNode) => matchGlob(child.name, lastSegment));
+}
+
 /**
  * Shared flat ops execution pipeline.
  * Parses ops string → compiles → executes → returns receipt.
@@ -774,6 +818,28 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       case 'ls': {
         // List children at a path — like Unix ls
         const lsPath = parameters.path || '/';
+
+        // Glob support: ls /Card/Btn*
+        if (hasGlob(lsPath)) {
+          const globNodes = await resolveGlobPaths(lsPath);
+          if (globNodes.length === 0) {
+            response = { success: false, error: { code: 'NO_MATCH', message: `No nodes matched pattern "${lsPath}".` } };
+            break;
+          }
+          const lines = globNodes.map(n => formatLsEntry(n));
+          response = {
+            success: true,
+            data: {
+              listing: lines.join('\n'),
+              path: lsPath,
+              container: `glob(${lsPath})`,
+              count: globNodes.length,
+              footer: `[${globNodes.length} matches]`,
+            },
+          };
+          break;
+        }
+
         const resolved = await resolvePathToNode(lsPath);
         if (!resolved.ok) { response = resolved.response; break; }
 
@@ -901,6 +967,33 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         const catDepth = Math.min(parameters.depth || 5, 10);
         const wantScreenshot = parameters.screenshot;
 
+        // Glob support: cat /Card/Btn*
+        if (hasGlob(catPath)) {
+          const globNodes = await resolveGlobPaths(catPath);
+          if (globNodes.length === 0) {
+            response = { success: false, error: { code: 'NO_MATCH', message: `No nodes matched pattern "${catPath}".` } };
+            break;
+          }
+          // Serialize each matched node compactly
+          const entries: any[] = [];
+          for (const gNode of globNodes.slice(0, 10)) {
+            const serialized = NodeSerializer.serializeWithCompression(gNode, { maxDepth: catDepth, pruneDefaults: true });
+            const xml = FlatOpsSerializer.serialize(serialized, { maxDepth: catDepth });
+            entries.push({ name: gNode.name, id: gNode.id, type: gNode.type.toLowerCase(), xml });
+          }
+          response = {
+            success: true,
+            data: {
+              pattern: catPath,
+              matches: entries.length,
+              total: globNodes.length,
+              nodes: entries,
+              truncated: globNodes.length > 10,
+            },
+          };
+          break;
+        }
+
         const resolved = await resolvePathToNode(catPath);
         if (!resolved.ok) { response = resolved.response; break; }
 
@@ -981,6 +1074,13 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
         if (!mkPath) {
           response = { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a path. Usage: mk /Card/ frame w:400 layout:column' } };
+          break;
+        }
+
+        // Guard: detect embedded batch commands in propTokens (LLM sometimes crams multiple mk lines into one call)
+        if (propTokens && Array.isArray(propTokens) && propTokens.some((t: string) => /\nmk\s|^mk\s/.test(t))) {
+          const reconstructed = `${mkPath}${mkType ? ' ' + mkType : ''} ${(propTokens || []).join(' ')}${textContent ? ' -- ' + textContent : ''}`;
+          response = await executeMkBatch(reconstructed);
           break;
         }
 
@@ -1520,6 +1620,18 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       case 'rm': {
         const rmPath = parameters.path || '/';
 
+        // Glob support: rm /Card/Placeholder*
+        if (hasGlob(rmPath)) {
+          const globNodes = await resolveGlobPaths(rmPath);
+          if (globNodes.length === 0) {
+            response = { success: false, error: { code: 'NO_MATCH', message: `No nodes matched pattern "${rmPath}". Use ls to check available children.` } };
+            break;
+          }
+          const rmOps = globNodes.map(n => `delete('${n.id}')`).join('\n');
+          response = await executeFlatOps(rmOps);
+          break;
+        }
+
         const rmResolved = await resolvePathToNode(rmPath);
         if (!rmResolved.ok) { response = rmResolved.response; break; }
         if (rmResolved.isPage) {
@@ -1530,6 +1642,88 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
         const rmNodeId = rmResolved.node.id;
         const rmOps = `delete('${rmNodeId}')`;
         response = await executeFlatOps(rmOps);
+        break;
+      }
+
+      case 'mv': {
+        const { sourcePath: mvSourcePath, destPath: mvDestPath } = parameters;
+
+        if (!mvSourcePath) {
+          response = { success: false, error: { code: 'MISSING_SOURCE', message: 'mv requires a source path. Usage: mv /OldName /NewName' } };
+          break;
+        }
+        if (!mvDestPath) {
+          response = { success: false, error: { code: 'MISSING_DEST', message: 'mv requires a destination path. Usage: mv /OldName /NewName' } };
+          break;
+        }
+
+        // Resolve source
+        const mvSourceResolved = await resolvePathToNode(mvSourcePath);
+        if (!mvSourceResolved.ok) { response = mvSourceResolved.response; break; }
+        if (mvSourceResolved.isPage) {
+          response = { success: false, error: { code: 'INVALID_SOURCE', message: 'Cannot move page root.' } };
+          break;
+        }
+        const mvNode = mvSourceResolved.node;
+        const mvOldName = mvNode.name;
+        const mvOldParentId = mvNode.parent?.id;
+
+        // Check if dest is an existing container → move INTO it (Unix "mv file dir/" semantics)
+        let mvNewName: string = mvNode.name;
+        let mvNewParent: (BaseNode & ChildrenMixin) | null = null;
+
+        const mvDestResolved = await resolvePathToNode(mvDestPath);
+        if (mvDestResolved.ok && !mvDestResolved.isPage && 'children' in mvDestResolved.node) {
+          // Dest exists and is a container → move into it, keep original name
+          mvNewParent = mvDestResolved.node as BaseNode & ChildrenMixin;
+        } else if (mvDestResolved.ok && mvDestResolved.isPage) {
+          // Dest is page root → move to page, keep original name
+          mvNewParent = figma.currentPage;
+        } else {
+          // Dest doesn't exist → split into parent + name (rename + reparent)
+          const { parentPath: mvParentPath, nodeName: mvTargetName } = splitPath(mvDestPath);
+          if (!mvTargetName) {
+            response = { success: false, error: { code: 'INVALID_DEST', message: 'Destination must include a name, e.g. mv /Card/OldTitle /Card/NewTitle' } };
+            break;
+          }
+          mvNewName = mvTargetName;
+
+          const mvParentResolved = await resolvePathToNode(mvParentPath);
+          if (!mvParentResolved.ok) { response = mvParentResolved.response; break; }
+
+          if (mvParentResolved.isPage) {
+            mvNewParent = figma.currentPage;
+          } else if ('children' in mvParentResolved.node) {
+            mvNewParent = mvParentResolved.node as BaseNode & ChildrenMixin;
+          } else {
+            response = { success: false, error: { code: 'INVALID_DEST', message: `"${mvParentPath}" is not a container. Cannot move node there.` } };
+            break;
+          }
+        }
+
+        // Apply rename
+        const mvRenamed = mvOldName !== mvNewName;
+        if (mvRenamed) {
+          mvNode.name = mvNewName;
+        }
+
+        // Apply reparent
+        const mvMoved = mvNewParent != null && mvNewParent.id !== mvOldParentId;
+        if (mvMoved) {
+          (mvNewParent as any).appendChild(mvNode);
+        }
+
+        response = {
+          success: true,
+          data: {
+            id: mvNode.id,
+            oldName: mvOldName,
+            newName: mvNewName,
+            renamed: mvRenamed,
+            moved: mvMoved,
+            newParent: mvMoved ? mvNewParent!.name : undefined,
+          },
+        };
         break;
       }
 
@@ -1610,7 +1804,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       default:
         response = {
           success: false,
-          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}".${(() => { const s = findClosestCommand(toolName); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, rm, cp, grep, sed, man` }
+          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}".${(() => { const s = findClosestCommand(toolName); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, mv, rm, cp, grep, sed, man` }
         };
         break;
     }

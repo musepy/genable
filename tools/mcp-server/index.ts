@@ -332,7 +332,15 @@ async function main() {
         // | : always run (pipe data is contextual, passed via input)
 
         // Map CLI args to tool parameters
-        const cmdInput = chain.commands.length === 1 ? input : undefined;
+        // Pipe: pass previous result as input to next command
+        let cmdInput: string | undefined;
+        if (ci === 0) {
+          cmdInput = input;
+        } else if (prevOp === '|' && results.length > 0) {
+          // Extract text from last result content block
+          const lastContent = results[results.length - 1];
+          cmdInput = lastContent?.text || undefined;
+        }
         const args = mapToToolArgs(cmd, cmdInput);
 
         // null args = help mode

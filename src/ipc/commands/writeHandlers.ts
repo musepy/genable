@@ -149,15 +149,27 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
 
     if (tokens.length === 0) continue;
 
-    const path = tokens[0];
+    // Reconstruct path from initial tokens (handles spaces in names like "/Pricing Table/")
+    // Path starts with '/' and continues until we hit a type keyword, property (:), '--', or ref
+    let path = tokens[0];
+    let pathEnd = 1;
+    if (path.startsWith('/')) {
+      while (pathEnd < tokens.length) {
+        const next = tokens[pathEnd];
+        if (MK_TYPES.has(next) || next.includes(':') || next === '--' || next === 'ref' || next.startsWith('ref:')) break;
+        path += ' ' + next;
+        pathEnd++;
+      }
+    }
+
     let type: string | undefined;
     let refComponent: string | undefined;
-    let propsStart = 1;
+    let propsStart = pathEnd;
 
-    if (tokens[1]) {
-      if (MK_TYPES.has(tokens[1])) { type = tokens[1]; propsStart = 2; }
-      else if (tokens[1].startsWith('ref:')) { refComponent = tokens[1].slice(4); propsStart = 2; }
-      else if (tokens[1] === 'ref' && tokens[2]) { refComponent = tokens[2]; propsStart = 3; }
+    if (tokens[pathEnd]) {
+      if (MK_TYPES.has(tokens[pathEnd])) { type = tokens[pathEnd]; propsStart = pathEnd + 1; }
+      else if (tokens[pathEnd].startsWith('ref:')) { refComponent = tokens[pathEnd].slice(4); propsStart = pathEnd + 1; }
+      else if (tokens[pathEnd] === 'ref' && tokens[pathEnd + 1]) { refComponent = tokens[pathEnd + 1]; propsStart = pathEnd + 2; }
     }
 
     const propTokens: string[] = [];

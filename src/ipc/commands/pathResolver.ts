@@ -45,9 +45,10 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
 
-    // If segment looks like a Figma node ID (contains ':'), resolve directly
-    if (segment.includes(':')) {
-      const node = await figma.getNodeByIdAsync(segment);
+    // Explicit ID prefix: #1058:12304 → resolve by Figma ID
+    if (segment.startsWith('#')) {
+      const nodeId = segment.slice(1);
+      const node = await figma.getNodeByIdAsync(nodeId);
       if (!node) {
         return {
           ok: false,
@@ -55,7 +56,7 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
             success: false,
             error: {
               code: 'PATH_NOT_FOUND',
-              message: `Node ID "${segment}" not found in path "${path}". Use ls("/") to discover available nodes.`,
+              message: `Node ID "${nodeId}" not found. Use ls("/") to discover available nodes.`,
             },
           },
         };
@@ -64,7 +65,7 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
       continue;
     }
 
-    // Otherwise, find child by name
+    // All segments are name-based by default — no implicit ID guessing
     if (!('children' in current)) {
       return {
         ok: false,

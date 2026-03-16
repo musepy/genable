@@ -164,7 +164,7 @@ export class ToolDispatcher {
       // ── Expand $LAST variable in command string ──
       let expandedTc = tc;
       if (this.lastNodeId && tc.name === 'run' && typeof tc.args?.command === 'string' && tc.args.command.includes('$LAST')) {
-        expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, `/${this.lastNodeId}/`) } };
+        expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, `/#${this.lastNodeId}/`) } };
       }
 
       // ── Unwrap `run` → command name ──
@@ -378,7 +378,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       if (this.lastNodeId) {
         for (let j = 0; j < cmd.positionalArgs.length; j++) {
           if (cmd.positionalArgs[j].includes('$LAST')) {
-            cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/${this.lastNodeId}/`);
+            cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/#${this.lastNodeId}/`);
           }
         }
       }
@@ -511,7 +511,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const firstNode = data.results[0];
       if (firstNode?.id && ['cat', 'tree', 'ls', 'sed', 'mk', 'rm'].includes(commandName)) {
         if (!args.path || args.path === '/') {
-          args.path = `/${firstNode.id}/`;
+          args.path = `/#${firstNode.id}/`;
         }
       }
     }
@@ -521,7 +521,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const ids = Object.values(data.idMap);
       if (ids.length > 0 && ['cat', 'tree', 'ls'].includes(commandName)) {
         if (!args.path || args.path === '/') {
-          args.path = `/${ids[ids.length - 1]}/`;
+          args.path = `/#${ids[ids.length - 1]}/`;
         }
       }
     }

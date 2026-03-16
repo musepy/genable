@@ -19,7 +19,8 @@ function formatLsEntry(node: SceneNode, showId = false): string {
   const hasChildren = 'children' in node && (node as any).children.length > 0;
   const baseName = hasChildren ? `${node.name}/` : node.name;
   // Show ID suffix for duplicate-named siblings (like `ls -i` in Unix)
-  const name = showId ? `${baseName} (${node.id})` : baseName;
+  // Use # prefix so the ID is directly usable as a path: /#1058:12304/
+  const name = showId ? `${baseName} (#${node.id})` : baseName;
   const type = node.type.toLowerCase();
   const w = Math.round(node.width);
   const h = Math.round(node.height);

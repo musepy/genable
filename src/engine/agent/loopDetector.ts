@@ -24,7 +24,6 @@ export interface LoopThresholds {
 
 export class LoopDetector {
   private signatureHistory: string[] = [];
-  private identicalGraceGiven = false;
   private readonly maxHistoryLength = 10;
   private readonly readTools = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat', 'grep', 'man']);
 
@@ -54,7 +53,6 @@ export class LoopDetector {
   /** Reset state (call at start of each run) */
   reset(): void {
     this.signatureHistory = [];
-    this.identicalGraceGiven = false;
   }
 
   // ── Private helpers ──────────────────────────────────────────
@@ -131,27 +129,20 @@ export class LoopDetector {
 
   /**
    * Detect exact same signature repeated >= threshold times.
-   * First occurrence gives the agent a grace chance to explain; second is fatal.
+   * Always non-fatal — injects a hint but never terminates.
+   * Other guardrails (consecutive failure escalation, iteration budget)
+   * handle actual stuck scenarios more precisely.
    */
   private detectIdenticalLoop(currentSignature: string, threshold: number): LoopDetectionResult | null {
     const count = this.signatureHistory.filter(sig => sig === currentSignature).length;
     if (count < threshold) return null;
 
-    if (!this.identicalGraceGiven) {
-      this.identicalGraceGiven = true;
-      return {
-        type: 'identical',
-        message: `[LOOP DETECTED] Same action repeated ${count} times.`,
-        fatal: false,
-        hint: `You repeated the same action ${count} times. Stop retrying. `
-          + `Explain to the user what you were trying to do and why it's not working.`,
-      };
-    }
-
     return {
       type: 'identical',
-      message: `[LOOP DETECTED] Same action repeated ${count} times after grace warning: ${currentSignature}. Terminating.`,
-      fatal: true,
+      message: `[LOOP WARNING] Same action repeated ${count} times.`,
+      fatal: false,
+      hint: `You repeated the same action ${count} times. If you are making progress (creating new nodes, fixing errors), continue. `
+        + `If stuck, change approach or explain the blocker to the user.`,
     };
   }
 

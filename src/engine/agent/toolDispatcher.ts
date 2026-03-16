@@ -534,18 +534,25 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
   private injectPipeData(commandName: string, args: Record<string, any>, prevResult: any): void {
     const data = prevResult?.data ?? prevResult;
 
-    // grep node search → cat/tree: inject first result's ID as path
+    // grep node search → cat/tree/ls/sed: inject first result's ID as path
     if (data?.results && Array.isArray(data.results) && data.results.length > 0) {
       const firstNode = data.results[0];
-      if (firstNode?.id && (commandName === 'cat' || commandName === 'tree' || commandName === 'ls')) {
+      if (firstNode?.id && ['cat', 'tree', 'ls', 'sed', 'mk', 'rm'].includes(commandName)) {
         if (!args.path || args.path === '/') {
           args.path = `/${firstNode.id}/`;
         }
       }
     }
 
-    // grep property discovery → sed: inject discovered values for replacement context
-    // (sed still needs explicit from/to, but piped context helps the LLM)
+    // mk/design result (idMap) → cat/tree/ls: inject last created node as path
+    if (data?.idMap && typeof data.idMap === 'object') {
+      const ids = Object.values(data.idMap);
+      if (ids.length > 0 && ['cat', 'tree', 'ls'].includes(commandName)) {
+        if (!args.path || args.path === '/') {
+          args.path = `/${ids[ids.length - 1]}/`;
+        }
+      }
+    }
   }
 
   // ─── Idempotency helpers ──────────────────────────────────

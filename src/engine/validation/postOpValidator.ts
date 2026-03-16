@@ -175,6 +175,8 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): ValidationVio
     const estimatedLines = estimateLineCount(content, t.width, fontSize);
     const narrowWidthThreshold = Math.max(96, fontSize * 4);
     if (estimatedLines >= 3 && t.width <= narrowWidthThreshold) {
+      // Check if parent is auto-layout — if so, suggest sizingH:fill
+      const parentHint = getParentLayoutHint(t);
       violations.push({
         code: 'TEXT_WIDTH_COLLAPSED',
         message: `'${t.name}' is wrapping into a narrow ${Math.round(t.width)}px text box (${estimatedLines} estimated lines)`,
@@ -186,11 +188,17 @@ function validateTextNode(t: TextNode, intended?: PostOpIntended): ValidationVio
           estimatedLines,
           fontSize,
           contentLength: content.length,
+          ...parentHint.context,
         },
-        hints: [
-          `If this is a short label or heading, switch to textAutoResize="WIDTH_AND_HEIGHT" and remove width`,
-          `If this text should wrap, widen the text box beyond ${Math.round(narrowWidthThreshold)}px`,
-        ],
+        hints: parentHint.hasAutoLayoutParent
+          ? [
+            `Set layoutSizingHorizontal to "FILL" so text expands to parent width`,
+            `If this is a short label, switch to textAutoResize="WIDTH_AND_HEIGHT"`,
+          ]
+          : [
+            `If this is a short label or heading, switch to textAutoResize="WIDTH_AND_HEIGHT" and remove width`,
+            `If this text should wrap, widen the text box beyond ${Math.round(narrowWidthThreshold)}px`,
+          ],
       });
     }
   }
@@ -595,6 +603,29 @@ function walkTree(
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
+
+/**
+ * Check if a node's parent has auto-layout, providing context for sizing hints.
+ */
+function getParentLayoutHint(node: SceneNode): {
+  hasAutoLayoutParent: boolean;
+  context: Record<string, any>;
+} {
+  const parent = node.parent;
+  if (!parent || !('layoutMode' in parent)) {
+    return { hasAutoLayoutParent: false, context: {} };
+  }
+  const parentFrame = parent as FrameNode;
+  const hasLayout = parentFrame.layoutMode && parentFrame.layoutMode !== 'NONE';
+  return {
+    hasAutoLayoutParent: !!hasLayout,
+    context: {
+      'parent.name': parentFrame.name,
+      'parent.layoutMode': parentFrame.layoutMode || 'NONE',
+      'parent.width': Math.round(parentFrame.width),
+    },
+  };
+}
 
 function getFontSize(t: TextNode): number {
   const fs = t.fontSize;

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { presentForLLM } from '../presentation';
 
 describe('presentForLLM — noise stripping', () => {
-  it('strips mk result to idMap only', () => {
+  it('strips mk result to idMap + key fields, removes noise', () => {
     const result = {
       success: true,
       data: {
@@ -13,9 +13,10 @@ describe('presentForLLM — noise stripping', () => {
       },
     };
     const presented = presentForLLM(result, 'mk', 50);
-    expect(presented.data).toEqual({ idMap: { Card: '100:1', Title: '100:2' } });
-    expect(presented.data.created).toBeUndefined();
-    expect(presented.data.count).toBeUndefined();
+    expect(presented.data.idMap).toEqual({ Card: '100:1', Title: '100:2' });
+    expect(presented.data.created).toBe(2); // kept for LLM context
+    expect(presented.data.count).toBeUndefined(); // noise stripped
+    expect(presented.data.diagnostics).toBeUndefined(); // noise stripped
     expect(presented._meta).toContain('exit:0');
   });
 

@@ -308,6 +308,8 @@ export class AgentRuntime {
     });
 
     let iteration = 0;
+    let emptyArgsCount = 0;
+    let truncationCount = 0;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
     this.idCounter = 0;
@@ -469,6 +471,7 @@ export class AgentRuntime {
       // ──── EMPTY ARGS GUARD (universal, all providers) ────
       // Some models (e.g. Kimi K2.5) return tool calls with empty/null args.
       // Strip them and inject a self-correct hint so the LLM regenerates.
+      // Bounded: max 3 consecutive empty-args iterations before abort.
       if (toolCallsForExecution.length > 0) {
         const emptyArgsCalls = toolCallsForExecution.filter(tc =>
           tc.args == null
@@ -476,8 +479,12 @@ export class AgentRuntime {
           || tc.args === ''
         );
         if (emptyArgsCalls.length > 0) {
+          emptyArgsCount++;
+          if (emptyArgsCount > 3) {
+            throw new Error('Model repeatedly returns empty tool arguments (3+ times). Aborting.');
+          }
           const names = emptyArgsCalls.map(tc => tc.name).join(', ');
-          console.warn(`[AgentRuntime] Stripping ${emptyArgsCalls.length} tool call(s) with empty args: ${names}`);
+          console.warn(`[AgentRuntime] Stripping ${emptyArgsCalls.length} tool call(s) with empty args: ${names} (${emptyArgsCount}/3)`);
           toolCallsForExecution = toolCallsForExecution.filter(tc => !emptyArgsCalls.includes(tc));
           // Inject hint so LLM self-corrects on next iteration
           this.turnMessages.push({
@@ -489,6 +496,8 @@ export class AgentRuntime {
             iteration++;
             continue;
           }
+        } else {
+          emptyArgsCount = 0; // Reset on valid args
         }
       }
 
@@ -565,19 +574,22 @@ export class AgentRuntime {
         continue;
       } else {
         // ──── TRUNCATION GUARD ────
-        // If finishReason is present and NOT 'stop', the response was truncated
-        // (e.g. 'length' = max_tokens hit, 'timeout' = stream timeout).
-        // Inject a continuation hint so the LLM can resume its work.
+        // If finishReason is present and NOT 'stop', the response was truncated.
+        // Bounded: max 3 continuations before forcing turn end.
         const fr = response.finishReason;
         if (fr && fr !== 'stop' && fr !== 'tool_calls') {
-          console.warn(`[AgentRuntime] Response truncated (finishReason=${fr}). Injecting continuation.`);
-          this.turnMessages.push({
-            id: this.generateId('cont'),
-            role: 'user',
-            content: 'Your previous response was truncated. Continue where you left off.',
-          });
-          iteration++;
-          continue;
+          truncationCount++;
+          if (truncationCount <= 3) {
+            console.warn(`[AgentRuntime] Response truncated (finishReason=${fr}, ${truncationCount}/3). Injecting continuation.`);
+            this.turnMessages.push({
+              id: this.generateId('cont'),
+              role: 'user',
+              content: 'Your previous response was truncated. Continue where you left off.',
+            });
+            iteration++;
+            continue;
+          }
+          console.warn(`[AgentRuntime] Truncation limit reached (3). Forcing turn end.`);
         }
 
         // Turn end: summarize this turn, prepare for next

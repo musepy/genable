@@ -40,7 +40,10 @@ Knowledge:
   man [topic]            — help, guidelines, style guides
 
 Path: "/" = page root, "/Card/" = by name, "/100:5/" = by Figma ID.
-Chain: "mk /Card/ frame w:400 && mk /Card/Title text size:24 -- Hello" — sequential.
+Chain operators:
+  &&  run next only if previous succeeded
+  ;   run next regardless
+  ||  run next only if previous failed
 Help: command name only (e.g. "mk") for detailed usage.
 
 Output metadata: [exit:N | Xs] — exit:0 success, exit:1 error, exit:127 not found.

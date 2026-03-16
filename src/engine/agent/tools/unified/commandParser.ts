@@ -23,10 +23,13 @@ export interface ParsedCommand {
   raw: string;
 }
 
+/** Chain operators: && (and), || (or), ; (seq), | (pipe). */
+export type ChainOperator = '&&' | '||' | ';' | '|';
+
 export interface ParsedChain {
   commands: ParsedCommand[];
   /** Operators between commands. Length = commands.length - 1. */
-  operators: ('&&')[];
+  operators: ChainOperator[];
 }
 
 // ── Tokenizer ──────────────────────────────────────────────────────
@@ -148,16 +151,18 @@ function parseSingleCommand(raw: string): ParsedCommand {
 // ── Chain parser ───────────────────────────────────────────────────
 
 /**
- * Parse a command string, splitting by && chain operators.
+ * Parse a command string, splitting by chain operators: &&, ||, ;, |
  *
- * "tree / && cat /Card/Header/"
- * → { commands: [parse("tree /"), parse("cat /Card/Header/")], operators: ['&&'] }
+ * "tree / && cat /Card/Header/"   → sequential, stop on failure
+ * "mk /A/ ; mk /B/"              → sequential, run regardless
+ * "cat /A/ || man"                → run second only if first fails
+ * "grep Button | cat"             → pipe: first result feeds into second
  *
- * Respects quoted strings — && inside quotes is not treated as an operator.
+ * Respects quoted strings — operators inside quotes are not treated as operators.
  */
 export function parseCommandString(input: string): ParsedChain {
   const segments: string[] = [];
-  const operators: ('&&')[] = [];
+  const operators: ChainOperator[] = [];
 
   let current = '';
   let inQuote: string | null = null;
@@ -176,6 +181,19 @@ export function parseCommandString(input: string): ParsedChain {
       operators.push('&&');
       current = '';
       i++; // skip second &
+    } else if (ch === '|' && input[i + 1] === '|') {
+      if (current.trim()) segments.push(current.trim());
+      operators.push('||');
+      current = '';
+      i++; // skip second |
+    } else if (ch === '|') {
+      if (current.trim()) segments.push(current.trim());
+      operators.push('|');
+      current = '';
+    } else if (ch === ';') {
+      if (current.trim()) segments.push(current.trim());
+      operators.push(';');
+      current = '';
     } else {
       current += ch;
     }

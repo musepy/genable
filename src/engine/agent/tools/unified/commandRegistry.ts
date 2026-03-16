@@ -66,6 +66,53 @@ export function getAllCommandDefinitions(): ToolDefinition[] {
 }
 
 /**
+ * Find the closest matching command name using Levenshtein distance.
+ * Returns null if no close match (distance > 3).
+ */
+export function findClosestCommand(input: string): string | null {
+  const lower = input.toLowerCase();
+  let best: string | null = null;
+  // Threshold scales with input length: short inputs need closer match
+  let bestDist = lower.length <= 3 ? 2 : 4; // max edit distance 1 for short, 3 for long
+
+  for (const name of COMMAND_NAMES) {
+    const d = levenshtein(lower, name);
+    if (d < bestDist) {
+      bestDist = d;
+      best = name;
+    }
+    // Also check prefix match (e.g. "gre" → "grep")
+    if (name.startsWith(lower) && lower.length >= 2) {
+      return name;
+    }
+  }
+  return best;
+}
+
+/** Simple Levenshtein distance (bounded for short strings). */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+/**
  * Get help text for a command — CLI syntax, example-driven.
  * Used when LLM calls `run({command: "ls"})` with no args (help mode).
  * Pattern: description → CLI usage → examples → see also.
@@ -73,7 +120,9 @@ export function getAllCommandDefinitions(): ToolDefinition[] {
 export function getCommandHelp(commandName: string): string {
   const def = COMMAND_MAP.get(commandName);
   if (!def) {
-    return `Unknown command "${commandName}". Available: ${COMMAND_NAMES.join(', ')}`;
+    const suggestion = findClosestCommand(commandName);
+    const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
+    return `Unknown command "${commandName}".${hint} Available: ${COMMAND_NAMES.join(', ')}`;
   }
 
   const help = COMMAND_CLI_HELP[commandName];

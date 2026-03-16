@@ -22,7 +22,7 @@ import {
   canonicalizeCreateParams,
 } from './idempotencyStore';
 import { toolDisplayMap, allToolDefinitions } from './tools';
-import { getCommandHelp, isValidCommand } from './tools/unified/commandRegistry';
+import { getCommandHelp, isValidCommand, findClosestCommand } from './tools/unified/commandRegistry';
 import {
   parseCommandString,
   mapToToolArgs,
@@ -350,22 +350,31 @@ export class ToolDispatcher {
   // ─── Chain execution ────────────────────────────────────────
 
   /**
-   * Execute a chain of commands sequentially with && semantics.
-   * "tree / && cat /Card/" → execute tree, if ok execute cat, return combined.
+   * Execute a chain of commands with Unix operator semantics.
+   *
+   * Operators:
+   * - `&&` : run next only if previous succeeded (AND)
+   * - `||` : run next only if previous failed (OR)
+   * - `;`  : run next regardless (SEQ)
+   * - `|`  : pipe previous stdout as input to next (PIPE)
    *
    * Each command goes through validation and IPC independently.
    * Returns a single combined result for the chain.
    */
   private async executeChain(chain: ParsedChain, input?: string): Promise<any> {
     const results: any[] = [];
+    let pipeData: any = undefined; // data flowing through pipe
 
     for (let i = 0; i < chain.commands.length; i++) {
       this.config.throwIfCanceled();
 
       const cmd = chain.commands[i];
+      const prevOp = i > 0 ? chain.operators[i - 1] : undefined;
+      const prevResult = i > 0 ? results[i - 1] : undefined;
+      const prevSuccess = prevResult?.success !== false;
 
-      // && semantics: stop on failure
-      if (i > 0 && chain.operators[i - 1] === '&&' && results[i - 1]?.success === false) {
+      // ── Operator semantics: decide whether to run this command ──
+      if (prevOp === '&&' && !prevSuccess) {
         results.push({
           command: cmd.raw,
           success: false,
@@ -374,8 +383,30 @@ export class ToolDispatcher {
         continue;
       }
 
-      // Map CLI args
-      const args = mapToToolArgs(cmd, i === 0 ? input : undefined);
+      if (prevOp === '||' && prevSuccess) {
+        // || : skip if previous succeeded
+        results.push({
+          command: cmd.raw,
+          success: true,
+          data: { skipped: true, reason: 'Previous command succeeded (|| operator).' },
+        });
+        continue;
+      }
+
+      // ; : always run (no skip logic)
+      // | : always run (pipe data handled below)
+
+      // Map CLI args — pipe operator injects previous result as input
+      let cmdInput = i === 0 ? input : undefined;
+      if (prevOp === '|' && prevResult) {
+        // Pipe: serialize previous result as input for the next command
+        cmdInput = typeof prevResult.data === 'string'
+          ? prevResult.data
+          : JSON.stringify(prevResult.data ?? prevResult);
+        pipeData = prevResult;
+      }
+
+      const args = mapToToolArgs(cmd, cmdInput);
       if (!args) {
         results.push({
           command: cmd.raw,
@@ -390,9 +421,14 @@ export class ToolDispatcher {
         results.push({
           command: cmd.raw,
           success: false,
-          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man. Run "man" for help.` },
+          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, rm, cp, grep, sed, man` },
         });
         break;
+      }
+
+      // Pipe: inject piped node IDs into args for read commands
+      if (prevOp === '|' && pipeData) {
+        this.injectPipeData(cmd.name, args, pipeData);
       }
 
       // Execute via local executor or IPC
@@ -424,6 +460,33 @@ export class ToolDispatcher {
       success: results.every(r => r.success !== false),
       data: { chain: results },
     };
+  }
+
+  // ─── Pipe data injection ────────────────────────────────────
+
+  /**
+   * Inject piped data from a previous command into the next command's args.
+   *
+   * Pipe semantics for design tools:
+   * - grep results (node IDs) → cat/tree/sed receive first node's path
+   * - grep property discovery → sed receives values for replacement
+   * - ls/tree output → grep can search within
+   */
+  private injectPipeData(commandName: string, args: Record<string, any>, prevResult: any): void {
+    const data = prevResult?.data ?? prevResult;
+
+    // grep node search → cat/tree: inject first result's ID as path
+    if (data?.results && Array.isArray(data.results) && data.results.length > 0) {
+      const firstNode = data.results[0];
+      if (firstNode?.id && (commandName === 'cat' || commandName === 'tree' || commandName === 'ls')) {
+        if (!args.path || args.path === '/') {
+          args.path = `/${firstNode.id}/`;
+        }
+      }
+    }
+
+    // grep property discovery → sed: inject discovered values for replacement context
+    // (sed still needs explicit from/to, but piped context helps the LLM)
   }
 
   // ─── Idempotency helpers ──────────────────────────────────

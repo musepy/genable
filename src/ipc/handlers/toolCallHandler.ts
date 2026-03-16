@@ -20,6 +20,7 @@ import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { fontBus } from '../../engine/figma-adapter/resources/FontBus';
 import { buildCreateReceipt } from './receiptBuilder';
 import type { ValidationViolation } from '../../engine/validation/postOpValidator';
+import { findClosestCommand } from '../../engine/agent/tools/unified/commandRegistry';
 
 export interface ToolCallData {
   toolName: string;
@@ -1510,7 +1511,7 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
       default:
         response = {
           success: false,
-          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man` }
+          error: { code: 'UNKNOWN_TOOL', message: `Unknown command "${toolName}".${(() => { const s = findClosestCommand(toolName); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, rm, cp, grep, sed, man` }
         };
         break;
     }

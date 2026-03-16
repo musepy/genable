@@ -27,7 +27,7 @@ import {
   parseCommandString,
   mapToToolArgs,
 } from '../../src/engine/agent/tools/unified/commandParser.js';
-import { isValidCommand, getCommandHelp } from '../../src/engine/agent/tools/unified/commandRegistry.js';
+import { isValidCommand, getCommandHelp, findClosestCommand } from '../../src/engine/agent/tools/unified/commandRegistry.js';
 
 // ── Exit code & presentation layer ──
 import {
@@ -304,40 +304,64 @@ async function main() {
         }
         if (!isValidCommand(cmd.name)) {
           return {
-            content: [{ type: 'text', text: `Unknown command "${cmd.name}". Available: ls, tree, cat, mk, rm, cp, grep, sed, man\n${formatMeta(EXIT_NOT_FOUND, 0)}` }],
+            content: [{ type: 'text', text: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, rm, cp, grep, sed, man\n${formatMeta(EXIT_NOT_FOUND, 0)}` }],
             isError: true,
           };
         }
       }
 
-      // Execute chain sequentially, stop on failure
+      // Execute chain with operator semantics: &&, ||, ;, |
       const results: any[] = [];
-      for (const cmd of chain.commands) {
-        // Map CLI args to tool parameters (input only applies to last/only command)
+      let lastIsError = false;
+
+      for (let ci = 0; ci < chain.commands.length; ci++) {
+        const cmd = chain.commands[ci];
+        const prevOp = ci > 0 ? chain.operators[ci - 1] : undefined;
+
+        // ── Operator semantics ──
+        if (prevOp === '&&' && lastIsError) {
+          // && : skip on previous failure
+          results.push({ type: 'text', text: `[skipped] ${cmd.raw} — previous command failed (&&)` });
+          continue;
+        }
+        if (prevOp === '||' && !lastIsError) {
+          // || : skip on previous success
+          continue; // silently skip — || is fallback
+        }
+        // ; : always run
+        // | : always run (pipe data is contextual, passed via input)
+
+        // Map CLI args to tool parameters
         const cmdInput = chain.commands.length === 1 ? input : undefined;
         const args = mapToToolArgs(cmd, cmdInput);
 
-        // null args = help mode (command name with no required args)
+        // null args = help mode
         if (args === null) {
           results.push({ type: 'text', text: getCommandHelp(cmd.name) });
+          lastIsError = false;
           continue;
         }
 
         try {
           const result = await executeCommand(cmd.name, args);
-          // Collect all content items
           results.push(...result.content);
-          // Stop chain on error
-          if (result.isError) {
+          lastIsError = !!result.isError;
+
+          // && : stop chain on error
+          if (prevOp === '&&' && result.isError) {
             return { content: results, isError: true };
           }
         } catch (err: any) {
           results.push({ type: 'text', text: `${err.message || String(err)}\n${formatMeta(EXIT_ERROR, 0)}` });
-          return { content: results, isError: true };
+          lastIsError = true;
+          // && : stop chain on error
+          if (prevOp === '&&') {
+            return { content: results, isError: true };
+          }
         }
       }
 
-      return { content: results };
+      return { content: results, isError: lastIsError ? true : undefined };
     }
 
     // Direct tool call (non-`run`) — backward compatibility

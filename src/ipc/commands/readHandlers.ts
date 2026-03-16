@@ -15,9 +15,11 @@ import { exportNodeToBase64 } from './shared';
 
 // ── ls ──
 
-function formatLsEntry(node: SceneNode): string {
+function formatLsEntry(node: SceneNode, showId = false): string {
   const hasChildren = 'children' in node && (node as any).children.length > 0;
-  const name = hasChildren ? `${node.name}/` : node.name;
+  const baseName = hasChildren ? `${node.name}/` : node.name;
+  // Show ID suffix for duplicate-named siblings (like `ls -i` in Unix)
+  const name = showId ? `${baseName} (${node.id})` : baseName;
   const type = node.type.toLowerCase();
   const w = Math.round(node.width);
   const h = Math.round(node.height);
@@ -85,9 +87,20 @@ export async function handleLs(parameters: any): Promise<ToolResponse> {
     containerName = node.name;
   }
 
-  const lines: string[] = [];
+  // Detect duplicate names — show ID for disambiguation (like `ls -i`)
+  const nameCounts = new Map<string, number>();
   for (const child of children) {
-    lines.push(formatLsEntry(child));
+    nameCounts.set(child.name, (nameCounts.get(child.name) || 0) + 1);
+  }
+
+  const lines: string[] = [];
+  const nameSeenCount = new Map<string, number>();
+  for (const child of children) {
+    const isDuplicate = (nameCounts.get(child.name) || 0) > 1;
+    const seenBefore = (nameSeenCount.get(child.name) || 0) > 0;
+    // First occurrence: no ID (it's the default path target). Subsequent: show ID.
+    lines.push(formatLsEntry(child, isDuplicate && seenBefore));
+    nameSeenCount.set(child.name, (nameSeenCount.get(child.name) || 0) + 1);
   }
 
   const page = figma.currentPage;

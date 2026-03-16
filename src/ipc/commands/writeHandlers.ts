@@ -74,11 +74,11 @@ async function executeSingleMk(
     return { success: false, error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
   }
 
-  // Deduplicate name for page-level nodes to avoid collision with existing designs
-  let finalName = nodeName;
-  if (parentResolved.isPage) {
-    finalName = deduplicateName(figma.currentPage.children, nodeName);
-  }
+  // Deduplicate name among siblings — like Unix, names are unique within a directory
+  const siblings = parentResolved.isPage
+    ? figma.currentPage.children
+    : (parentResolved.node as FrameNode).children;
+  let finalName = deduplicateName(siblings, nodeName);
 
   const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
   const adjustedTokens = injectLayoutDefaults(type, propTokens);

@@ -94,13 +94,11 @@ describe('AgentRuntime', () => {
     expect(messages[2].role).toBe('tool');
   });
 
-  it('should short-circuit unified validation errors and keep actionable details in tool result history', async () => {
-    // LLM sends run({command: "query nodes"}) → unwraps to query with {source: "nodes"}
-    // but missing required "query" param → validation error before IPC
+  it('should reject unknown tool names with UNKNOWN_COMMAND error', async () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
-        text: 'try query',
-        toolCalls: [{ name: 'run', args: { command: 'query nodes' } }]
+        text: 'start task',
+        toolCalls: [{ name: 'task_start', args: { title: 'Legacy call' } }]
       })
       .mockResolvedValueOnce({
         text: 'Recovered',
@@ -121,50 +119,6 @@ describe('AgentRuntime', () => {
       loopPolicy: { useSkillSystem: false } as any
     });
 
-    const result = await runtime.run('Query something');
-
-    expect(result).toBe('Recovered');
-    expect(mockIpcBridge.callTool).not.toHaveBeenCalled();
-
-    const firstToolTurn = (mockProvider.formatToolResults as any).mock.calls[0][0];
-    const firstResponse = firstToolTurn[0].response;
-
-    expect(firstResponse.success).toBe(false);
-    expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
-    expect(firstResponse.error.message).toContain('Validation Error: query');
-    expect(firstResponse.error.message).toContain('query');
-    expect(firstResponse.error.details).toMatchObject({
-      tool: 'query',
-      mode: 'EXECUTION',
-      missing: ['query']
-    });
-  });
-
-  it('should reject unknown legacy tool names with actionable error', async () => {
-    (mockProvider.generate as any)
-      .mockResolvedValueOnce({
-        text: 'start task',
-        toolCalls: [{ name: 'task_start', args: { title: 'Legacy call' } }]
-      })
-      .mockResolvedValueOnce({
-        text: 'Recovered',
-        toolCalls: []
-      });
-
-    const mockIpcBridge = {
-      callTool: vi.fn(),
-      dispose: vi.fn()
-    } as any;
-
-    const runtime = new AgentRuntime({
-      provider: mockProvider,
-      tools: [
-        { name: 'create', description: 'Create', parameters: { type: 'object', properties: {} } }
-      ],
-      ipcBridge: mockIpcBridge,
-      loopPolicy: { useSkillSystem: false } as any
-    });
-
     const result = await runtime.run('Create something');
 
     expect(result).toBe('Recovered');
@@ -173,8 +127,8 @@ describe('AgentRuntime', () => {
     const firstToolTurn = (mockProvider.formatToolResults as any).mock.calls[0][0];
     const firstResponse = firstToolTurn[0].response;
     expect(firstResponse.success).toBe(false);
-    expect(firstResponse.error.code).toBe('TOOL_VALIDATION_ERROR');
-    expect(firstResponse.error.message).toContain('task_start is not an available tool');
+    expect(firstResponse.error.code).toBe('UNKNOWN_COMMAND');
+    expect(firstResponse.error.message).toContain('Unknown command');
   });
 
   it('should throw error if max iterations reached', async () => {

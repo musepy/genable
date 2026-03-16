@@ -9,8 +9,11 @@ import { resolve } from 'path'
  */
 export default defineConfig({
   plugins: [preact()],
-  
+
   root: resolve(__dirname, 'preview'),
+
+  // Treat CSV/JSON data files as assets so Vite doesn't parse them as JS
+  assetsInclude: ['**/*.csv'],
   
   resolve: {
     alias: {

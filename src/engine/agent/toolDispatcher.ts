@@ -9,32 +9,18 @@
  */
 
 import { LLMToolCall, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
-import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
-import { ToolResultCleaner } from './context/toolResultCleaner';
 import { classifyError, categoryToErrorCode } from './retryPolicy';
-import { AGENT_RUNTIME_CONSTANTS } from './constants';
 
 import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
-import {
-  IdempotencyStore,
-  computeRequestHash,
-  canonicalizeCreateParams,
-} from './idempotencyStore';
-import { toolDisplayMap, allToolDefinitions } from './tools';
+import { toolDisplayMap } from './tools';
 import { getCommandHelp, isValidCommand, findClosestCommand } from './tools/unified/commandRegistry';
 import {
   parseCommandString,
   mapToToolArgs,
   type ParsedChain,
 } from './tools/unified/commandParser';
-import {
-  computeExitCode,
-  formatMeta,
-  extractStderr,
-  truncateOverflow,
-  guardBinary,
-} from './tools/unified/exitCode';
+import { presentForLLM } from './tools/unified/presentation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,8 +47,6 @@ export interface ToolDispatcherConfig {
   onToolResult?: (tc: LLMToolCall, result: any) => void;
   /** Provider-specific tool results formatter. */
   formatToolResults: (results: LLMToolResult[]) => LLMMessage;
-  /** Returns the current runId for idempotency context. */
-  getRunId?: () => string;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,24 +66,13 @@ class ToolDispatcherCanceledError extends Error {
 // ToolDispatcher
 // ---------------------------------------------------------------------------
 
-/**
- * Tools whose results should be cached for idempotent replay.
- * Auto-derived from ToolDefinition.idempotent flag — no manual sync needed.
- */
-const IDEMPOTENT_CACHE_TOOLS = new Set(
-  allToolDefinitions.filter(t => t.idempotent).map(t => t.name)
-);
-
 export class ToolDispatcher {
-  private idempotencyStore = new IdempotencyStore();
   /** Last created/modified node ID — expanded as $LAST in commands. */
   private lastNodeId: string | undefined;
 
   constructor(
     private toolExecutors: Record<string, ToolExecutor>,
     private ipcBridge: IpcBridge | undefined,
-    private coordinator: ToolExecutionCoordinator,
-    private cleaner: ToolResultCleaner,
     private allowedToolNames: Set<string>,
     private config: ToolDispatcherConfig,
   ) {}
@@ -229,43 +202,21 @@ export class ToolDispatcher {
         console.warn(`[${commandName}] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
       }
 
-      // Extract image attachment before cleaning (prevents base64 truncation by cleaner)
+      // Extract image attachment before presentation pipe
       let imageAttachment: { mimeType: string; data: string } | undefined;
       if (result?.data?.__image) {
         imageAttachment = result.data.__image;
         delete result.data.__image;
       }
 
-      // Clean result and add execution metadata footer for LLM cost awareness
-      const cleaned = this.cleanToolResult(result, commandName);
-      const exitCode = computeExitCode(result);
-      cleaned._meta = formatMeta(exitCode, durationMs);
-
-      // Layer 2: stderr — surface warnings/errors as separate signal
-      const stderr = extractStderr(result);
-      if (stderr) cleaned._stderr = stderr;
-
-      // Layer 2: overflow guard — truncate oversized text output
-      if (cleaned.data?.listing && typeof cleaned.data.listing === 'string') {
-        cleaned.data.listing = truncateOverflow(cleaned.data.listing, 'Use tree -d 2 for overview or cat /path/ for specific node.');
-      }
-      if (cleaned.data?.tree && typeof cleaned.data.tree === 'string') {
-        cleaned.data.tree = truncateOverflow(cleaned.data.tree, 'Use cat /path/ for specific subtree.');
-      }
-
-      // Layer 2: binary guard — intercept garbled data before LLM sees it
-      if (cleaned.data?.listing && typeof cleaned.data.listing === 'string') {
-        cleaned.data.listing = guardBinary(cleaned.data.listing);
-      }
-      if (cleaned.data?.tree && typeof cleaned.data.tree === 'string') {
-        cleaned.data.tree = guardBinary(cleaned.data.tree);
-      }
+      // Layer 2: single presentation pipe — exit code, meta, stderr, guards
+      const presented = presentForLLM(result, commandName, durationMs);
 
       toolResults.push({
         // Use original name ('run') for Gemini functionResponse.name matching
         name: originalName,
         id: tc.id,
-        response: cleaned,
+        response: presented,
         thought_signature: tc.thought_signature,
         imageAttachment,
       });
@@ -309,7 +260,6 @@ export class ToolDispatcher {
 
     // ── Help mode: return command documentation ──
     if (tc.args?.__help) {
-      // run with no command → return tool overview
       if (tc.name === 'run') {
         return {
           success: true,
@@ -332,41 +282,26 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       return this.executeChain(tc.args.__chain as ParsedChain, tc.args?.input);
     }
 
-    const toolExec = this.toolExecutors[tc.name];
-
-    const validation = this.coordinator.validateToolCall(
-      tc.name,
-      tc.args,
-      'EXECUTION',
-      this.allowedToolNames,
-    );
-    if (!validation.ok) {
-      return { success: false, error: validation.error };
+    // ── Unknown command guard ──
+    if (!this.allowedToolNames.has(tc.name)) {
+      const suggestion = findClosestCommand(tc.name);
+      const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
+      return { success: false, error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${tc.name}".${hint}` } };
     }
 
-    // ── Idempotency check (before dispatch, covers both local + IPC paths) ──
-    const idempotencyKey = this.checkIdempotencyCache(tc);
-    if (idempotencyKey && typeof idempotencyKey === 'object') {
-      // Cache hit or conflict — return immediately without executing
-      return idempotencyKey;
-    }
-
+    // ── Execute via local executor or IPC ──
     try {
       let result: any;
+      const toolExec = this.toolExecutors[tc.name];
       if (toolExec) {
         result = await toolExec(tc.args);
       }
-      // Fall through to IPC if no local executor or local executor returned null
       if (result == null && this.ipcBridge) {
         result = await this.ipcBridge.callTool(tc.name, tc.args);
       }
       if (result == null) {
-        return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `Command "${tc.name}" not available. Available: ${[...this.allowedToolNames].join(', ')}` } };
+        return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `Command "${tc.name}" not available.` } };
       }
-
-      // ── Store result for idempotent replay ──
-      this.storeIdempotencyResult(tc, result);
-
       return result;
     } catch (e: any) {
       return {
@@ -555,78 +490,4 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
     }
   }
 
-  // ─── Idempotency helpers ──────────────────────────────────
-
-  /**
-   * Check idempotency cache before tool execution.
-   *
-   * Key = runId:toolCallId (transport-level replay protection).
-   * requestHash stored alongside for conflict detection:
-   *   - same key + same hash → hit (replay, return cached)
-   *   - same key + different hash → conflict (error)
-   *   - different key → miss (execute)
-   *
-   * Returns cached result on hit, error response on conflict, or null on miss.
-   */
-  private checkIdempotencyCache(tc: LLMToolCall): any | null {
-    if (!IDEMPOTENT_CACHE_TOOLS.has(tc.name)) return null;
-
-    const runId = this.config.getRunId?.() ?? '';
-    if (!runId || !tc.id) return null;
-
-    this.idempotencyStore.setRunId(runId);
-    const requestHash = this.computeToolRequestHash(tc);
-    const key = `${runId}:${tc.id}`;
-
-    const cached = this.idempotencyStore.check(key, requestHash);
-
-    if (cached.hit) {
-      return cached.result;
-    }
-
-    if (cached.conflict) {
-      return {
-        success: false,
-        error: {
-          code: 'IDEMPOTENCY_KEY_CONFLICT',
-          message: `Idempotency key "${key}" was previously used with different parameters. oldHash=${cached.oldHash}, newHash=${cached.newHash}`,
-        },
-      };
-    }
-
-    // Cache miss — store the key on tc for post-execution storage
-    (tc as any)._idempotencyKey = key;
-    (tc as any)._requestHash = requestHash;
-    return null;
-  }
-
-  /**
-   * Store a tool result after execution for idempotent replay.
-   * Only caches successful results — transient failures should remain retryable.
-   */
-  private storeIdempotencyResult(tc: LLMToolCall, result: any): void {
-    const key = (tc as any)._idempotencyKey as string | undefined;
-    const hash = (tc as any)._requestHash as string | undefined;
-    if (key && hash && result?.success !== false) {
-      this.idempotencyStore.set(key, hash, result);
-    }
-    delete (tc as any)._idempotencyKey;
-    delete (tc as any)._requestHash;
-  }
-
-  /**
-   * Compute a request hash for a tool call based on its args.
-   * Currently only create has specialized canonicalization.
-   */
-  private computeToolRequestHash(tc: LLMToolCall): string {
-    if (tc.name === 'create' || tc.name === 'design') {
-      return computeRequestHash(canonicalizeCreateParams(tc.args));
-    }
-    // Generic fallback: hash the stringified args
-    return computeRequestHash(JSON.stringify(tc.args));
-  }
-
-  private cleanToolResult(result: any, toolName?: string): any {
-    return this.cleaner.cleanToolResult({ ...result, ...(toolName && { name: toolName }) });
-  }
 }

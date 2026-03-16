@@ -498,7 +498,7 @@ export function useChat({
     const modelId = 'preview-model-flow'
     const userId = 'preview-user-flow'
 
-    const setFlowCalls = (calls: ToolCallRecord[], streaming = true, text?: string) => {
+    const setFlowCalls = (calls: ToolCallRecord[], streaming = true, text?: string, msgRunState?: ChatMessage['runState']) => {
       setHistory(prev =>
         prev.map(msg => {
           if (msg.id !== modelId) return msg
@@ -507,6 +507,7 @@ export function useChat({
             toolCalls: calls,
             streaming,
             text: text ?? msg.text,
+            ...(msgRunState ? { runState: msgRunState } : {}),
           }
         })
       )
@@ -600,7 +601,8 @@ export function useChat({
         setFlowCalls(
           [...calls],
           false,
-          'Flow simulation complete. UI cleaned up and skill search enabled.'
+          'Flow simulation complete. UI cleaned up and skill search enabled.',
+          'completed'
         )
       })
     }
@@ -644,6 +646,8 @@ export function useChat({
             return {
               ...msg,
               streaming: false,
+              runState: 'error',
+              runError: 'Validation failed. Please revise the latest instruction.',
               text: 'The run failed in verification. Try a narrower instruction and retry.',
             }
           })

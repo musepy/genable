@@ -1,6 +1,10 @@
 /**
  * @file toolResultCleaner.ts
- * @description Logic for cleaning and sanitizing tool results and calls to prevent context bloat.
+ * @description Sanitizes tool calls for history context to prevent context bloat.
+ *
+ * Note: cleanToolResult() was removed — commands now own their output format,
+ * and the presentation pipe (presentation.ts) handles LLM-facing guards.
+ * Only sanitizeToolCallsForHistory() remains (context management concern).
  */
 
 import { LLMToolCall } from '../../llm-client/providers/types';
@@ -15,138 +19,11 @@ export class ToolResultCleaner {
   }
 
   /**
-   * Cleans a tool result to prevent context bloat.
-   */
-  public cleanToolResult(result: any): any {
-    if (!result || typeof result !== 'object') return result;
-
-    const cleaned = { ...result };
-
-    // Clean error object
-    if (cleaned.error && typeof cleaned.error === 'object') {
-      const errorCode = cleaned.error.code;
-      const validationDetails =
-        errorCode === 'TOOL_VALIDATION_ERROR'
-          ? this.cleanValidationErrorDetails(cleaned.error.details)
-          : undefined;
-      cleaned.error = {
-        message: cleaned.error.message || 'Unknown error',
-        code: errorCode,
-        ...(cleaned.error.semanticFeedback && { semanticFeedback: cleaned.error.semanticFeedback }),
-        ...(validationDetails && { details: validationDetails }),
-      };
-    }
-
-    if (!cleaned.data) return cleaned;
-
-    // read tools: truncate oversized XML at safe boundary
-    const READ_TOOLS = new Set(['context', 'outline', 'inspect', 'ls', 'tree', 'cat', 'grep']);
-    if (READ_TOOLS.has(cleaned.name)) {
-      cleaned.data = this.cleanInspectResult(cleaned.data);
-      return cleaned;
-    }
-
-    // create/edit/design + write commands: data is already a compact receipt from executor — pass through
-    const WRITE_TOOLS = new Set(['create', 'edit', 'design', 'mkdir', 'mktext', 'write', 'rm', 'cp', 'ln', 'mk', 'sed']);
-    if (WRITE_TOOLS.has(cleaned.name)) {
-      return cleaned;
-    }
-
-    // query/man: results already bounded by executor (knowledge: BM25 top-k, guidelines: single topic doc)
-    if (cleaned.name === 'query' || cleaned.name === 'man') {
-      return cleaned;
-    }
-
-    // Generic fallback: cap oversized data for other tools
-    const dataJson = JSON.stringify(cleaned.data);
-    if (dataJson.length > CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS) {
-      const idMap = cleaned.data?.idMap;
-      cleaned.data = { ...(idMap && { idMap }) };
-    }
-
-    return cleaned;
-  }
-
-  /**
-   * Cleans read results. Tree string passed through directly (already compact).
-   * Preserves hint/context fields from handler (auto-degradation signals).
-   * Safe truncation: cuts at last newline boundary.
-   */
-  private cleanInspectResult(data: any): any {
-    const result: any = {};
-    // Support both new `tree` and legacy `xml` field
-    const treeContent = data.tree ?? data.xml;
-    if (treeContent) result.tree = treeContent;
-
-    // Preserve structured fields from handler
-    if (data.hint) result.hint = data.hint;
-    if (data.context) result.context = data.context;
-    if (data.page) result.page = data.page;
-    if (data.selection) result.selection = data.selection;
-    if (data.suggestedReads) result.suggestedReads = data.suggestedReads;
-    // VFS fields
-    if (data.path) result.path = data.path;
-    if (data.listing) result.listing = data.listing;
-    if (data.container) result.container = data.container;
-    if (data.count !== undefined) result.count = data.count;
-    if (data.footer) result.footer = data.footer;
-    if (data.children) result.children = data.children;
-
-    const MAX_CHARS = CONTEXT_CONSTANTS.TOOL_RESULT_MAX_DATA_CHARS;
-    if (result.tree && result.tree.length > MAX_CHARS) {
-      // Safe truncation at newline boundary (flat ops is line-oriented)
-      const lastNewline = result.tree.lastIndexOf('\n', MAX_CHARS);
-      const cutPoint = lastNewline > 0 ? lastNewline : MAX_CHARS;
-      result.tree = result.tree.substring(0, cutPoint);
-    }
-    return result;
-  }
-
-  private cleanValidationErrorDetails(details: any): any | undefined {
-    if (!details || typeof details !== 'object') return undefined;
-
-    const safeMissing = Array.isArray(details.missing)
-      ? details.missing
-          .slice(0, 20)
-          .map((name: any) => this.sanitizeString(name, 80))
-      : [];
-
-    const safeInvalid = Array.isArray(details.invalid)
-      ? details.invalid.slice(0, 20).map((entry: any) => {
-          const sanitized: Record<string, any> = {
-            name: this.sanitizeString(entry?.name || '', 80),
-            reason: this.sanitizeString(entry?.reason || '', 160),
-          };
-          if (entry?.mapPath) {
-            sanitized.mapPath = this.sanitizeString(entry.mapPath, 120);
-          }
-          return sanitized;
-        })
-      : [];
-
-    const safeReceivedKeys = Array.isArray(details.receivedKeys)
-      ? details.receivedKeys
-          .slice(0, 30)
-          .map((name: any) => this.sanitizeString(name, 80))
-      : [];
-
-    return {
-      tool: typeof details.tool === 'string' ? this.sanitizeString(details.tool, 80) : '',
-      mode: typeof details.mode === 'string' ? this.sanitizeString(details.mode, 40) : '',
-      missing: safeMissing,
-      invalid: safeInvalid,
-      receivedKeys: safeReceivedKeys,
-      repairHint: typeof details.repairHint === 'string' ? this.sanitizeString(details.repairHint, 240) : '',
-    };
-  }
-
-  /**
    * Sanitizes tool calls for history to prevent context bloat.
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
       // Strip XML from create/edit history — tool result already has success/idMap feedback.
-      // Never leave placeholder text; weak models copy it verbatim as new tool calls.
       if ((tc.name === 'create' || tc.name === 'edit') && typeof tc.args?.xml === 'string' && tc.args.xml.length > 500) {
         return {
           ...tc,
@@ -225,5 +102,4 @@ export class ToolResultCleaner {
       ...(sanitizedArgs.name && { name: sanitizedArgs.name }),
     };
   }
-
 }

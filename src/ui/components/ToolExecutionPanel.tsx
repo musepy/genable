@@ -108,11 +108,16 @@ export function ToolExecutionPanel({
   const [expanded, setExpanded] = useState(false)
   const inferredRunning = !runState && !!thinkingStatus
   const isRunning = runState === 'running' || runState === 'reconnecting' || inferredRunning
+  const isError = runState === 'error'
   const dots = useRunningDots(isRunning)
   const elapsedText = useElapsedTime(taskStartTime, isRunning, taskEndTime)
   const reasoningSnippet = reasoningPreview ? reasoningPreview.slice(-200) : ''
   const toolCount = toolCalls.length
   const collapsed = useMemo(() => collapseCalls(toolCalls), [toolCalls])
+  const errorCount = useMemo(() => toolCalls.filter(c => c.status === 'error').length, [toolCalls])
+
+  // Latest tool activity for live feed
+  const latestTool = toolCalls.length > 0 ? toolCalls[toolCalls.length - 1] : null
 
   useEffect(() => {
     if (isRunning && onStop) {
@@ -123,18 +128,19 @@ export function ToolExecutionPanel({
   }, [isRunning, onStop])
 
   useEffect(() => {
-    if (runState === 'error') setExpanded(true)
-  }, [runState])
+    if (isError) setExpanded(true)
+  }, [isError])
 
+  // Build status text
   const statusParts = useMemo(() => {
     const parts: string[] = []
-    if (runState === 'error') parts.push(runError || 'Failed')
+    if (isError) parts.push(runError || 'Failed')
     else if (runState === 'canceled') parts.push('Stopped')
     else if (runState === 'reconnecting') {
       const rc = typeof reconnectCount === 'number' && typeof maxReconnects === 'number'
         ? ` ${reconnectCount}/${maxReconnects}` : ''
       parts.push(`Reconnecting${rc}`)
-    } else if (runState === 'running') {
+    } else if (isRunning) {
       const task = currentTaskTitle || thinkingStatus || ('Thinking')
       parts.push(`${task}${dots}`)
     } else if (thinkingStatus) {
@@ -143,10 +149,16 @@ export function ToolExecutionPanel({
       parts.push('Waiting')
     }
     if (elapsedText) parts.push(elapsedText)
-    if (isRunning && progress) parts.push(`${progress.iteration}/${progress.maxIterations}`)
     if (!isRunning && toolCount > 0) parts.push(`${toolCount} tool use${toolCount > 1 ? 's' : ''}`)
+    if (!isRunning && errorCount > 0) parts.push(`${errorCount} failed`)
     return parts
-  }, [runState, runError, reconnectCount, maxReconnects, currentTaskTitle, thinkingStatus, phase, dots, elapsedText, progress, toolCount, isRunning])
+  }, [runState, runError, reconnectCount, maxReconnects, currentTaskTitle, thinkingStatus, phase, dots, elapsedText, progress, toolCount, errorCount, isRunning, isError])
+
+  // Progress fraction for bar
+  const progressFraction = useMemo(() => {
+    if (!progress || progress.maxIterations <= 0) return 0
+    return Math.max(0, Math.min(1, progress.iteration / progress.maxIterations))
+  }, [progress])
 
   if (
     toolCalls.length === 0 && !thinkingStatus && !reasoningPreview &&
@@ -156,13 +168,24 @@ export function ToolExecutionPanel({
   const dim = tokens.colors.textSecondary
   const faint = tokens.colors.alpha[4]
   const sz = tokens.fontSize[1]
-
-  // Hanging indent: ✻ sits in the left margin, body text aligns with message text
   const MARKER_W = 14
 
+  // Accent color for error/running/idle states
+  const stateColor = isError ? tokens.colors.error : (isRunning ? tokens.colors.accent : faint)
+
   return (
-    <div>
-      {/* Status line — hanging indent via negative text-indent */}
+    <div style={{
+      // Error: subtle left border accent
+      borderLeft: isError ? `2px solid ${tokens.colors.error}` : undefined,
+      paddingLeft: isError ? tokens.space[2] : undefined,
+      // Error: subtle tinted background
+      background: isError ? tokens.colors.errorMuted : undefined,
+      borderRadius: isError ? 'var(--radius-2)' : undefined,
+      marginLeft: isError ? -tokens.space[2] : undefined,
+      paddingTop: isError ? tokens.space[1] : undefined,
+      paddingBottom: isError ? tokens.space[1] : undefined,
+    }}>
+      {/* Status line */}
       <div
         onClick={() => setExpanded(v => !v)}
         style={{
@@ -179,10 +202,10 @@ export function ToolExecutionPanel({
           width: MARKER_W,
           flexShrink: 0,
           textAlign: 'center',
-          color: isRunning ? dim : faint,
-        }}>✻</span>
+          color: stateColor,
+        }}>{isError ? '✕' : '✻'}</span>
 
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: dim }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: isError ? tokens.colors.error : dim }}>
           {statusParts.join(' · ')}
         </span>
 
@@ -209,8 +232,42 @@ export function ToolExecutionPanel({
         )}
       </div>
 
-      {/* Reasoning snippet — same left edge as message text (no extra indent) */}
-      {reasoningSnippet && (
+      {/* Progress bar — visible during running state */}
+      {isRunning && progress && progress.maxIterations > 0 && (
+        <div style={{ marginTop: 3, height: 2, borderRadius: 'var(--radius-full)', background: tokens.colors.alpha[2], overflow: 'hidden' }}>
+          <div style={{
+            width: `${Math.round(progressFraction * 100)}%`,
+            height: '100%',
+            background: tokens.colors.accent,
+            transition: 'width 300ms ease-out',
+            borderRadius: 'var(--radius-full)',
+          }} />
+        </div>
+      )}
+
+      {/* Live tool activity feed — shows latest tool during execution */}
+      {isRunning && latestTool && (
+        <div style={{
+          marginTop: 4,
+          fontSize: sz,
+          lineHeight: '16px',
+          color: faint,
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.space[1],
+        }}>
+          <span style={{ color: latestTool.status === 'error' ? tokens.colors.error : tokens.colors.accent, fontSize: '9px' }}>●</span>
+          <span>{getDisplayName(latestTool)}</span>
+          {latestTool.status === 'running' && <span>{dots}</span>}
+          {latestTool.status === 'success' && <span style={{ color: tokens.colors.success }}>✓</span>}
+          {latestTool.status === 'error' && <span style={{ color: tokens.colors.error }}>✕</span>}
+          {toolCount > 1 && <span style={{ color: tokens.colors.alpha[3] }}>+{toolCount - 1}</span>}
+          {progress && <span style={{ marginLeft: 'auto', color: tokens.colors.alpha[3] }}>{progress.iteration}/{progress.maxIterations}</span>}
+        </div>
+      )}
+
+      {/* Reasoning snippet */}
+      {reasoningSnippet && !isRunning && (
         <div style={{
           marginTop: 2,
           fontSize: sz,
@@ -224,15 +281,19 @@ export function ToolExecutionPanel({
         </div>
       )}
 
-      {/* Expanded tool list — collapsed by name with counts */}
+      {/* Expanded tool list — collapsed by name with counts + status icons */}
       {expanded && collapsed.length > 0 && (
-        <div style={{ marginTop: tokens.space[1], display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <div style={{ marginTop: tokens.space[1], display: 'flex', flexDirection: 'column', gap: 2 }}>
           {collapsed.map(entry => (
-            <div key={entry.name} style={{ fontSize: sz, lineHeight: '18px', color: dim }}>
-              {entry.name}{entry.count > 1 && <span style={{ color: faint }}> ×{entry.count}</span>}
+            <div key={entry.name} style={{ fontSize: sz, lineHeight: '18px', color: dim, display: 'flex', alignItems: 'center', gap: tokens.space[1] }}>
+              <span style={{ color: entry.errorCount > 0 ? tokens.colors.error : tokens.colors.success, fontSize: '8px', width: 10, textAlign: 'center' }}>
+                {entry.errorCount > 0 ? '✕' : '✓'}
+              </span>
+              <span>{entry.name}</span>
+              {entry.count > 1 && <span style={{ color: faint }}>×{entry.count}</span>}
               {entry.errorCount > 0 && (
-                <span style={{ color: tokens.colors.error }}>
-                  {' '}· {entry.errorCount} error{entry.errorCount > 1 ? 's' : ''}
+                <span style={{ color: tokens.colors.error, fontSize: '11px' }}>
+                  {entry.errorCount} failed
                 </span>
               )}
             </div>
@@ -240,8 +301,8 @@ export function ToolExecutionPanel({
         </div>
       )}
 
-      {/* Inline error detail */}
-      {runState === 'error' && runError && (() => {
+      {/* Inline error detail (user-actionable) */}
+      {isError && runError && (() => {
         const cat = categorizeError(runError)
         const content = t.errors[cat.i18nKey as keyof typeof t.errors]
         if (!content) return null
@@ -281,7 +342,7 @@ export function ToolExecutionPanel({
         )
       })()}
 
-      {/* Context bar — inline, same level */}
+      {/* Context bar — inline */}
       {expanded && contextUsage && (
         <div style={{ marginTop: tokens.space[1], display: 'flex', alignItems: 'center', gap: tokens.space[2], fontSize: sz, color: faint }}>
           <span>ctx {contextUsage.percent}%</span>

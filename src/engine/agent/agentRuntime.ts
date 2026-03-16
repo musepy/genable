@@ -20,7 +20,6 @@ import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { buildCompressionSummary } from './context/contextSummarizer';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
-import { ToolExecutionCoordinator } from './tools/toolExecutionCoordinator';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
 import { COMMAND_NAMES } from './tools/unified/commandRegistry';
@@ -81,7 +80,6 @@ export class AgentRuntime {
 
   private lastPromptTokens: number = 0;
   private cleaner: ToolResultCleaner;
-  private toolExecutionCoordinator = new ToolExecutionCoordinator();
   private llmCoordinator: LLMGenerationCoordinator;
   private toolDispatcher: ToolDispatcher;
   private allowedExecutionToolNames: Set<string>;
@@ -131,8 +129,6 @@ export class AgentRuntime {
     this.toolDispatcher = new ToolDispatcher(
       options.toolExecutors || {},
       options.ipcBridge,
-      this.toolExecutionCoordinator,
-      this.cleaner,
       this.allowedExecutionToolNames,
       {
         toolTimeoutMs: AGENT_RUNTIME_CONSTANTS.DEFAULT_TOOL_TIMEOUT_MS,
@@ -143,7 +139,6 @@ export class AgentRuntime {
         onToolCall: options.onToolCall,
         onToolResult: options.onToolResult,
         formatToolResults: (results) => options.provider.formatToolResults(results),
-        getRunId: () => this.currentRunId,
       },
     );
 

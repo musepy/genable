@@ -58,6 +58,21 @@ export function buildCompressionSummary(messagesToSummarize: LLMMessage[]): stri
   return lines.join('\n');
 }
 
+/**
+ * Cap summary length by dropping oldest turns.
+ * Preserves the most recent conversation history within the budget.
+ */
+export function capSummary(summary: string, maxChars: number): string {
+  if (summary.length <= maxChars) return summary;
+  // Split by turn boundaries (User: lines)
+  const turns = summary.split(/(?=^User: )/m);
+  // Drop oldest turns until fits
+  while (turns.length > 1 && turns.join('').length > maxChars) {
+    turns.shift();
+  }
+  return '[Earlier history truncated]\n' + turns.join('');
+}
+
 // ---------------------------------------------------------------------------
 // Internal: group messages into logical turns
 // ---------------------------------------------------------------------------
@@ -185,21 +200,21 @@ function summarizeArgs(toolName: string, args: any): string {
 }
 
 function summarizeSuccessResult(toolName: string, resp: any): string {
-  if (toolName === 'create') {
-    // Extract created node IDs from idMap
-    const idMap = resp.data?.idMap || resp.idMap;
-    if (idMap && typeof idMap === 'object') {
-      const ids = Object.values(idMap).slice(0, 5);
-      const suffix = Object.keys(idMap).length > 5 ? ` +${Object.keys(idMap).length - 5} more` : '';
-      return `created [${ids.join(', ')}${suffix}]`;
-    }
-    return 'ok';
+  if (toolName === 'create' || toolName === 'mk' || toolName === 'cp') {
+    return summarizeIdMap(resp.data?.idMap || resp.idMap);
   }
   if (toolName === 'edit') {
     return summarizeEditLikeResult(resp.data);
   }
   if (toolName === 'design') {
     return summarizeDesignResult(resp.data);
+  }
+  if (toolName === 'rm') {
+    const n = resp.data?.deleted;
+    return n ? `deleted ${n}` : 'ok';
+  }
+  if (toolName === 'mv') {
+    return resp.data?.name ? `→ ${resp.data.name}` : 'ok';
   }
   if (toolName === 'context') {
     const childCount = resp.data?.page?.childCount;
@@ -211,6 +226,8 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
     return 'ok';
   }
   if (toolName === 'ls') {
+    const listing = resp.data?.listing;
+    if (typeof listing === 'string') return `${listing.split('\n').length} items`;
     return resp.data?.count !== undefined ? `${resp.data.count} items` : 'ok';
   }
   if (toolName === 'tree' || toolName === 'cat') {
@@ -218,7 +235,25 @@ function summarizeSuccessResult(toolName: string, resp: any): string {
     if (typeof tree === 'string') return `${tree.length} chars`;
     return 'ok';
   }
+  if (toolName === 'grep') {
+    const results = resp.data?.results;
+    if (Array.isArray(results)) return `${results.length} matches`;
+    return 'ok';
+  }
+  if (toolName === 'sed') {
+    return resp.data?.replaced != null ? `replaced ${resp.data.replaced}` : 'ok';
+  }
   return 'ok';
+}
+
+/** Summarize idMap → "Card=962:1, Title=962:5" */
+function summarizeIdMap(idMap: any): string {
+  if (!idMap || typeof idMap !== 'object') return 'ok';
+  const entries = Object.entries(idMap);
+  if (entries.length === 0) return 'ok';
+  const sample = entries.slice(0, 5).map(([k, v]) => `${k}=${v}`);
+  const suffix = entries.length > 5 ? ` +${entries.length - 5} more` : '';
+  return `created [${sample.join(', ')}${suffix}]`;
 }
 
 function summarizeEditLikeResult(data: any): string {
@@ -249,42 +284,17 @@ function summarizeDesignResult(data: any): string {
   return parts.join(', ') || 'ok';
 }
 
+/**
+ * Append receipt signals to summary parts.
+ * After noise stripping in presentation.ts, only `failed` and `degraded` survive
+ * in the presented data. Other signals (defaults, violations, warnings) are in _stderr.
+ */
 function appendReceiptSignals(parts: string[], data: any): void {
-  const defaultsAppliedCount = typeof data.defaultsAppliedCount === 'number'
-    ? data.defaultsAppliedCount
-    : (Array.isArray(data.defaultsApplied) ? data.defaultsApplied.length : 0);
-  if (defaultsAppliedCount > 0) {
-    const sample = Array.isArray(data.defaultsApplied)
-      ? data.defaultsApplied
-          .slice(0, 3)
-          .map((entry: any) => entry?.property)
-          .filter(Boolean)
-      : [];
-    parts.push(sample.length > 0
-      ? `defaults ${defaultsAppliedCount} [${sample.join(', ')}]`
-      : `defaults ${defaultsAppliedCount}`);
-  }
-
-  const violations = Array.isArray(data.violations) ? data.violations : [];
-  if (violations.length > 0) {
-    const sampleCodes = violations
-      .slice(0, 3)
-      .map((violation: any) => violation?.code)
-      .filter(Boolean);
-    parts.push(sampleCodes.length > 0
-      ? `violations ${violations.length} [${sampleCodes.join(', ')}]`
-      : `violations ${violations.length}`);
-  }
-
-  if (data.nodeLimitWarning) parts.push('node-limit warning');
-  if (Array.isArray(data.degraded) && data.degraded.length > 0) {
-    parts.push(`degraded ${data.degraded.length}`);
-  }
-  if (typeof data.warningCount === 'number' && data.warningCount > 0) {
-    parts.push(`warnings ${data.warningCount}`);
-  }
   if (typeof data.failed === 'number' && data.failed > 0) {
     parts.push(`failed ${data.failed}`);
+  }
+  if (Array.isArray(data.degraded) && data.degraded.length > 0) {
+    parts.push(`degraded ${data.degraded.length}`);
   }
 }
 

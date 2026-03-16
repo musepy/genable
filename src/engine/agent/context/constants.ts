@@ -26,6 +26,9 @@ export interface ContextProfile {
 
   /** Max chars for agent response in summary (0 = no truncation) */
   summaryAgentResponseChars: number;
+
+  /** Max chars for the rolling summary. Oldest turns are dropped when exceeded. 0 = no cap. */
+  summaryMaxChars: number;
 }
 
 /**
@@ -38,6 +41,7 @@ export const TIGHT_PROFILE: ContextProfile = {
   maxHistoryArgsChars: 1500,
   summaryUserRequestChars: 120,
   summaryAgentResponseChars: 150,
+  summaryMaxChars: 2000,
 };
 
 /**
@@ -50,6 +54,7 @@ export const RELAXED_PROFILE: ContextProfile = {
   maxHistoryArgsChars: 15000,
   summaryUserRequestChars: 500,
   summaryAgentResponseChars: 500,
+  summaryMaxChars: 8000,
 };
 
 // ---------------------------------------------------------------------------

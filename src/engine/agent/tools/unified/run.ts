@@ -42,6 +42,9 @@ function buildRunDescription(): string {
     Knowledge: [
       ['man [topic]', 'help, guidelines, style guides'],
     ],
+    Scripting: [
+      ['js <code>', 'execute JavaScript (full figma.* API access)'],
+    ],
     Pager: [
       ['more <id>', 'page through truncated output'],
     ],

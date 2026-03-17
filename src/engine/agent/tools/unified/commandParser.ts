@@ -306,6 +306,15 @@ export function mapToToolArgs(
       return { path: sedPath, replacements };
     }
 
+    case 'js': {
+      // js <expression> or js with multiline input
+      // Use raw string (not tokenized) — JS code has braces/arrows that tokenizer mangles
+      const rawCode = parsed.raw.replace(/^js\s*/, '');
+      const code = input || rawCode || '';
+      if (!code) return null; // help mode
+      return { code };
+    }
+
     case 'more':
       return { id: pos[0] || '' };
 

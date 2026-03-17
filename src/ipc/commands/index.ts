@@ -13,6 +13,7 @@ import { findClosestCommand } from '../../engine/agent/tools/unified/commandRegi
 import { handleLs, handleTree, handleCat } from './readHandlers';
 import { handleMk, handleRm, handleMv, handleCp } from './writeHandlers';
 import { handleGrep, handleSed } from './searchHandlers';
+import { handleJs } from './jsHandler';
 import { handleMemoryCommand } from './memoryHandler';
 import {
   handleContext, handleOutline, handleInspect,
@@ -37,6 +38,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   cp: handleCp,
   grep: handleGrep,
   sed: handleSed,
+  js: handleJs,
   // man is handled locally in sandbox — should not arrive at IPC
   man: async () => ({
     success: false as const,

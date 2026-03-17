@@ -23,6 +23,7 @@ import { mvDefinition } from './mv';
 import { grepDefinition } from './grep';
 import { sedDefinition } from './sed';
 import { manDefinition } from './man';
+import { jsDefinition } from './js';
 
 /** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
 const moreDefinition: ToolDefinition = {
@@ -46,6 +47,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [grepDefinition.name, grepDefinition],
   [sedDefinition.name, sedDefinition],
   [manDefinition.name, manDefinition],
+  [jsDefinition.name, jsDefinition],
   [moreDefinition.name, moreDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
@@ -371,6 +373,25 @@ Deep-copies the source. ChildName.prop:value overrides child properties.
 
 See also: mkdir (create from scratch), ln (component instances)`,
 
+  js: `js — Execute JavaScript in the Figma plugin runtime.
+
+Usage:
+  js figma.currentPage.children.length                              # expression
+  js figma.currentPage.findAll(n => n.type === 'TEXT').length        # query
+  js figma.currentPage.selection.map(n => n.name)                   # selection
+
+Multiline (via input):
+  run({command: "js", input: "const texts = figma.currentPage.findAll(n => n.type === 'TEXT')\\ntexts.forEach(t => { t.fills = [{type:'SOLID',color:{r:1,g:0,b:0}}] })\\nreturn texts.length"})
+
+Rules:
+  - Full access to figma.* API (Plugin API)
+  - Use return to output a value (expressions auto-return)
+  - Async/await supported
+  - Results auto-serialized (nodes → {id, type, name, width, height})
+  - Arrays capped at 100 items
+
+See also: cat (inspect nodes), mk (create/update), grep (search nodes)`,
+
   more: `more — Page through truncated output.
 
 Usage:
@@ -413,5 +434,6 @@ const COMMAND_SEE_ALSO: Record<string, string> = {
   rm: 'ls (check before deleting), cp (clone instead)',
   cp: 'mkdir (create from scratch), ln (component instances)',
   ln: 'cp (clone without components), design (batch instances)',
+  js: 'cat (inspect nodes), mk (create/update), grep (search nodes)',
   more: 'cat (read nodes), grep (search), tree (structure)',
 };

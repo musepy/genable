@@ -135,15 +135,15 @@ describe('normalizeProps (was compileCssProps)', () => {
     expect(normalizeProps({ itemSpacing: 12 })).toEqual({ itemSpacing: 12 });
   });
 
-  // ── CSS name priority (conflict resolution) ──
-  it('CSS name overrides Figma name when both present', () => {
+  // ── Conflict resolution: explicit Figma-native wins over shorthand ──
+  it('explicit layoutMode overrides layout shorthand', () => {
     const result = normalizeProps({ layout: 'row', layoutMode: 'VERTICAL' });
-    expect(result.layoutMode).toBe('HORIZONTAL');
+    expect(result.layoutMode).toBe('VERTICAL');
   });
 
-  it('gap overrides itemSpacing when both present', () => {
+  it('explicit itemSpacing overrides gap shorthand', () => {
     const result = normalizeProps({ gap: 20, itemSpacing: 10 });
-    expect(result.itemSpacing).toBe(20);
+    expect(result.itemSpacing).toBe(10);
   });
 
   // ── Unknown properties pass-through ──
@@ -175,7 +175,10 @@ describe('normalizeProps (was compileCssProps)', () => {
       layoutSizingVertical: 'HUG',
       fills: ['#FFFFFF'],
       cornerRadius: 16,
-      padding: 24,
+      paddingTop: 24,
+      paddingRight: 24,
+      paddingBottom: 24,
+      paddingLeft: 24,
     });
   });
 

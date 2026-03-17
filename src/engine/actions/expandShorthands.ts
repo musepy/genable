@@ -257,6 +257,9 @@ const EXPANDERS: Record<string, Expander> = {
   maxH: (v) => ({ maxHeight: isVarRef(v) ? v : Number(v) }),
 };
 
+/** All shorthand keys recognized by the expander — exported for suggestion matching. */
+export const SHORTHAND_KEYS: ReadonlySet<string> = new Set(Object.keys(EXPANDERS));
+
 // ─── Text Content Normalization ──────────────────────────────────────────────
 
 /** CSS text-transform prefixes that LLMs write as literal text content */

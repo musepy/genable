@@ -9,9 +9,59 @@
  */
 
 import { PROP_METADATA, TEXT_ONLY_PROPS, KNOWN_PROP_KEYS } from '../constants/figma-api';
-import { expandShorthands } from '../engine/actions/expandShorthands';
+import { expandShorthands, SHORTHAND_KEYS } from '../engine/actions/expandShorthands';
 
 const norm = (s: string) => s.toLowerCase().replace(/[-_]/g, '');
+
+// ── Property suggestion (Levenshtein) ────────────────────────────────────────
+
+/** All accepted property names: canonical + shorthands. Cached once. */
+let _allPropNames: string[] | null = null;
+function getAllPropNames(): string[] {
+  if (!_allPropNames) {
+    const s = new Set<string>([...KNOWN_PROP_KEYS, ...SHORTHAND_KEYS]);
+    _allPropNames = [...s];
+  }
+  return _allPropNames;
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[] = Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = i - 1;
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+/** Find up to 3 closest property names within edit distance threshold. */
+function suggestProperties(unknown: string): string[] {
+  const lower = unknown.toLowerCase();
+  const threshold = lower.length <= 3 ? 1 : lower.length <= 6 ? 2 : 3;
+  const candidates: { name: string; dist: number }[] = [];
+
+  for (const name of getAllPropNames()) {
+    // Prefix match (e.g. "pad" → "padding")
+    if (name.startsWith(lower) && name !== lower) {
+      candidates.push({ name, dist: 0 });
+      continue;
+    }
+    const dist = levenshtein(lower, name.toLowerCase());
+    if (dist <= threshold) candidates.push({ name, dist });
+  }
+
+  candidates.sort((a, b) => a.dist - b.dist);
+  return candidates.slice(0, 3).map(c => c.name);
+}
 
 export interface NormalizePropsOptions {
   nodeType?: string;
@@ -99,10 +149,14 @@ export function normalizeProps(
     }
   }
 
-  // ── Step 7: Unknown property filter ──
+  // ── Step 7: Unknown property filter (with suggestions) ──
   for (const key of Object.keys(result)) {
     if (!KNOWN_PROP_KEYS.has(key)) {
-      warn(`'${key}' is not a supported property — dropped`);
+      const suggestions = suggestProperties(key);
+      const hint = suggestions.length > 0
+        ? ` Did you mean: ${suggestions.join(', ')}?`
+        : ' Run `man mk` for property reference.';
+      warn(`'${key}' is not a recognized property — dropped.${hint}`);
       delete result[key];
     }
   }

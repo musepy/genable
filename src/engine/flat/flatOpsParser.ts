@@ -85,9 +85,9 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
   const tag = rawType.toLowerCase();
   const args = extractArgs(line, m[0].length - 1);
 
-  if (tag === 'ref') return parseRef(num, line, sym, args, uniq);
-  if (tag === 'variantset') return parseVariantSet(num, line, sym, args, uniq);
-  if (tag === 'clone') return parseClone(num, line, sym, args, uniq);
+  if (tag === 'ref') return parseRef(num, line, sym, args, uniq, pushWarn);
+  if (tag === 'variantset') return parseVariantSet(num, line, sym, args, uniq, pushWarn);
+  if (tag === 'clone') return parseClone(num, line, sym, args, uniq, pushWarn);
 
   const figmaType = TAG_TO_TYPE[tag];
   if (!figmaType || figmaType === 'DELETE' || figmaType === 'REF' || figmaType === 'VARIANT_SET' || figmaType === 'CLONE') throw new Error(`Unknown type: ${tag}`);
@@ -118,6 +118,7 @@ function parseLine(line: string, num: number, uniq: (s: string) => string, warn:
 function parseRef(
   num: number, raw: string, sym: string,
   args: string[], uniq: (s: string) => string,
+  warn: (msg: string) => void = () => {},
 ): OperationIR {
   const componentName = unquote(args[0] || '');
   const parent = unquote(args[1] || 'root');
@@ -142,7 +143,7 @@ function parseRef(
 
   return {
     command: 'instance', lineNumber: num, raw, symbol: uniq(sym),
-    parentRef: parent, props: normalizeProps(props), dependsOn: deps,
+    parentRef: parent, props: normalizeProps(props, {}, warn), dependsOn: deps,
     componentRef: compSym,
     overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
     ...(variantSelector ? { variantSelector } : {}),
@@ -152,6 +153,7 @@ function parseRef(
 function parseVariantSet(
   num: number, raw: string, sym: string,
   args: string[], uniq: (s: string) => string,
+  warn: (msg: string) => void = () => {},
 ): OperationIR {
   const parent = unquote(args[0] || 'root');
   const rawProps = parsePropsBlock(args[1] || '');
@@ -164,8 +166,8 @@ function parseVariantSet(
   const deps = [...computeDependsOn(parent), ...componentSymbols];
   // Forward all props (except 'from') through buildProps (abbreviation expansion)
   // then normalizeProps (CSS→Figma conversion: layout:'row'→layoutMode, etc.)
-  const builtProps = buildProps(restRawProps, 'frame', false);
-  const normProps = normalizeProps(builtProps, { nodeType: 'FRAME', isCreate: true });
+  const builtProps = buildProps(restRawProps, 'frame', false, warn);
+  const normProps = normalizeProps(builtProps, { nodeType: 'FRAME', isCreate: true }, warn);
 
   return {
     command: 'variantSet', lineNumber: num, raw, symbol: uniq(sym),
@@ -182,6 +184,7 @@ function parseVariantSet(
 function parseClone(
   num: number, raw: string, sym: string,
   args: string[], uniq: (s: string) => string,
+  warn: (msg: string) => void = () => {},
 ): OperationIR {
   // clone(source, parent, {props})  or  clone(source, {props})
   let sourceRef: string;
@@ -234,7 +237,7 @@ function parseClone(
   for (const [childName, childProps] of Object.entries(childRaw)) {
     // Use 'text' tag hint so fill→fills conversion works for text children
     const built = buildProps(childProps, 'text', false);
-    normOverrides[childName] = normalizeProps(built);
+    normOverrides[childName] = normalizeProps(built, {}, warn);
   }
 
   const deps = [...computeDependsOn(parent)];
@@ -243,7 +246,7 @@ function parseClone(
   return {
     command: 'clone', lineNumber: num, raw, symbol: uniq(sym),
     parentRef: parent, sourceRef,
-    props: normalizeProps(props, { nodeType: 'FRAME', isCreate: true }),
+    props: normalizeProps(props, { nodeType: 'FRAME', isCreate: true }, warn),
     overrides: Object.keys(normOverrides).length > 0 ? normOverrides : undefined,
     dependsOn: deps,
   };
@@ -412,6 +415,16 @@ function unquote(s: string): string {
 // Replaces: parseFlatOps() + validateSemantics() + ActionCompiler.compile()
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Classify a property warning message into a diagnostic code. */
+function classifyWarning(msg: string): string {
+  if (msg.includes('not a recognized property')) return 'UNKNOWN_PROPERTY';
+  if (msg.includes('not a supported property')) return 'UNKNOWN_PROPERTY';
+  if (msg.includes('not a valid Figma value')) return 'INVALID_ENUM_VALUE';
+  if (msg.includes('requires layout')) return 'MISSING_LAYOUT';
+  if (msg.includes('text-only property')) return 'WRONG_NODE_TYPE';
+  return 'PROPERTY_WARNING';
+}
+
 const SHAPE_TYPES = new Set(['RECTANGLE', 'ELLIPSE', 'LINE', 'VECTOR']);
 
 export interface CompileDesignOpsResult {
@@ -451,7 +464,7 @@ export function compileDesignOps(input: string, defaultParentId?: string, knownS
     if (op.symbol) allSymbols.add(op.symbol);
   }
   const diagnostics: DesignDiagnostic[] = propWarnings.map(w => ({
-    code: w.message.includes('not a valid Figma value') ? 'INVALID_ENUM_VALUE' : w.message.includes('requires layout') ? 'MISSING_LAYOUT' : 'INVALID_PAINT_FORMAT',
+    code: classifyWarning(w.message),
     severity: 'warning' as const,
     message: w.message,
     lineNumber: w.line,

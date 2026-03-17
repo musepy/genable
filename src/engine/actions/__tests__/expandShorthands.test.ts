@@ -228,8 +228,14 @@ describe('expandShorthands', () => {
       expect(result.bottomLeftRadius).toBe(0);
       expect(result.bottomRightRadius).toBe(0);
     });
+    it('"full" → 9999 (circle shorthand)', () => {
+      expect(expandShorthands({ radius: 'full' })).toMatchObject({ cornerRadius: 9999 });
+    });
     it('corner is alias for radius', () => {
       expect(expandShorthands({ corner: 8 })).toMatchObject({ cornerRadius: 8 });
+    });
+    it('corner:full also works', () => {
+      expect(expandShorthands({ corner: 'full' })).toMatchObject({ cornerRadius: 9999 });
     });
   });
 

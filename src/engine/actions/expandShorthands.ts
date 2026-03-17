@@ -169,6 +169,8 @@ const EXPANDERS: Record<string, Expander> = {
     if (Array.isArray(v) && v.length === 4) {
       return { topLeftRadius: v[0], topRightRadius: v[1], bottomLeftRadius: v[2], bottomRightRadius: v[3] };
     }
+    // 'full' = fully rounded (circle for square nodes) — Figma clamps to half the shorter side
+    if (String(v).toLowerCase() === 'full') return { cornerRadius: 9999 };
     return { cornerRadius: Number(v) };
   },
 

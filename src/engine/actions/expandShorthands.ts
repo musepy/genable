@@ -241,6 +241,30 @@ const EXPANDERS: Record<string, Expander> = {
   maxH: (v) => ({ maxHeight: Number(v) }),
 };
 
+// ─── Text Content Normalization ──────────────────────────────────────────────
+
+/** CSS text-transform prefixes that LLMs write as literal text content */
+const TEXT_TRANSFORM_PREFIXES: Record<string, string> = {
+  'uppercase ': 'UPPER',
+  'lowercase ': 'LOWER',
+  'capitalize ': 'TITLE',
+};
+
+/**
+ * Detect "uppercase X" in characters → strip prefix, set textCase.
+ * LLMs confuse CSS text-transform with literal text content.
+ */
+function normalizeTextContent(props: Record<string, any>): void {
+  if (typeof props.characters !== 'string') return;
+  for (const [prefix, textCase] of Object.entries(TEXT_TRANSFORM_PREFIXES)) {
+    if (props.characters.toLowerCase().startsWith(prefix)) {
+      props.characters = props.characters.substring(prefix.length);
+      if (!props.textCase) props.textCase = textCase;
+      break;
+    }
+  }
+}
+
 // ─── Main Function ───────────────────────────────────────────────────────────
 
 /**
@@ -249,6 +273,7 @@ const EXPANDERS: Record<string, Expander> = {
  * Rules:
  * - Explicit Figma-native props always override shorthand expansions
  * - Multiple effect shorthands (shadow + blur) are merged into one effects array
+ * - "uppercase X" in characters → textCase: UPPER + strip prefix
  * - Unknown props pass through unchanged
  */
 export function expandShorthands(props: Record<string, any>): Record<string, any> {
@@ -280,5 +305,10 @@ export function expandShorthands(props: Record<string, any>): Record<string, any
   }
 
   // Passthrough (explicit Figma-native props) overrides expanded shorthands
-  return { ...expanded, ...passthrough };
+  const result = { ...expanded, ...passthrough };
+
+  // Post-pass: normalize text content ("uppercase X" → textCase + strip)
+  normalizeTextContent(result);
+
+  return result;
 }

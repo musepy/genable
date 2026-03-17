@@ -266,6 +266,36 @@ describe('expandShorthands', () => {
     });
   });
 
+  // ── Text content normalization ───────────────────────────────────────
+
+  describe('text-transform detection', () => {
+    it('"uppercase FREE" → characters "FREE" + textCase UPPER', () => {
+      const result = expandShorthands({ characters: 'uppercase FREE' });
+      expect(result.characters).toBe('FREE');
+      expect(result.textCase).toBe('UPPER');
+    });
+    it('"Uppercase PRO" → case-insensitive match', () => {
+      const result = expandShorthands({ characters: 'Uppercase PRO' });
+      expect(result.characters).toBe('PRO');
+      expect(result.textCase).toBe('UPPER');
+    });
+    it('"lowercase Hello" → characters "Hello" + textCase LOWER', () => {
+      const result = expandShorthands({ characters: 'lowercase Hello' });
+      expect(result.characters).toBe('Hello');
+      expect(result.textCase).toBe('LOWER');
+    });
+    it('no prefix → unchanged', () => {
+      const result = expandShorthands({ characters: 'Normal text' });
+      expect(result.characters).toBe('Normal text');
+      expect(result.textCase).toBeUndefined();
+    });
+    it('explicit textCase wins over detected prefix', () => {
+      const result = expandShorthands({ characters: 'uppercase FREE', textCase: 'ORIGINAL' });
+      expect(result.characters).toBe('FREE');
+      expect(result.textCase).toBe('ORIGINAL');
+    });
+  });
+
   // ── Integration: user's example ────────────────────────────────────────
 
   it('user example: full shorthand expansion', () => {

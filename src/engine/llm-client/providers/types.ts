@@ -129,11 +129,14 @@ export interface LLMProviderCapabilities {
   supportsTextStreaming: boolean;
   /** Provider can return incremental reasoning/thought chunks in a single generation turn. */
   supportsReasoningStreaming: boolean;
+  /** Model's context window size in tokens. Used for lazy compression decisions. */
+  contextWindow: number;
 }
 
 export const DEFAULT_PROVIDER_CAPABILITIES: LLMProviderCapabilities = {
   supportsTextStreaming: false,
   supportsReasoningStreaming: false,
+  contextWindow: 1_000_000,
 };
 
 export interface LLMProvider {

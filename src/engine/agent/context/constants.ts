@@ -58,6 +58,22 @@ export const RELAXED_PROFILE: ContextProfile = {
 };
 
 // ---------------------------------------------------------------------------
+// Derive profile from context window — replaces regex-based model guessing
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive a ContextProfile from the model's declared context window.
+ * Replaces the old regex-based heuristic (e.g. `/pro|kimi|k2/i.test(modelName)`).
+ *
+ * Threshold: 100K tokens → RELAXED, else TIGHT.
+ * The actual compression trigger is in AgentRuntime (lazy, budget-based),
+ * so this profile mainly controls per-message truncation limits.
+ */
+export function deriveContextProfile(contextWindowTokens: number): ContextProfile {
+  return contextWindowTokens >= 100_000 ? RELAXED_PROFILE : TIGHT_PROFILE;
+}
+
+// ---------------------------------------------------------------------------
 // Active profile — selected at runtime, defaults to tight (backward compat)
 // ---------------------------------------------------------------------------
 

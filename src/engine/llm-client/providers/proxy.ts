@@ -44,7 +44,7 @@ export class ProxyProvider implements LLMProvider {
   ) {}
 
   getCapabilities(): LLMProviderCapabilities {
-    return { supportsTextStreaming: true, supportsReasoningStreaming: true };
+    return { supportsTextStreaming: true, supportsReasoningStreaming: true, contextWindow: 1_000_000 };
   }
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {

@@ -58,7 +58,7 @@ export class DashScopeProvider implements LLMProvider {
   ) {}
 
   getCapabilities(): LLMProviderCapabilities {
-    return { supportsTextStreaming: true, supportsReasoningStreaming: false };
+    return { supportsTextStreaming: true, supportsReasoningStreaming: false, contextWindow: 1_000_000 };
   }
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {

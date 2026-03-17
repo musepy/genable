@@ -2,12 +2,16 @@
  * @file agentRuntime.ts
  * @description Autonomous agent runtime with layered context management.
  *
- * Context is structured in 3 layers, not a flat message array:
- *   1. systemPrompt  — static, set once at construction
- *   2. summary       — rolling summary of previous turns, updated at turn boundaries
- *   3. turnMessages  — current turn's messages, cleared at turn end
+ * Context is structured in 4 layers, not a flat message array:
+ *   1. systemPrompt          — static, set once at construction
+ *   2. summary               — compressed history (only populated when context is near-full)
+ *   3. conversationHistory   — previous turns' FULL messages (kept as long as context allows)
+ *   4. turnMessages          — current turn's messages, moved to history at turn end
  *
- * This keeps context bounded and predictable regardless of conversation length.
+ * Lazy compression: full messages are preserved across turns. Only when the total
+ * context approaches the model's context window are the oldest turns compressed
+ * into the summary. This matches how Claude Code works — use the context you have,
+ * only compress when you must.
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
@@ -55,6 +59,8 @@ export interface AgentRuntimeOptions {
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
   hooks?: HookRegistration[];
   requireToolApproval?: boolean;
+  /** Model's context window in tokens. Used for lazy compression budget. */
+  contextWindow?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,8 +85,10 @@ export class AgentRuntime {
 
   // ─── Layered context ───
   private readonly staticSystemPrompt: string;
-  private summary: string = '';            // rolling summary of previous turns
-  private turnMessages: LLMMessage[] = []; // current turn only, cleared at turn end
+  private summary: string = '';                    // compressed history (only when context is near-full)
+  private conversationHistory: LLMMessage[] = [];  // previous turns' FULL messages
+  private turnMessages: LLMMessage[] = [];         // current turn only, moved to history at turn end
+  private readonly contextBudgetChars: number;     // max chars before triggering compression
 
   private lastPromptTokens: number = 0;
   private cleaner: ToolResultCleaner;
@@ -112,6 +120,12 @@ export class AgentRuntime {
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
     this.staticSystemPrompt = options.systemPrompt || '';
+    // Context budget: 70% of context window (leave 30% for model output + safety margin)
+    // chars ≈ tokens * 4 (rough estimate)
+    const contextWindowTokens = options.contextWindow
+      ?? options.provider.getCapabilities?.().contextWindow
+      ?? 32_000;
+    this.contextBudgetChars = Math.floor(contextWindowTokens * 0.7) * 4;
     // ToolResultCleaner uses command definitions (not the `run` wrapper)
     // so it can route to the correct cleaning strategy per command.
     this.cleaner = new ToolResultCleaner(allToolDefinitions);
@@ -264,8 +278,8 @@ export class AgentRuntime {
   // ─── Context assembly ─────────────────────────────────────────
 
   /**
-   * Assemble the prompt from layered context.
-   * Always bounded: system + summary + current turn messages.
+   * Assemble the prompt from 4-layer context.
+   * Layers: system → summary (compressed) → conversation history (full) → current turn.
    */
   private assemblePrompt(): LLMMessage[] {
     const messages: LLMMessage[] = [];
@@ -275,37 +289,129 @@ export class AgentRuntime {
       messages.push({ id: 'sys_static', role: 'system', content: this.staticSystemPrompt });
     }
 
-    // Layer 2: rolling summary of previous turns (system role — distinct from user turns)
+    // Layer 2: compressed summary (only present if some history was compressed)
     if (this.summary) {
       messages.push({ id: 'ctx_summary', role: 'system', content: this.summary });
     }
 
-    // Layer 3: current turn messages
+    // Layer 3: uncompressed conversation history (previous turns, full detail)
+    messages.push(...this.conversationHistory);
+
+    // Layer 4: current turn messages
     messages.push(...this.turnMessages);
 
     return messages;
   }
 
   /**
-   * Summarize the current turn and append to rolling summary.
+   * End the current turn. Moves turnMessages to conversationHistory (preserving
+   * full detail), then lazily compresses only if approaching context budget.
+   *
    * turnMessages are NOT cleared here — they stay available for getMessages()
    * (used by debrief). They're cleared at the start of the next run().
    */
   private endTurn(): void {
-    const turnSummary = buildCompressionSummary(this.turnMessages);
-    if (turnSummary) {
-      this.summary = this.summary
-        ? `${this.summary}\n${turnSummary}`
-        : turnSummary;
+    // Move current turn's full messages to conversation history
+    this.conversationHistory.push(...this.turnMessages);
 
-      // Cap summary length — drop oldest turns if exceeded
-      const maxChars = getContextProfile().summaryMaxChars;
-      if (maxChars > 0 && this.summary.length > maxChars) {
-        this.summary = capSummary(this.summary, maxChars);
-      }
+    // Lazy compression: only compress when approaching context budget
+    this.compressIfNeeded();
+  }
 
-      console.log(`[Context] Turn summarized (${turnSummary.length} chars). Total summary: ${this.summary.length} chars`);
+  // ─── Lazy compression ──────────────────────────────────────
+
+  /**
+   * Estimate total context size in chars (across all 4 layers).
+   */
+  private estimateContextChars(): number {
+    let total = this.staticSystemPrompt.length + this.summary.length;
+    for (const msg of this.conversationHistory) {
+      total += this.estimateMessageChars(msg);
     }
+    for (const msg of this.turnMessages) {
+      total += this.estimateMessageChars(msg);
+    }
+    return total;
+  }
+
+  private estimateMessageChars(msg: LLMMessage): number {
+    if (typeof msg.content === 'string') return msg.content.length;
+    if (!Array.isArray(msg.content)) return 0;
+    let total = 0;
+    for (const part of msg.content) {
+      if (part.text) total += part.text.length;
+      if (part.functionCall) {
+        total += (part.functionCall.name?.length || 0)
+          + JSON.stringify(part.functionCall.args || {}).length;
+      }
+      if (part.functionResponse) {
+        total += (part.functionResponse.name?.length || 0)
+          + JSON.stringify(part.functionResponse.response || {}).length;
+      }
+      // Skip inlineData — image token count is provider-specific
+    }
+    return total;
+  }
+
+  /**
+   * Compress oldest turns from conversationHistory into summary,
+   * but ONLY if total context exceeds the budget.
+   *
+   * Compresses one turn at a time (user msg + subsequent model/tool msgs)
+   * until we're under budget or history is empty.
+   */
+  private compressIfNeeded(): void {
+    const totalBefore = this.estimateContextChars();
+    if (totalBefore <= this.contextBudgetChars) {
+      console.log(`[Context] Lazy: ${totalBefore} chars, budget ${this.contextBudgetChars} — no compression needed`);
+      return;
+    }
+
+    console.log(`[Context] Lazy: ${totalBefore} chars exceeds budget ${this.contextBudgetChars} — compressing oldest turns`);
+    let compressed = 0;
+
+    while (this.estimateContextChars() > this.contextBudgetChars && this.conversationHistory.length > 0) {
+      // Extract the oldest turn (from first user msg to next user msg)
+      const oldestTurn = this.extractOldestTurn();
+      if (oldestTurn.length === 0) break;
+
+      const turnSummary = buildCompressionSummary(oldestTurn);
+      if (turnSummary) {
+        this.summary = this.summary
+          ? `${this.summary}\n${turnSummary}`
+          : turnSummary;
+        compressed++;
+      }
+    }
+
+    // Cap summary if it grew too large
+    const maxChars = getContextProfile().summaryMaxChars;
+    if (maxChars > 0 && this.summary.length > maxChars) {
+      this.summary = capSummary(this.summary, maxChars);
+    }
+
+    const totalAfter = this.estimateContextChars();
+    console.log(`[Context] Compressed ${compressed} turns: ${totalBefore} → ${totalAfter} chars (summary: ${this.summary.length} chars)`);
+  }
+
+  /**
+   * Extract the oldest logical turn from conversationHistory.
+   * A turn = a user message + all subsequent model/tool messages until the next user message.
+   * Returns the extracted messages (removed from conversationHistory).
+   */
+  private extractOldestTurn(): LLMMessage[] {
+    if (this.conversationHistory.length === 0) return [];
+
+    // Find the end of the first turn (next user message after index 0)
+    let endIdx = this.conversationHistory.length;
+    for (let i = 1; i < this.conversationHistory.length; i++) {
+      if (this.conversationHistory[i].role === 'user') {
+        endIdx = i;
+        break;
+      }
+    }
+
+    return this.conversationHistory.splice(0, endIdx);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -320,7 +426,7 @@ export class AgentRuntime {
     this.canceled = false;
     this.cancelReason = 'Canceled by user';
 
-    // Clear previous turn (its summary is already in this.summary)
+    // Clear previous turn's messages (already moved to conversationHistory by endTurn)
     this.turnMessages = [];
 
     // Add user message to current turn

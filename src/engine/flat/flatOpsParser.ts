@@ -15,10 +15,9 @@
 import type { OperationIR } from '../../domain/design-ir';
 import type { FigmaAction } from '../actions/types';
 import type { DesignOp, DesignOpError, DesignDiagnostic } from '../actions/createTypes';
-import { paintSpec, effectSpec } from '../../domain/property-specs';
 import { normalizeProps } from '../../domain/node-normalizers';
 import {
-  TAG_TO_TYPE, ABBREV_EXPANSION, coerceValue, expandPadding,
+  TAG_TO_TYPE, coerceValue,
   toCamelCase, computeDependsOn,
 } from '../utils/prop-dsl';
 
@@ -131,9 +130,8 @@ function parseRef(
     if (k === 'name') { props.name = v; continue; }
     if (k === 'variant') { variantSelector = v; continue; }
     if (k.startsWith('set:')) { overrides[k.substring(4)] = { characters: v }; continue; }
-    const exp = ABBREV_EXPANSION[k] ?? k;
-    if (exp === 'padding' || k === 'p') { Object.assign(props, expandPadding(v)); continue; }
-    props[exp] = coerceValue(exp, v);
+    // Pass raw key — expandShorthands (called by normalizeProps) handles translation
+    props[k] = coerceValue(k, v);
   }
 
   // Only apply toCamelCase for display names with spaces (e.g. 'Button Primary' → 'buttonPrimary').
@@ -229,7 +227,7 @@ function parseClone(
     }
   }
 
-  // Run root props through buildProps (handles stroke→paintSpec, bg→fills, etc.)
+  // Run root props through buildProps (coerces values; expansion handled by normalizeProps)
   const props = buildProps(rootRaw, 'frame', false);
   // Run each child's overrides through buildProps (tag='' for generic handling, then fill→fills)
   const normOverrides: Record<string, Record<string, any>> = {};
@@ -302,37 +300,18 @@ function buildProps(rawProps: Record<string, string>, tag: string, isIcon: boole
 
   for (const [rawKey, rawValue] of Object.entries(rawProps)) {
     if (rawKey === 'reusable') continue;
-
     if (rawKey === 'name') { props.name = rawValue; continue; }
 
-    // Icon-specific
+    // Icon-specific: 'size' means width+height for icons, not fontSize
     if (rawKey === 'icon' && isIcon) { props.iconName = rawValue; continue; }
     if (rawKey === 'size' && isIcon) {
       const s = coerceValue('width', rawValue);
       props.width = s; props.height = s; continue;
     }
 
-    const expandedKey = ABBREV_EXPANSION[rawKey] ?? rawKey;
-
-    if (expandedKey === 'padding' || rawKey === 'p') { Object.assign(props, expandPadding(rawValue)); continue; }
-    if (expandedKey === 'shadow' || rawKey === 'shadow') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(rawValue)]; continue; }
-    if (rawKey === 'blur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`blur(${rawValue})`)]; continue; }
-    if (rawKey === 'bgblur') { props.effects = [...(props.effects ?? []), ...effectSpec.parseXml(`bgblur(${rawValue})`)]; continue; }
-    if (expandedKey === 'fill' || (rawKey === 'fill' && tag !== 'text') || rawKey === 'fills') { paintSpec.validate(rawValue).forEach(warn); props.fills = paintSpec.parseXml(rawValue); continue; }
-    if (rawKey === 'stroke' || rawKey === 'strokes') { paintSpec.validate(rawValue).forEach(warn); props.strokes = paintSpec.parseXml(rawValue); continue; }
-    if (expandedKey === 'clipsContent') {
-      const v = rawValue.toLowerCase();
-      props.clipsContent = (v === 'hidden' || v === 'clip' || v === 'true');
-      continue;
-    }
-
-    props[expandedKey] = coerceValue(expandedKey, rawValue);
-  }
-
-  // Text fill from fill attribute
-  if (tag === 'text' && rawProps.fill) {
-    paintSpec.validate(rawProps.fill).forEach(warn);
-    props.fills = paintSpec.parseXml(rawProps.fill);
+    // Pass raw key with coerced value — expandShorthands (called by normalizeProps)
+    // handles all abbreviation expansion and property translation.
+    props[rawKey] = coerceValue(rawKey, rawValue);
   }
 
   return props;

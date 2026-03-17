@@ -190,6 +190,45 @@ const EXPANDERS: Record<string, Expander> = {
     if (s === 'nowrap' || s === 'no-wrap') return { layoutWrap: 'NO_WRAP' };
     return { layoutWrap: String(v).toUpperCase() };
   },
+
+  // ── DSL abbreviations (text compression aliases) ───────────────────────
+  // These delegate to semantic expanders above so DSL parser can skip
+  // ABBREV_EXPANSION and pass raw keys directly.
+  w: (v, all) => EXPANDERS.width(v, all),
+  h: (v, all) => EXPANDERS.height(v, all),
+  p: (v, all) => EXPANDERS.padding(v, all),
+  pt: (v) => ({ paddingTop: Number(v) }),
+  pr: (v) => ({ paddingRight: Number(v) }),
+  pb: (v) => ({ paddingBottom: Number(v) }),
+  pl: (v) => ({ paddingLeft: Number(v) }),
+  size: (v) => ({ fontSize: Number(v) }),
+  weight: (v) => ({ fontWeight: String(v) }),
+  font: (v) => ({ fontFamily: String(v) }),
+  alignMain: (v) => ({ primaryAxisAlignItems: mapAlign(String(v)) }),
+  alignCross: (v) => ({ counterAxisAlignItems: mapAlign(String(v)) }),
+  textAlign: (v) => ({ textAlignHorizontal: String(v).toUpperCase() }),
+  positioning: (v) => ({ layoutPositioning: String(v).toUpperCase() }),
+  tracking: (v) => ({ letterSpacing: v }),
+  leading: (v) => ({ lineHeight: v }),
+  strokeW: (v) => ({ strokeWeight: Number(v) }),
+  strokeA: (v) => ({ strokeAlign: String(v).toUpperCase() }),
+  strokeJ: (v) => ({ strokeJoin: String(v).toUpperCase() }),
+  strokeC: (v) => ({ strokeCap: String(v).toUpperCase() }),
+  dash: (v) => ({ dashPattern: v }),
+  strokeT: (v) => ({ strokeTopWeight: Number(v) }),
+  strokeR: (v) => ({ strokeRightWeight: Number(v) }),
+  strokeB: (v) => ({ strokeBottomWeight: Number(v) }),
+  strokeL: (v) => ({ strokeLeftWeight: Number(v) }),
+  sizingH: (v) => ({ layoutSizingHorizontal: String(v).toUpperCase() }),
+  sizingV: (v) => ({ layoutSizingVertical: String(v).toUpperCase() }),
+  strokesInLayout: (v) => ({ strokesIncludedInLayout: v === true || String(v).toLowerCase() === 'true' }),
+  reverseZ: (v) => ({ itemReverseZIndex: v === true || String(v).toLowerCase() === 'true' }),
+  lockRatio: (v) => ({ constrainProportions: v === true || String(v).toLowerCase() === 'true' }),
+  pin: (v) => ({ constraints: v }),
+  minW: (v) => ({ minWidth: Number(v) }),
+  maxW: (v) => ({ maxWidth: Number(v) }),
+  minH: (v) => ({ minHeight: Number(v) }),
+  maxH: (v) => ({ maxHeight: Number(v) }),
 };
 
 // ─── Main Function ───────────────────────────────────────────────────────────

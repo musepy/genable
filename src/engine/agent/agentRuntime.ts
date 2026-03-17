@@ -25,6 +25,8 @@ import { ToolDispatcher } from './toolDispatcher';
 import { COMMAND_NAMES } from './tools/unified/commandRegistry';
 import { getContextProfile } from './context/constants';
 import { clearOverflows } from './overflowStore';
+import { executeSubtask } from './subtask/executor';
+import type { SubtaskContext } from './subtask/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +95,7 @@ export class AgentRuntime {
   behaviorConfig: AgentBehaviorConfig;
   loopPolicy: AgentLoopPolicy;
   private canceled = false;
+  private currentIteration = 0;
   private cancelReason = 'Canceled by user';
   private activeAbortController: AbortController | null = null;
   private currentRunId = '';
@@ -154,6 +157,25 @@ export class AgentRuntime {
       this.resetBuiltinState = reset;
     }
     this.hookRunner = new HookRunner(this.hookRegistry);
+
+    // Register subtask executor (bounded self-recursion)
+    this.toolDispatcher.mergeExecutors({
+      subtask: async (args: any) => {
+        const childContext: SubtaskContext = {
+          provider: this.options.provider,
+          ipcBridge: this.options.ipcBridge,
+          systemPrompt: this.staticSystemPrompt,
+          tools: this.options.tools,
+          toolExecutors: this.options.toolExecutors,
+          maxIterations: Math.min(Math.floor((this.maxIterations - this.currentIteration) / 2), 20),
+          depth: 0,
+          maxDepth: 2,
+          isParentCanceled: () => this.canceled,
+          onRuntimeEvent: this.options.onRuntimeEvent,
+        };
+        return executeSubtask(args?.prompt || args?.input || '', childContext);
+      },
+    });
 
     if (process.env.NODE_ENV === 'test') {
       (this as any).THROTTLE_MS = 0;
@@ -334,6 +356,7 @@ export class AgentRuntime {
     // ════════════════════════════════════════════
     while (iteration < this.maxIterations) {
       this.throwIfCanceled(iteration + 1);
+      this.currentIteration = iteration;
 
       const prompt = this.assemblePrompt();
       const currentTokens = this.lastPromptTokens;
@@ -588,6 +611,18 @@ export class AgentRuntime {
         // text-only response. Safety net is maxIterations=200 (ceiling, not target).
 
         iteration++;
+
+        // ── BUDGET WARNING ──
+        const remaining = this.maxIterations - iteration; // iteration was just incremented
+        const threshold = Math.ceil(this.maxIterations * 0.2);
+        if (remaining === threshold && remaining > 0) {
+          this.turnMessages.push({
+            id: this.generateId('budget'),
+            role: 'user',
+            content: `[Budget] ${remaining} iterations remaining out of ${this.maxIterations}. Wrap up your current work — summarize progress and tell the user what's left if you can't finish.`,
+          });
+        }
+
         continue;
       } else {
         // ──── TRUNCATION GUARD ────
@@ -622,7 +657,15 @@ export class AgentRuntime {
       }
     }
 
-    throw new Error(`Maximum iterations (${this.maxIterations}) reached.`);
+    // Graceful budget exhaustion: endTurn + return instead of throw
+    this.emitRuntimeEvent({
+      type: 'budget_exhausted',
+      phase: 'execution',
+      iteration,
+      maxIterations: this.maxIterations,
+    });
+    this.endTurn();
+    return `I've used all ${this.maxIterations} iterations. My progress is saved — say "continue" to pick up where I left off.`;
   }
 
   /** Returns current turn messages (for debrief/diagnostics). */

@@ -225,6 +225,13 @@ export function useChat({
         setPendingApproval({ toolCalls: event.toolCalls })
         break
       }
+      case 'budget_exhausted': {
+        updateStreamingMessage(msg => ({
+          ...msg,
+          budgetExhausted: true,
+        }))
+        break
+      }
       case 'turn_end': {
         setLoading(false)
         setRuntimeState('idle')

@@ -24,6 +24,7 @@ import { grepDefinition } from './grep';
 import { sedDefinition } from './sed';
 import { manDefinition } from './man';
 import { jsDefinition } from './js';
+import { subtaskDefinition } from './subtask';
 
 /** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
 const moreDefinition: ToolDefinition = {
@@ -49,6 +50,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [manDefinition.name, manDefinition],
   [jsDefinition.name, jsDefinition],
   [moreDefinition.name, moreDefinition],
+  [subtaskDefinition.name, subtaskDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],
@@ -392,6 +394,23 @@ Rules:
 
 See also: cat (inspect nodes), mk (create/update), grep (search nodes)`,
 
+  subtask: `subtask — Delegate a focused sub-task to a child agent.
+
+Usage:
+  subtask Design a sidebar with nav links and user avatar
+  subtask Create a data table with 5 columns and sample rows
+
+The child agent:
+  - Shares your tools, canvas, and system prompt
+  - Has its own iteration budget (max 20 iterations)
+  - Returns its result and statistics when done
+  - Is automatically canceled if you are canceled
+
+Use for independent pieces of complex designs. Don't use for
+simple operations that take 1-2 tool calls.
+
+See also: man (design guidelines), mk (create/update)`,
+
   more: `more — Page through truncated output.
 
 Usage:
@@ -435,5 +454,6 @@ const COMMAND_SEE_ALSO: Record<string, string> = {
   cp: 'mkdir (create from scratch), ln (component instances)',
   ln: 'cp (clone without components), design (batch instances)',
   js: 'cat (inspect nodes), mk (create/update), grep (search nodes)',
+  subtask: 'man (design guidelines), mk (create/update)',
   more: 'cat (read nodes), grep (search), tree (structure)',
 };

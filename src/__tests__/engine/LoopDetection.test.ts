@@ -95,12 +95,14 @@ describe('AgentRuntime Loop Detection', () => {
   it('should NOT distinguish truly identical calls (Loop Detection should still work)', async () => {
     const identicalCall = { id: '1', name: 'createNode', args: { name: 'Identical Name', parentId: 'parent-123' } };
 
-    mockProvider.generate.mockResolvedValue({ 
-      text: 'Stuck...', 
+    mockProvider.generate.mockResolvedValue({
+      text: 'Stuck...',
       toolCalls: [identicalCall]
     });
 
-    // Should throw after 3 identical iterations
-    await expect(runtime.run('Do something identical')).rejects.toThrow(/LOOP DETECTED/);
+    // With elastic iterations, the agent exhausts its budget gracefully instead of throwing.
+    // Loop detection is non-fatal (hint injection only), so the agent runs until maxIterations.
+    const result = await runtime.run('Do something identical');
+    expect(result).toContain('used all');
   });
 });

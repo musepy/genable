@@ -183,6 +183,14 @@ export interface AgentRuntimeDebriefEvent extends AgentRuntimeBaseEvent {
   };
 }
 
+/** Emitted when the agent exhausts its iteration budget without a natural turn end. */
+export interface AgentRuntimeBudgetExhaustedEvent extends AgentRuntimeBaseEvent {
+  type: 'budget_exhausted';
+  phase: AgentRuntimePhase;
+  iteration: number;
+  maxIterations: number;
+}
+
 /** Emitted after an LLM generation call completes or fails. */
 export interface AgentRuntimeLLMResponseEvent extends AgentRuntimeBaseEvent {
   type: 'llm_response';
@@ -221,7 +229,8 @@ export type AgentRuntimeEvent =
   | AgentRuntimeCanceledEvent
   | AgentRuntimeLLMRequestEvent
   | AgentRuntimeLLMResponseEvent
-  | AgentRuntimeDebriefEvent;
+  | AgentRuntimeDebriefEvent
+  | AgentRuntimeBudgetExhaustedEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -238,5 +247,6 @@ export type AgentRuntimeEventType =
   | 'canceled'
   | 'llm_request'
   | 'llm_response'
-  | 'debrief';
+  | 'debrief'
+  | 'budget_exhausted';
 

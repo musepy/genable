@@ -103,6 +103,8 @@ export interface ChatMessage {
     runError?: string;
     /** Error code for routing (e.g. 'RATE_LIMIT_EXHAUSTED') */
     runErrorCode?: string;
+    /** Whether the agent exhausted its iteration budget (elastic iterations) */
+    budgetExhausted?: boolean;
     /** Post-run agent debrief (collected after difficult runs) */
     debrief?: {
         exitReason: string;

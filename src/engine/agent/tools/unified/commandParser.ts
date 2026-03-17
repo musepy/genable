@@ -315,6 +315,13 @@ export function mapToToolArgs(
       return { code };
     }
 
+    case 'subtask': {
+      // subtask <prompt text> — all positional args form the prompt
+      const subtaskPrompt = input || pos.join(' ') || '';
+      if (!subtaskPrompt) return null; // help mode
+      return { prompt: subtaskPrompt };
+    }
+
     case 'more':
       return { id: pos[0] || '' };
 

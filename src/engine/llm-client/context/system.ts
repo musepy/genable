@@ -52,6 +52,32 @@ You have persistent memory at \`/.agent/memory/\`. Use standard commands to read
 Use this to remember user preferences, design patterns, or anything useful across conversations.`
     );
 
+    // 5b. Scratchpad hint (session-scoped working memory)
+    parts.push(
+`## SCRATCHPAD (Session Working Memory)
+Session-scoped notepad at \`/.agent/scratch/\`. Use it to store intermediate data during complex tasks:
+- \`mk /.agent/scratch/plan text -- Step 1: create card frame...\` — save a note
+- \`cat /.agent/scratch/plan\` — read it back
+- \`ls /.agent/scratch/\` — list all notes
+- \`rm /.agent/scratch/plan\` — delete a note
+Unlike persistent memory, scratchpad is cleared when the session ends. Use it for:
+- Node ID mappings (tempId → realId)
+- Design plans for multi-step work
+- Color palettes or spacing values to reuse`
+    );
+
+    // 5c. Subtask delegation hint
+    parts.push(
+`## SUBTASK DELEGATION
+For complex multi-part designs, delegate independent sections to focused sub-agents:
+- \`subtask Design a sidebar with logo, nav links, and user profile\`
+- \`subtask Create a data table with headers, rows, and pagination\`
+Each subtask gets its own iteration budget and focus. Use when:
+- A design has 3+ independent sections (sidebar, header, content, footer)
+- You want to ensure each section gets full attention
+Do NOT use subtask for simple operations (1-2 tool calls) or dependent work.`
+    );
+
     // 6. Tool definitions (serialized, with category grouping)
     if (tools.length > 0) {
         const hasCategories = tools.some(t => t.category);

@@ -131,19 +131,23 @@ describe('AgentRuntime', () => {
     expect(firstResponse.error.message).toContain('Unknown command');
   });
 
-  it('should throw error if max iterations reached', async () => {
+  it('should return graceful message when max iterations reached', async () => {
     (mockProvider.generate as any).mockResolvedValue({
       text: 'Thinking...',
       toolCalls: [{ name: 'loop', args: {} }]
     });
 
+    const events: any[] = [];
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [{ name: 'loop', description: 'Loop', parameters: { type: 'object', properties: {} } }],
-      maxIterations: 2
+      maxIterations: 2,
+      onRuntimeEvent: (event) => events.push(event),
     });
 
-    await expect(runtime.run('Loop me')).rejects.toThrow('Maximum iterations (2) reached.');
+    const result = await runtime.run('Loop me');
+    expect(result).toContain('used all 2 iterations');
+    expect(events.some(e => e.type === 'budget_exhausted')).toBe(true);
   });
 
   it('should emit reasoning_delta runtime events when provider streams thoughts', async () => {
@@ -168,6 +172,7 @@ describe('AgentRuntime', () => {
 
   it('should detect generic tool call loops (safety guardrail)', async () => {
     // Same tool with same args called repeatedly → loop detector should fire
+    // With elastic iterations, the agent returns gracefully instead of throwing
     (mockProvider.generate as any).mockResolvedValue({
       text: 'Doing same thing...',
       toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
@@ -178,16 +183,20 @@ describe('AgentRuntime', () => {
       dispose: vi.fn()
     } as any;
 
+    const events: any[] = [];
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
         { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
       ],
       ipcBridge: mockIpcBridge,
-      maxIterations: 15
+      maxIterations: 15,
+      onRuntimeEvent: (event) => events.push(event),
     });
 
-    await expect(runtime.run('Loop me')).rejects.toThrow();
+    const result = await runtime.run('Loop me');
+    expect(result).toContain('used all 15 iterations');
+    expect(events.some(e => e.type === 'budget_exhausted')).toBe(true);
   });
 
   it('should complete immediately with text-only response (implicit completion)', async () => {

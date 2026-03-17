@@ -22,6 +22,7 @@ import {
   type ParsedChain,
 } from './tools/unified/commandParser';
 import { presentForLLM } from './tools/unified/presentation';
+import { handleScratchCommand } from './scratchpad/handler';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -291,6 +292,10 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       return { success: true, data: getCommandHelp(tc.name) };
     }
 
+    // ── Scratchpad intercept (sandbox-local, zero IPC) ──
+    const scratchResult = await handleScratchCommand(tc.name, tc.args);
+    if (scratchResult) return scratchResult;
+
     // ── Chain mode: execute multiple commands sequentially ──
     if (tc.args?.__chain) {
       return this.executeChain(tc.args.__chain as ParsedChain, tc.args?.input);
@@ -421,6 +426,12 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       // Execute via local executor or IPC
       let result: any;
       try {
+        // Scratchpad intercept (sandbox-local, zero IPC)
+        const scratchResult = await handleScratchCommand(cmd.name, args);
+        if (scratchResult) {
+          result = scratchResult;
+        }
+
         // Text pipe: grep on piped text content (Unix-style text filtering)
         if (args.__pipedText && cmd.name === 'grep') {
           const text = args.__pipedText as string;

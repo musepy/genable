@@ -260,9 +260,24 @@ describe('shorthand pipeline (coerceValue → expandShorthands)', () => {
       expect(r.letterSpacing).toBe(1.5);
     });
 
-    it('leading:24', () => {
-      const r = pipeline({ leading: '24' });
-      expect(r.lineHeight).toBe(24);
+    it('leading:24 → pixels (> 5 threshold)', () => {
+      expect(pipeline({ leading: '24' }).lineHeight).toBe(24);
+    });
+
+    it('leading:1.5 → CSS multiplier → 150%', () => {
+      expect(pipeline({ leading: '1.5' }).lineHeight).toBe('150%');
+    });
+
+    it('lineHeight:1.5 → CSS multiplier → 150%', () => {
+      expect(pipeline({ lineHeight: '1.5' }).lineHeight).toBe('150%');
+    });
+
+    it('lineHeight:24 → stays as pixels (> 5)', () => {
+      expect(pipeline({ lineHeight: '24' }).lineHeight).toBe(24);
+    });
+
+    it('lineHeight:160% → stays as percentage string', () => {
+      expect(pipeline({ lineHeight: '160%' }).lineHeight).toBe('160%');
     });
   });
 

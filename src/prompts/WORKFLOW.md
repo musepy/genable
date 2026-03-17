@@ -56,13 +56,12 @@ For medium/complex designs, break creation into semantic steps:
   - `pattern:'stack'` = layout:none (absolute positioning)
   - Explicit props always override pattern defaults: `{pattern:'column', bg:'#FFF'}` → white bg
 
-**Key rules**:
-1. **Explicit Sizing**: Every frame MUST have explicit `w` and `h` (or `height`). Omitting them causes unpredictable defaults.
-   - **Root container**: pixel value (`w:360`, `w:1440`)
-   - **Layout frames** (structural wrappers, transparent containers): use `pattern` — `pattern:'column'`, `pattern:'row-fill'`, etc. This sets layout + sizing + transparent bg in one prop, preventing omissions.
-   - **Sibling cards/tiles in a row**: `w:'fill', height:'fill'` — ensures equal width AND equal height
-   - **Buttons / badges / tags**: `pattern:'row'` with explicit `p` and `bg`, or fixed `h:44`
-2. **Typography**: For `weight` (fontWeight), prioritize `Regular`, `Medium`, and `Bold`. **AVOID** `Semi Bold`.
+**Sizing guidance**:
+- **Root container**: pixel value (`w:360`, `w:1440`)
+- **Structural wrappers**: use `pattern` (`pattern:'column'`, `pattern:'row-fill'`) — sets layout + sizing + transparent bg in one prop.
+- **Sibling cards/tiles**: `w:'fill', h:'fill'` for equal sizing
+- **Buttons / badges / tags**: `pattern:'row'` with `p` and `bg`
+- **Typography**: prioritize `Regular`, `Medium`, `Bold`. Avoid `Semi Bold`.
 
 **Example** — a polished card (batch mk):
 ```json

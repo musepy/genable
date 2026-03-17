@@ -212,7 +212,14 @@ const EXPANDERS: Record<string, Expander> = {
   textAlign: (v) => ({ textAlignHorizontal: String(v).toUpperCase() }),
   positioning: (v) => ({ layoutPositioning: String(v).toUpperCase() }),
   tracking: (v) => ({ letterSpacing: v }),
-  leading: (v) => ({ lineHeight: v }),
+  // CSS multiplier detection: 1.5 = 150%, not 1.5px
+  // Values ≤ 5 are almost certainly multipliers, not pixel heights
+  lineHeight: (v) => {
+    const n = Number(v);
+    if (!isNaN(n) && n > 0 && n <= 5) return { lineHeight: `${Math.round(n * 100)}%` };
+    return { lineHeight: v };
+  },
+  leading: (v, all) => EXPANDERS.lineHeight(v, all),
   strokeW: (v) => ({ strokeWeight: Number(v) }),
   strokeA: (v) => ({ strokeAlign: String(v).toUpperCase() }),
   strokeJ: (v) => ({ strokeJoin: String(v).toUpperCase() }),

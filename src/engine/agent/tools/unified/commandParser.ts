@@ -416,6 +416,88 @@ export function mapToToolArgs(
       return { path, component, propsRaw: propsRaw || undefined };
     }
 
+    // ── Design system commands ──
+
+    case 'var': {
+      if (pos.length === 0) return null; // help mode
+      const sub = pos[0];
+      switch (sub) {
+        case 'ls':
+          return { subcommand: 'ls', collection: pos[1] || undefined };
+        case 'mk': {
+          // Check for --collection flag (collection creation mode)
+          if (flags['collection']) {
+            return {
+              subcommand: 'mk-collection',
+              collection: flags['collection'] as string,
+              modes: flags['modes'] as string || undefined,
+            };
+          }
+          // Variable creation/update: var mk collection/name TYPE value [--mode X]
+          return {
+            subcommand: 'mk',
+            variable: pos[1],
+            varType: pos[2],
+            value: pos.slice(3).join(' ') || undefined,
+            mode: flags['mode'] as string || undefined,
+          };
+        }
+        case 'bind':
+          // var bind /node/path prop collection/varName
+          return {
+            subcommand: 'bind',
+            nodePath: pos[1],
+            property: pos[2],
+            variable: pos[3],
+          };
+        case 'alias':
+          // var alias semantic/name target/name
+          return {
+            subcommand: 'alias',
+            variable: pos[1],
+            target: pos[2],
+          };
+        default:
+          return null;
+      }
+    }
+
+    case 'comp': {
+      if (pos.length === 0) return null; // help mode
+      const sub = pos[0];
+      switch (sub) {
+        case 'create':
+          return { subcommand: 'create', paths: [pos[1]] };
+        case 'combine': {
+          const compPaths = pos.slice(1).filter(p => p.startsWith('/'));
+          return {
+            subcommand: 'combine',
+            paths: compPaths,
+            name: flags['name'] as string || undefined,
+          };
+        }
+        case 'prop':
+          // comp prop /Component/ PropName TYPE [defaultValue]
+          return {
+            subcommand: 'prop',
+            paths: [pos[1]],
+            name: pos[2],
+            propType: pos[3],
+            defaultValue: pos[4] || undefined,
+          };
+        case 'ls':
+          return { subcommand: 'ls', paths: [pos[1] || '/'] };
+        case 'instance':
+          return {
+            subcommand: 'instance',
+            paths: [pos[1]],
+            parent: flags['parent'] as string || undefined,
+          };
+        default:
+          return null;
+      }
+    }
+
     default:
       if (isValidCommand(name) && pos.length === 0) return null;
       return null;

@@ -45,6 +45,20 @@ function buildRunDescription(): string {
     Knowledge: [
       ['man [topic]', 'help, guidelines, style guides'],
     ],
+    Variables: [
+      ['var ls [collection]', 'list collections & variables'],
+      ['var mk <coll/name> TYPE value', 'create variable (COLOR, FLOAT, BOOLEAN, STRING)'],
+      ['var mk --collection <name> --modes A,B', 'create collection with modes'],
+      ['var bind /path/ prop coll/name', 'bind variable to node property'],
+      ['var alias semantic/name target/name', 'create alias (semantic → primitive)'],
+    ],
+    Components: [
+      ['comp create /path/', 'convert frame to component'],
+      ['comp combine /p1/ /p2/ --name X', 'combine as variant set'],
+      ['comp prop /path/ Name TYPE [default]', 'add component property'],
+      ['comp ls /path/', 'list component properties & variants'],
+      ['comp instance /path/ [--parent /p/]', 'create instance'],
+    ],
     Scripting: [
       ['js <code>', 'execute JavaScript (full figma.* API access)'],
     ],

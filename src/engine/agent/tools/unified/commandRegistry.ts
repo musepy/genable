@@ -25,6 +25,8 @@ import { sedDefinition } from './sed';
 import { manDefinition } from './man';
 import { jsDefinition } from './js';
 import { subtaskDefinition } from './subtask';
+import { varDefinition } from './var';
+import { compDefinition } from './comp';
 
 /** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
 const moreDefinition: ToolDefinition = {
@@ -51,6 +53,9 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [jsDefinition.name, jsDefinition],
   [moreDefinition.name, moreDefinition],
   [subtaskDefinition.name, subtaskDefinition],
+  // Design system commands
+  [varDefinition.name, varDefinition],
+  [compDefinition.name, compDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],
@@ -411,6 +416,42 @@ simple operations that take 1-2 tool calls.
 
 See also: man (design guidelines), mk (create/update)`,
 
+  var: `var — Manage Figma variables (design tokens).
+
+Subcommands:
+  var ls                                    list all collections & variables
+  var ls Theme                              filter by collection name
+  var mk colors/primary COLOR #1A1A1A       create COLOR variable
+  var mk spacing/md FLOAT 16                create FLOAT variable
+  var mk --collection Theme --modes Light,Dark  create collection with modes
+  var mk Theme/bg COLOR #FFF --mode Light   set per-mode value
+  var bind /Card/ fills Theme/bg            bind variable to node
+  var alias semantic/text colors/primary    create alias
+
+Workflow:
+  1. var mk --collection ... → create collection
+  2. var mk coll/name TYPE value → create variables
+  3. var bind /path/ prop coll/name → bind to design nodes
+
+See also: comp (component variants), mk (create nodes with $var binding), grep (discover properties)`,
+
+  comp: `comp — Manage Figma components and variants.
+
+Subcommands:
+  comp create /Button/Primary                  convert frame to component
+  comp combine /Btn1/ /Btn2/ --name Button     combine as variant set
+  comp prop /Button/ Label TEXT "Click"         add component property
+  comp ls /Button/                              list properties & variants
+  comp instance /Button/ --parent /Card/        create instance
+
+Workflow:
+  1. Create frames with mk (e.g. Primary, Secondary, Ghost buttons)
+  2. comp create /each/frame → convert to components
+  3. comp combine → merge into variant set
+  4. comp prop → add configurable properties
+
+See also: var (design tokens), mk (create frames), cp (clone with overrides)`,
+
   more: `more — Page through truncated output.
 
 Usage:
@@ -456,4 +497,6 @@ const COMMAND_SEE_ALSO: Record<string, string> = {
   js: 'cat (inspect nodes), mk (create/update), grep (search nodes)',
   subtask: 'man (design guidelines), mk (create/update)',
   more: 'cat (read nodes), grep (search), tree (structure)',
+  var: 'comp (component variants), mk (create with $var binding), grep (discover values)',
+  comp: 'var (design tokens), mk (create frames), cp (clone with overrides)',
 };

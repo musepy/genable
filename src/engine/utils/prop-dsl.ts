@@ -1,10 +1,9 @@
 /**
  * @file prop-dsl.ts
- * @description Shared DSL utilities for property parsing — abbreviation expansion,
- * value coercion, padding expansion, symbol helpers.
+ * @description Shared DSL utilities — tag mapping, value coercion, helpers.
  *
- * Consumed by both flatOpsParser and xml-interpreter.
- * Extracted to decouple shared logic from the (now legacy) XML interpreter.
+ * Property name translation (abbreviations, CSS aliases) is handled by
+ * expandShorthands.ts — the single source of truth for property expansion.
  */
 
 // ═══════════════════════════════════════════════
@@ -31,56 +30,7 @@ export const TAG_TO_TYPE: Record<string, string> = {
 };
 
 // ═══════════════════════════════════════════════
-// Abbreviation Expansion
-// ═══════════════════════════════════════════════
-
-export const ABBREV_EXPANSION: Record<string, string> = {
-  w: 'width',
-  h: 'height',
-  size: 'fontSize',
-  weight: 'fontWeight',
-  font: 'fontFamily',
-  corner: 'cornerRadius',
-  strokeW: 'strokeWeight',
-  pt: 'paddingTop',
-  pr: 'paddingRight',
-  pb: 'paddingBottom',
-  pl: 'paddingLeft',
-  alignMain: 'primaryAxisAlignItems',
-  alignCross: 'counterAxisAlignItems',
-  textAlign: 'textAlignHorizontal',
-  positioning: 'layoutPositioning',
-  tracking: 'letterSpacing',
-  leading: 'lineHeight',
-  strokeA: 'strokeAlign',
-  strokeJ: 'strokeJoin',
-  strokeC: 'strokeCap',
-  dash: 'dashPattern',
-  strokeT: 'strokeTopWeight',
-  strokeR: 'strokeRightWeight',
-  strokeB: 'strokeBottomWeight',
-  strokeL: 'strokeLeftWeight',
-  blend: 'blendMode',
-  smooth: 'cornerSmoothing',
-  bg: 'background',
-  sizingH: 'layoutSizingHorizontal',
-  sizingV: 'layoutSizingVertical',
-  gap: 'itemSpacing',
-  crossGap: 'counterAxisSpacing',
-  overflow: 'clipsContent',
-  wrap: 'layoutWrap',
-  strokesInLayout: 'strokesIncludedInLayout',
-  reverseZ: 'itemReverseZIndex',
-  lockRatio: 'constrainProportions',
-  pin: 'constraints',
-  minW: 'minWidth',
-  maxW: 'maxWidth',
-  minH: 'minHeight',
-  maxH: 'maxHeight',
-};
-
-// ═══════════════════════════════════════════════
-// Value classification
+// Value classification (for coerceValue)
 // ═══════════════════════════════════════════════
 
 const STRING_VALUE_PROPS = new Set([
@@ -91,18 +41,27 @@ const STRING_VALUE_PROPS = new Set([
   'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',
   'layoutWrap', 'component', 'constraints',
   'strokeJoin', 'strokeCap', 'blendMode', 'dashPattern',
+  // Abbreviations that must stay as strings
+  'weight', 'font', 'alignMain', 'alignCross', 'textAlign',
+  'positioning', 'strokeA', 'strokeJ', 'strokeC', 'dash',
+  'sizingH', 'sizingV', 'blend', 'wrap', 'pin', 'overflow',
 ]);
 
-const MIXED_VALUE_PROPS = new Set(['width', 'height']);
+const MIXED_VALUE_PROPS = new Set(['width', 'height', 'w', 'h']);
 
 const NUMERIC_PROPS = new Set([
-  'fontSize', 'cornerRadius', 'strokeWeight', 'itemSpacing', 'counterAxisSpacing', 'gap', 'crossGap',
+  'fontSize', 'cornerRadius', 'strokeWeight', 'itemSpacing', 'counterAxisSpacing',
   'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'letterSpacing', 'lineHeight', 'opacity',
   'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius',
   'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
   'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight',
   'cornerSmoothing',
+  // Abbreviations that are numeric
+  'gap', 'crossGap', 'size', 'corner', 'smooth', 'strokeW',
+  'pt', 'pr', 'pb', 'pl',
+  'strokeT', 'strokeR', 'strokeB', 'strokeL',
+  'minW', 'maxW', 'minH', 'maxH',
 ]);
 
 /** Properties that use the unitValue spec (lineHeight, letterSpacing) */
@@ -131,24 +90,6 @@ export function coerceValue(key: string, value: string): string | number | boole
   const n = parseFloat(value);
   if (!isNaN(n) && String(n) === value) return n;
   return value;
-}
-
-// ═══════════════════════════════════════════════
-// Special format parsers
-// ═══════════════════════════════════════════════
-
-export function expandPadding(value: string): Record<string, number> {
-  const parts = value.trim().split(/[\s,]+/).map(Number);
-  switch (parts.length) {
-    case 1:
-      return { paddingTop: parts[0], paddingRight: parts[0], paddingBottom: parts[0], paddingLeft: parts[0] };
-    case 2:
-      return { paddingTop: parts[0], paddingRight: parts[1], paddingBottom: parts[0], paddingLeft: parts[1] };
-    case 4:
-      return { paddingTop: parts[0], paddingRight: parts[1], paddingBottom: parts[2], paddingLeft: parts[3] };
-    default:
-      return { paddingTop: parts[0], paddingRight: parts[1], paddingBottom: parts[2], paddingLeft: parts[1] };
-  }
 }
 
 // ═══════════════════════════════════════════════

@@ -36,20 +36,6 @@ export async function executeFlatOps(
 
   try {
     const SOFT_CREATE_LIMIT = 20;
-    const HARD_CREATE_LIMIT = 30;
-
-    // Hard batch limit — reject before execution to teach LLM to split
-    if (compiled.ops.length > HARD_CREATE_LIMIT) {
-      return {
-        success: false,
-        error: {
-          code: 'BATCH_TOO_LARGE',
-          message: `${compiled.ops.length} operations exceeds the hard limit of ${HARD_CREATE_LIMIT}. ` +
-            `Split into multiple design() calls with 5-15 nodes each. ` +
-            `Recommended: skeleton (containers) first, then fill each section separately.`,
-        },
-      };
-    }
 
     const executor = new ActionExecutor();
     const result = await executor.executeDesignOps(compiled.ops, compiled.errors, {

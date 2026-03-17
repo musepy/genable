@@ -285,6 +285,8 @@ export const KNOWN_PROP_KEYS: ReadonlySet<string> = new Set([
   ...Object.keys(PROP_METADATA),
   ...Object.values(PROPS),
   ...Object.values(PROP_METADATA).map(m => m.figmaKey),
+  // Style reference properties — handled by styleRefHandler
+  'textStyle', 'fillStyle', 'strokeStyle', 'effectStyle',
 ]);
 
 // Derived Types

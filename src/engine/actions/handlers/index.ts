@@ -9,6 +9,8 @@
  */
 
 import { PropertyHandler, Warning, PropertyDiff } from './types';
+import { variableBindingHandler } from './variableBindingHandler';
+import { styleRefHandler } from './styleRefHandler';
 import { paintHandler } from './paintHandler';
 import { effectHandler } from './effectHandler';
 import { unitValueHandler } from './unitValueHandler';
@@ -19,9 +21,13 @@ import { defaultHandler } from './defaultHandler';
 
 /**
  * Ordered list of property handlers. First match wins.
+ * variableBindingHandler and styleRefHandler are first — they intercept
+ * $varName values and textStyle:Name refs before other handlers process them.
  * defaultHandler MUST be last — it catches any property that exists on the node.
  */
 const HANDLERS: PropertyHandler[] = [
+  variableBindingHandler,
+  styleRefHandler,
   paintHandler,
   effectHandler,
   unitValueHandler,

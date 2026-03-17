@@ -35,6 +35,9 @@ const PATTERNS: Record<string, Record<string, any>> = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Check if a value is a variable reference ($varName). Pass through as-is. */
+const isVarRef = (v: any): v is string => typeof v === 'string' && v.startsWith('$');
+
 const norm = (s: string) => s.toLowerCase().replace(/[-_]/g, '');
 
 function mapAlign(v: string): string {
@@ -91,15 +94,16 @@ const EXPANDERS: Record<string, Expander> = {
 
   // ── Spacing ────────────────────────────────────────────────────────────
   padding: (v) => {
+    if (isVarRef(v)) return { paddingTop: v, paddingRight: v, paddingBottom: v, paddingLeft: v };
     if (typeof v === 'number') return expandPaddingParts([v]);
     if (typeof v === 'string') return expandPaddingParts(v.trim().split(/[\s,]+/).map(Number));
     if (Array.isArray(v)) return expandPaddingParts(v.map(Number));
     return {};
   },
 
-  gap: (v) => ({ itemSpacing: Number(v) }),
-  crossGap: (v) => ({ counterAxisSpacing: Number(v) }),
-  crossAxisGap: (v) => ({ counterAxisSpacing: Number(v) }),
+  gap: (v) => isVarRef(v) ? { itemSpacing: v } : { itemSpacing: Number(v) },
+  crossGap: (v) => isVarRef(v) ? { counterAxisSpacing: v } : { counterAxisSpacing: Number(v) },
+  crossAxisGap: (v) => isVarRef(v) ? { counterAxisSpacing: v } : { counterAxisSpacing: Number(v) },
 
   // ── Sizing ─────────────────────────────────────────────────────────────
   width: (v) => {
@@ -133,6 +137,7 @@ const EXPANDERS: Record<string, Expander> = {
 
   // ── Paint ──────────────────────────────────────────────────────────────
   fill: (v) => {
+    if (isVarRef(v)) return { fills: v }; // $varName → handler binds color variable
     if (v === 'transparent' || v === 'none') return { fills: [] };
     if (typeof v === 'string') return { fills: [v] };
     if (Array.isArray(v)) return { fills: v };
@@ -167,6 +172,7 @@ const EXPANDERS: Record<string, Expander> = {
 
   // ── Shape ──────────────────────────────────────────────────────────────
   radius: (v) => {
+    if (isVarRef(v)) return { cornerRadius: v };
     if (Array.isArray(v) && v.length === 4) {
       return { topLeftRadius: v[0], topRightRadius: v[1], bottomLeftRadius: v[2], bottomRightRadius: v[3] };
     }
@@ -200,12 +206,22 @@ const EXPANDERS: Record<string, Expander> = {
   w: (v, all) => EXPANDERS.width(v, all),
   h: (v, all) => EXPANDERS.height(v, all),
   p: (v, all) => EXPANDERS.padding(v, all),
-  pt: (v) => ({ paddingTop: Number(v) }),
-  pr: (v) => ({ paddingRight: Number(v) }),
-  pb: (v) => ({ paddingBottom: Number(v) }),
-  pl: (v) => ({ paddingLeft: Number(v) }),
-  size: (v) => ({ fontSize: Number(v) }),
-  weight: (v) => ({ fontWeight: String(v) }),
+  pt: (v) => ({ paddingTop: isVarRef(v) ? v : Number(v) }),
+  pr: (v) => ({ paddingRight: isVarRef(v) ? v : Number(v) }),
+  pb: (v) => ({ paddingBottom: isVarRef(v) ? v : Number(v) }),
+  pl: (v) => ({ paddingLeft: isVarRef(v) ? v : Number(v) }),
+  size: (v) => ({ fontSize: isVarRef(v) ? v : Number(v) }),
+  weight: (v) => {
+    // Support hyphenated aliases: semi-bold → Semi Bold, extra-bold → Extra Bold
+    const s = String(v);
+    const WEIGHT_ALIASES: Record<string, string> = {
+      thin: 'Thin', extralight: 'Extra Light', light: 'Light',
+      regular: 'Regular', medium: 'Medium', semibold: 'Semi Bold',
+      bold: 'Bold', extrabold: 'Extra Bold', black: 'Black',
+    };
+    const normalized = s.toLowerCase().replace(/[-_\s]/g, '');
+    return { fontWeight: WEIGHT_ALIASES[normalized] ?? s };
+  },
   font: (v) => ({ fontFamily: String(v) }),
   alignMain: (v) => ({ primaryAxisAlignItems: mapAlign(String(v)) }),
   alignCross: (v) => ({ counterAxisAlignItems: mapAlign(String(v)) }),
@@ -220,7 +236,7 @@ const EXPANDERS: Record<string, Expander> = {
     return { lineHeight: v };
   },
   leading: (v, all) => EXPANDERS.lineHeight(v, all),
-  strokeW: (v) => ({ strokeWeight: Number(v) }),
+  strokeW: (v) => ({ strokeWeight: isVarRef(v) ? v : Number(v) }),
   strokeA: (v) => ({ strokeAlign: String(v).toUpperCase() }),
   strokeJ: (v) => ({ strokeJoin: String(v).toUpperCase() }),
   strokeC: (v) => ({ strokeCap: String(v).toUpperCase() }),
@@ -235,10 +251,10 @@ const EXPANDERS: Record<string, Expander> = {
   reverseZ: (v) => ({ itemReverseZIndex: v === true || String(v).toLowerCase() === 'true' }),
   lockRatio: (v) => ({ constrainProportions: v === true || String(v).toLowerCase() === 'true' }),
   pin: (v) => ({ constraints: v }),
-  minW: (v) => ({ minWidth: Number(v) }),
-  maxW: (v) => ({ maxWidth: Number(v) }),
-  minH: (v) => ({ minHeight: Number(v) }),
-  maxH: (v) => ({ maxHeight: Number(v) }),
+  minW: (v) => ({ minWidth: isVarRef(v) ? v : Number(v) }),
+  maxW: (v) => ({ maxWidth: isVarRef(v) ? v : Number(v) }),
+  minH: (v) => ({ minHeight: isVarRef(v) ? v : Number(v) }),
+  maxH: (v) => ({ maxHeight: isVarRef(v) ? v : Number(v) }),
 };
 
 // ─── Text Content Normalization ──────────────────────────────────────────────

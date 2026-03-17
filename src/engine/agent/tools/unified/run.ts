@@ -30,6 +30,9 @@ function buildRunDescription(): string {
     ],
     Write: [
       ['mk /path/ [type] key:value... [-- text]', 'create or update (upsert)'],
+      ['  padding:$layout/pad  fill:$bg/primary', '→ $varName binds a Figma variable by name'],
+      ['  textStyle:Heading/H1  fillStyle:Brand', '→ applies a local style by name'],
+      ['  weight:semibold (or semi-bold)', '→ aliases: thin,light,medium,semibold,bold,extrabold,black'],
       ['mv /src/ /dest/', 'move or rename node'],
       ['rm /path/', 'delete node (supports glob: rm /Card/Old*)'],
       ['cp /src/ /dest/ {overrides}', 'clone with overrides'],

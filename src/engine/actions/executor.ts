@@ -18,6 +18,7 @@ import { applyProperty } from './handlers';
 import { parseRichText } from '../text/richTextParser';
 import { toCamelCase } from '../utils/prop-dsl';
 import { sortByPropertyOrder, validateDependencies, SELF_GATE_PROPERTIES, PARENT_GATE_PROPERTIES } from './propertyDependencies';
+import { expandShorthands } from './expandShorthands';
 
 // ---------------------------------------------------------------------------
 // Progress event (moved from IncrementalExecutor)
@@ -1204,16 +1205,8 @@ export class ActionExecutor {
   private async applyProps(node: SceneNode, props: Record<string, any>): Promise<{ warnings: any[]; diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> }> {
     const warnings: any[] = [];
     const diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> = [];
-    const normalizedProps: Record<string, any> = { ...props };
-
-    // 1. Padding expansion (avoid mutating the caller object)
-    if (normalizedProps.padding !== undefined) {
-      normalizedProps.paddingTop = normalizedProps.padding;
-      normalizedProps.paddingRight = normalizedProps.padding;
-      normalizedProps.paddingBottom = normalizedProps.padding;
-      normalizedProps.paddingLeft = normalizedProps.padding;
-      delete normalizedProps.padding;
-    }
+    // 1. Expand shorthands (padding, align, fill, layout, etc.)
+    const normalizedProps: Record<string, any> = expandShorthands({ ...props });
 
     // 2. Validate dependencies and auto-fix missing gates
     const nodeState: Record<string, unknown> = {};

@@ -53,22 +53,8 @@ export class ActionValidator {
       }
     }
 
-    // 3. itemSpacing constraints (requires layoutMode)
-    if (props.itemSpacing !== undefined) {
-      const targetLayoutMode = action.action === 'updateProps' && targetNode && 'layoutMode' in targetNode 
-        ? targetNode.layoutMode 
-        : undefined;
-      const intendedLayoutMode = props.layoutMode !== undefined ? props.layoutMode : targetLayoutMode;
-
-      if (intendedLayoutMode === 'NONE' || intendedLayoutMode === undefined) { 
-        if (action.action === 'createFrame' && props.layoutMode === undefined) {
-          return { valid: false, error: `Cannot set 'itemSpacing' on a node without 'layoutMode'.`};
-        }
-        if (intendedLayoutMode === 'NONE') {
-          return { valid: false, error: `Cannot set 'itemSpacing' on a node without 'layoutMode'.`};
-        }
-      }
-    }
+    // itemSpacing and other auto-layout prerequisites are now validated
+    // and auto-fixed in propertyDependencies.ts (single source of truth).
 
     return { valid: true };
   }

@@ -17,6 +17,7 @@ import { lowerPaints } from '../figma/figma-lowering';
 import { applyProperty } from './handlers';
 import { parseRichText } from '../text/richTextParser';
 import { toCamelCase } from '../utils/prop-dsl';
+import { sortByPropertyOrder, validateDependencies, SELF_GATE_PROPERTIES, PARENT_GATE_PROPERTIES } from './propertyDependencies';
 
 // ---------------------------------------------------------------------------
 // Progress event (moved from IncrementalExecutor)
@@ -1197,71 +1198,8 @@ export class ActionExecutor {
     return null;
   }
 
-  /**
-   * Property application priority — Figma API requires certain properties to be set
-   * before others (e.g., layoutMode before layoutSizing*, font before characters).
-   * Lower number = applied first.
-   */
-  private static readonly PROP_ORDER: Record<string, number> = {
-    // Layout mode must be first — sizing/spacing depend on it
-    layoutMode: 0,
-    layoutWrap: 1,
-    // Sizing depends on layoutMode
-    layoutSizingHorizontal: 2,
-    layoutSizingVertical: 2,
-    // Spacing — auto-layout only
-    itemSpacing: 3,
-    counterAxisSpacing: 3,
-    paddingTop: 3,
-    paddingRight: 3,
-    paddingBottom: 3,
-    paddingLeft: 3,
-    // Child positioning
-    primaryAxisAlignItems: 4,
-    counterAxisAlignItems: 4,
-    layoutGrow: 4,
-    layoutAlign: 4,
-    layoutPositioning: 4,
-    clipsContent: 4,
-    strokesIncludedInLayout: 4,
-    itemReverseZIndex: 4,
-    constrainProportions: 4,
-    constraints: 4,
-    blendMode: 4,
-    // Stroke details (after strokeWeight)
-    strokeJoin: 4,
-    strokeCap: 4,
-    dashPattern: 4,
-    strokeTopWeight: 4,
-    strokeRightWeight: 4,
-    strokeBottomWeight: 4,
-    strokeLeftWeight: 4,
-    cornerSmoothing: 4,
-    // Dimensions
-    width: 5,
-    height: 5,
-    minWidth: 5,
-    minHeight: 5,
-    maxWidth: 5,
-    maxHeight: 5,
-    // Font must load before characters
-    fontName: 6,
-    fontSize: 6,
-    fontWeight: 6,
-    // Text content last among text props
-    characters: 7,
-    // textAutoResize must be applied AFTER dimensions — resize() can reset it
-    textAutoResize: 8,
-  };
-
-  private static sortPropsByDependency(entries: [string, any][]): [string, any][] {
-    const defaultOrder = 5;
-    return entries.sort(([a], [b]) => {
-      const orderA = ActionExecutor.PROP_ORDER[a] ?? defaultOrder;
-      const orderB = ActionExecutor.PROP_ORDER[b] ?? defaultOrder;
-      return orderA - orderB;
-    });
-  }
+  // Property ordering and dependency validation are derived from
+  // propertyDependencies.ts — the single source of truth for Figma property prerequisites.
 
   private async applyProps(node: SceneNode, props: Record<string, any>): Promise<{ warnings: any[]; diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> }> {
     const warnings: any[] = [];
@@ -1277,10 +1215,28 @@ export class ActionExecutor {
       delete normalizedProps.padding;
     }
 
-    // 2. Sort properties by dependency order to avoid Figma API errors
-    const sortedEntries = ActionExecutor.sortPropsByDependency(Object.entries(normalizedProps));
+    // 2. Validate dependencies and auto-fix missing gates
+    const nodeState: Record<string, unknown> = {};
+    for (const g of SELF_GATE_PROPERTIES) {
+      if (g in node) nodeState[g] = (node as any)[g];
+    }
+    let parentState: Record<string, unknown> | undefined;
+    if (node.parent) {
+      parentState = {};
+      for (const g of PARENT_GATE_PROPERTIES) {
+        if (g in node.parent) (parentState as any)[g] = (node.parent as any)[g];
+      }
+    }
+    const { fixes, warnings: depWarnings } = validateDependencies(normalizedProps, nodeState, parentState);
+    Object.assign(normalizedProps, fixes);
+    for (const w of depWarnings) {
+      warnings.push({ code: 'DEPENDENCY_VIOLATION', severity: 'warning', message: w });
+    }
 
-    // 3. Apply each property via the handler pipeline
+    // 3. Sort properties by dependency-derived order
+    const sortedEntries = sortByPropertyOrder(Object.entries(normalizedProps));
+
+    // 4. Apply each property via the handler pipeline
     for (const [key, value] of sortedEntries) {
       const result = await applyProperty(node, key, value);
       if (result.warnings.length > 0) warnings.push(...result.warnings);

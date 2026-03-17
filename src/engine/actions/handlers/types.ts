@@ -25,7 +25,7 @@ export interface PropertyDiff {
  * A PropertyHandler knows how to apply one or more properties to a Figma SceneNode.
  *
  * The pipeline:
- *   1. Sort all (key, value) entries by PROP_ORDER
+ *   1. Sort all (key, value) entries by propertyDependencies.sortByPropertyOrder()
  *   2. For each entry, find the first handler where `match()` returns true
  *   3. Call `apply()` on that handler
  *   4. If no handler matches, fall through to the default handler (direct assignment)

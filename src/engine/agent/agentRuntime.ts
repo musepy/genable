@@ -124,7 +124,7 @@ export class AgentRuntime {
     // chars ≈ tokens * 4 (rough estimate)
     const contextWindowTokens = options.contextWindow
       ?? options.provider.getCapabilities?.().contextWindow
-      ?? 32_000;
+      ?? 1_000_000;
     this.contextBudgetChars = Math.floor(contextWindowTokens * 0.7) * 4;
     // ToolResultCleaner uses command definitions (not the `run` wrapper)
     // so it can route to the correct cleaning strategy per command.

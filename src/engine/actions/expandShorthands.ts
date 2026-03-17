@@ -99,6 +99,7 @@ const EXPANDERS: Record<string, Expander> = {
 
   gap: (v) => ({ itemSpacing: Number(v) }),
   crossGap: (v) => ({ counterAxisSpacing: Number(v) }),
+  crossAxisGap: (v) => ({ counterAxisSpacing: Number(v) }),
 
   // ── Sizing ─────────────────────────────────────────────────────────────
   width: (v) => {

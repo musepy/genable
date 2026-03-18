@@ -464,9 +464,7 @@ function checkFollowUpCompliance(
 function buildSystemPromptForTest(): string {
   const parts: string[] = [];
   parts.push((catalog as any).CORE.trim());
-  parts.push((catalog as any).WORKFLOW.trim());
   parts.push('## AVAILABLE TOOLS\n' + serializeTools(agentTools));
-  parts.push((catalog as any).EXAMPLES.trim());
   return parts.filter(Boolean).join('\n\n');
 }
 

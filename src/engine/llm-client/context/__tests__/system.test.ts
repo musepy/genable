@@ -55,16 +55,14 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('Create a Figma design via XML markup.');
     });
 
-    it('should include tool examples', () => {
+    it('should include creation protocol (merged from WORKFLOW)', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('## EXAMPLES');
+        expect(prompt).toContain('CREATION PROTOCOL');
     });
 
-    it('should include workflow guides (error handling moved to on-demand help)', () => {
+    it('should include turn management (merged from WORKFLOW)', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        // ERROR HANDLING section moved to help system (query on-demand)
-        // The WORKFLOW section now contains a WORKFLOW GUIDES table that references error-handling
-        expect(prompt).toContain('WORKFLOW GUIDES');
+        expect(prompt).toContain('TURN MANAGEMENT');
     });
 
     it('should include provider tool instructions', () => {
@@ -83,9 +81,9 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('SCENE GRAPH MENTAL MODEL');
     });
 
-    it('should include workflow rules', () => {
+    it('should include execution environment rules', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('TOOL CALLING PROTOCOL');
+        expect(prompt).toContain('EXECUTION ENVIRONMENT');
     });
 
     it('should use phase-based serialization when tools have categories', () => {

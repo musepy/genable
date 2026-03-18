@@ -76,6 +76,13 @@ const EXPANDERS: Record<string, Expander> = {
     if ('fill' in all || 'fills' in all || 'background' in all || 'bg' in all) {
       delete result.fills;
     }
+    // Don't override explicit sizing — HUG defaults should yield to explicit w/h/sizing
+    if ('w' in all || 'width' in all || 'sizingH' in all || 'sizing' in all) {
+      delete result.layoutSizingHorizontal;
+    }
+    if ('h' in all || 'height' in all || 'sizingV' in all || 'sizing' in all) {
+      delete result.layoutSizingVertical;
+    }
     return result;
   },
 
@@ -96,7 +103,11 @@ const EXPANDERS: Record<string, Expander> = {
   padding: (v) => {
     if (isVarRef(v)) return { paddingTop: v, paddingRight: v, paddingBottom: v, paddingLeft: v };
     if (typeof v === 'number') return expandPaddingParts([v]);
-    if (typeof v === 'string') return expandPaddingParts(v.trim().split(/[\s,]+/).map(Number));
+    if (typeof v === 'string') {
+      const parts = v.trim().split(/[\s,]+/).map(Number);
+      if (parts.some(isNaN)) return {};
+      return expandPaddingParts(parts);
+    }
     if (Array.isArray(v)) return expandPaddingParts(v.map(Number));
     return {};
   },
@@ -111,6 +122,9 @@ const EXPANDERS: Record<string, Expander> = {
       const w = v.toLowerCase().trim();
       if (w === 'fill' || w === '100%') return { layoutSizingHorizontal: 'FILL' };
       if (w === 'hug') return { layoutSizingHorizontal: 'HUG' };
+      // Strip CSS units: "200px" → 200
+      const parsed = parseFloat(w);
+      if (!isNaN(parsed)) return { width: parsed };
     }
     return { width: v };
   },
@@ -120,6 +134,9 @@ const EXPANDERS: Record<string, Expander> = {
       const h = v.toLowerCase().trim();
       if (h === 'fill' || h === '100%') return { layoutSizingVertical: 'FILL' };
       if (h === 'hug') return { layoutSizingVertical: 'HUG' };
+      // Strip CSS units: "100px" → 100
+      const parsed = parseFloat(h);
+      if (!isNaN(parsed)) return { height: parsed };
     }
     return { height: v };
   },
@@ -188,7 +205,7 @@ const EXPANDERS: Record<string, Expander> = {
   corner: (v) => EXPANDERS.radius(v, {}),
 
   // ── Layout details ─────────────────────────────────────────────────────
-  smooth: (v) => ({ cornerSmoothing: v }),
+  smooth: (v) => ({ cornerSmoothing: Number(v) }),
   blend: (v) => ({ blendMode: v }),
   borderRadius: (v) => ({ cornerRadius: v }),
 

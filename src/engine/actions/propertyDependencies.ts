@@ -74,6 +74,7 @@ export const DEPENDENCY_RULES: readonly DependencyRule[] = [
     gate: 'layoutWrap',
     scope: 'self',
     condition: { op: '==', value: 'WRAP' },
+    inject: 'WRAP',
     dependents: ['counterAxisSpacing', 'counterAxisAlignContent'],
   },
 

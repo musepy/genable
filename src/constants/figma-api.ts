@@ -62,6 +62,10 @@ export const PROPS = {
   strokeBottomWeight: 'strokeBottomWeight',
   strokeLeftWeight: 'strokeLeftWeight',
   cornerRadius: 'cornerRadius',
+  topLeftRadius: 'topLeftRadius',
+  topRightRadius: 'topRightRadius',
+  bottomLeftRadius: 'bottomLeftRadius',
+  bottomRightRadius: 'bottomRightRadius',
   cornerSmoothing: 'cornerSmoothing',
   effects: 'effects',
   blendMode: 'blendMode',                  // enum: NORMAL | MULTIPLY | SCREEN | etc.
@@ -214,6 +218,10 @@ export const PROP_METADATA: Record<string, PropDefinition> = {
   [PROPS.strokes]: { figmaKey: 'strokes', type: 'color', defaultValue: [] },
   [PROPS.strokeWeight]: { figmaKey: 'strokeWeight', type: 'scalar', defaultValue: 0, min: 0, max: 100 },
   [PROPS.cornerRadius]: { figmaKey: 'cornerRadius', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
+  [PROPS.topLeftRadius]: { figmaKey: 'topLeftRadius', type: 'scalar', min: 0, max: 1000 },
+  [PROPS.topRightRadius]: { figmaKey: 'topRightRadius', type: 'scalar', min: 0, max: 1000 },
+  [PROPS.bottomLeftRadius]: { figmaKey: 'bottomLeftRadius', type: 'scalar', min: 0, max: 1000 },
+  [PROPS.bottomRightRadius]: { figmaKey: 'bottomRightRadius', type: 'scalar', min: 0, max: 1000 },
   [PROPS.effects]: { figmaKey: 'effects', type: 'array', defaultValue: [] },
 
   // Text

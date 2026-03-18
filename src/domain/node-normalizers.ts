@@ -165,6 +165,20 @@ export function normalizeProps(
     }
   }
 
+  // ── Step 5b: Scalar range clamping via PROP_METADATA ──
+  for (const [prop, meta] of Object.entries(PROP_METADATA)) {
+    if (meta.type !== 'scalar' || result[prop] === undefined) continue;
+    if (typeof result[prop] === 'string') continue; // variable refs, percentages
+    const n = Number(result[prop]);
+    if (isNaN(n)) {
+      warn(`${prop}: '${result[prop]}' is not a valid number — dropped.`);
+      delete result[prop];
+      continue;
+    }
+    if (meta.min != null && n < meta.min) { result[prop] = meta.min; }
+    if (meta.max != null && n > meta.max) { result[prop] = meta.max; }
+  }
+
   // ── Step 6: Node-type property filter ──
   if (options.nodeType && !isTextNode) {
     for (const key of Object.keys(result)) {

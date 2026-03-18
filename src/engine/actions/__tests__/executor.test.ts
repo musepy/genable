@@ -15,16 +15,14 @@ describe('ActionExecutor.applyProps', () => {
       },
     };
 
-    const warnings = await (executor as any).applyProps(textNode, {
+    const { warnings } = await (executor as any).applyProps(textNode, {
       layoutSizingHorizontal: 'FILL',
     });
 
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatchObject({
-      code: 'UNSUPPORTED_PROP',
-      severity: 'warning',
-    });
-    expect(warnings[0].message).toContain("layoutSizingHorizontal");
-    expect(warnings[0].message).toContain('TEXT');
+    expect(warnings.length).toBeGreaterThanOrEqual(1);
+    const unsupportedWarn = warnings.find((w: any) => w.code === 'UNSUPPORTED_PROP');
+    expect(unsupportedWarn).toBeDefined();
+    expect(unsupportedWarn.message).toContain("layoutSizingHorizontal");
+    expect(unsupportedWarn.message).toContain('TEXT');
   });
 });

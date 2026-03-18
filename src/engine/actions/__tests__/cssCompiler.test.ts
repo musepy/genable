@@ -95,9 +95,14 @@ describe('normalizeProps (was compileCssProps)', () => {
     expect(result).not.toHaveProperty('height');
   });
 
-  it('TEXT height: "hug" converts to layoutSizingVertical + syncs textAutoResize', () => {
-    const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT' });
+  it('TEXT height: "hug" converts to layoutSizingVertical + syncs textAutoResize on create', () => {
+    const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT', isCreate: true });
     expect(result).toEqual({ layoutSizingVertical: 'HUG', textAutoResize: 'WIDTH_AND_HEIGHT' });
+  });
+
+  it('TEXT height: "hug" on update does not force textAutoResize', () => {
+    const result = normalizeProps({ height: 'hug' }, { nodeType: 'TEXT' });
+    expect(result).toEqual({ layoutSizingVertical: 'HUG' });
   });
 
   it('height: 44 → height: 44 (number pass-through)', () => {

@@ -115,13 +115,13 @@ describe('validateDependencies', () => {
   // ── Wrap gate ──────────────────────────────────────────────────────────
 
   describe('layoutWrap gate', () => {
-    it('warns: counterAxisSpacing without layoutWrap=WRAP', () => {
-      const { warnings } = validateDependencies({
+    it('auto-injects layoutWrap=WRAP when counterAxisSpacing is set', () => {
+      const { fixes, warnings } = validateDependencies({
         layoutMode: 'HORIZONTAL',
         counterAxisSpacing: 8,
       });
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings[0]).toContain('counterAxisSpacing');
+      expect(fixes.layoutWrap).toBe('WRAP');
+      expect(warnings).toHaveLength(0);
     });
 
     it('no warning: counterAxisSpacing with layoutWrap=WRAP', () => {

@@ -396,7 +396,10 @@ export function mapToToolArgs(
       const sourcePath = pos[0] || '';
       const destPath = pos[1] || '';
       if (!sourcePath || !destPath) return null;
-      return { sourcePath, destPath };
+      const args: Record<string, any> = { sourcePath, destPath };
+      const atFlag = flags['at'];
+      if (atFlag !== undefined) args.at = Number(atFlag);
+      return args;
     }
 
     case 'rm':

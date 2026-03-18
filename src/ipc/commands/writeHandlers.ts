@@ -46,23 +46,18 @@ async function executeSingleMk(
   // Try to resolve the full path to check if node exists (for upsert)
   const existing = await resolvePathToNode(path);
   if (existing.ok && !existing.isPage) {
-    // Page-level collision: skip upsert, create new with deduplicated name
-    const isPageLevel = parentPath === '/' || parentPath === '';
-    if (!isPageLevel) {
-      // Nested node — upsert as before
-      const nodeId = existing.node.id;
-      const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
-      if (!propsBlock && !textContent) {
-        return { success: true, data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
-      }
-      let ops = `update('${nodeId}', {${propsBlock}})`;
-      if (textContent) {
-        const escaped = escapeFlatOpsStr(textContent);
-        ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
-      }
-      return await executeFlatOps(ops);
+    // Path resolves to an existing node — UPDATE (upsert)
+    const nodeId = existing.node.id;
+    const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
+    if (!propsBlock && !textContent) {
+      return { success: true, data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
     }
-    // Page-level: fall through to create mode with deduplication
+    let ops = `update('${nodeId}', {${propsBlock}})`;
+    if (textContent) {
+      const escaped = escapeFlatOpsStr(textContent);
+      ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
+    }
+    return await executeFlatOps(ops);
   }
 
   // Node doesn't exist (or page-level collision) → create mode
@@ -330,7 +325,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
 // ── mv ──
 
 export async function handleMv(parameters: any): Promise<ToolResponse> {
-  const { sourcePath: mvSourcePath, destPath: mvDestPath } = parameters;
+  const { sourcePath: mvSourcePath, destPath: mvDestPath, at: mvAtIndex } = parameters;
 
   if (!mvSourcePath) {
     return { success: false, error: { code: 'MISSING_SOURCE', message: 'mv requires a source path. Usage: mv /OldName /NewName' } };
@@ -379,7 +374,24 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   if (mvRenamed) mvNode.name = mvNewName;
 
   const mvMoved = mvNewParent != null && mvNewParent.id !== mvOldParentId;
-  if (mvMoved) (mvNewParent as any).appendChild(mvNode);
+  let mvReordered = false;
+
+  if (mvMoved) {
+    // Moving to a different parent
+    if (mvAtIndex != null) {
+      const idx = mvAtIndex < 0 ? (mvNewParent as any).children.length : mvAtIndex;
+      (mvNewParent as any).insertChild(idx, mvNode);
+    } else {
+      (mvNewParent as any).appendChild(mvNode);
+    }
+  } else if (mvAtIndex != null && mvNewParent != null) {
+    // Same parent — reorder using insertChild
+    const parent = mvNewParent as any;
+    const childCount = parent.children.length;
+    const idx = mvAtIndex < 0 ? childCount - 1 : Math.min(mvAtIndex, childCount - 1);
+    parent.insertChild(idx, mvNode);
+    mvReordered = true;
+  }
 
   return {
     success: true,
@@ -389,7 +401,9 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
       newName: mvNewName,
       renamed: mvRenamed,
       moved: mvMoved,
+      reordered: mvReordered,
       newParent: mvMoved ? mvNewParent!.name : undefined,
+      index: mvReordered ? mvAtIndex : undefined,
     },
   };
 }

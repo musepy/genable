@@ -155,7 +155,7 @@ export function normalizeProps(
       const suggestions = suggestProperties(key);
       const hint = suggestions.length > 0
         ? ` Did you mean: ${suggestions.join(', ')}?`
-        : ' Run `man mk` for property reference.';
+        : ' Run `man properties` for full property reference.';
       warn(`'${key}' is not a recognized property — dropped.${hint}`);
       delete result[key];
     }

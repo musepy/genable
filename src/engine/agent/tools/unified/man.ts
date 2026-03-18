@@ -22,7 +22,7 @@ export const manDefinition: ToolDefinition = {
   man style dark-mode,minimal  → get visual style guide by tags
 
 **Guidelines topics**: dashboard, form, landing-page, card-layout, navigation, mobile, table, chart.
-**Help topics**: components, variants, progressive-creation, modification, batch-replace, canvas-reading, parent-child, error-handling, style-guide, examples, error-catalog.`,
+**Help topics**: properties, components, variants, progressive-creation, modification, batch-replace, canvas-reading, parent-child, error-handling, style-guide, examples, error-catalog, rich-text, design-system, component-set, agent-page, design-knowledge.`,
   parameters: {
     type: 'object',
     properties: {

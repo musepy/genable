@@ -1242,14 +1242,8 @@ export class ActionExecutor {
     const warnings: any[] = [];
     const diffs: Array<{ key: string; changed: boolean; before?: any; after?: any }> = [];
 
-    // Sync textAutoResize when sizing mode changes on update (parser can't know node type)
-    if (!props.textAutoResize && (props.layoutSizingHorizontal !== undefined || props.layoutSizingVertical !== undefined)) {
-      if (props.layoutSizingHorizontal === 'FILL') {
-        props.textAutoResize = 'HEIGHT';
-      } else {
-        props.textAutoResize = 'WIDTH_AND_HEIGHT';
-      }
-    }
+    // textAutoResize sync + align conversion are handled by normalizeProps() at parse time.
+    // Single source of truth in node-normalizers.ts — no duplication here.
 
     // Handle font resolution before setting characters
     // Read current font from node as fallback — avoid resetting to Inter/Regular

@@ -155,6 +155,10 @@ const EXPANDERS: Record<string, Expander> = {
         else if (/^\d/.test(p)) result.strokeWeight = parseFloat(p);
         else result.strokeAlign = p.toUpperCase();
       }
+      // Inject default black if weight/align specified without color
+      if (!result.strokes && (result.strokeWeight || result.strokeAlign)) {
+        result.strokes = ['#000000'];
+      }
       return result;
     }
     return {};

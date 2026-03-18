@@ -92,14 +92,40 @@ export function normalizeProps(
   const isTextNode = options.nodeType?.toUpperCase() === 'TEXT';
 
   // ── Step 2: textAutoResize sync for text nodes ──
+  // Invariant: any "lock width/height" intent → textAutoResize must reflect it.
+  // After expandShorthands: w:280→{width:280}, w:fill→{layoutSizingH:'FILL'}, w:hug→{layoutSizingH:'HUG'}
   if (isTextNode && !result.textAutoResize) {
-    const hasSizingChange = result.layoutSizingHorizontal !== undefined || result.layoutSizingVertical !== undefined;
-    if (options.isCreate || hasSizingChange) {
-      if (result.layoutSizingHorizontal === 'FILL') {
-        result.textAutoResize = 'HEIGHT';
-      } else {
-        result.textAutoResize = 'WIDTH_AND_HEIGHT';
-      }
+    const widthLocked =
+      result.layoutSizingHorizontal === 'FILL' ||
+      result.layoutSizingHorizontal === 'FIXED' ||
+      typeof result.width === 'number';
+    const heightLocked =
+      result.layoutSizingVertical === 'FILL' ||
+      result.layoutSizingVertical === 'FIXED' ||
+      typeof result.height === 'number';
+
+    if (widthLocked && heightLocked) {
+      result.textAutoResize = 'NONE';
+    } else if (widthLocked) {
+      result.textAutoResize = 'HEIGHT';
+    } else if (options.isCreate) {
+      result.textAutoResize = 'WIDTH_AND_HEIGHT';
+    }
+  }
+
+  // ── Step 2b: Convert auto-layout alignment to text alignment for text nodes ──
+  if (isTextNode) {
+    if (result.primaryAxisAlignItems && !result.textAlignHorizontal) {
+      const alignMap: Record<string, string> = { MIN: 'LEFT', CENTER: 'CENTER', MAX: 'RIGHT' };
+      const mapped = alignMap[result.primaryAxisAlignItems];
+      if (mapped) result.textAlignHorizontal = mapped;
+      delete result.primaryAxisAlignItems;
+    }
+    if (result.counterAxisAlignItems && !result.textAlignVertical) {
+      const alignMap: Record<string, string> = { MIN: 'TOP', CENTER: 'CENTER', MAX: 'BOTTOM' };
+      const mapped = alignMap[result.counterAxisAlignItems];
+      if (mapped) result.textAlignVertical = mapped;
+      delete result.counterAxisAlignItems;
     }
   }
 

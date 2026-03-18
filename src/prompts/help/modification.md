@@ -6,26 +6,28 @@ whenToUse: When modifying, updating, or deleting existing nodes on the canvas
 ---
 
 ### MODIFICATION (update and delete operations)
-The `design` tool handles creation, modification, and deletion in a single call:
 
-- `symbol = type(parent, {props})` → create new node
-- `update('nodeId', {props})` → modify existing node (only listed properties change)
-- `delete('nodeId')` → remove node and children
+**Update existing nodes** — `mk` on an existing path updates properties (upsert):
+```
+mk /Card/ corner:16 bg:#F3F4F6
+mk /Card/Title fill:#EF4444 size:18
+```
+Only listed properties change; everything else is preserved.
 
-**CRITICAL: update/delete MUST reference a real Figma node ID (from inspect/outline or previous design idMap).**
-
-**BATCH EDITS**: Pack ALL related changes into a SINGLE `design` call. Changing a color scheme across 5 nodes = ONE call with 5 update lines, NOT five separate calls.
-
-```json
-design({
-  "ops": "update('100:5', {bg:'#F3F4F6', corner:16})\nupdate('100:8', {fill:'#EF4444', size:18})\ndelete('100:12')"
-})
+**Delete nodes** — `rm` removes a node and its children:
+```
+rm /Card/OldSection/
+rm /Card/Temp*          ← glob: delete all children starting with "Temp"
 ```
 
-**Mixed create + edit + delete** (all in one call):
-```json
-design({
-  "ops": "lbl = text(root, {name:'New Label', size:14, fill:'#6B7280'}, 'Added text')\nupdate('100:5', {bg:'#FF0000'})\ndelete('100:12')",
-  "parentId": "200:1"
-})
+**CRITICAL: target existing nodes by path (from ls/tree/cat output) or by Figma ID (`/#100:5/`).**
+
+**BATCH EDITS**: Use `sed` for bulk property changes across a subtree — one command replaces all matching values:
+```
+sed /Card/ fill:#3B82F6/#8B5CF6 size:14/16 corner:8/12
+```
+
+**Mixed create + edit** (chain with &&):
+```
+mk /Card/NewLabel text size:14 fill:#6B7280 -- Added text && rm /Card/OldLabel/
 ```

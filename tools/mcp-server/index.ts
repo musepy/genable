@@ -353,11 +353,12 @@ async function main() {
         // ; : always run
         // | : always run (pipe data is contextual, passed via input)
 
-        // $LAST expansion: replace $LAST in positional args with last node path
+        // $LAST expansion: replace $LAST in positional args with last node ID path
+        // Uses /#id/ format so pathResolver resolves by Figma node ID, not by name
         if (lastNodeId) {
           for (let j = 0; j < cmd.positionalArgs.length; j++) {
             if (cmd.positionalArgs[j].includes('$LAST')) {
-              cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/${lastNodeId}/`);
+              cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/#${lastNodeId}`);
             }
           }
         }

@@ -45,6 +45,18 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
 
+    // Parent navigation: ".." → go up to parent node
+    if (segment === '..') {
+      if (current.parent && current.parent.type !== 'DOCUMENT') {
+        current = current.parent;
+      }
+      // At page level, ".." is a no-op (can't go above page)
+      continue;
+    }
+
+    // Current directory: "." → no-op
+    if (segment === '.') continue;
+
     // Explicit ID prefix: #1058:12304 → resolve by Figma ID
     if (segment.startsWith('#')) {
       const nodeId = segment.slice(1);

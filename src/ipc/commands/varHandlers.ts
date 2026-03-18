@@ -32,6 +32,7 @@ export async function handleVar(parameters: any): Promise<ToolResponse> {
 
 async function handleVarLs(params: any): Promise<ToolResponse> {
   const filterCollection = params.collection as string | undefined;
+  const verbose = params.verbose as boolean | undefined;
 
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const allVariables = await figma.variables.getLocalVariablesAsync();
@@ -49,7 +50,39 @@ async function handleVarLs(params: any): Promise<ToolResponse> {
     const collVars = allVariables.filter(v => v.variableCollectionId === coll.id);
     const modeNames = coll.modes.map(m => m.name).join(', ');
     lines.push(`📁 ${coll.name}  (${collVars.length} vars, modes: ${modeNames})`);
+    totalVars += collVars.length;
 
+    if (!filterCollection && !verbose) {
+      // No collection specified → summary only (collection names + counts)
+      continue;
+    }
+
+    if (!verbose && collVars.length > 30) {
+      // Collection specified but too many vars → grouped summary
+      const groups = new Map<string, { count: number; types: Set<string>; examples: string[] }>();
+      for (const v of collVars) {
+        // Group by all segments except the last (e.g. "Colors/Gray/1" → "Colors/Gray")
+        const lastSlash = v.name.lastIndexOf('/');
+        const groupName = lastSlash > 0 ? v.name.slice(0, lastSlash) : '(root)';
+        if (!groups.has(groupName)) groups.set(groupName, { count: 0, types: new Set(), examples: [] });
+        const g = groups.get(groupName)!;
+        g.count++;
+        g.types.add(v.resolvedType);
+        if (g.examples.length < 2) {
+          const val = formatVarValue(v.valuesByMode[coll.modes[0].modeId], v.resolvedType, allVariables);
+          g.examples.push(`${v.name.slice(lastSlash + 1)}=${val}`);
+        }
+      }
+      for (const [groupName, g] of groups) {
+        const types = [...g.types].join(',');
+        lines.push(`  ${groupName.padEnd(30)} ${String(g.count).padStart(3)} ${types.padEnd(7)}  e.g. ${g.examples.join(', ')}`);
+      }
+      lines.push(`  ── ${groups.size} groups. Use: var ls "${coll.name}" -v  for full listing`);
+      lines.push('');
+      continue;
+    }
+
+    // Verbose mode or small collection → full listing
     for (const v of collVars) {
       const values: string[] = [];
       for (const mode of coll.modes) {
@@ -62,9 +95,12 @@ async function handleVarLs(params: any): Promise<ToolResponse> {
         }
       }
       lines.push(`  ${v.resolvedType.padEnd(7)}  ${v.name.padEnd(30)}  ${values.join('  ')}`);
-      totalVars++;
     }
     lines.push('');
+  }
+
+  if (!filterCollection && !verbose) {
+    lines.push(`── ${collections.length} collections, ${totalVars} variables total. Use: var ls <collection>  to explore.`);
   }
 
   return {

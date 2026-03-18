@@ -14,6 +14,28 @@
 
 import { isValidCommand } from './commandRegistry';
 
+/**
+ * Alias map: cat/mk shorthand → grep/sed internal property names.
+ * `fill` expands to BOTH fillColor and textColor since cat output uses `fill` for both.
+ */
+const PROP_ALIASES: Record<string, string[]> = {
+  fill:    ['fillColor', 'textColor'],
+  bg:      ['fillColor'],
+  color:   ['textColor'],
+  corner:  ['cornerRadius'],
+  radius:  ['cornerRadius'],
+  size:    ['fontSize'],
+  font:    ['fontFamily'],
+  weight:  ['fontWeight'],
+  stroke:  ['strokeColor'],
+  strokeW: ['strokeWeight'],
+};
+
+/** Expand a single property name through aliases. Returns canonical names. */
+function expandPropAlias(prop: string): string[] {
+  return PROP_ALIASES[prop] || [prop];
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface ParsedCommand {
@@ -264,7 +286,10 @@ export function mapToToolArgs(
         // Property discovery: grep /path/ prop1,prop2  or  grep /path/ props (all)
         const ALL_GREP_PROPS = ['fillColor', 'textColor', 'strokeColor', 'cornerRadius', 'gap', 'fontSize', 'fontFamily', 'fontWeight'];
         const rawProps = pos[1] ? pos[1].split(',') : [];
-        const grepProps = (rawProps.length === 1 && rawProps[0] === 'props') ? ALL_GREP_PROPS : rawProps;
+        // Expand aliases: fill → [fillColor, textColor], corner → [cornerRadius], etc.
+        const grepProps = (rawProps.length === 1 && rawProps[0] === 'props')
+          ? ALL_GREP_PROPS
+          : rawProps.flatMap(p => expandPropAlias(p));
         return { path: firstArg, properties: grepProps, mode: 'properties' };
       }
       // Node search: grep <query> [path]
@@ -280,26 +305,32 @@ export function mapToToolArgs(
         const token = pos[i];
         const colonIdx = token.indexOf(':');
         if (colonIdx < 0) continue;
-        const prop = token.slice(0, colonIdx);
+        const rawProp = token.slice(0, colonIdx);
         const rest = token.slice(colonIdx + 1);
         const slashIdx = rest.lastIndexOf('/');
         if (slashIdx < 0) continue;
         const fromVal = rest.slice(0, slashIdx);
         const toVal = rest.slice(slashIdx + 1);
-        if (!replacements[prop]) replacements[prop] = [];
         const numFrom = Number(fromVal);
         const numTo = Number(toVal);
-        replacements[prop].push({
+        const rule = {
           from: !isNaN(numFrom) && fromVal !== '' ? numFrom : fromVal,
           to: !isNaN(numTo) && toVal !== '' ? numTo : toVal,
-        });
+        };
+        // Expand aliases: fill → [fillColor, textColor], corner → [cornerRadius], etc.
+        for (const prop of expandPropAlias(rawProp)) {
+          if (!replacements[prop]) replacements[prop] = [];
+          replacements[prop].push(rule);
+        }
       }
       if (input) {
         try {
           const parsed = JSON.parse(input);
-          for (const [prop, rules] of Object.entries(parsed)) {
-            if (!replacements[prop]) replacements[prop] = [];
-            replacements[prop].push(...(rules as any[]));
+          for (const [rawProp, rules] of Object.entries(parsed)) {
+            for (const prop of expandPropAlias(rawProp)) {
+              if (!replacements[prop]) replacements[prop] = [];
+              replacements[prop].push(...(rules as any[]));
+            }
           }
         } catch { /* CLI syntax is primary */ }
       }
@@ -426,7 +457,7 @@ export function mapToToolArgs(
       const sub = pos[0];
       switch (sub) {
         case 'ls':
-          return { subcommand: 'ls', collection: pos[1] || undefined };
+          return { subcommand: 'ls', collection: pos[1] || undefined, verbose: !!(flags['v'] || flags['verbose']) };
         case 'mk': {
           // Check for --collection flag (collection creation mode)
           if (flags['collection']) {

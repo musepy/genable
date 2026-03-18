@@ -4,21 +4,6 @@ name: Design Knowledge
 description: Search design patterns, component anatomy, and layout rules
 category: knowledge
 priority: 3
-injectionType: dynamic
-tools:
-  - query_knowledge
-triggerPatterns:
-  - pattern
-  - best practice
-  - how to
-  - anatomy
-  - structure
-  - layout rule
-  - guideline
-  - 模式
-  - 最佳实践
-  - 结构
-  - 规则
 enabledByDefault: true
 ---
 
@@ -26,16 +11,19 @@ enabledByDefault: true
 
 Access design knowledge when you need guidance:
 
-- `query_knowledge(source="knowledge", query="...")`: Find UI patterns, color schemes, typography rules, component anatomy, layout rules
+- `man [topic]` — browse available help topics and guidelines
+- `man properties` — property reference for mk command
+- `man components` — component workflow guide
+- `man style-tags` — available style guide tags
+- `man style dark-mode,dashboard` — get a specific style guide
 
-Use `query_knowledge` BEFORE creating complex components to ensure best practices.
+Use `man` BEFORE creating complex components to ensure best practices.
 
 ### Examples
 
 **Create a pricing table:**
 ```
-query_knowledge({ source: "knowledge", query: "pricing table anatomy" })
-→ { results: [...] }
-
-build_design({ "operations": [...] })
+man progressive-creation
+man style minimal,saas
 ```
+Then create with `mk` commands following the style guide's tokens.

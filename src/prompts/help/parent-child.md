@@ -6,6 +6,29 @@ whenToUse: When inserting children into existing frames or using idMap from prev
 ---
 
 ## PARENT-CHILD CREATION
-- **Progressive**: Build the skeleton first, then use `idMap` from earlier `design` results to insert children into the correct parent.
-- **Cross-call references**: Use real Figma node IDs from previous `design` `idMap` or `outline`/`inspect` output.
-- **Query-first for existing trees**: If inserting into existing design, call `outline` first to confirm target parent ID.
+
+**Progressive building** — create skeleton first, then add children:
+```
+mk /Card/ frame w:400 layout:column p:24 bg:#FFF corner:12
+mk /Card/Header frame layout:row alignCross:center gap:12
+mk /Card/Header/Title text size:18 weight:Bold fill:#111 -- Card Title
+mk /Card/Body text size:14 fill:#666 -- Description here
+```
+
+**Insert into existing trees** — use `tree` or `ls` first to discover the structure, then `mk` into the path:
+```
+tree /ExistingCard/ -d 2
+mk /ExistingCard/Footer frame layout:row gap:8 alignMain:end
+mk /ExistingCard/Footer/Btn frame layout:row p:'8 16' bg:#000 corner:6
+mk /ExistingCard/Footer/Btn/Label text size:12 fill:#FFF weight:Medium -- Action
+```
+
+**$LAST shortcut** — reference the last created node in chains:
+```
+mk /Card/Icon frame w:40 h:40 bg:#EEE corner:20 && cat $LAST -s
+```
+
+**By ID** — use `/#nodeId/` prefix for precise targeting:
+```
+mk /#1134:25994/NewChild text size:14 fill:#333 -- Inserted by ID
+```

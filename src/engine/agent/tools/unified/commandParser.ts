@@ -459,6 +459,39 @@ export function mapToToolArgs(
       return { path, component, propsRaw: propsRaw || undefined };
     }
 
+    // ── Semantic rendering ──
+
+    case 'token': {
+      if (pos.length === 0) return null; // help mode
+      const sub = pos[0];
+      switch (sub) {
+        case 'ls':
+          return { subcommand: 'ls', filter: pos[1] || undefined };
+        case 'set': {
+          const tokenName = pos[1];
+          if (!tokenName) return null;
+          // Check for --text or --container flag
+          const tokenType = flags['text'] ? 'text' : flags['container'] ? 'container' : undefined;
+          return { subcommand: 'set', name: tokenName, propTokens: pos.slice(2), tokenType };
+        }
+        case 'rm':
+          return { subcommand: 'rm', name: pos[1] };
+        case 'reset':
+          return { subcommand: 'reset' };
+        default:
+          return null;
+      }
+    }
+
+    case 'render': {
+      const markup = input || pos.join('\n') || '';
+      if (!markup) return null; // help mode
+      const args: Record<string, any> = { markup };
+      const parentId = flags['p'] || flags['parent'];
+      if (parentId) args.parentId = parentId;
+      return args;
+    }
+
     // ── Design system commands ──
 
     case 'var': {

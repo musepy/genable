@@ -310,6 +310,32 @@ export class AgentRuntime {
    * turnMessages are NOT cleared here — they stay available for getMessages()
    * (used by debrief). They're cleared at the start of the next run().
    */
+  /**
+   * Render agent's text response as a styled bubble on the canvas.
+   * Non-fatal: failures are logged, never block the turn.
+   */
+  private async renderBubble(text: string, iteration: number): Promise<void> {
+    // Strip markdown formatting for clean display
+    let clean = text
+      .replace(/\*\*([^*]+)\*\*/g, '$1')   // **bold** → bold
+      .replace(/\*([^*]+)\*/g, '$1')        // *italic* → italic
+      .replace(/~~([^~]+)~~/g, '$1')        // ~~strike~~ → strike
+      .replace(/^[-*]\s+/gm, '• ')          // - item → • item
+      .replace(/\n{2,}/g, '\n');            // collapse blank lines
+
+    // Truncate to max 300 chars
+    if (clean.length > 300) clean = clean.slice(0, 300) + '…';
+
+    // Escape single quotes (markup uses single-quote internally in flat ops)
+    const safe = clean.replace(/'/g, "\\'").replace(/"/g, "'");
+
+    const markup = `bubble\n  agent-name: Genable\n  agent-text: ${safe}`;
+    await this.toolDispatcher.dispatch(
+      [{ id: this.generateId('bubble'), name: 'render', args: { markup } }],
+      iteration,
+    );
+  }
+
   private endTurn(): void {
     // Move current turn's full messages to conversation history
     this.conversationHistory.push(...this.turnMessages);
@@ -748,6 +774,19 @@ export class AgentRuntime {
             continue;
           }
           console.warn(`[AgentRuntime] Truncation limit reached (3). Forcing turn end.`);
+        }
+
+        // Auto-bubble: render agent's reply on canvas BEFORE turn_end
+        // (so dev bridge nodeTree snapshot captures it)
+        if (response.text) {
+          try {
+            await Promise.race([
+              this.renderBubble(response.text, iteration),
+              new Promise(r => setTimeout(r, 5000)),
+            ]);
+          } catch (e: any) {
+            console.warn('[AutoBubble] Failed (non-fatal):', e?.message);
+          }
         }
 
         // Turn end: summarize this turn, prepare for next

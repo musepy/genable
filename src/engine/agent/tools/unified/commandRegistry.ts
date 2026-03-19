@@ -27,6 +27,8 @@ import { jsDefinition } from './js';
 import { subtaskDefinition } from './subtask';
 import { varDefinition } from './var';
 import { compDefinition } from './comp';
+import { renderDefinition } from './render';
+import { tokenDefinition } from './token';
 
 /** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
 const moreDefinition: ToolDefinition = {
@@ -56,6 +58,9 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   // Design system commands
   [varDefinition.name, varDefinition],
   [compDefinition.name, compDefinition],
+  // Semantic rendering
+  [renderDefinition.name, renderDefinition],
+  [tokenDefinition.name, tokenDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],
@@ -464,6 +469,53 @@ The truncation message includes "overflow/N" — use more N to retrieve it.
 
 See also: cat (read nodes), grep (search), tree (structure)`,
 
+  token: `token — View and customize style tokens for render command.
+
+Subcommands:
+  token ls                                    list all tokens with values
+  token ls text                               text tokens only
+  token ls container                          container tokens only
+  token set bubble fill:#1E1B4B corner:20     update existing token
+  token set my-label --text size:14 fill:#666 create new text token
+  token set my-box --container p:32 fill:#FFF create new container token
+  token rm my-label                           remove custom token (defaults can't be removed)
+  token reset                                 reset all to defaults
+
+Tokens define visual styles for the render command.
+Props use mk shorthand: size, weight, fill, corner, p, gap, layout, w, h, etc.
+
+See also: render (use tokens), man (design guidelines)`,
+
+  render: `render — Create designs using style tokens (semantic markup).
+
+Usage:
+  run({command: "render", input: "card\\n  h1: \\"Dashboard\\"\\n  body: \\"Overview\\""})
+
+Syntax (indentation = nesting):
+  container-token [override:value ...]
+    text-token: "content"
+
+Text tokens: h1, h2, h3, body, body-sm, caption, stat-value, stat-label, overline
+Container tokens: page, card, row, column, section, chip
+
+Examples:
+  card
+    h1: "Settings"
+    body: "Manage your account"
+
+  page
+    row gap:24
+      card
+        stat-value: "1,234"
+        stat-label: "Users"
+      card
+        stat-value: "$45.6K"
+        stat-label: "Revenue"
+
+Container overrides: row gap:24, card fill:#F8FAFC p:32
+
+See also: mk (custom designs), cat (inspect result)`,
+
   ln: `ln — Create a component instance at a path.
 
 Usage:
@@ -499,4 +551,6 @@ const COMMAND_SEE_ALSO: Record<string, string> = {
   more: 'cat (read nodes), grep (search), tree (structure)',
   var: 'comp (component variants), mk (create with $var binding), grep (discover values)',
   comp: 'var (design tokens), mk (create frames), cp (clone with overrides)',
+  render: 'mk (custom designs), token (customize styles), cat (inspect result)',
+  token: 'render (use tokens), var (design tokens), man (guidelines)',
 };

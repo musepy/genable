@@ -4,27 +4,6 @@ name: Design System Creation
 description: Create and manage Figma design systems with variables, collections, modes, component variants, and bindings
 category: figma
 priority: 3
-injectionType: dynamic
-tools:
-  - var
-  - comp
-triggerPatterns:
-  - variable
-  - design token
-  - design system
-  - theme
-  - dark mode
-  - light mode
-  - color scheme
-  - brand guide
-  - brand guidelines
-  - 变量
-  - 主题
-  - 暗色模式
-  - 亮色模式
-  - 设计系统
-  - 品牌指南
-  - 设计规范
 enabledByDefault: true
 ---
 

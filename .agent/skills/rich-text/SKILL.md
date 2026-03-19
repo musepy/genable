@@ -4,24 +4,6 @@ name: Rich Text Styling
 description: Apply mixed styles within a single text node using markdown markup
 category: core
 priority: 4
-injectionType: dynamic
-tools:
-  - design
-triggerPatterns:
-  - bold
-  - italic
-  - strikethrough
-  - rich text
-  - mixed style
-  - highlight
-  - price
-  - markdown
-  - 加粗
-  - 斜体
-  - 删除线
-  - 富文本
-  - 混合样式
-  - 价格
 enabledByDefault: true
 ---
 

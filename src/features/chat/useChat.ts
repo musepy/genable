@@ -6,6 +6,27 @@ import guidelinesCatalog from '../../generated/guidelines-catalog.json'
 import styleCatalog from '../../generated/style-catalog.json'
 import { matchStyleGuide, normalizeStyleTags, StyleGuideEntry } from './styleGuideMatcher'
 import { helpIndex } from '../../engine/agent/tools/helpIndex'
+import skillsRegistry from '../../generated/skills-registry.json'
+
+// ==========================================
+// Skill lookup helpers (from build-time skills-registry.json)
+// ==========================================
+
+type SkillRegistryEntry = { id: string; name: string; description: string; body: string }
+
+function getSkillById(id: string): SkillRegistryEntry | null {
+  const entry = (skillsRegistry as Record<string, any>)[id]
+  if (!entry) return null
+  return { id: entry.id, name: entry.name, description: entry.description, body: entry.body }
+}
+
+function getSkillTopics(): { id: string; title: string; whenToUse: string }[] {
+  return Object.values(skillsRegistry as Record<string, any>).map((s: any) => ({
+    id: s.id,
+    title: s.name,
+    whenToUse: s.description,
+  }))
+}
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -124,7 +145,6 @@ export function useChat({
         }
         updateStreamingMessage(msg => ({
           ...msg,
-          text: '', // Reset intermediate text — prevents accumulation across iterations
           iterations: [...(msg.iterations || []), newIteration],
         }))
         break
@@ -374,20 +394,28 @@ export function useChat({
           if (params.source === 'help') {
             const query = (params.query || '').trim()
             if (!query) {
-              return { success: true, data: { topics: helpIndex.listTopics() } }
+              return { success: true, data: { topics: [...helpIndex.listTopics(), ...getSkillTopics()] } }
             }
+            // 1. Exact match helpIndex
             const exact = helpIndex.getById(query)
             if (exact) {
               return { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } }
             }
-            const results = helpIndex.search(query, 2)
-            if (results.length === 0) {
-              return { success: true, data: {
-                message: `No help article matched "${query}".`,
-                availableTopics: helpIndex.listTopics()
-              } }
+            // 2. Exact match skill ID
+            const skill = getSkillById(query)
+            if (skill) {
+              return { success: true, data: { topic: skill.id, title: skill.name, content: skill.body } }
             }
-            return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
+            // 3. BM25 fuzzy search helpIndex
+            const results = helpIndex.search(query, 2)
+            if (results.length > 0) {
+              return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
+            }
+            // 4. No match
+            return { success: true, data: {
+              message: `No help article matched "${query}".`,
+              availableTopics: [...helpIndex.listTopics(), ...getSkillTopics()]
+            } }
           }
           return null
         },
@@ -422,20 +450,28 @@ export function useChat({
           if (source === 'help') {
             const query = (params.query || '').trim()
             if (!query) {
-              return { success: true, data: { topics: helpIndex.listTopics() } }
+              return { success: true, data: { topics: [...helpIndex.listTopics(), ...getSkillTopics()] } }
             }
+            // 1. Exact match helpIndex
             const exact = helpIndex.getById(query)
             if (exact) {
               return { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } }
             }
-            const results = helpIndex.search(query, 2)
-            if (results.length === 0) {
-              return { success: true, data: {
-                message: `No help article matched "${query}".`,
-                availableTopics: helpIndex.listTopics()
-              } }
+            // 2. Exact match skill ID
+            const skill = getSkillById(query)
+            if (skill) {
+              return { success: true, data: { topic: skill.id, title: skill.name, content: skill.body } }
             }
-            return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
+            // 3. BM25 fuzzy search helpIndex
+            const results = helpIndex.search(query, 2)
+            if (results.length > 0) {
+              return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
+            }
+            // 4. No match
+            return { success: true, data: {
+              message: `No help article matched "${query}".`,
+              availableTopics: [...helpIndex.listTopics(), ...getSkillTopics()]
+            } }
           }
           return null
         },

@@ -409,10 +409,6 @@ class KnowledgeHubService {
   private anatomy: AnatomyBlueprint[];
   private figmaLayout: FigmaLayoutRule[];
 
-  // Skill documents indexed for unified search
-  private skillDocs: Array<{ id: string; name: string; description: string; body: string }> = [];
-  private skillIndex: MiniSearch<{ id: string; name: string; description: string; body: string }>;
-
   constructor() {
     // Parse CSV text → typed arrays
     this.reasoning = transformReasoning(parseCSV(reasoningCsv));
@@ -460,7 +456,6 @@ class KnowledgeHubService {
     this.stacksIndex = this.createIndex(['stack', 'category', 'guideline', 'description']);
     this.figmaLayoutIndex = this.createIndex(['category', 'issue', 'keywords', 'description']);
     this.anatomyIndex = this.createIndex(['id', 'name', 'category', 'description', 'keywords']);
-    this.skillIndex = this.createIndex(['name', 'description', 'body']);
 
     this.reasoningIndex.addAll(this.reasoning);
     this.stylesIndex.addAll(this.styles);
@@ -473,16 +468,6 @@ class KnowledgeHubService {
     this.stacksIndex.addAll(this.stacks);
     this.figmaLayoutIndex.addAll(this.figmaLayout);
     this.anatomyIndex.addAll(this.anatomy);
-  }
-
-  /**
-   * Index skill bodies so they appear in unified searchAll results.
-   * Called once after skills are loaded.
-   */
-  indexSkills(skills: Array<{ id: string; name: string; description: string; body: string }>): void {
-    this.skillDocs = skills;
-    this.skillIndex.removeAll();
-    this.skillIndex.addAll(skills);
   }
 
   private createIndex<T>(fields: string[]): MiniSearch<T> {
@@ -583,45 +568,6 @@ class KnowledgeHubService {
   }
 
 
-
-  // ==========================================
-  // Unified Search (all domains + skills)
-  // ==========================================
-
-  /**
-   * Cross-domain search. Returns top results scored across all domains + skills.
-   * Primary entry point for `query(source="knowledge")`.
-   */
-  searchAll(query: string, limit = 5): SearchResult<any>[] {
-    const allResults: SearchResult<any>[] = [];
-
-    const domains: Array<{ index: MiniSearch<any>; data: any[] }> = [
-      { index: this.reasoningIndex, data: this.reasoning },
-      { index: this.stylesIndex, data: this.styles },
-      { index: this.colorsIndex, data: this.colors },
-      { index: this.typographyIndex, data: this.typography },
-      { index: this.landingIndex, data: this.landing },
-      { index: this.chartsIndex, data: this.charts },
-      { index: this.productsIndex, data: this.products },
-      { index: this.guidelinesIndex, data: this.guidelines },
-      { index: this.stacksIndex, data: this.stacks },
-      { index: this.figmaLayoutIndex, data: this.figmaLayout },
-      { index: this.anatomyIndex, data: this.anatomy },
-      { index: this.skillIndex, data: this.skillDocs },
-    ];
-
-    for (const { index, data } of domains) {
-      const hits = index.search(query);
-      for (const hit of hits.slice(0, 2)) {
-        const item = data.find((d: any) => d.id === hit.id);
-        if (item) allResults.push({ item, score: hit.score });
-      }
-    }
-
-    return allResults
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-  }
 
   // ==========================================
   // Private Helpers

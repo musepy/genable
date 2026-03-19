@@ -15,7 +15,7 @@ import { ThinkingLevel } from '../llm-client/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { TelemetryService } from './TelemetryService';
 
-import { initializeSkills, skillRegistry, getActiveAgentTools } from '../agent/skills';
+import { initializeSkills, skillRegistry } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { clearIconCache } from '../figma-adapter/assets/iconify';

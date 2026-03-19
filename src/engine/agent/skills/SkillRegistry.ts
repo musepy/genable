@@ -3,7 +3,7 @@
  * @description Central registry for agent skills.
  *
  * Skills are listed as a lightweight menu in the system prompt.
- * Full skill bodies are indexed into knowledgeHub for unified search via query(source="knowledge").
+ * Full skill bodies are accessible via `man <skill-id>` at runtime.
  */
 
 import {
@@ -11,7 +11,6 @@ import {
   SkillState,
   ISkillRegistry,
 } from './types';
-import { ToolDefinition, ToolExecutor } from '../tools/types';
 
 class SkillRegistryImpl implements ISkillRegistry {
   private skills: Map<string, SkillDefinition> = new Map();
@@ -60,30 +59,6 @@ class SkillRegistryImpl implements ISkillRegistry {
       state.enabled = false;
       console.log(`[SkillRegistry] Disabled skill: ${id}`);
     }
-  }
-
-  getActiveTools(): ToolDefinition[] {
-    const tools: ToolDefinition[] = [];
-    const seenNames = new Set<string>();
-
-    for (const skill of this.getEnabled()) {
-      for (const tool of skill.tools) {
-        if (!seenNames.has(tool.name)) {
-          tools.push(tool);
-          seenNames.add(tool.name);
-        }
-      }
-    }
-
-    return tools;
-  }
-
-  getActiveExecutors(): Record<string, ToolExecutor> {
-    const executors: Record<string, ToolExecutor> = {};
-    for (const skill of this.getEnabled()) {
-      Object.assign(executors, skill.executors);
-    }
-    return executors;
   }
 
   reset(): void {

@@ -4,27 +4,6 @@ name: Agent Page — Visual Design System Dashboard
 description: Initialize and manage the .agent page with Palette (color/spacing/typography) and Guide (usage documentation), using component templates for layout
 category: figma
 priority: 2
-injectionType: dynamic
-tools:
-  - var
-  - comp
-  - mk
-  - js
-triggerPatterns:
-  - \.agent
-  - agent page
-  - palette
-  - design system
-  - design token
-  - color scale
-  - color palette
-  - brand guide
-  - initialize
-  - 设计系统
-  - 色板
-  - 调色板
-  - 品牌指南
-  - 初始化
 enabledByDefault: true
 ---
 

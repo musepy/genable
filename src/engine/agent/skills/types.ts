@@ -64,12 +64,11 @@ export interface SkillDefinition {
 
 /**
  * Skill context configuration.
- * Full body is indexed into knowledgeHub for unified search.
  */
 export interface SkillContext {
   /**
    * Full skill body (from SKILL.md).
-   * Indexed into knowledgeHub, searchable via query(source="knowledge").
+   * Accessible via `man <skill-id>` at runtime.
    */
   systemPromptSection?: string;
 }
@@ -95,6 +94,4 @@ export interface ISkillRegistry {
   getEnabled(): SkillDefinition[];
   enable(id: string): void;
   disable(id: string): void;
-  getActiveTools(): ToolDefinition[];
-  getActiveExecutors(): Record<string, ToolExecutor>;
 }

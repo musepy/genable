@@ -43,6 +43,8 @@ export interface ParsedCommand {
   positionalArgs: string[];
   flags: Record<string, string | boolean>;
   raw: string;
+  /** Raw text after `--` separator, before tokenization. Preserved for commands like mk that need verbatim text content. */
+  textAfterSeparator?: string;
 }
 
 /** Chain operators: && (and), || (or), ; (seq), | (pipe). */
@@ -129,6 +131,13 @@ function parseSingleCommand(raw: string): ParsedCommand {
   const name = tokens[0];
   const positionalArgs: string[] = [];
   const flags: Record<string, string | boolean> = {};
+  let textAfterSeparator: string | undefined;
+
+  // Extract raw text after " -- " before tokenization destroys it
+  const separatorMatch = raw.match(/\s--\s([\s\S]*)$/);
+  if (separatorMatch) {
+    textAfterSeparator = separatorMatch[1].trim();
+  }
 
   for (let i = 1; i < tokens.length; i++) {
     const token = tokens[i];
@@ -167,7 +176,7 @@ function parseSingleCommand(raw: string): ParsedCommand {
     }
   }
 
-  return { name, positionalArgs, flags, raw };
+  return { name, positionalArgs, flags, raw, ...(textAfterSeparator !== undefined && { textAfterSeparator }) };
 }
 
 // ── Chain parser ───────────────────────────────────────────────────
@@ -245,7 +254,7 @@ export function mapToToolArgs(
   parsed: ParsedCommand,
   input?: string,
 ): Record<string, any> | null {
-  const { name, positionalArgs: pos, flags } = parsed;
+  const { name, positionalArgs: pos, flags, textAfterSeparator } = parsed;
 
   switch (name) {
     // ── VFS read commands ──
@@ -276,7 +285,7 @@ export function mapToToolArgs(
         return { batch: input };
       }
       if (pos.length === 0) return null; // help mode
-      return parseMkArgs(pos, flags);
+      return parseMkArgs(pos, flags, textAfterSeparator);
     }
 
     case 'grep': {
@@ -547,6 +556,7 @@ export function mapToToolArgs(
 export function parseMkArgs(
   pos: string[],
   flags: Record<string, string | boolean>,
+  textAfterSeparator?: string,
 ): Record<string, any> {
   const path = pos[0] || '/';
   let type: string | undefined;
@@ -566,14 +576,41 @@ export function parseMkArgs(
     }
   }
 
-  // Collect prop tokens (key:value) and text content
-  const propTokens: string[] = [];
-  const textParts: string[] = [];
   const hasSeparator = flags['--'] === true;
 
-  // When -- is present, parseSingleCommand pushes all tokens after -- into positionalArgs
-  // and sets flags['--']=true. All those post-separator tokens are already in pos.
-  // We need to find where the separator was. Prop tokens are key:value format.
+  // When textAfterSeparator is available, use it directly as textContent.
+  // This preserves verbatim text (including tokens with ":") that would otherwise
+  // be misclassified as prop tokens by the heuristic below.
+  if (hasSeparator && textAfterSeparator !== undefined) {
+    // Props are only tokens BEFORE the separator (those without ":" would have been
+    // positional args before we hit "--"). Since parseSingleCommand mixes pre/post
+    // separator tokens, we count: pre-separator props = tokens from propsStart that
+    // were collected before the separator tokens were appended.
+    // With textAfterSeparator we don't need the post-separator tokens at all for text.
+    const propTokens: string[] = [];
+    // Tokens from the separator onward were appended to pos by parseSingleCommand.
+    // We need to figure out how many pre-separator tokens there are.
+    // Pre-separator tokens: positionalArgs collected before the break.
+    // Post-separator tokens: those pushed in the `for (let j = i + 1 ...)` loop.
+    // Since we tokenized the post-separator part, count how many tokens that is:
+    const postTokens = tokenize(textAfterSeparator);
+    const preSeparatorEnd = pos.length - postTokens.length;
+    for (let i = propsStart; i < preSeparatorEnd; i++) {
+      propTokens.push(pos[i]);
+    }
+    return {
+      path,
+      ...(type && { type }),
+      ...(refComponent && { refComponent }),
+      propTokens,
+      textContent: textAfterSeparator,
+    };
+  }
+
+  // Fallback: no textAfterSeparator — use heuristic (key:value = prop, rest = text)
+  const propTokens: string[] = [];
+  const textParts: string[] = [];
+
   for (let i = propsStart; i < pos.length; i++) {
     const t = pos[i];
     if (hasSeparator && !t.includes(':')) {

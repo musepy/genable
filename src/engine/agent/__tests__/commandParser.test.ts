@@ -191,9 +191,45 @@ describe('parseMkArgs', () => {
     expect(result.propTokens).toContain('size:24');
   });
 
+  it('preserves colons in text content when textAfterSeparator is provided', () => {
+    const result = parseMkArgs(
+      ['/Card/Title', 'text', 'size:24', 'font:SFPro', 'Hello'],
+      { '--': true },
+      'font:SFPro Hello',
+    );
+    expect(result.textContent).toBe('font:SFPro Hello');
+    expect(result.propTokens).toEqual(['size:24']);
+  });
+
   it('defaults path to /', () => {
     const result = parseMkArgs([], {});
     expect(result.path).toBe('/');
+  });
+});
+
+// ── Memory text with colons — full pipeline ───────────────────────
+
+describe('mk memory text with colons (full pipeline)', () => {
+  it('preserves colon-containing tokens in text after --', () => {
+    const chain = parseCommandString('mk /.agent/memory/test text -- font:SFPro and size:24 here');
+    expect(chain.commands.length).toBe(1);
+    const args = mapToToolArgs(chain.commands[0]);
+    expect(args).not.toBeNull();
+    expect(args!.textContent).toBe('font:SFPro and size:24 here');
+    expect(args!.propTokens).toEqual([]);
+  });
+
+  it('preserves URLs with colons in text after --', () => {
+    const chain = parseCommandString('mk /.agent/memory/urls text -- Visit https://example.com for details');
+    const args = mapToToolArgs(chain.commands[0]);
+    expect(args!.textContent).toBe('Visit https://example.com for details');
+  });
+
+  it('still parses props before -- correctly', () => {
+    const chain = parseCommandString('mk /Card/Title text size:24 weight:bold -- Hello World');
+    const args = mapToToolArgs(chain.commands[0]);
+    expect(args!.propTokens).toEqual(['size:24', 'weight:bold']);
+    expect(args!.textContent).toBe('Hello World');
   });
 });
 

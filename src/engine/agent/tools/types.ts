@@ -80,6 +80,8 @@ export interface ToolResponse<T = any> {
     message: string;
     details?: any;
   };
+  /** Pre-built stderr from command source. presentForLLM passes it through. */
+  _stderr?: string;
 }
 
 /**

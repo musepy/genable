@@ -66,27 +66,21 @@ export function formatMeta(exitCode: number, durationMs: number): string {
 // ── Stderr formatting ──────────────────────────────────────────────
 
 /**
- * Extract and format stderr from warnings/errors in a result.
- * Returns null if no stderr content.
+ * Extract stderr from a tool result.
+ *
+ * Commands that build stderr at the source set `result._stderr` directly.
+ * This function checks for that first, then falls back to extracting
+ * from legacy data fields for commands not yet migrated.
  */
 export function extractStderr(result: any): string | null {
   const parts: string[] = [];
 
-  // Warnings from executor
-  if (result?.data?.warnings && Array.isArray(result.data.warnings)) {
-    for (const w of result.data.warnings) {
-      parts.push(`[warn] ${typeof w === 'string' ? w : w.message || JSON.stringify(w)}`);
-    }
+  // Pre-built stderr from source — command already wrote its own stderr
+  if (result?._stderr && typeof result._stderr === 'string') {
+    parts.push(result._stderr);
   }
 
-  // Violations from executor
-  if (result?.data?.violations && Array.isArray(result.data.violations)) {
-    for (const v of result.data.violations) {
-      parts.push(`[warn] ${typeof v === 'string' ? v : v.message || JSON.stringify(v)}`);
-    }
-  }
-
-  // Per-op errors from receipt (PARTIAL_FAILURE details)
+  // Per-op errors from receipt (PARTIAL_FAILURE details) — always in data
   if (result?.data?.errors && Array.isArray(result.data.errors)) {
     for (const e of result.data.errors) {
       parts.push(`[error] ${e.op}: ${e.error}`);
@@ -96,6 +90,27 @@ export function extractStderr(result: any): string | null {
   // Error message (only for failed results)
   if (result?.success === false && result?.error?.message) {
     parts.push(`[error] ${result.error.message}`);
+  }
+
+  // Legacy fallback: extract from data fields if no pre-built stderr
+  if (!result?._stderr) {
+    if (result?.data?.diagnostics && Array.isArray(result.data.diagnostics)) {
+      for (const d of result.data.diagnostics) {
+        parts.push(`[${d.severity || 'warn'}] ${d.message || JSON.stringify(d)}`);
+      }
+    }
+    if (result?.data?.violations && Array.isArray(result.data.violations)) {
+      for (const v of result.data.violations) {
+        const msg = typeof v === 'string' ? v : v.message || JSON.stringify(v);
+        const fix = (typeof v === 'object' && v.fix) ? ` Fix: ${v.fix}` : '';
+        parts.push(`[${v.severity || 'warn'}] ${msg}.${fix}`);
+      }
+    }
+    if (result?.data?.warnings && Array.isArray(result.data.warnings)) {
+      for (const w of result.data.warnings) {
+        parts.push(`[warn] ${typeof w === 'string' ? w : w.message || JSON.stringify(w)}`);
+      }
+    }
   }
 
   return parts.length > 0 ? parts.join('\n') : null;

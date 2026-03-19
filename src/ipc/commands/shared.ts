@@ -12,8 +12,39 @@ import { ActionExecutor } from '../../engine/actions/executor';
 import { collectTreeViolations, type ValidationViolation } from '../../engine/validation/postOpValidator';
 import { compileDesignOps } from '../../engine/flat/flatOpsParser';
 import { logger } from '../../utils/logger';
-import { buildCreateReceipt } from '../handlers/receiptBuilder';
+import { buildCreateReceipt, type ReceiptViolation } from '../handlers/receiptBuilder';
 import { resolveSceneNode } from './pathResolver';
+
+// ── Stderr builder — command writes its own stderr at the source ──
+
+interface DiagnosticEntry { code: string; severity: string; message: string }
+
+/**
+ * Build stderr at the source — every line is self-contained: problem + action.
+ * Format: `[severity] message. Fix: action`
+ */
+function buildStderr(
+  diagnostics: DiagnosticEntry[],
+  violations: ReceiptViolation[],
+  warnings: Array<{ node: string; warnings: Array<{ code: string; message: string }> }>,
+  nodeLimitWarning?: string,
+): string | undefined {
+  const lines: string[] = [];
+  for (const d of diagnostics) {
+    lines.push(`[${d.severity}] ${d.message}`);
+  }
+  for (const v of violations) {
+    const fix = v.fix ? ` Fix: ${v.fix}` : '';
+    lines.push(`[${v.severity}] ${v.message}.${fix}`);
+  }
+  for (const group of warnings) {
+    for (const w of group.warnings) {
+      lines.push(`[warn] ${group.node}: ${w.message}`);
+    }
+  }
+  if (nodeLimitWarning) lines.push(`[warn] ${nodeLimitWarning}`);
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
 
 // ── Flat Ops execution pipeline ──
 
@@ -52,13 +83,22 @@ export async function executeFlatOps(
       createLineCount: compiled.ops.length,
     });
 
-    if (compiled.diagnostics.length > 0) {
-      receipt.diagnostics = compiled.diagnostics.slice(0, 10).map(d => ({
-        code: d.code,
-        severity: d.severity,
-        message: d.message,
-      }));
-    }
+    // Build stderr at source — command owns its diagnostics
+    const stderr = buildStderr(
+      compiled.diagnostics.slice(0, 10),
+      receipt.violations || [],
+      receipt.warnings || [],
+      receipt.nodeLimitWarning,
+    );
+
+    // Strip stderr fields from stdout — they've been written to _stderr
+    delete receipt.violations;
+    delete receipt.diagnostics;
+    delete receipt.warnings;
+    delete receipt.warningCount;
+    delete receipt.defaultsApplied;
+    delete receipt.defaultsAppliedCount;
+    delete receipt.nodeLimitWarning;
 
     // Auto-pan viewport to newly created root node
     if (!parentId && Object.keys(result.idMap).length > 0) {
@@ -74,10 +114,10 @@ export async function executeFlatOps(
       if (result.stats.deleted) parts.push(`${result.stats.deleted} deleted`);
       if (result.stats.failed) parts.push(`${result.stats.failed} failed`);
       if (result.stats.skipped) parts.push(`${result.stats.skipped} skipped`);
-      return { success: false, data: receipt, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
+      return { success: false, data: receipt, _stderr: stderr, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
     }
 
-    return { success: true, data: receipt };
+    return { success: true, data: receipt, _stderr: stderr };
   } catch (e: any) {
     return { success: false, error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
   }

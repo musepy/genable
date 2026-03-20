@@ -14,7 +14,6 @@ function makeCtx(overrides: Partial<HookContext> = {}): HookContext {
     loopPolicy: {
       monotoneLoopThreshold: 8,
       maxOutputTokens: 16384,
-      promptBudgetTokens: 8000,
       useSkillSystem: true,
     },
     generateId: (prefix: string) => `${prefix}_test_1`,

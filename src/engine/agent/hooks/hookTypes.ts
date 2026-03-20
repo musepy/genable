@@ -16,13 +16,18 @@ import { AgentLoopPolicy } from '../agentLoopPolicy';
 // ---------------------------------------------------------------------------
 
 /**
- * 5 lifecycle events in the autonomous agent loop:
+ * Lifecycle events in the autonomous agent loop.
  *
- * beforeIteration  → after context management, before LLM call
- * afterLLMResponse → after LLM generates, before tool dispatch
- * beforeToolExec   → before a single tool executes
- * afterToolExec    → after a single tool executes (before result enters history)
- * afterIteration   → after all tool results committed to history
+ * ACTIVE (wired up in agentRuntime.ts):
+ *   afterLLMResponse → after LLM generates, before tool dispatch
+ *     - emptyResponseHook (priority 10)
+ *     - loopDetectionHook (priority 30)
+ *
+ * RESERVED (defined but not triggered — extension points for future hooks):
+ *   beforeIteration  → after context management, before LLM call
+ *   beforeToolExec   → before a single tool executes
+ *   afterToolExec    → after a single tool executes (before result enters history)
+ *   afterIteration   → after all tool results committed to history
  */
 export type HookEvent =
   | 'beforeIteration'

@@ -23,17 +23,7 @@ import { COMMAND_NAMES } from './commandRegistry';
 function buildRunDescription(): string {
   // Command catalog — grouped by function
   const COMMAND_CATALOG: Record<string, Array<[string, string]>> = {
-    Read: [
-      ['ls /path/', 'list children ("/" = page root)'],
-      ['tree /path/ [-d N]', 'structural skeleton'],
-      ['cat /path/ [-s]', 'full properties (-s = screenshot)'],
-    ],
-    Write: [
-      ['mk /path/ [type] key:value... [-- text]', 'create or update (upsert)'],
-      ['jsx <markup>', 'create design tree with nested JSX syntax (batch)'],
-      ['  padding:$layout/pad  fill:$bg/primary', '→ $varName binds a Figma variable by name'],
-      ['  textStyle:Heading/H1  fillStyle:Brand', '→ applies a local style by name'],
-      ['  weight:semibold (or semi-bold)', '→ aliases: thin,light,medium,semibold,bold,extrabold,black'],
+    'Move & Delete': [
       ['mv /src/ /dest/', 'move or rename node'],
       ['rm /path/', 'delete node (supports glob: rm /Card/Old*)'],
       ['cp /src/ /dest/ {overrides}', 'clone with overrides'],
@@ -68,7 +58,13 @@ function buildRunDescription(): string {
     ],
   };
 
-  const lines: string[] = [`Execute a command via CLI syntax. ${COMMAND_NAMES.length} commands.`, ''];
+  const lines: string[] = [
+    'Advanced operations via CLI syntax. For common tasks, prefer the dedicated tools:',
+    '  jsx({markup: "..."})   — create design trees',
+    '  inspect({path: "..."}) — read/inspect nodes',
+    '  edit({path: "...", props: {...}}) — update properties',
+    '',
+  ];
 
   for (const [group, cmds] of Object.entries(COMMAND_CATALOG)) {
     lines.push(`${group}:`);
@@ -80,27 +76,16 @@ function buildRunDescription(): string {
 
   lines.push(
     'Path: "/" = page root, "/Card/" = by name, "/#100:5/" = by Figma ID (# prefix).',
-    'Glob: /Card/Btn* matches children starting with "Btn". Works in rm, cat, ls.',
-    '$LAST: expands to last created/modified node ID. Works in chains and across calls.',
-    'Chain operators:',
-    '  &&  run next only if previous succeeded',
-    '  ;   run next regardless',
-    '  ||  run next only if previous failed',
-    '  |   pipe output to next command',
-    'Help: command name only (e.g. "mk") for detailed usage.',
-    '',
-    'Output metadata: [exit:N | Xs] — exit:0 success, exit:1 error, exit:127 not found.',
+    'Glob: /Card/Btn* matches children starting with "Btn".',
+    '$LAST: expands to last created/modified node ID.',
+    'Chain: cmd1 && cmd2 (and), cmd1 ; cmd2 (seq), cmd1 || cmd2 (or), cmd1 | cmd2 (pipe)',
     '',
     'Examples:',
-    '  run({command: "ls /"})',
-    '  run({command: "mk /Card/ frame w:400 layout:column p:24 bg:#FFF corner:12"})',
-    '  run({command: "mk /Card/Title text size:24 weight:Bold fill:#111 -- Card Title"})',
-    '  run({command: "cat /Card/Header/ -s"})',
     '  run({command: "grep Button"})',
     '  run({command: "sed /Card/ fillColor:#FFF/#000"})',
-    '  run({command: "mk /Card/ frame w:400 && mk $LAST/Title text size:24 -- Hello"})',
-    '  run({command: "mk", input: "/Card/ frame w:400 layout:column\\n/Card/Title text size:24 -- Hello"})',
-    '  run({command: "jsx", input: "<frame name=\'Card\' w={400} layout=\'column\' p={24}>\\n  <text name=\'Title\' size={24}>Hello</text>\\n</frame>"})',
+    '  run({command: "mv /Card/Old/ /Card/New/"})',
+    '  run({command: "rm /Card/Placeholder*"})',
+    '  run({command: "var mk colors/primary COLOR #1A1A1A"})',
   );
 
   return lines.join('\n');

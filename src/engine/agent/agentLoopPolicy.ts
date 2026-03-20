@@ -19,8 +19,6 @@ export interface AgentLoopPolicy {
   monotoneLoopThreshold: number;
   /** Max output tokens for LLM generation. */
   maxOutputTokens: number;
-  /** Max tokens for prompt budget. */
-  promptBudgetTokens: number;
   /** Whether to use the skill system for prompt composition. */
   useSkillSystem: boolean;
 }
@@ -28,7 +26,6 @@ export interface AgentLoopPolicy {
 export const DEFAULT_AGENT_LOOP_POLICY: AgentLoopPolicy = {
   monotoneLoopThreshold: 8,
   maxOutputTokens: 16384,
-  promptBudgetTokens: 8000,
   useSkillSystem: true,
 };
 

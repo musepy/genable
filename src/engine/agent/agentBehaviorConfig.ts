@@ -40,12 +40,6 @@ export interface AgentBehaviorConfig {
   };
 
   /**
-   * Whether to pin the original user request so it survives context compression.
-   * Prevents the agent from "forgetting" what was asked after many iterations.
-   */
-  enableInstructionAnchoring: boolean;
-
-  /**
    * Maximum agent loop iterations (overrides AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_ITERATIONS).
    */
   maxIterations: number;
@@ -60,7 +54,6 @@ export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   promptPolicy: {
     useSkillSystem: true,
   },
-  enableInstructionAnchoring: true,
   maxIterations: 40,
 };
 

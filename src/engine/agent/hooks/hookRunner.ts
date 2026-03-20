@@ -43,6 +43,7 @@ export class HookRunner {
             id: ctx.generateId('hook'),
             role: 'user',
             content: result.injectMessage,
+            synthetic: true,
           });
         }
 

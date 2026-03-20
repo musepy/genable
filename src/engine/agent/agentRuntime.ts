@@ -765,6 +765,7 @@ export class AgentRuntime {
             id: this.generateId('empty_hint'),
             role: 'user',
             content: `Your tool call to ${names} had empty arguments and was not executed. Please provide the required parameters (e.g. xml for create/edit) and try again.`,
+            synthetic: true,
           });
           if (toolCallsForExecution.length === 0) {
             iteration++;
@@ -788,7 +789,7 @@ export class AgentRuntime {
           this.pendingApproval = null;
           this.throwIfCanceled(iteration + 1);
           if (!approved) {
-            this.turnMessages.push({ id: this.generateId('usr'), role: 'user', content: 'Tools denied by user. Try a different approach.' });
+            this.turnMessages.push({ id: this.generateId('usr'), role: 'user', content: 'Tools denied by user. Try a different approach.', synthetic: true });
             iteration++;
             continue;
           }
@@ -843,6 +844,7 @@ export class AgentRuntime {
                 id: this.generateId('repair'),
                 role: 'user',
                 content: `⚠ PARTIAL_FAILURE detected. Before proceeding, you MUST fix these errors:\n${errorSummaries.join('\n')}\nUse the idMap from successful nodes to reference them. Do NOT create new content until these are resolved.`,
+                synthetic: true,
               });
             }
           }
@@ -856,6 +858,7 @@ export class AgentRuntime {
               content: `⚠ ${consecutiveFailIterations} consecutive iterations have ALL failed. Your current approach is not working. `
                 + `STOP and change strategy: use context/outline to re-examine the canvas state, `
                 + `verify node IDs exist, or explain the blocker to the user.`,
+              synthetic: true,
             });
           }
         }
@@ -873,6 +876,7 @@ export class AgentRuntime {
             id: this.generateId('budget'),
             role: 'user',
             content: `[Budget] ${remaining} iterations remaining out of ${this.maxIterations}. Wrap up your current work — summarize progress and tell the user what's left if you can't finish.`,
+            synthetic: true,
           });
         }
 
@@ -890,6 +894,7 @@ export class AgentRuntime {
               id: this.generateId('cont'),
               role: 'user',
               content: 'Your previous response was truncated. Continue where you left off.',
+              synthetic: true,
             });
             iteration++;
             continue;

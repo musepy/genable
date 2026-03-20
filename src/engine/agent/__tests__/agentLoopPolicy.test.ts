@@ -10,7 +10,6 @@ describe('AgentLoopPolicy', () => {
 
     expect(policy.monotoneLoopThreshold).toBe(DEFAULT_AGENT_LOOP_POLICY.monotoneLoopThreshold);
     expect(policy.maxOutputTokens).toBe(DEFAULT_AGENT_LOOP_POLICY.maxOutputTokens);
-    expect(policy.promptBudgetTokens).toBe(DEFAULT_AGENT_LOOP_POLICY.promptBudgetTokens);
   });
 
   it('should apply overrides', () => {
@@ -21,6 +20,5 @@ describe('AgentLoopPolicy', () => {
 
     expect(policy.monotoneLoopThreshold).toBe(5);
     expect(policy.maxOutputTokens).toBe(2000);
-    expect(policy.promptBudgetTokens).toBe(DEFAULT_AGENT_LOOP_POLICY.promptBudgetTokens);
   });
 });

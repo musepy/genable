@@ -22,6 +22,7 @@ export interface LLMMessage {
   hidden?: boolean; // If true, this message is excluded from the current context sent to LLM
   summaryOf?: string[]; // IDs of original messages that this message summarizes
   pinned?: boolean; // If true, this message survives context compression (e.g., original user request)
+  synthetic?: boolean; // If true, this message was injected by the runtime (not from the user or LLM)
 }
 
 export interface Part {

@@ -162,10 +162,17 @@ export class ToolDispatcher {
       tc.id = this.config.normalizeToolCallId(tc, 'call');
       const startedAt = Date.now();
 
-      // ── Expand $LAST variable in command string ──
+      // ── Expand $LAST variable ──
       let expandedTc = tc;
-      if (this.lastNodeId && tc.name === 'run' && typeof tc.args?.command === 'string' && tc.args.command.includes('$LAST')) {
-        expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, `/#${this.lastNodeId}/`) } };
+      if (this.lastNodeId) {
+        // In run CLI commands
+        if (tc.name === 'run' && typeof tc.args?.command === 'string' && tc.args.command.includes('$LAST')) {
+          expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, `/#${this.lastNodeId}/`) } };
+        }
+        // In first-class tools with path arg (inspect, edit)
+        else if (typeof tc.args?.path === 'string' && tc.args.path.includes('$LAST')) {
+          expandedTc = { ...tc, args: { ...tc.args, path: tc.args.path.replace(/\$LAST/g, `/#${this.lastNodeId}/`) } };
+        }
       }
 
       // ── Unwrap `run` → command name ──

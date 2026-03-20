@@ -206,6 +206,75 @@ function buildNodesFromJsx(markup: string): SerializedNode[] {
   return roots;
 }
 
+/** Parse create() tool call nodes into synthetic SerializedNode tree. */
+function buildNodesFromCreateNodes(nodes: any[]): SerializedNode[] {
+  const roots: SerializedNode[] = [];
+  const nameToNode = new Map<string, SerializedNode>();
+  let idCounter = 0;
+
+  for (const n of nodes) {
+    if (!n || typeof n !== 'object') continue;
+    const tag = n.tag || 'frame';
+    const name = n.name || tag;
+
+    let nodeType = tag === 'text' ? 'TEXT' : tag === 'rect' ? 'RECTANGLE' :
+      tag === 'ellipse' ? 'ELLIPSE' : tag === 'line' ? 'LINE' : 'FRAME';
+
+    const node: SerializedNode = {
+      id: `create-${++idCounter}`,
+      type: nodeType,
+      name,
+      visible: true,
+      width: 100, height: 100,
+    };
+
+    // Map props (same logic as mk/jsx handlers)
+    if (n.layout) node.layoutMode = n.layout === 'row' ? 'HORIZONTAL' : n.layout === 'column' ? 'VERTICAL' : n.layout;
+    if (n.w) {
+      if (n.w === 'fill') node.layoutSizingHorizontal = 'FILL';
+      else if (n.w === 'hug') node.layoutSizingHorizontal = 'HUG';
+      else { node.layoutSizingHorizontal = 'FIXED'; node.width = parseFloat(n.w) || 100; }
+    }
+    if (n.h) {
+      if (n.h === 'fill') node.layoutSizingVertical = 'FILL';
+      else if (n.h === 'hug') node.layoutSizingVertical = 'HUG';
+      else { node.layoutSizingVertical = 'FIXED'; node.height = parseFloat(n.h) || 100; }
+    }
+    if (n.gap != null) node.itemSpacing = parseFloat(n.gap) || 0;
+    if (n.p != null) {
+      const pVal = parseFloat(n.p) || 0;
+      node.paddingTop = pVal; node.paddingRight = pVal; node.paddingBottom = pVal; node.paddingLeft = pVal;
+    }
+    if (n.bg && n.bg !== 'transparent') node.fills = [{ type: 'SOLID', visible: true }];
+    if (n.corner) node.cornerRadius = n.corner === 'full' ? 999 : parseFloat(n.corner) || 0;
+    if (node.layoutMode && node.layoutMode !== 'NONE') {
+      if (!node.layoutSizingHorizontal) node.layoutSizingHorizontal = 'HUG';
+      if (!node.layoutSizingVertical) node.layoutSizingVertical = 'HUG';
+    }
+    if (nodeType === 'TEXT') {
+      if (n.size) node.fontSize = parseFloat(n.size);
+      if (n.weight) node.fontName = { family: 'Inter', style: String(n.weight) };
+      else node.fontName = { family: 'Inter', style: 'Regular' };
+      if (n.fill) node.fills = [{ type: 'SOLID', visible: true }];
+      if (n.content) node.characters = String(n.content);
+      node.textAutoResize = n.w === 'fill' ? 'HEIGHT' : 'WIDTH_AND_HEIGHT';
+    }
+
+    // Parent linkage by name
+    if (n.parent && nameToNode.has(n.parent)) {
+      const parent = nameToNode.get(n.parent)!;
+      if (!parent.children) parent.children = [];
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+
+    nameToNode.set(name, node);
+  }
+
+  return roots;
+}
+
 /** Parse mk batch lines into synthetic SerializedNode tree. */
 function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
   const nodeMap = new Map<string, SerializedNode>();
@@ -220,6 +289,10 @@ function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
       if (tc.name === 'mk' && params.batch) batchText = params.batch;
       else if (tc.name === 'render' && params.markup) batchText = params.markup;
       else if (tc.name === 'jsx' && params.markup) jsxMarkup = params.markup;
+      else if (tc.name === 'create' && Array.isArray(params.nodes)) {
+        roots.push(...buildNodesFromCreateNodes(params.nodes));
+        continue;
+      }
       else continue;
     } catch { continue; }
 

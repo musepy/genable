@@ -41,12 +41,21 @@ export { runDefinition } from './run';
 export { createDefinition } from './create';
 
 import { runDefinition } from './run';
-import { createDefinition } from './create';
+import { jsxDefinition } from './jsx';
+import { inspectDefinition } from './inspect';
+import { editDefinition } from './edit';
 import { ToolDefinition } from '../types';
 
 /**
  * Primary tool set for LLM function calling.
- * - `create` — structured JSON for tree creation (first-class, no CLI parsing)
- * - `run` — CLI dispatch for reads, search, edits, and everything else
+ * - `jsx` — tree creation via JSX markup (nesting IS hierarchy)
+ * - `inspect` — read design nodes (list/tree/detail)
+ * - `edit` — update existing node properties
+ * - `run` — power operations (mv, rm, cp, grep, sed, js, var, comp, etc.)
  */
-export const unifiedTools: ToolDefinition[] = [createDefinition, runDefinition];
+export const unifiedTools: ToolDefinition[] = [
+  jsxDefinition,
+  inspectDefinition,
+  editDefinition,
+  runDefinition,
+];

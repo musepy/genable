@@ -40,6 +40,9 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   sed:     ['replaced', 'details'],
   // Info
   man:     null,                        // pass through
+  // First-class tools
+  inspect: null,                        // delegates to ls/tree/cat — pass through
+  jsx:     ['idMap', 'created', 'failed', 'errors'],
   // Legacy tool names
   design:  ['idMap', 'created', 'edited', 'deleted', 'failed', 'errors', 'degraded', 'degradedHint'],
   edit:    ['idMap', 'edited', 'failed', 'errors', 'changeSummary'],

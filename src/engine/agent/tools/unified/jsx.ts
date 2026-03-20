@@ -13,18 +13,18 @@ export const jsxDefinition: ToolDefinition = {
   category: 'create',
   executionStrategy: 'sequential',
   display: { displayName: 'JSX', group: 'create' },
-  description: `Create design trees with nested JSX-like syntax — batch creation with visual hierarchy.
+  description: `Create design trees with nested JSX markup — nesting IS the hierarchy.
 
-Usage:
-  run({command: "jsx", input: "<frame name='Card' w={400} layout='column' p={24} bg='#FFF' corner={12}>\\n  <text name='Title' size={24} weight='Bold' fill='#111'>Card Title</text>\\n  <text name='Body' size={14} fill='#666' w='fill'>Description text</text>\\n</frame>"})
+Example:
+  jsx({markup: "<frame name='Card' w={400} layout='column' p={24} bg='#FFF' corner={12}>\\n  <frame name='Header' layout='row' gap={12} w='fill'>\\n    <text name='Title' size={18} weight='Bold' fill='#111'>John Doe</text>\\n  </frame>\\n  <text name='Body' size={14} fill='#666' w='fill'>Description</text>\\n</frame>"})
 
 Elements: frame, text, rect, ellipse, line, icon, image, instance, component, group, section, vector
-Attributes: same shorthands as mk (w, h, bg, layout, gap, p, corner, fill, size, weight)
+Attributes: same shorthands (w, h, bg, layout, gap, p, corner, fill, size, weight, stroke, shadow)
 Text: <text size={24}>content here</text>
 Instance: <instance ref="Button" variant="Size=Large"/>
 Self-closing: <rect w="fill" h={1} fill="#E5E7EB"/>
 
-Use jsx for tree creation (5+ nodes). Use mk for updates and single-node ops.`,
+Use jsx for tree creation. Use edit for property updates on existing nodes.`,
   parameters: {
     type: 'object',
     properties: {

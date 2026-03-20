@@ -21,7 +21,7 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
-    const { messages, tools, temperature, maxTokens, responseSchema, toolConfig, onProgress, models } = options;
+    const { messages, tools, temperature, maxTokens, responseSchema, toolConfig, onProgress, models, abortSignal } = options;
 
     const body: any = {
       messages: this.mapMessages(messages),
@@ -69,6 +69,7 @@ export class OpenRouterProvider implements LLMProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
 
     if (!response.ok) {

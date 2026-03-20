@@ -239,8 +239,23 @@ async function handleResultById(id: string, waitSec: number, res: ServerResponse
     const timeoutMs = Math.min(waitSec, 300) * 1000; // cap at 5 min
     let resolved = false;
 
-    const timeout = setTimeout(() => {
+    const timeout = setTimeout(async () => {
       if (resolved) return;
+      // Before giving up, re-check filesystem — result may have arrived
+      // between the initial check and waiter registration (race window)
+      try {
+        const meta = await readFile(join(resultDir, 'meta.json'), 'utf-8');
+        resolved = true;
+        const waiters = resultWaiters.get(id);
+        if (waiters) {
+          const idx = waiters.indexOf(resolve);
+          if (idx >= 0) waiters.splice(idx, 1);
+          if (waiters.length === 0) resultWaiters.delete(id);
+        }
+        json(res, 200, { id, ...JSON.parse(meta) });
+        return;
+      } catch { /* still not ready */ }
+
       resolved = true;
       const waiters = resultWaiters.get(id);
       if (waiters) {

@@ -483,15 +483,23 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
    * Extract the last created/modified node ID from a tool result.
    * Sources: idMap (mk/design), id (mv/single-node ops).
    */
+  /** Figma node IDs are always `digits:digits` */
+  private static readonly FIGMA_ID_RE = /^\d+:\d+$/;
+
   private extractLastNodeId(result: any): void {
     const data = result?.data;
     if (!data || result?.success === false) return;
 
+    let candidate: string | undefined;
     if (data.idMap && typeof data.idMap === 'object') {
       const ids = Object.values(data.idMap);
-      if (ids.length > 0) this.lastNodeId = String(ids[ids.length - 1]);
+      if (ids.length > 0) candidate = String(ids[ids.length - 1]);
     } else if (data.id) {
-      this.lastNodeId = String(data.id);
+      candidate = String(data.id);
+    }
+
+    if (candidate && ToolDispatcher.FIGMA_ID_RE.test(candidate)) {
+      this.lastNodeId = candidate;
     }
   }
 

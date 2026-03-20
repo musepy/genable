@@ -31,6 +31,16 @@ const PLAN_LIMITS: Record<string, number> = {
   unlimited: Infinity,
 };
 
+/** Safe JSON.parse — returns fallback on malformed data instead of crashing */
+function safeParseJSON<T>(raw: string, fallback: T, label: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    console.error(`[Worker] Corrupted JSON in ${label}: ${raw.slice(0, 100)}`);
+    return fallback;
+  }
+}
+
 // ─── CORS helpers ─────────────────────────────────────────────────────────────
 
 function corsHeaders(): Record<string, string> {
@@ -68,7 +78,13 @@ async function authenticate(
   const raw = await env.USERS.get(`user:${token}`);
   if (!raw) return errorResponse('Invalid token', 401);
 
-  const user = JSON.parse(raw) as UserRecord;
+  let user: UserRecord;
+  try {
+    user = JSON.parse(raw) as UserRecord;
+  } catch {
+    console.error(`[Auth] Corrupted user record for token ${token.slice(0, 8)}…`);
+    return errorResponse('Corrupted user record', 500);
+  }
   if (user.status !== 'active') return errorResponse('Token inactive or expired', 403);
 
   // Check expiry
@@ -100,7 +116,7 @@ async function checkAndIncrementUsage(
   const key = currentMonthKey(token);
   const raw = await env.USERS.get(key);
   const usage: UsageRecord = raw
-    ? JSON.parse(raw)
+    ? safeParseJSON<UsageRecord>(raw, { calls: 0, tokens_used: 0, last_call: '' }, `usage:${key}`)
     : { calls: 0, tokens_used: 0, last_call: '' };
 
   if (isFinite(limit) && usage.calls >= limit) {
@@ -231,7 +247,7 @@ async function handleValidateToken(request: Request, env: Env): Promise<Response
   const key = currentMonthKey(token);
   const raw = await env.USERS.get(key);
   const usage: UsageRecord = raw
-    ? JSON.parse(raw)
+    ? safeParseJSON<UsageRecord>(raw, { calls: 0, tokens_used: 0, last_call: '' }, `validate:${key}`)
     : { calls: 0, tokens_used: 0, last_call: '' };
 
   const limit = PLAN_LIMITS[user.plan] ?? 10;
@@ -257,7 +273,7 @@ async function handleUsage(request: Request, env: Env): Promise<Response> {
   const key = currentMonthKey(token);
   const raw = await env.USERS.get(key);
   const usage: UsageRecord = raw
-    ? JSON.parse(raw)
+    ? safeParseJSON<UsageRecord>(raw, { calls: 0, tokens_used: 0, last_call: '' }, `usage:${key}`)
     : { calls: 0, tokens_used: 0, last_call: '' };
 
   const limit = PLAN_LIMITS[user.plan] ?? 10;

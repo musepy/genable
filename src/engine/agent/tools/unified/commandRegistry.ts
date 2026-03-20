@@ -24,6 +24,7 @@ import { compDefinition } from './comp';
 import { renderDefinition } from './render';
 import { tokenDefinition } from './token';
 import { jsxDefinition } from './jsx';
+import { createDefinition } from './create';
 
 /** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
 const moreDefinition: ToolDefinition = {
@@ -57,6 +58,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [renderDefinition.name, renderDefinition],
   [tokenDefinition.name, tokenDefinition],
   [jsxDefinition.name, jsxDefinition],
+  [createDefinition.name, createDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],

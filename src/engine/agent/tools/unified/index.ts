@@ -36,14 +36,17 @@ export {
   type ParsedChain,
 } from './commandParser';
 
-// LLM-facing tool
+// LLM-facing tools
 export { runDefinition } from './run';
+export { createDefinition } from './create';
 
 import { runDefinition } from './run';
+import { createDefinition } from './create';
 import { ToolDefinition } from '../types';
 
 /**
  * Primary tool set for LLM function calling.
- * Single `run` tool — dispatches to individual commands internally.
+ * - `create` — structured JSON for tree creation (first-class, no CLI parsing)
+ * - `run` — CLI dispatch for reads, search, edits, and everything else
  */
-export const unifiedTools: ToolDefinition[] = [runDefinition];
+export const unifiedTools: ToolDefinition[] = [createDefinition, runDefinition];

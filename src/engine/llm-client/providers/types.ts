@@ -209,10 +209,9 @@ export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
 
 /**
  * Default implementation for getToolSystemInstruction.
- * All providers currently use the same centralized TOOL_CALLING_PROTOCOL.
+ * Tool calling protocol is now part of CORE prompt (merged during prompt consolidation).
+ * Returns empty — no separate tool instruction needed.
  */
-export function getToolSystemInstructionDefault(tools: ToolDefinition[]): string {
-  if (!tools || tools.length === 0) return '';
-  const { TOOL_CALLING_PROTOCOL } = require('../../prompt/promptRegistry');
-  return TOOL_CALLING_PROTOCOL;
+export function getToolSystemInstructionDefault(_tools: ToolDefinition[]): string {
+  return '';
 }

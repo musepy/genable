@@ -33,7 +33,12 @@ export class ToolResultCleaner {
         };
       }
 
-      const def = this.toolMap.get(tc.name);
+      // Unwrap "run" tool — extract the actual command name from the CLI string
+      const commandName = tc.name === 'run' && typeof tc.args?.command === 'string'
+        ? tc.args.command.trim().split(/\s/)[0]
+        : tc.name;
+
+      const def = this.toolMap.get(commandName);
       if (!def) return tc;
       let sanitizedArgs = this.sanitizeArgsBySchema(tc.args, def.parameters as ToolParameter);
 

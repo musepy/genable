@@ -16,6 +16,7 @@ import { execSync } from 'child_process';
 const WS_PORT = 3458;
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const HANDSHAKE_TIMEOUT_MS = 5_000;
+const RELAY_SECRET = process.env.RELAY_SECRET || '';
 
 // Per-tool timeout: heavy tools (design, replace) need more headroom than reads.
 const TOOL_TIMEOUTS: Record<string, number> = {
@@ -78,6 +79,13 @@ function setupClient(
 
         // Handle handshake message
         if (!identified && msg.type === 'identify') {
+          // Verify shared secret if configured
+          if (RELAY_SECRET && msg.secret !== RELAY_SECRET) {
+            console.error(`[MCP] Rejecting "${msg.name || '(unnamed)'}" — invalid secret`);
+            ws.close(4003, 'auth-failed');
+            clearTimeout(handshakeTimer);
+            return;
+          }
           clearTimeout(handshakeTimer);
           identified = true;
           clientName = msg.name || '(unnamed)';

@@ -110,14 +110,17 @@ async function checkAndIncrementUsage(
     );
   }
 
-  // Increment (fire and forget — don't block the streaming response)
+  // Increment — await to ensure write completes before response.
+  // NOTE: KV has eventual consistency (~60s). Concurrent requests within that window
+  // can read stale counts, allowing limit overrun. Acceptable for current scale;
+  // for strict enforcement, migrate to Durable Objects (atomic read-modify-write).
   const updated: UsageRecord = {
     calls: usage.calls + 1,
     tokens_used: usage.tokens_used + tokensUsed,
     last_call: new Date().toISOString(),
   };
   // TTL: 35 days so old months auto-expire
-  env.USERS.put(key, JSON.stringify(updated), { expirationTtl: 35 * 24 * 3600 });
+  await env.USERS.put(key, JSON.stringify(updated), { expirationTtl: 35 * 24 * 3600 });
 
   return null;
 }

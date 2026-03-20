@@ -144,7 +144,18 @@ export class ActionExecutor {
       }
 
       // 3c. Resolve symbol references → real Figma IDs
-      const { action: resolvedAction, warnings: resolveWarnings } = this.resolveSymbolRefs(op.action, symbolMap);
+      const { action: resolvedAction, warnings: resolveWarnings, error: resolveError } = this.resolveSymbolRefs(op.action, symbolMap);
+
+      // 3c-fail: Unresolved reference → fail this action immediately
+      if (resolveError) {
+        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'failed', command, symbol: op.symbol, error: resolveError, warnings: resolveWarnings.length > 0 ? resolveWarnings : undefined };
+        if (op.symbol) statusMap.set(op.symbol, 'failed');
+        lineResults.push(lr);
+        completed++;
+        options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+        if (options.onError === 'abort') aborted = true;
+        continue;
+      }
 
       // 3d. Execute
       let result: Omit<ActionResult, 'action'>;
@@ -257,15 +268,13 @@ export class ActionExecutor {
 
   /**
    * Resolve symbol references in a FigmaAction using the symbolMap.
-   * Returns the resolved action + any UNRESOLVED_SYMBOL warnings.
-   * If a parentId/nodeId can't resolve and doesn't look like a Figma ID, the action
-   * is returned with parentId cleared (fail-safe to page root) instead of passing
-   * garbage to figma.getNodeByIdAsync which can hang.
+   * Returns the resolved action + any warnings/errors.
+   * Fail-fast: unresolved parentId/nodeId → error (not silent fallback to page root).
    */
   private resolveSymbolRefs(
     action: FigmaAction,
     symbolMap: Map<string, string>,
-  ): { action: FigmaAction; warnings: Array<{ code: string; message: string }> } {
+  ): { action: FigmaAction; warnings: Array<{ code: string; message: string }>; error?: string } {
     const resolved: any = { ...action };
     const warnings: Array<{ code: string; message: string }> = [];
 
@@ -273,17 +282,16 @@ export class ActionExecutor {
       const original = resolved.parentId;
       resolved.parentId = symbolMap.get(resolved.parentId)
         ?? (resolved.parentId === 'root' ? undefined : resolved.parentId);
-      // Unresolved non-ID string → clear to page root (prevents hang)
+      // Unresolved non-ID string → fail the action (don't silently create at page root)
       if (resolved.parentId === original && !original.match(/^\d+:\d+$/)) {
-        warnings.push({ code: 'UNRESOLVED_SYMBOL', message: `Parent '${original}' not found. Falling back to page root.` });
-        resolved.parentId = undefined;
+        return { action: resolved, warnings, error: `Parent '${original}' not found. Cannot resolve target container.` };
       }
     }
     if (resolved.nodeId) {
       const original = resolved.nodeId;
       resolved.nodeId = symbolMap.get(resolved.nodeId) ?? resolved.nodeId;
       if (resolved.nodeId === original && !original.match(/^\d+:\d+$/)) {
-        warnings.push({ code: 'UNRESOLVED_SYMBOL', message: `Node '${original}' not found in current batch.` });
+        return { action: resolved, warnings, error: `Node '${original}' not found in current batch.` };
       }
     }
     if (resolved.source?.nodeId) {
@@ -909,6 +917,9 @@ export class ActionExecutor {
 
         case 'delete': {
           if (!targetNode) return { success: false, error: 'Node not found' };
+          if (!this.isAgentOwned(targetNode)) {
+            return { success: false, error: `Cannot delete node '${targetNode.name}' (${targetNode.id}) — not created by agent. Only agent-created nodes can be deleted.` };
+          }
           if (!targetNode.removed) {
             targetNode.remove();
           }
@@ -917,6 +928,9 @@ export class ActionExecutor {
 
         case 'move': {
           if (!targetNode) return { success: false, error: 'Node not found' };
+          if (!this.isAgentOwned(targetNode)) {
+            return { success: false, error: `Cannot move node '${targetNode.name}' (${targetNode.id}) — not created by agent. Only agent-created nodes can be moved.` };
+          }
           if (!parentNode || !('insertChild' in parentNode)) {
              return { success: false, error: 'Invalid parent node for move' };
           }
@@ -1147,6 +1161,18 @@ export class ActionExecutor {
     return children.find(
       (c: SceneNode) => c.name === name && c.type === expectedType
     ) ?? null;
+  }
+
+  /** Check if a node (or any ancestor) was created by the agent. */
+  private isAgentOwned(node: SceneNode): boolean {
+    let current: BaseNode | null = node;
+    while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+      if ('getPluginData' in current && (current as SceneNode).getPluginData('_agent') === 'created') {
+        return true;
+      }
+      current = current.parent;
+    }
+    return false;
   }
 
   private resolveId(idOrTempId: string): string {

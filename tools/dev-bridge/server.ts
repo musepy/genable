@@ -23,6 +23,7 @@ import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT) || 3456;
 const BRIDGE_DIR = process.env.BRIDGE_DIR || '/tmp/figma-bridge';
+const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || '';
 const TRIGGER_FILE = join(BRIDGE_DIR, 'prompt.json');
 const RESULT_DIR = join(BRIDGE_DIR, 'results');
 const MAX_RESULTS = 5;
@@ -30,9 +31,19 @@ const MAX_RESULTS = 5;
 // --- helpers ---
 
 function cors(res: ServerResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Restrict to localhost only — prevents cross-origin attacks from browser tabs
+  res.setHeader('Access-Control-Allow-Origin', 'http://localhost');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+/** Check Bearer token on mutating endpoints. No-op if BRIDGE_TOKEN is unset. */
+function checkAuth(req: IncomingMessage, res: ServerResponse): boolean {
+  if (!BRIDGE_TOKEN) return true;
+  const header = req.headers.authorization || '';
+  if (header === `Bearer ${BRIDGE_TOKEN}`) return true;
+  json(res, 401, { error: 'Invalid or missing BRIDGE_TOKEN' });
+  return false;
 }
 
 function json(res: ServerResponse, status: number, body: unknown) {
@@ -133,7 +144,8 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
   const body = await readBody(req);
   const payload = JSON.parse(body.toString('utf-8'));
 
-  const id = payload.triggerId || `result-${Date.now()}`;
+  const rawId = payload.triggerId || `result-${Date.now()}`;
+  const id = rawId.replace(/[^a-zA-Z0-9_\-]/g, '_'); // sanitize: alphanumeric, dash, underscore only
   const resultDir = join(RESULT_DIR, id);
   await mkdir(resultDir, { recursive: true });
 
@@ -314,10 +326,13 @@ const server = createServer(async (req, res) => {
     } else if (path === '/trigger' && method === 'GET') {
       await handleTriggerGet(res);
     } else if (path === '/trigger' && method === 'POST') {
+      if (!checkAuth(req, res)) return;
       await handleTriggerPost(req, res);
     } else if (path === '/trigger' && method === 'DELETE') {
+      if (!checkAuth(req, res)) return;
       await handleTriggerDelete(res);
     } else if (path === '/result' && method === 'POST') {
+      if (!checkAuth(req, res)) return;
       await handleResultPost(req, res);
     } else if (path === '/result' && method === 'GET') {
       await handleResultGet(res);

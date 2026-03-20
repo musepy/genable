@@ -1,5 +1,8 @@
 import { PropertyHandler, Warning } from './types';
 
+/** Property names that must never be written — prototype pollution vectors. */
+const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__']);
+
 /**
  * Fallback handler — direct property assignment with readonly/setter checks.
  * This MUST be the last handler in the registry (catches everything).
@@ -8,6 +11,7 @@ export const defaultHandler: PropertyHandler = {
   name: 'default',
 
   match(key, _value, node) {
+    if (BLOCKED_KEYS.has(key)) return false;
     return key in node;
   },
 

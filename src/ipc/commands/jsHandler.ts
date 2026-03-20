@@ -69,6 +69,23 @@ function serializeValue(value: unknown, depth = 0): unknown {
   return String(value);
 }
 
+/**
+ * Patterns that indicate destructive or out-of-scope operations.
+ * Fail-fast: reject before execution, not after damage.
+ */
+const BLOCKED_PATTERNS = [
+  /\.remove\s*\(\s*\)/,                  // bulk deletion (use rm command instead)
+  /figma\.root/,                          // root access — can traverse entire document
+  /figma\.currentPage\.children/,         // page-level bulk access
+  /\.removeChild/,                        // child removal
+  /\.insertChild/,                        // structure mutation (use mv command instead)
+  /figma\.closePlugin/,                   // plugin lifecycle
+  /figma\.notify/,                        // UI injection
+  /\beval\b/,                             // nested eval
+  /\bFunction\b\s*\(/,                    // nested Function constructor
+  /\bimport\b\s*\(/,                      // dynamic import
+];
+
 export async function handleJs(parameters: any): Promise<ToolResponse> {
   const { code } = parameters;
 
@@ -77,6 +94,15 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
       success: false,
       error: { code: 'EMPTY_CODE', message: 'No code provided. Usage: js <expression>' },
     };
+  }
+
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(code)) {
+      return {
+        success: false,
+        error: { code: 'BLOCKED_OPERATION', message: `Blocked: '${pattern.source}' is not allowed in js command. Use the dedicated tool commands (rm, mv, mk) instead.` },
+      };
+    }
   }
 
   try {

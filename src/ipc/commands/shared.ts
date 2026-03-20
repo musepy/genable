@@ -74,7 +74,14 @@ export async function executeFlatOps(
     });
 
     const rootId = parentId || Object.values(result.idMap)[0];
-    const violations = await collectViolationsForNodeIds([rootId], 5);
+    // Validator runs post-mutation — isolate its errors so a validator crash
+    // doesn't mask the fact that mutations already committed.
+    let violations: Awaited<ReturnType<typeof collectViolationsForNodeIds>> = [];
+    try {
+      violations = await collectViolationsForNodeIds([rootId], 5);
+    } catch (e: any) {
+      logger.warn('Post-op validator crashed (mutations already committed)', { error: e?.message });
+    }
 
     const receipt = buildCreateReceipt({
       result,

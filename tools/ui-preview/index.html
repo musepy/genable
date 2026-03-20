@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genable Plugin UI Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    @property --angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+
+    :root {
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --gray-1: #fcfcfc; --gray-2: #f9f9f9; --gray-3: #f0f0f0;
+      --gray-4: #e8e8e8; --gray-5: #e0e0e0; --gray-6: #d9d9d9;
+      --gray-7: #cecece; --gray-8: #bbbbbb; --gray-9: #8d8d8d;
+      --gray-11: #646464; --gray-12: #202020;
+      --accent-9: #3e63dd; --accent-3: #edf2fe;
+      --success-9: #30a46c;
+      --bg: #fff;
+      --surface: var(--gray-2);
+      --border: 1px solid var(--gray-5);
+      --border-light: 1px solid var(--gray-4);
+      --radius: 8px;
+      --radius-pill: 9999px;
+      --text: 12px;
+      --text-s: 11px;
+      --lh: 18px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      font-size: var(--text);
+      line-height: var(--lh);
+      color: var(--gray-12);
+      background: #e8e8e8;
+      padding: 48px;
+      display: flex; gap: 48px; flex-wrap: wrap; justify-content: center;
+    }
+
+    .screen-label {
+      font-size: var(--text); font-weight: 400;
+      color: var(--gray-9);
+      margin-bottom: var(--sp-3, 12px);
+      text-align: center;
+    }
+
+    .plugin-frame {
+      width: 320px; height: 520px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    /* ===== HEADER — no bottom border, just spacing ===== */
+    .header {
+      display: flex; align-items: center;
+      padding: 8px 12px;
+      gap: 8px; flex-shrink: 0;
+    }
+    .header-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: var(--border-light);
+      background: transparent;
+      font-size: var(--text); font-weight: 500;
+      color: var(--gray-12);
+      cursor: pointer; font-family: var(--font);
+    }
+    .header-icon-btn {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: transparent;
+      color: var(--gray-9); cursor: pointer;
+      border-radius: var(--radius);
+    }
+    .header-spacer { flex: 1; }
+
+    /* ===== INPUT AREA ===== */
+    .input-area {
+      flex-shrink: 0;
+      padding: 0 12px 12px;
+      background: var(--bg);
+    }
+    .input-container {
+      background: var(--surface);
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      box-shadow: 0 0 0 1px var(--gray-4);
+      position: relative;
+    }
+    .input-textarea {
+      width: 100%; min-height: 56px;
+      padding: 8px 14px;
+      font-size: var(--text); line-height: var(--lh);
+      background: transparent; color: var(--gray-12);
+      border: none; outline: none; resize: none;
+      font-family: var(--font);
+    }
+    .input-textarea::placeholder { color: var(--gray-9); }
+    .input-footer {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+    }
+    .plus-btn {
+      width: 28px; height: 28px;
+      border-radius: var(--radius);
+      border: var(--border-light);
+      background: transparent;
+      color: var(--gray-9);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .model-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 8px;
+      border: none; background: transparent;
+      border-radius: var(--radius);
+      font-size: var(--text-s); color: var(--gray-9);
+      font-family: var(--font); cursor: pointer;
+    }
+    .submit-btn {
+      width: 32px; height: 32px;
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      border: none; cursor: pointer;
+    }
+    .submit-btn.active { background: var(--accent-9); color: white; }
+    .submit-btn.disabled { background: rgba(0,0,0,0.05); color: var(--gray-8); }
+
+    /* ===== MESSAGES ===== */
+    .messages-area {
+      flex: 1; min-height: 0;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex; flex-direction: column;
+    }
+    .empty-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start;
+      flex: 1; gap: 8px;
+      color: var(--gray-9);
+      text-align: center;
+      padding-top: 24px;
+    }
+    .empty-state svg { color: var(--accent-9); }
+
+    /* Chips — horizontal scroll, left-aligned, edge-to-edge */
+    .chips-row {
+      display: flex; gap: 8px;
+      overflow-x: auto; scrollbar-width: none;
+      margin: 4px -12px 0;
+      padding: 4px 12px;
+    }
+    .chips-row::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto;
+      background: transparent;
+      border: var(--border-light);
+      border-radius: var(--radius);
+      padding: 5px 10px;
+      display: flex; align-items: center; gap: 4px;
+      font-size: var(--text); font-family: var(--font);
+      color: var(--gray-12); cursor: pointer;
+      white-space: nowrap;
+    }
+    .chip svg { flex-shrink: 0; }
+
+    /* Messages */
+    .msg-user {
+      padding: 6px 10px; width: 100%;
+      background: var(--gray-3);
+      border-radius: var(--radius);
+      font-size: var(--text); line-height: var(--lh);
+      color: var(--gray-12); word-break: break-word;
+    }
+    .msg-assistant {
+      padding: 4px 10px; width: 100%;
+      font-size: var(--text); line-height: var(--lh);
+      color: var(--gray-12); word-break: break-word;
+    }
+
+    /* ===== TOOL PANEL — Claude Code style ⎿ ===== */
+    .tool-summary {
+      display: flex; align-items: baseline;
+      font-size: var(--text); color: var(--gray-9);
+      line-height: var(--lh);
+      margin-bottom: 2px;
+    }
+    .tool-summary .marker {
+      font-size: 10px; margin-right: 4px;
+    }
+    .tool-summary .marker.done { color: var(--gray-6); }
+    .tool-summary .marker.running { color: var(--accent-9); }
+
+    /* Single tool line — only latest visible */
+    .tool-line {
+      display: flex; align-items: baseline; gap: 0;
+      font-size: var(--text); color: var(--gray-11);
+      line-height: var(--lh);
+      overflow: hidden;
+      position: relative;
+      height: var(--lh);
+    }
+    .tool-bracket {
+      color: var(--gray-6);
+      margin-right: 6px;
+      font-size: 13px;
+      line-height: var(--lh);
+    }
+    .tool-name {
+      flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Slide-up animation for tool transitions */
+    @keyframes tool-slide-up {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .tool-line.animate {
+      animation: tool-slide-up 0.25s ease-out;
+    }
+
+    .esc-btn {
+      flex-shrink: 0; cursor: pointer;
+      color: var(--gray-9);
+      padding: 2px 6px;
+      border-radius: var(--radius);
+    }
+
+    /* ===== ONBOARDING ===== */
+    .onboarding {
+      display: flex; flex-direction: column;
+      height: 100%; padding: 16px;
+      background: var(--bg);
+    }
+    .onboarding h2 {
+      font-size: 13px; font-weight: 500;
+      color: var(--gray-12);
+      margin-bottom: 20px;
+    }
+    /* Tabs — minimal, no heavy border-bottom on container */
+    .provider-tabs {
+      display: flex; gap: 16px;
+      margin-bottom: 16px;
+    }
+    .provider-tab {
+      padding: 4px 0 6px 0;
+      border: none; background: transparent;
+      font-size: var(--text); font-weight: 400;
+      cursor: pointer; position: relative;
+      font-family: var(--font);
+      color: var(--gray-9);
+    }
+    .provider-tab.active {
+      color: var(--gray-12); font-weight: 500;
+    }
+    .provider-tab.active::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 1.5px; background: var(--gray-12);
+      border-radius: 1px;
+    }
+    /* All form text: same size, color differentiates */
+    .form-label {
+      font-size: var(--text); font-weight: 400;
+      color: var(--gray-11);
+    }
+    .form-link {
+      font-size: var(--text-s); color: var(--gray-9);
+      text-decoration: none; cursor: pointer;
+    }
+    .form-input {
+      width: 100%; height: 36px;
+      padding: 0 12px;
+      border: var(--border-light);
+      border-radius: var(--radius);
+      font-size: var(--text); font-family: var(--font);
+      color: var(--gray-12); background: var(--bg);
+      outline: none;
+    }
+    .form-input::placeholder { color: var(--gray-9); }
+    .form-hint {
+      font-size: var(--text-s); color: var(--gray-9);
+    }
+
+    /* Filter chip — active state reuses accent-3 */
+    .filter-chip {
+      display: inline-flex; align-items: center;
+      padding: 3px 8px;
+      border-radius: var(--radius);
+      border: var(--border-light);
+      background: transparent;
+      font-size: var(--text); font-family: var(--font);
+      color: var(--gray-9); cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .filter-chip.active {
+      background: var(--accent-3);
+      border-color: rgba(62,99,221,0.15);
+      color: var(--accent-9);
+    }
+    .filter-chip:hover { background: var(--gray-3); }
+    .filter-chip.active:hover { background: #dfe8fd; }
+    .btn-primary {
+      width: 100%; height: 40px;
+      border-radius: var(--radius-pill);
+      background: var(--accent-9);
+      color: white; border: none;
+      font-size: var(--text); font-weight: 500;
+      cursor: pointer; font-family: var(--font);
+    }
+
+    /* ===== SETTINGS — flat left-aligned, no extra nesting ===== */
+    .settings-body {
+      flex: 1; overflow-y: auto;
+      padding: 12px 16px;
+      display: flex; flex-direction: column;
+    }
+    .settings-title {
+      font-size: var(--text); color: var(--gray-11);
+      padding: 4px 0 12px;
+    }
+    .model-list {
+      display: flex; flex-direction: column; gap: 1px;
+    }
+    .model-item {
+      padding: 6px 8px;
+      border-radius: var(--radius);
+      font-size: var(--text); color: var(--gray-11);
+      cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .model-item.selected {
+      background: var(--accent-3);
+      color: var(--accent-9); font-weight: 500;
+    }
+    .model-item .dot {
+      width: 5px; height: 5px; border-radius: 50%;
+    }
+    .model-item.selected .dot { background: var(--accent-9); }
+    .model-item:not(.selected) .dot { background: var(--gray-7); }
+
+    .dev-tools {
+      margin-top: 16px;
+      border: none; outline: none;
+    }
+    .dev-tools summary {
+      font-size: var(--text); color: var(--gray-9);
+      cursor: pointer; list-style: none;
+      display: flex; align-items: center; gap: 4px;
+      padding: 4px 0; user-select: none;
+      border: none; outline: none;
+    }
+    .dev-tools summary::-webkit-details-marker { display: none; }
+    .dev-tools summary:focus { outline: none; }
+    .dev-tools .chevron { transition: transform 0.15s ease; }
+    .dev-tools[open] .chevron { transform: rotate(180deg); }
+    .dev-tools-content {
+      padding: 8px 0;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .dev-tools-content label {
+      font-size: var(--text); color: var(--gray-9);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .dev-tools-content input, .dev-tools-content select {
+      width: 72px; height: 28px;
+      padding: 0 8px;
+      border: var(--border-light);
+      border-radius: var(--radius);
+      font-size: var(--text); font-family: var(--font);
+      color: var(--gray-11); background: var(--bg);
+      outline: none; text-align: right;
+    }
+
+    .settings-footer {
+      padding: 10px 16px;
+      text-align: center; flex-shrink: 0;
+      color: var(--gray-9); font-size: var(--text-s);
+    }
+    .settings-footer a {
+      color: var(--gray-9); text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    .digest-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px;
+      background: transparent; border: none;
+      border-radius: var(--radius);
+      color: var(--gray-9); cursor: pointer;
+      font-size: var(--text); font-family: var(--font);
+    }
+
+    /* ===== Interaction States ===== */
+    .header-chip:hover { background: var(--gray-3); }
+    .header-icon-btn:hover { background: var(--gray-3); color: var(--gray-12); }
+    .chip:hover { background: var(--gray-3); }
+    .plus-btn:hover { background: var(--gray-3); }
+    .model-chip:hover { background: var(--gray-3); }
+    .submit-btn.active:hover { background: #3555c0; }
+    .btn-primary:hover { background: #3555c0; }
+    .provider-tab:hover { color: var(--gray-12); }
+    .model-item:hover:not(.selected) { background: var(--gray-3); }
+    .form-link:hover { color: var(--gray-11); }
+    .digest-btn:hover { background: var(--gray-3); }
+    .esc-btn:hover { background: var(--gray-3); }
+    .dev-tools summary:hover { color: var(--gray-11); }
+
+    /* Focus: two opposing light points rotating along border */
+    .input-container:focus-within {
+      border: 1px solid transparent;
+      box-shadow: 0 0 0 3px rgba(62,99,221,0.03), 0 0 16px rgba(62,99,221,0.05);
+      background:
+        linear-gradient(var(--surface), var(--surface)) padding-box,
+        conic-gradient(from var(--angle),
+          rgba(62,99,221,0.03) 0%,
+          rgba(62,99,221,0.06) 10%,
+          rgba(62,99,221,0.18) 20%,
+          rgba(62,99,221,0.06) 30%,
+          rgba(62,99,221,0.03) 40%,
+          rgba(62,99,221,0.03) 50%,
+          rgba(62,99,221,0.06) 60%,
+          rgba(62,99,221,0.18) 70%,
+          rgba(62,99,221,0.06) 80%,
+          rgba(62,99,221,0.03) 90%,
+          rgba(62,99,221,0.03) 100%
+        ) border-box;
+      animation: spin-border 4s linear infinite;
+    }
+    @keyframes spin-border {
+      to { --angle: 360deg; }
+    }
+    .form-input:focus {
+      border-color: var(--gray-7);
+    }
+    button:focus-visible, a:focus-visible, summary:focus-visible {
+      outline: 1.5px solid var(--gray-8);
+      outline-offset: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ==================== SCREEN 1: Onboarding ==================== -->
+<div>
+  <div class="screen-label">Onboarding</div>
+  <div class="plugin-frame">
+    <div class="onboarding">
+      <h2>Setup Connection</h2>
+      <div class="provider-tabs">
+        <button class="provider-tab active">Gemini</button>
+        <button class="provider-tab inactive">OpenRouter</button>
+        <button class="provider-tab inactive">DashScope</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span class="form-label">API Key</span>
+          <span class="form-link">Get key from Google AI Studio</span>
+        </div>
+        <input class="form-input" type="text" placeholder="AIzaSy..." />
+        <div class="form-hint">Keys are stored locally in Figma client storage.</div>
+      </div>
+      <div style="margin-top:auto;padding-top:16px">
+        <button class="btn-primary">Connect & Start</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 2: Chat Empty State ==================== -->
+<div>
+  <div class="screen-label">Chat — Empty</div>
+  <div class="plugin-frame">
+    <div class="header">
+      <button class="header-chip">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>New Design</span>
+      </button>
+      <div class="header-spacer"></div>
+      <button class="header-icon-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button class="header-icon-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="messages-area">
+      <div class="empty-state">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+        <span>Pick a suggestion or describe your design</span>
+      </div>
+      <div class="chips-row">
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Dashboard</button>
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3"/></svg> Login</button>
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Profile</button>
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> Pricing</button>
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/></svg> Blog</button>
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg> Nav</button>
+        <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="m16 10-4 4-4-4"/></svg> Modal</button>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="input-container">
+        <textarea class="input-textarea" placeholder="Describe your design..." rows="2"></textarea>
+        <div class="input-footer">
+          <button class="plus-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="model-chip">gemini-2.0-flash <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="submit-btn disabled">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 3: Chat Active ==================== -->
+<div>
+  <div class="screen-label">Chat — Active</div>
+  <div class="plugin-frame">
+    <div class="header">
+      <button class="header-chip">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>New Design</span>
+      </button>
+      <div class="header-spacer"></div>
+      <button class="header-icon-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button class="header-icon-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="messages-area">
+      <div class="msg-user">Design a login page with email, password, and sign-in button</div>
+
+      <!-- Completed turn — collapsed summary -->
+      <div style="margin-top:8px">
+        <div class="tool-summary">
+          <span class="marker done">&#10043;</span>
+          <span>12.4s · 8 tools</span>
+        </div>
+      </div>
+
+      <div class="msg-assistant" style="margin-top:4px">
+        I've created a login page with email and password fields, a "Sign In" button, and social login options.
+      </div>
+
+      <div class="msg-user" style="margin-top:12px">Add a "Forgot password?" link below the password field</div>
+
+      <!-- Running turn — latest tool only, ⎿ bracket style -->
+      <div style="margin-top:8px">
+        <div class="tool-summary">
+          <span class="marker running">&#10043;</span>
+          <span style="color:var(--gray-12)">3.2s</span>
+          <span class="esc-btn" style="margin-left:auto">esc</span>
+        </div>
+        <div class="tool-line animate">
+          <span class="tool-bracket">⎿</span>
+          <span class="tool-name">Edit Node "password-field"</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-area">
+      <div style="display:flex;justify-content:flex-start;margin-bottom:6px">
+        <button class="digest-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Copy Digest
+        </button>
+      </div>
+      <div class="input-container">
+        <textarea class="input-textarea" placeholder="Describe your design..." rows="2"></textarea>
+        <div class="input-footer">
+          <button class="plus-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="model-chip">gemini-2.0-flash <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+            <button class="submit-btn disabled">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SCREEN 4: Settings ==================== -->
+<div>
+  <div class="screen-label">Settings</div>
+  <div class="plugin-frame">
+    <div class="header">
+      <span style="font-size:var(--text);color:var(--gray-11);padding-left:4px">Settings</span>
+      <div class="header-spacer"></div>
+      <button class="header-icon-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Flat layout: everything left-aligned to same edge -->
+    <div class="settings-body">
+      <div class="provider-tabs">
+        <button class="provider-tab active">Gemini</button>
+        <button class="provider-tab inactive">OpenRouter</button>
+        <button class="provider-tab inactive">DashScope</button>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span class="form-label">API Key</span>
+        <span class="form-link">Get key</span>
+      </div>
+      <input class="form-input" type="password" value="AIzaSyB..." />
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;margin-bottom:6px">
+        <span class="form-label">Available Models</span>
+        <button class="filter-chip active" onclick="this.classList.toggle('active')">Free</button>
+      </div>
+      <div class="model-list">
+        <div class="model-item selected"><span class="dot"></span> gemini-2.0-flash</div>
+        <div class="model-item"><span class="dot"></span> gemini-2.0-flash-lite</div>
+        <div class="model-item"><span class="dot"></span> gemini-2.5-flash-preview</div>
+        <div class="model-item"><span class="dot"></span> gemini-2.5-pro-preview</div>
+      </div>
+
+      <details class="dev-tools">
+        <summary>
+          <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          Developer Tools
+        </summary>
+        <div class="dev-tools-content">
+          <label>Bridge Port <input type="text" value="3456" /></label>
+          <label>MCP Relay <input type="text" value="3458" /></label>
+          <label>Log Level
+            <select><option>info</option><option>debug</option></select>
+          </label>
+        </div>
+      </details>
+    </div>
+
+    <div class="settings-footer">
+      <a href="#">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+        Muse404
+      </a>
+      <span style="color:var(--gray-6);margin:0 6px">·</span>
+      <span>v1.0.0</span>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

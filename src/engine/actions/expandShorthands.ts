@@ -276,6 +276,66 @@ const EXPANDERS: Record<string, Expander> = {
   maxW: (v) => ({ maxWidth: isVarRef(v) ? v : Number(v) }),
   minH: (v) => ({ minHeight: isVarRef(v) ? v : Number(v) }),
   maxH: (v) => ({ maxHeight: isVarRef(v) ? v : Number(v) }),
+
+  // ── Hyperlink ───────────────────────────────────────────────────────────
+  link: (v) => ({ hyperlink: String(v) }),
+
+  // ── Text decoration & truncation ──────────────────────────────────────
+  decoration: (v) => {
+    const DECO_MAP: Record<string, string> = {
+      underline: 'UNDERLINE', strikethrough: 'STRIKETHROUGH', none: 'NONE',
+      'line-through': 'STRIKETHROUGH',
+    };
+    return { textDecoration: DECO_MAP[norm(String(v))] ?? String(v).toUpperCase() };
+  },
+
+  truncate: (v) => {
+    if (v === true || String(v).toLowerCase() === 'true') {
+      return { textTruncation: 'ENDING', textAutoResize: 'NONE' };
+    }
+    return { textTruncation: 'DISABLED' };
+  },
+
+  maxLines: (v) => ({ maxLines: Number(v), textTruncation: 'ENDING' }),
+
+  whiteSpace: (v) => {
+    const WS_MAP: Record<string, string> = {
+      nowrap: 'WIDTH_AND_HEIGHT', normal: 'HEIGHT', pre: 'HEIGHT',
+    };
+    const mapped = WS_MAP[norm(String(v))];
+    return mapped ? { textAutoResize: mapped } : {};
+  },
+
+  // ── Transform ─────────────────────────────────────────────────────────
+  // CSS rotate is clockwise-positive; Figma rotation is counter-clockwise-positive
+  rotate: (v) => ({ rotation: -(Number(v)) }),
+
+  // ── Font style ────────────────────────────────────────────────────────
+  italic: (v) => ({ fontStyle: (v === true || String(v).toLowerCase() === 'true') ? 'italic' : 'normal' }),
+  slant: (v) => ({ fontSlant: Number(v) }),
+
+  // ── Image fit ─────────────────────────────────────────────────────────
+  fit: (v) => {
+    const FIT_MAP: Record<string, string> = {
+      cover: 'FILL', contain: 'FIT', none: 'CROP', tile: 'TILE',
+      fill: 'FILL', fit: 'FIT', crop: 'CROP',
+    };
+    return { scaleMode: FIT_MAP[norm(String(v))] ?? String(v).toUpperCase() };
+  },
+
+  // ── Outline (basic: strokeAlign OUTSIDE) ──────────────────────────────
+  outline: (v) => {
+    if (typeof v === 'string') {
+      const result: Record<string, any> = { strokeAlign: 'OUTSIDE' };
+      for (const p of v.trim().split(/\s+/)) {
+        if (p.startsWith('#')) result.strokes = [p];
+        else if (/^\d/.test(p)) result.strokeWeight = parseFloat(p);
+      }
+      if (!result.strokes && result.strokeWeight) result.strokes = ['#000000'];
+      return result;
+    }
+    return {};
+  },
 };
 
 /** All shorthand keys recognized by the expander — exported for suggestion matching. */

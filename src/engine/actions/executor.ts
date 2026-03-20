@@ -19,6 +19,7 @@ import { parseRichText } from '../text/richTextParser';
 import { toCamelCase } from '../utils/prop-dsl';
 import { sortByPropertyOrder, validateDependencies, SELF_GATE_PROPERTIES, PARENT_GATE_PROPERTIES } from './propertyDependencies';
 import { expandShorthands } from './expandShorthands';
+import { expandMacros } from './macroExpander';
 
 // ---------------------------------------------------------------------------
 // Progress event (moved from IncrementalExecutor)
@@ -235,6 +236,16 @@ export class ActionExecutor {
     const idMap: Record<string, string> = {};
     for (const [sym, nodeId] of symbolMap) idMap[sym] = nodeId;
 
+    // 7. Tag created nodes with pluginData for session identity
+    for (const { nodeId } of createdNodes) {
+      try {
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (node && !node.removed) {
+          node.setPluginData('_agent', 'created');
+        }
+      } catch { /* best-effort tagging */ }
+    }
+
     return {
       success: !hasErrors,
       hasErrors,
@@ -353,14 +364,17 @@ export class ActionExecutor {
     const globalOnError = this.options.onError || 'skip-dependents';
     let aborted = false;
 
+    // 0. Macro expansion: 1 action → N actions (grid, outline-offset, etc.)
+    const expandedActions = expandMacros(actions);
+
     // 1. Collect all tempIds within this batch
     const currentBatchTempIds = new Set<string>();
-    for (const action of actions) {
+    for (const action of expandedActions) {
       if (action.tempId) currentBatchTempIds.add(action.tempId);
     }
 
     // 2. Sort actions topologically based on dependsOn to ensure dependencies run first
-    const sortedActions = this.topologicalSort(actions);
+    const sortedActions = this.topologicalSort(expandedActions);
 
     // 2. Execute sequentially
     for (const action of sortedActions) {
@@ -1249,7 +1263,19 @@ export class ActionExecutor {
     // Read current font from node as fallback — avoid resetting to Inter/Regular
     const currentFont = node.fontName as FontName;
     const family = props.fontFamily || currentFont?.family || 'Inter';
-    const style = props.fontWeight || currentFont?.style || 'Regular';
+
+    // Resolve font weight → Figma style name
+    const currentIsItalic = currentFont?.style?.includes('Italic') ?? false;
+    const rawWeight = props.fontWeight ?? currentFont?.style?.replace(/\s*Italic\s*/, '').trim() ?? 'Regular';
+    const weight = fontBus.normalizeWeight(rawWeight);
+
+    // Resolve italic: explicit fontStyle prop > current node state
+    const isItalic = props.fontStyle !== undefined
+      ? props.fontStyle === 'italic'
+      : currentIsItalic;
+
+    // Build full style string: weight + italic
+    const style = fontBus.buildStyleString(weight, isItalic);
 
     // Default font loading
     const { success, loadedStyle } = await fontBus.getOrLoad(family, style);
@@ -1275,6 +1301,8 @@ export class ActionExecutor {
        const otherProps = { ...props };
        delete otherProps.fontFamily;
        delete otherProps.fontWeight;
+       delete otherProps.fontStyle;
+       delete otherProps.fontSlant;
        delete otherProps.characters;
 
        const propResult = await this.applyProps(node, otherProps);
@@ -1297,6 +1325,8 @@ export class ActionExecutor {
        const otherProps = { ...props };
        delete otherProps.fontFamily;
        delete otherProps.fontWeight;
+       delete otherProps.fontStyle;
+       delete otherProps.fontSlant;
 
        const propResult = await this.applyProps(node, otherProps);
        if (propResult.warnings.length > 0) warnings.push(...propResult.warnings);

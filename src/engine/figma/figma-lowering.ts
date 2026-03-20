@@ -11,6 +11,7 @@
 import type { PaintValue, EffectValue, UnitValue } from '../../domain/design-ir';
 import { paintSpec, effectSpec, unitValueSpec } from '../../domain/property-specs';
 import { parseHexToRGBA } from '../../domain/property-specs';
+import { isGradientString, parseGradient, getGradientTransform } from '../../domain/gradient-parser';
 
 /**
  * Convert an array of paint values to Figma Paint[] format.
@@ -26,6 +27,17 @@ export function lowerPaints(paints: any[]): any[] {
     // Canonical IR PaintValue (has 'kind' discriminant)
     if (typeof item === 'object' && item !== null && 'kind' in item) {
       return paintSpec.toFigma([item as PaintValue])[0];
+    }
+    // CSS gradient string → gradient paint
+    if (typeof item === 'string' && isGradientString(item)) {
+      const parsed = parseGradient(item);
+      if (parsed) {
+        return {
+          type: parsed.type,
+          gradientStops: parsed.stops.map(s => ({ color: s.color, position: s.position })),
+          gradientTransform: getGradientTransform(parsed.type, parsed.angleDeg),
+        };
+      }
     }
     // Legacy: hex string → solid paint via figma.util.solidPaint (Figma runtime only)
     if (typeof item === 'string') {

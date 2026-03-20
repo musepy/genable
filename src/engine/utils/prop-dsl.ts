@@ -41,10 +41,12 @@ const STRING_VALUE_PROPS = new Set([
   'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',
   'layoutWrap', 'component', 'constraints',
   'strokeJoin', 'strokeCap', 'blendMode', 'dashPattern',
+  'textDecoration', 'textTruncation', 'fontStyle', 'scaleMode',
   // Abbreviations that must stay as strings
   'weight', 'font', 'alignMain', 'alignCross', 'textAlign',
   'positioning', 'strokeA', 'strokeJ', 'strokeC', 'dash',
   'sizingH', 'sizingV', 'blend', 'wrap', 'pin', 'overflow',
+  'decoration', 'whiteSpace', 'italic', 'fit', 'outline',
 ]);
 
 const MIXED_VALUE_PROPS = new Set(['width', 'height', 'w', 'h']);
@@ -57,11 +59,13 @@ const NUMERIC_PROPS = new Set([
   'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
   'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight',
   'cornerSmoothing',
+  'rotation', 'maxLines', 'fontSlant',
   // Abbreviations that are numeric
   'gap', 'crossGap', 'size', 'corner', 'smooth', 'strokeW',
   'pt', 'pr', 'pb', 'pl',
   'strokeT', 'strokeR', 'strokeB', 'strokeL',
   'minW', 'maxW', 'minH', 'maxH',
+  'rotate', 'slant',
 ]);
 
 /** Properties that use the unitValue spec (lineHeight, letterSpacing) */

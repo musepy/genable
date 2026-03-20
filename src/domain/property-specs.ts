@@ -28,6 +28,7 @@ import type {
   ConstraintType,
   Vector,
 } from './design-ir';
+import { isGradientString, parseGradient, getGradientTransform } from './gradient-parser';
 
 // ═══════════════════════════════════════════════
 // PropertySpec Interface
@@ -97,7 +98,15 @@ export function rgbaToHex(rgba: RGBA): string {
 function parseSinglePaintXml(value: string): PaintValue {
   const trimmed = value.trim();
 
-  // Gradient: GRADIENT_LINEAR(#color@pos,#color@pos)
+  // CSS gradient: linear-gradient(...), radial-gradient(...), etc.
+  if (isGradientString(trimmed)) {
+    const parsed = parseGradient(trimmed);
+    if (parsed) {
+      return { kind: 'gradient', type: parsed.type, stops: parsed.stops, angle: parsed.angleDeg };
+    }
+  }
+
+  // Legacy IR gradient: GRADIENT_LINEAR(#color@pos,#color@pos)
   const gradientMatch = trimmed.match(/^(GRADIENT_\w+)\((.+)\)$/);
   if (gradientMatch) {
     const type = gradientMatch[1] as GradientType;
@@ -187,7 +196,7 @@ function paintToFigma(paint: PaintValue): any {
           color: s.color,
           position: s.position,
         })),
-        gradientTransform: [[1, 0, 0], [0, 1, 0]], // identity transform
+        gradientTransform: getGradientTransform(paint.type, paint.angle ?? 180),
       };
     }
     case 'image': {
@@ -258,8 +267,8 @@ export const paintSpec = {
   validate(value: string): string[] {
     if (value === 'transparent' || value === 'none') return [];
     return splitRespectingParens(value)
-      .filter(p => !p.startsWith('#') && !p.startsWith('GRADIENT_') && !p.startsWith('IMAGE('))
-      .map(p => `Invalid paint format "${p}". Use "#RRGGBB[AA]" for solid or "GRADIENT_LINEAR(#color@pos,...)" for gradients. Rendered as black.`);
+      .filter(p => !p.startsWith('#') && !p.startsWith('GRADIENT_') && !p.startsWith('IMAGE(') && !isGradientString(p))
+      .map(p => `Invalid paint format "${p}". Use "#RRGGBB[AA]" for solid, "GRADIENT_LINEAR(#color@pos,...)" or "linear-gradient(135deg, #color, #color)" for gradients. Rendered as black.`);
   },
 
   defaultValue: [],

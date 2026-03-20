@@ -12,7 +12,7 @@ Properties use `key:value` syntax in mk commands. Both shorthand and canonical n
 #### Layout
 | Shorthand | Canonical | Values |
 |-----------|-----------|--------|
-| `layout` | layoutMode | `row`, `column`, `none` |
+| `layout` | layoutMode | `row`, `column`, `none`, `grid` (with `cols:N` — auto-generates equal child frames) |
 | `pattern` | (composite) | `row`, `column`, `row-fill`, `column-fill`, `stack` |
 | `align` | primary+counterAxisAlignItems | `center`, `start`, `end`, `space-between` |
 | `alignMain` | primaryAxisAlignItems | `center`, `start`, `end`, `space-between` |
@@ -48,8 +48,9 @@ Properties use `key:value` syntax in mk commands. Both shorthand and canonical n
 #### Appearance
 | Shorthand | Canonical | Values |
 |-----------|-----------|--------|
-| `fill` / `bg` | fills | `#hex`, `transparent`, `none` |
+| `fill` / `bg` | fills | `#hex`, `transparent`, `none`, `linear-gradient(deg, #color, #color)`, `radial-gradient(...)`, `diamond-gradient(...)` |
 | `stroke` | strokes+strokeWeight+strokeAlign | `#hex width align` |
+| `outline` | strokes+strokeAlign:OUTSIDE | `#hex weight` — for focus rings. Add `outlineOffset:N` for gap |
 | `strokeW` | strokeWeight | number |
 | `strokeA` | strokeAlign | `inside`, `outside`, `center` |
 | `strokeJ` | strokeJoin | `miter`, `bevel`, `round` |
@@ -78,24 +79,27 @@ Properties use `key:value` syntax in mk commands. Both shorthand and canonical n
 | Shorthand | Canonical | Values |
 |-----------|-----------|--------|
 | `size` | fontSize | number |
-| `weight` | fontWeight | `thin`, `light`, `regular`, `medium`, `semi-bold`, `bold`, `extra-bold`, `black` |
-| `font` | fontFamily | string |
+| `weight` | fontWeight | `thin`, `light`, `regular`, `medium`, `semi-bold`, `bold`, `extra-bold`, `black`, or numeric 100-900 |
+| `font` | fontFamily | string (supports `$variable` binding) |
+| `italic` | fontStyle | `true`, `false` — combines with weight to build style string |
+| `slant` | fontSlant | number (variable font oblique axis) |
+| `decoration` | textDecoration | `underline`, `strikethrough`, `none` |
+| `truncate` | textTruncation+textAutoResize | `true` — enables ellipsis. NEVER write literal "..." |
+| `maxLines` | maxLines | number — auto-enables truncation. Use with `truncate:true` |
+| `whiteSpace` | textAutoResize | `nowrap`=WIDTH_AND_HEIGHT, `normal`=HEIGHT |
 | `textAlign` | textAlignHorizontal | `left`, `center`, `right`, `justified` |
 | `leading` / `lineHeight` | lineHeight | number or `%` (values <=5 treated as multiplier) |
 | `tracking` | letterSpacing | number |
 | `characters` | characters | text content (or use `-- text` syntax) |
-| `textAutoResize` | textAutoResize | `WIDTH_AND_HEIGHT`, `HEIGHT`, `NONE`, `TRUNCATE` |
-| `textTruncation` | textTruncation | `DISABLED`, `ENDING` |
-| `maxLines` | maxLines | number |
 | `textCase` | textCase | `UPPER`, `LOWER`, `TITLE`, `ORIGINAL` |
-| `textDecoration` | textDecoration | `NONE`, `UNDERLINE`, `STRIKETHROUGH` |
 
 #### Layout Details
 | Shorthand | Canonical | Values |
 |-----------|-----------|--------|
 | `x` | x | number (position) |
 | `y` | y | number (position) |
-| `rotation` | rotation | number (degrees) |
+| `rotate` | rotation | number (CSS clockwise degrees, auto-negated for Figma) |
+| `rotation` | rotation | number (degrees, Figma native counter-clockwise) |
 | `pin` | constraints | `{horizontal, vertical}` |
 | `strokesInLayout` | strokesIncludedInLayout | `true`, `false` |
 | `reverseZ` | itemReverseZIndex | `true`, `false` |
@@ -113,5 +117,15 @@ Properties use `key:value` syntax in mk commands. Both shorthand and canonical n
 **Prefixes**: `lucide`, `mdi`, `heroicons`, `tabler`, `f7`, `hugeicons`, `logos` (brand icons with original colors).
 **Example**: `mk /Card/Icon icon iconName:lucide:heart w:20 h:20 fill:#EF4444`
 
+#### Image
+| Shorthand | Canonical | Values |
+|-----------|-----------|--------|
+| `fit` | scaleMode (IMAGE paint) | `cover`=FILL, `contain`=FIT, `none`=CROP, `tile`=TILE |
+
+#### Grid (macro)
+`layout:grid cols:3 gap:16` expands into a row frame with N equal-width (`w:fill`) child frames.
+Mixed widths: `cols:"200 1fr 300"` → fixed + fill + fixed children.
+
 #### Variable Binding
 Any property value starting with `$` binds to a Figma variable: `fill:$colors/primary`
+Gradient stops also support variables: `fill:linear-gradient(90deg, $colors/primary, $colors/secondary)`

@@ -90,7 +90,7 @@
       background: var(--bg);
     }
     .input-container {
-      background: var(--surface);
+      background: var(--bg);
       border: 1px solid transparent;
       border-radius: var(--radius);
       box-shadow: 0 0 0 1px var(--gray-4);
@@ -144,14 +144,34 @@
       display: flex; flex-direction: column;
     }
     .empty-state {
+      position: relative;
+      flex: 1;
       display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start;
-      flex: 1; gap: 8px;
       color: var(--gray-9);
       text-align: center;
       padding-top: 24px;
+      overflow: hidden;
     }
-    .empty-state svg { color: var(--accent-9); }
+    .empty-state svg.empty-icon { color: var(--accent-9); position: relative; z-index: 1; }
+    .empty-state span { position: relative; z-index: 1; }
+
+    /* ASCII art background — large, clipped, behind everything */
+    .ascii-bg {
+      position: absolute;
+      bottom: -40px; left: -20px; right: -20px;
+      font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+      font-size: 11px;
+      line-height: 14px;
+      color: var(--gray-4);
+      white-space: pre;
+      pointer-events: none;
+      user-select: none;
+      z-index: 0;
+      /* fade out at top */
+      mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.8) 100%);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.3) 30%, rgba(0,0,0,0.6) 70%, rgba(0,0,0,0.8) 100%);
+    }
 
     /* Chips — horizontal scroll, left-aligned, edge-to-edge */
     .chips-row {
@@ -422,7 +442,7 @@
       border: 1px solid transparent;
       box-shadow: 0 0 0 3px rgba(62,99,221,0.03), 0 0 16px rgba(62,99,221,0.05);
       background:
-        linear-gradient(var(--surface), var(--surface)) padding-box,
+        linear-gradient(var(--bg), var(--bg)) padding-box,
         conic-gradient(from var(--angle),
           rgba(62,99,221,0.03) 0%,
           rgba(62,99,221,0.06) 10%,
@@ -497,8 +517,10 @@
     </div>
     <div class="messages-area">
       <div class="empty-state">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+        <svg class="empty-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
         <span>Pick a suggestion or describe your design</span>
+        <!-- ASCII art placeholder — disabled, needs better design -->
+        <!-- <pre class="ascii-bg" aria-hidden="true">...</pre> -->
       </div>
       <div class="chips-row">
         <button class="chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Dashboard</button>

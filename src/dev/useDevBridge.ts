@@ -43,24 +43,29 @@ async function fetchBridge(path: string, options?: RequestInit): Promise<Respons
   }
 }
 
-/** Extract root node IDs from design/create tool results. Result shape: { idMap: { symbol: "802:1526", ... } } */
+/** Extract root node IDs from mk/create tool results. Handles both legacy ({idMap}) and current ({data:{idMap}}) shapes. */
 function extractRootNodeIds(history: ChatMessage[]): string[] {
-  const ids: string[] = []
+  const ids = new Set<string>()
   for (const msg of history) {
     if (!msg.toolCalls) continue
     for (const tc of msg.toolCalls) {
-      if ((tc.name !== 'design' && tc.name !== 'create') || tc.status !== 'success' || !tc.result) continue
+      if (tc.status !== 'success' || !tc.result) continue
+      // Accept current (mk/render) and legacy (design/create) tool names
+      if (tc.name !== 'mk' && tc.name !== 'render' && tc.name !== 'design' && tc.name !== 'create') continue
       const result = typeof tc.result === 'string' ? (() => { try { return JSON.parse(tc.result) } catch { return null } })() : tc.result
-      if (result?.idMap && typeof result.idMap === 'object') {
-        // First entry in idMap is the root node
-        const values = Object.values(result.idMap) as string[]
+      // Current shape: { success, data: { idMap: { n1: "802:1526", ... } } }
+      // Legacy shape: { idMap: { symbol: "802:1526", ... } }
+      const idMap = result?.data?.idMap || result?.idMap
+      if (idMap && typeof idMap === 'object') {
+        // First entry is the root node of this mk batch
+        const values = Object.values(idMap) as string[]
         if (values.length > 0 && typeof values[0] === 'string') {
-          ids.push(values[0])
+          ids.add(values[0])
         }
       }
     }
   }
-  return ids
+  return [...ids]
 }
 
 /** Request node tree + screenshots from main thread via IPC. Timeout after 10s. */
@@ -168,6 +173,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
             finalText,
             durationMs,
             modelName: state.modelName,
+            rootNodeIds,
             toolCallSummary,
             toolCallDetails,
             conversationHistory,

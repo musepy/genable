@@ -6,7 +6,7 @@
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath, deduplicateName } from './pathResolver';
+import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath, deduplicateName, isSessionNode } from './pathResolver';
 import {
   executeFlatOps, escapeFlatOpsStr, injectNameProp, injectLayoutDefaults,
   mkPropToFlatOps, stripBraces,
@@ -57,7 +57,12 @@ async function executeSingleMk(
       const escaped = escapeFlatOpsStr(textContent);
       ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
     }
-    return await executeFlatOps(ops);
+    const result = await executeFlatOps(ops);
+    // Include the edited node ID so callers can reference it (updates produce empty idMap)
+    if (result.success && result.data) {
+      result.data.idMap = { ...result.data.idMap, [nodeName]: nodeId };
+    }
+    return result;
   }
 
   // Node doesn't exist (or page-level collision) → create mode
@@ -319,7 +324,22 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
     return { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' } };
   }
 
-  return await executeFlatOps(`delete('${rmResolved.node.id}')`);
+  // Capture metadata before deletion (node becomes inaccessible after remove)
+  const rmNodeName = rmResolved.node.name;
+  const rmNodeId = rmResolved.node.id;
+  const rmIsSessionNode = isSessionNode(rmNodeId) || rmResolved.node.getPluginData('_agent') === 'created';
+
+  const rmResult = await executeFlatOps(`delete('${rmNodeId}')`);
+
+  // Warn if deleting a node not created by this session
+  if (rmResult.success && !rmIsSessionNode) {
+    rmResult.data = {
+      ...rmResult.data,
+      warning: `⚠ "${rmNodeName}" was not created by you in this session.`,
+    };
+  }
+
+  return rmResult;
 }
 
 // ── mv ──

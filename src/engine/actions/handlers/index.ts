@@ -17,6 +17,7 @@ import { unitValueHandler } from './unitValueHandler';
 import { resizeHandler } from './resizeHandler';
 import { constraintsHandler } from './constraintsHandler';
 import { dashPatternHandler } from './dashPatternHandler';
+import { hyperlinkHandler } from './hyperlinkHandler';
 import { defaultHandler } from './defaultHandler';
 
 /**
@@ -34,6 +35,7 @@ const HANDLERS: PropertyHandler[] = [
   resizeHandler,
   constraintsHandler,
   dashPatternHandler,
+  hyperlinkHandler,
   // ↑ Add new handlers above this line
   defaultHandler,
 ];

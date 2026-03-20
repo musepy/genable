@@ -10,6 +10,7 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 import { findClosestCommand } from '../../engine/agent/tools/unified/commandRegistry';
 
 // Command handler groups
+import { registerSessionNodes } from './pathResolver';
 import { handleLs, handleTree, handleCat } from './readHandlers';
 import { handleMk, handleRm, handleMv, handleCp } from './writeHandlers';
 import { handleGrep, handleSed } from './searchHandlers';
@@ -20,7 +21,6 @@ import { handleRender } from './renderHandler';
 import { handleToken } from './tokenHandler';
 import { handleMemoryCommand } from './memoryHandler';
 import {
-  handleContext, handleOutline, handleInspect,
   handleDesign, handleReplace, handleQuery,
   handleMkdir, handleMktext, handleWrite, handleLn,
 } from './legacyHandlers';
@@ -54,9 +54,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   }),
 
   // Legacy tools
-  context: handleContext,
-  outline: handleOutline,
-  inspect: handleInspect,
   design: handleDesign,
   replace: handleReplace,
   query: handleQuery,
@@ -81,12 +78,19 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
       success: false,
       error: {
         code: 'UNKNOWN_TOOL',
-        message: `Unknown command "${toolName}".${hint} Available: ${Object.keys(COMMAND_HANDLERS).filter(k => !['context', 'outline', 'inspect', 'design', 'replace', 'query', 'mkdir', 'mktext', 'write', 'ln'].includes(k)).join(', ')}`,
+        message: `Unknown command "${toolName}".${hint} Available: ${Object.keys(COMMAND_HANDLERS).filter(k => !['design', 'replace', 'query', 'mkdir', 'mktext', 'write', 'ln'].includes(k)).join(', ')}`,
       },
     };
   }
 
-  return await handler(parameters);
+  const result = await handler(parameters);
+
+  // Auto-register created node IDs for session-scoped path preference
+  if (result.success && result.data?.idMap) {
+    registerSessionNodes(Object.values(result.data.idMap));
+  }
+
+  return result;
 }
 
 // Re-export for direct use

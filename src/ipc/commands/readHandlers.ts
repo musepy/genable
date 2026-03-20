@@ -10,7 +10,7 @@ import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { logger } from '../../utils/logger';
-import { resolvePathToNode, hasGlob, resolveGlobPaths, buildNodePath } from './pathResolver';
+import { resolvePathToNode, hasGlob, resolveGlobPaths, buildNodePath, isSessionNode } from './pathResolver';
 import { exportNodeToBase64 } from './shared';
 
 // ── ls ──
@@ -39,7 +39,9 @@ function formatLsEntry(node: SceneNode, showId = false): string {
   }
 
   const propsStr = props.length > 0 ? `  ${props.join('  ')}` : '';
-  return `${name.padEnd(24)} ${type.padEnd(8)} ${w}×${h}${propsStr}`;
+  const isOwned = isSessionNode(node.id) || node.getPluginData('_agent') === 'created';
+  const sessionTag = isOwned ? '  [yours]' : '';
+  return `${name.padEnd(24)} ${type.padEnd(8)} ${w}×${h}${propsStr}${sessionTag}`;
 }
 
 export async function handleLs(parameters: any): Promise<ToolResponse> {

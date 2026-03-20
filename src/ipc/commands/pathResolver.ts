@@ -8,6 +8,24 @@
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 
+// ── Session-scoped node preference ──
+// Tracks node IDs created/referenced by the agent in the current session.
+// When multiple siblings share the same name, the resolver prefers session nodes.
+
+const sessionNodeIds = new Set<string>();
+
+export function registerSessionNodes(ids: string[]) {
+  for (const id of ids) sessionNodeIds.add(id);
+}
+
+export function clearSessionNodes() {
+  sessionNodeIds.clear();
+}
+
+export function isSessionNode(id: string): boolean {
+  return sessionNodeIds.has(id);
+}
+
 // ── Types ──
 
 export type NodeResolved = { ok: true; node: SceneNode } | { ok: false; response: ToolResponse };
@@ -92,7 +110,11 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
     }
 
     const children = (current as any).children as readonly BaseNode[];
-    const match = children.find(c => c.name === segment);
+    // Prefer session nodes when multiple siblings share the same name
+    const candidates = children.filter(c => c.name === segment);
+    const match = candidates.length > 1
+      ? (candidates.find(c => sessionNodeIds.has(c.id)) ?? candidates[0])
+      : candidates[0];
     if (!match) {
       const available = children.slice(0, 15).map(c => c.name);
       const suffix = children.length > 15 ? `, ... (${children.length} total)` : '';

@@ -143,26 +143,141 @@ Agent 启动 (run())
 5. ✅ `tree /Palette/ -d 2` 一次调用读取完整设计系统 context
 6. ✅ `var bind` 将变量绑定到色卡 swatch
 
+## 三层认知模型（2026-03-19 扩展）
+
+从 .agent page 出发，推演出 agent 的完整认知生命周期：
+
+### Layer 1: Session Scope（当前会话）
+
+**已实现**（2026-03-19）：`pathResolver.ts` 的 session node preference。
+
+- Agent 创建的节点 → 自动进入 `sessionNodeIds`
+- 路径解析遇到同名 siblings → 优先选 session 内的节点
+- "新设计"时清空 session
+
+**解决的问题**：画布上有多个同名节点（如多次测试留下的 "Card"），`sed /Card/` 总是命中第一个而非当前 session 创建的那个。
+
+**Agent 主动判断**：扫描 ≠ 进入上下文。Agent ls 一个 page 看到 50 个 frame，它判断哪些值得探索、哪些是草稿。不是被动收录一切。
+
+### Layer 2: Workspace Memory（跨对话持久化）
+
+类比 Claude Code 进入代码仓库后建 CLAUDE.md：
+
+- **`.agent` page**（Figma page）= 工作区的 "CLAUDE.md"
+- 包含：对话摘要、提取的 design tokens、palette、learned patterns
+- **启动时自动发现**：agent 启动 → 扫描 pages → 找到 `.agent` page → 加载为上下文
+- **也支持用户指定**：settings 或对话中指定
+
+### Layer 3: Design System Knowledge（可学习的设计规范）
+
+**核心洞察**：design system 的"可读表示"和"可消费表示"是两件事。
+
+| | 给人看 | 给 Agent 看 |
+|---|---|---|
+| 色板 | 视觉色块 + 标注 | `{ primary: "#000", secondary: "#475569" }` |
+| 字体 | "Aa" 预览 + 尺寸示意 | `{ headline: { family: "Space Grotesk", size: 32 } }` |
+| 组件 | 交互式预览 | component set ID + variant properties |
+
+参考 Linearis 插件的 **DESIGN.md** tab 概念 — Theme tab 给人看，DESIGN.md tab 给工具消费。
+
+**结构约定**（类似 skill 的 SKILL.md）：
+- Frame `name` = 知识条目名
+- Frame 内第一个 text node（或 `_description`）= 描述
+- 子节点 = 实际设计内容（样式示例、组件实例）
+- 支持富文本：markdown 标记在 text 内容里，agent 解析时识别
+
+### 沟通方式
+
+Agent 不是机械汇报"Learned: X"，而是自然描述**看到什么、理解什么、怎么用**：
+
+> "Your palette uses 4 seed colors with a cool-neutral secondary — I'll match this tone for surfaces and borders."
+> → View palette [link:NODE:xxx]
+
+在对话气泡里输出可点击的超链接，指向具体 design system 节点。
+
+### 宽容输入，显式输出
+
+| 输入方式 | Agent 行为 |
+|---|---|
+| 粘贴 Figma 链接 | `cat` → 分析 → 提取 |
+| 选中 frames | 读取 selection → 分析 |
+| Design system page 有清晰命名 | 自动识别 |
+| Frame 叫 `Frame 2435367` | 靠内容结构识别（有色块+标注 = 色板） |
+| 纯草稿/探索性内容 | 不提取，不进入上下文 |
+
+**"不能无效宽容"**：只有 agent 明确判断为"对后续设计有指导意义"的内容才进入上下文，并在气泡里显式告诉用户它打算怎么用。用户可以纠正。
+
+### Context Budget
+
+不是所有 design system 都塞进 prompt：
+- **Indexed but not loaded**：agent 知道有哪些条目（名字+描述），不默认全加载
+- **On-demand retrieval**：用到某个 pattern 时才 `cat` 读取详细内容
+- 类比 `man [topic]` 的 knowledge 系统——有索引，按需查
+
+### .agent page 内的结构化数据
+
+```
+.agent (Figma Page)
+├── _config              ← agent 配置（JSON in text node）
+├── _design.md           ← 提取的结构化知识
+│   "palette: { primary: #000, ... }"
+│   "typography: { headline: Space Grotesk/32 }"
+│   "source: [link:NODE:xxx]"  ← 回链到原始节点
+├── _memory              ← 对话摘要、用户偏好
+├── Palette/             ← 可视化色卡（绑定 Figma 变量）
+├── Typography/          ← 字体样本
+└── Components/          ← 组件库索引
+```
+
+### 首次进入（Onboarding）流程
+
+```
+Agent 启动
+  → 扫描 pages，发现 "Design System" page
+  → ls → tree → 选择性 cat 关键节点
+  → 判断：这是色板、这是字体规范、这是组件集
+  → 提取结构化摘要 → 写入 .agent/_design.md
+  → 对话气泡：
+    "I found your design system:
+     • 4-color palette anchored on pure black → View [link]
+     • Space Grotesk headlines + Inter body → View [link]
+     • Button component with 4 variants → View [link]
+     Need me to adjust anything?"
+```
+
+### 再次进入（Warm start）流程
+
+```
+Agent 启动
+  → 发现 .agent page → 读 _design.md
+  → 已有结构化知识，直接加载为上下文
+  → 检查 source links 是否仍然有效
+  → 如有变化，增量更新
+```
+
 ## 待实现
 
-### Phase 1：.agent page 生命周期
+### Phase 1：Session Scope + .agent page 生命周期
+- [x] Session-scoped path preference（pathResolver.ts）
 - [ ] 自动检测/创建 .agent page
 - [ ] `var sheet [collection]` 命令 — 一键生成可视化色卡
-- [ ] Palette 读取集成到 agent context assembly（`AgentOrchestrator.generate()` 层）
+- [ ] Palette 读取集成到 agent context assembly
 
-### Phase 2：双向同步
-- [ ] agent 创建变量时自动更新 Palette
-- [ ] 用户修改 Palette 色卡 → agent 下轮读取到最新状态（已天然支持，因为读的是画布节点）
+### Phase 2：Design System Learning
+- [ ] 结构化提取：从 Design System page 提取 tokens → _design.md
+- [ ] Onboarding 流程：首次扫描 + 自然语言反馈
+- [ ] 双向同步：agent 创建变量时更新 Palette，用户改 Palette agent 下轮读到
 
-### Phase 3：跨文件
+### Phase 3：跨文件 + 持久化
 - [ ] clientStorage 存储设计系统摘要
-- [ ] 新文件检测到无 .agent page → 从 clientStorage 引导初始化
+- [ ] 新文件 → 从 clientStorage 引导初始化
 - [ ] 品牌指南 → 变量 → Palette 的一键提取流程
 
-### Phase 4：完整 .agent page
-- [ ] Components/ — 组件库索引
-- [ ] Brief/ — 设计方向文本
-- [ ] Memory/ — agent 决策记录、用户偏好
+### Phase 4：完整认知生命周期
+- [ ] Agent 主动判断内容价值（不是被动收录）
+- [ ] 自然沟通风格（"I'll use this as..." 而非 "Learned: X"）
+- [ ] 对话气泡中输出 design system 超链接
+- [ ] Context budget 管理（索引 + 按需加载）
 
 ## Figma API 能力边界
 

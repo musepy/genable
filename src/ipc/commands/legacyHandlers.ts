@@ -1,131 +1,17 @@
 /**
  * @file legacyHandlers.ts
- * @description Legacy tool handlers — context, outline, inspect, design, replace, query,
+ * @description Legacy tool handlers — design, replace, query,
  * mkdir, mktext, write, ln. Kept for backward compatibility.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
-import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
-import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { fontBus } from '../../engine/figma-adapter/resources/FontBus';
-import { logger } from '../../utils/logger';
 import { resolveSceneNode, resolvePathToNode, splitPath } from './pathResolver';
 import {
-  executeFlatOps, exportNodeToBase64, stripBraces, escapeFlatOpsStr,
+  executeFlatOps, stripBraces, escapeFlatOpsStr,
   injectNameProp, extractAllReplacePropertyValues, matchesReplaceValue,
   applyReplacePropertyValue,
 } from './shared';
-
-// ── context ──
-
-export async function handleContext(parameters: any): Promise<ToolResponse> {
-  const { nodeId: contextNodeId, depth: contextDepth } = parameters;
-  const contextDepthClamped = Math.min(contextDepth || 2, 5);
-
-  const contextResolved = await resolveSceneNode(contextNodeId);
-  if (!contextResolved.ok) return contextResolved.response;
-  const contextNode = contextResolved.node;
-
-  const contextSerialized = NodeSerializer.serializeWithCompression(contextNode, {
-    maxDepth: contextDepthClamped,
-    pruneDefaults: true
-  });
-  const contextTree = FlatOpsSerializer.serialize(contextSerialized, {
-    maxDepth: contextDepthClamped,
-    structural: true,
-  });
-
-  const page = figma.currentPage;
-  const topLevelNodes = page.children.map(n => ({ id: n.id, name: n.name, type: n.type }));
-  const contextSelection = page.selection.map(n => ({ id: n.id, name: n.name, type: n.type }));
-
-  return {
-    success: true,
-    data: {
-      page: { name: page.name, childCount: page.children.length, topLevelNodes },
-      tree: contextTree,
-      ...(contextSelection.length > 0 && { selection: contextSelection }),
-    }
-  };
-}
-
-// ── outline ──
-
-export async function handleOutline(parameters: any): Promise<ToolResponse> {
-  const { nodeId: outlineNodeId, depth: outlineDepth } = parameters;
-  const outlineDepthClamped = Math.min(outlineDepth || 5, 10);
-
-  const outlineResolved = await resolveSceneNode(outlineNodeId);
-  if (!outlineResolved.ok) return outlineResolved.response;
-  const outlineNode = outlineResolved.node;
-
-  const outlineSerialized = NodeSerializer.serializeWithCompression(outlineNode, {
-    maxDepth: outlineDepthClamped,
-    pruneDefaults: true
-  });
-  const outlineXml = FlatOpsSerializer.serialize(outlineSerialized, {
-    maxDepth: outlineDepthClamped,
-    structural: true,
-  });
-
-  const suggestedReads: string[] = [];
-  if ('children' in outlineNode) {
-    for (const child of (outlineNode as any).children) {
-      if ('children' in child && child.children.length > 3) {
-        suggestedReads.push(child.id);
-      }
-    }
-  }
-
-  const outlineData: any = { tree: outlineXml };
-  if (suggestedReads.length > 0) outlineData.suggestedReads = suggestedReads;
-
-  return { success: true, data: outlineData };
-}
-
-// ── inspect ──
-
-export async function handleInspect(parameters: any): Promise<ToolResponse> {
-  const { nodeId: inspectNodeId, depth: inspectDepth, screenshot: wantScreenshot } = parameters;
-  const inspectDepthClamped = Math.min(inspectDepth || 5, 10);
-
-  const inspectResolved = await resolveSceneNode(inspectNodeId);
-  if (!inspectResolved.ok) return inspectResolved.response;
-  const inspectNode = inspectResolved.node;
-
-  const inspectSerialized = NodeSerializer.serializeWithCompression(inspectNode, {
-    maxDepth: inspectDepthClamped,
-    pruneDefaults: true
-  });
-
-  const inspectFullXml = FlatOpsSerializer.serialize(inspectSerialized, { maxDepth: inspectDepthClamped });
-  const inspectData: any = {};
-  const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
-
-  if (inspectFullXml.length > AUTO_DEGRADE_CHARS) {
-    const inspectStructuralXml = FlatOpsSerializer.serialize(inspectSerialized, {
-      maxDepth: inspectDepthClamped,
-      structural: true,
-    });
-    inspectData.tree = inspectStructuralXml;
-    const childCount = 'children' in inspectNode ? (inspectNode as any).children.length : 0;
-    inspectData.hint = `Tree is large (${childCount} children, ${inspectFullXml.length} chars). Use outline() to discover structure, then inspect specific children.`;
-  } else {
-    inspectData.tree = inspectFullXml;
-  }
-
-  if (wantScreenshot && inspectNode.visible && inspectNode.width > 0 && inspectNode.height > 0) {
-    try {
-      const ssResult = await exportNodeToBase64(inspectNode);
-      inspectData.__image = ssResult.__image;
-    } catch (e: any) {
-      logger.info(`Screenshot bundling failed for ${inspectNodeId}: ${e?.message}`);
-    }
-  }
-
-  return { success: true, data: inspectData };
-}
 
 // ── design ──
 

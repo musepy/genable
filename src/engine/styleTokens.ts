@@ -25,18 +25,29 @@ const DEFAULT_TEXT: Record<string, TokenProps> = {
   'stat-value': { size: 36, weight: 'Bold',      fill: '#0F172A' },
   'stat-label': { size: 12, weight: 'Medium',    fill: '#64748B', textCase: 'UPPER' },
   overline:     { size: 11, weight: 'SemiBold',  fill: '#94A3B8', textCase: 'UPPER' },
-  'agent-name': { size: 11, weight: 'SemiBold',  fill: '#6366F1' },
-  'agent-text': { size: 14, weight: 'Regular',   fill: '#1E293B' },
+  'chat-title': { size: 16, weight: 'SemiBold',  fill: '#0F172A', w: 'fill' },
+  'agent-name': { size: 11, weight: 'SemiBold',  fill: '#6366F1', w: 'fill' },
+  'agent-text': { size: 14, weight: 'Regular',   fill: '#1E293B', w: 'fill' },
+  'user-name':  { size: 11, weight: 'SemiBold',  fill: '#64748B', w: 'fill' },
+  'user-text':  { size: 14, weight: 'Regular',   fill: '#1E293B', w: 'fill' },
+  'link-text':  { size: 12, weight: 'Medium',    fill: '#6366F1', w: 'fill' },
 };
 
 const DEFAULT_CONTAINER: Record<string, TokenProps> = {
-  page:    { layout: 'vertical',   p: 48, gap: 32, w: 'hug', h: 'hug' },
-  card:    { layout: 'vertical',   p: 24, gap: 12, corner: 12, fill: '#FFFFFF', w: 'hug', h: 'hug' },
-  row:     { layout: 'horizontal', gap: 16, w: 'hug', h: 'hug' },
-  column:  { layout: 'vertical',   gap: 16, w: 'hug', h: 'hug' },
-  section: { layout: 'vertical',   gap: 16, w: 'hug', h: 'hug' },
-  chip:    { layout: 'horizontal', gap: 4, corner: 100, fill: '#F1F5F9', w: 'hug', h: 'hug' },
-  bubble:  { layout: 'vertical', p: 16, gap: 6, corner: 12, fill: '#EEF2FF', w: 'hug', h: 'hug' },
+  page:         { layout: 'vertical',   p: 48, gap: 32, w: 'hug', h: 'hug' },
+  card:         { layout: 'vertical',   p: 24, gap: 12, corner: 12, fill: '#FFFFFF', w: 'hug', h: 'hug' },
+  row:          { layout: 'horizontal', gap: 16, w: 'hug', h: 'hug' },
+  column:       { layout: 'vertical',   gap: 16, w: 'hug', h: 'hug' },
+  section:      { layout: 'vertical',   gap: 16, w: 'hug', h: 'hug' },
+  chip:         { layout: 'horizontal', gap: 4, corner: 100, fill: '#F1F5F9', w: 'hug', h: 'hug' },
+  'chat-panel': { layout: 'vertical', p: 24, gap: 12, corner: 16, fill: '#FFFFFF', w: 380, h: 'hug',
+                  stroke: '#E2E8F0', strokeW: 1 },
+  bubble:       { layout: 'vertical', p: 16, gap: 6, corner: 12, fill: '#EEF2FF', w: 'fill', h: 'hug' },
+  'user-bubble':{ layout: 'vertical', p: 12, gap: 4, corner: 12, fill: '#F1F5F9', w: 'fill', h: 'hug' },
+  // Design system tokens
+  palette:      { layout: 'vertical', gap: 8, w: 320, h: 'hug', p: 24 },
+  'type-scale': { layout: 'vertical', gap: 20, w: 'hug', h: 'hug', p: 24 },
+  'spacing-scale': { layout: 'vertical', gap: 12, w: 'hug', h: 'hug', p: 24 },
 };
 
 // ── Mutable stores ──────────────────────────────────────────────────

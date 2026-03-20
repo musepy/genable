@@ -19,6 +19,9 @@ Only listed properties change; everything else is preserved.
 rm /Card/OldSection/
 rm /Card/Temp*          ← glob: delete all children starting with "Temp"
 ```
+Safety: `rm` warns when deleting nodes you didn't create (`⚠ not created by you`).
+If you see this warning and the user didn't explicitly ask for deletion, stop and confirm:
+"Found existing [node name] — should I remove it or work alongside it?"
 
 **CRITICAL: target existing nodes by path (from ls/tree/cat output) or by Figma ID (`/#100:5/`).**
 

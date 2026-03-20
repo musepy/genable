@@ -19,11 +19,20 @@ import {
 } from '../../engine/styleTokens';
 import { executeFlatOps, escapeFlatOpsStr } from './shared';
 
+// ── Compound tokens ──
+// Compound tokens look like text (token: content) but expand to multi-node structures.
+
+const COMPOUND_TOKENS = new Set(['swatch', 'type-sample', 'spacing-step']);
+
+function isCompoundToken(token: string): boolean {
+  return COMPOUND_TOKENS.has(token);
+}
+
 // ── Types ──
 
 interface RenderNode {
   token: string;
-  type: 'text' | 'container';
+  type: 'text' | 'container' | 'compound';
   content?: string;
   overrides?: Record<string, string>;
   children: RenderNode[];
@@ -69,23 +78,41 @@ function parseMarkup(input: string): { roots: RenderNode[]; errors: string[] } {
 function parseLine(
   line: string, indent: number, errors: string[], lineNum: number,
 ): RenderNode | null {
-  // Text pattern: token: "content" or token: content
-  const textMatch = line.match(/^([\w-]+)\s*:\s*(.+)$/);
+  // Text/compound pattern: token [overrides]: "content" or token: content
+  const textMatch = line.match(/^([\w-]+)(?:\s+\[([^\]]*)\])?\s*:\s*(.+)$/);
   if (textMatch) {
-    const [, token, rawContent] = textMatch;
+    const [, token, overrideStr, rawContent] = textMatch;
     let content = rawContent.trim();
     if ((content.startsWith('"') && content.endsWith('"')) ||
         (content.startsWith("'") && content.endsWith("'"))) {
       content = content.slice(1, -1);
     }
 
+    // Compound tokens expand to multi-node structures
+    if (isCompoundToken(token)) {
+      return { token, type: 'compound' as const, content, children: [], indent };
+    }
+
     if (!isTextToken(token)) {
       const { text } = listTokens();
-      errors.push(`L${lineNum}: Unknown text token "${token}". Available: ${text.join(', ')}`);
+      errors.push(`L${lineNum}: Unknown text token "${token}". Available: ${text.join(', ')}, swatch, type-sample, spacing-step`);
       return null;
     }
 
-    return { token, type: 'text', content, children: [], indent };
+    // Parse optional overrides: [key:value key2:value2]
+    let overrides: Record<string, string> | undefined;
+    if (overrideStr) {
+      overrides = {};
+      for (const pair of overrideStr.trim().split(/\s+/)) {
+        const colonIdx = pair.indexOf(':');
+        if (colonIdx > 0) {
+          overrides[pair.slice(0, colonIdx)] = pair.slice(colonIdx + 1);
+        }
+      }
+      if (Object.keys(overrides).length === 0) overrides = undefined;
+    }
+
+    return { token, type: 'text', content, overrides, children: [], indent };
   }
 
   // Container pattern: token [prop:value ...]
@@ -131,11 +158,20 @@ function generateFlatOps(roots: RenderNode[]): string {
   function emit(node: RenderNode, parentSym: string): string {
     const sym = `n${++counter}`;
 
-    if (node.type === 'text') {
+    if (node.type === 'compound') {
+      return emitCompound(node, parentSym);
+    } else if (node.type === 'text') {
       const style = getTextStyle(node.token) || {};
+      const merged: Record<string, string | number> = { ...style };
+      if (node.overrides) {
+        for (const [k, v] of Object.entries(node.overrides)) {
+          const num = Number(v);
+          merged[k] = !isNaN(num) && v !== '' ? num : v;
+        }
+      }
       const content = node.content || '';
       lines.push(
-        `${sym} = text(${parentSym}, {name:'${escapeFlatOpsStr(node.token)}', ${propsToStr(style)}}, '${escapeFlatOpsStr(content)}')`,
+        `${sym} = text(${parentSym}, {name:'${escapeFlatOpsStr(node.token)}', ${propsToStr(merged)}}, '${escapeFlatOpsStr(content)}')`,
       );
     } else {
       const base = getContainerStyle(node.token) || {};
@@ -154,6 +190,70 @@ function generateFlatOps(roots: RenderNode[]): string {
       }
     }
 
+    return sym;
+  }
+
+  /** Expand compound tokens into multi-node structures. */
+  function emitCompound(node: RenderNode, parentSym: string): string {
+    const content = node.content || '';
+
+    if (node.token === 'swatch') {
+      // swatch: Name #HEXVAL
+      const match = content.match(/^(.+?)\s+(#[0-9A-Fa-f]{3,8})$/);
+      const name = match ? match[1] : content;
+      const color = match ? match[2] : '#CCCCCC';
+
+      const row = `n${++counter}`;
+      const rect = `n${++counter}`;
+      const info = `n${++counter}`;
+      const nameT = `n${++counter}`;
+      const valueT = `n${++counter}`;
+
+      lines.push(`${row} = frame(${parentSym}, {name:'${escapeFlatOpsStr(name)}', layout:'horizontal', gap:12, p:'12', corner:8, fill:'#FFFFFF', w:'fill', h:'hug', alignCross:'center'})`);
+      lines.push(`${rect} = rect(${row}, {name:'color', w:40, h:40, corner:8, fill:'${color}'})`);
+      lines.push(`${info} = frame(${row}, {name:'info', layout:'vertical', gap:2, w:'hug', h:'hug'})`);
+      lines.push(`${nameT} = text(${info}, {name:'name', size:14, weight:'Medium', fill:'#1E293B'}, '${escapeFlatOpsStr(name)}')`);
+      lines.push(`${valueT} = text(${info}, {name:'value', size:12, weight:'Regular', fill:'#94A3B8'}, '${color}')`);
+      return row;
+    }
+
+    if (node.token === 'type-sample') {
+      // type-sample: Label FontFamily Size Weight
+      const parts = content.split(/\s+/);
+      const label = parts[0] || 'Text';
+      const font = parts[1] || 'Inter';
+      const size = parseInt(parts[2]) || 16;
+      const weight = parts[3] || 'Regular';
+
+      const wrap = `n${++counter}`;
+      const labelT = `n${++counter}`;
+      const sampleT = `n${++counter}`;
+
+      lines.push(`${wrap} = frame(${parentSym}, {name:'${escapeFlatOpsStr(label)}', layout:'vertical', gap:4, w:'hug', h:'hug'})`);
+      lines.push(`${labelT} = text(${wrap}, {name:'label', size:11, weight:'Medium', fill:'#94A3B8', textCase:'UPPER'}, '${escapeFlatOpsStr(label)} · ${font} ${size}')`);
+      lines.push(`${sampleT} = text(${wrap}, {name:'sample', size:${size}, weight:'${weight}', font:'${escapeFlatOpsStr(font)}', fill:'#0F172A'}, 'The quick brown fox jumps over the lazy dog')`);
+      return wrap;
+    }
+
+    if (node.token === 'spacing-step') {
+      // spacing-step: Name Value
+      const parts = content.split(/\s+/);
+      const name = parts[0] || 'md';
+      const value = parseInt(parts[1]) || 16;
+
+      const row = `n${++counter}`;
+      const bar = `n${++counter}`;
+      const labelT = `n${++counter}`;
+
+      lines.push(`${row} = frame(${parentSym}, {name:'${escapeFlatOpsStr(name)}', layout:'horizontal', gap:12, w:'hug', h:'hug', alignCross:'center'})`);
+      lines.push(`${labelT} = text(${row}, {name:'label', size:12, weight:'Medium', fill:'#64748B', w:32}, '${escapeFlatOpsStr(name)}')`);
+      lines.push(`${bar} = rect(${row}, {name:'bar', w:${value}, h:12, corner:2, fill:'#6366F1'})`);
+      return row;
+    }
+
+    // Fallback: treat as plain text
+    const sym = `n${++counter}`;
+    lines.push(`${sym} = text(${parentSym}, {name:'${escapeFlatOpsStr(node.token)}', size:14, fill:'#475569'}, '${escapeFlatOpsStr(content)}')`);
     return sym;
   }
 

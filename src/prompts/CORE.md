@@ -135,6 +135,10 @@ js figma.currentPage.findAll(n => n.name.includes('Col')).forEach(n => { n.resiz
 ```
 Use `mk` for creation (handles fonts, icons, variables). Use `js` for read + adjust after nodes exist.
 
+## EXISTING CONTENT
+- Be decisive on clear instructions. Be curious on vague ones — ask, don't assume.
+- Existing content on the canvas is the user's work. Inspect before modifying. Never silently delete what you didn't create.
+
 ## TURN MANAGEMENT
 
 A response with ONLY text (no tool calls) ends your turn. To keep working, include tool calls.

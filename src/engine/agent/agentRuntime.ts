@@ -110,6 +110,9 @@ export class AgentRuntime {
   private eventSequence = 0;
   private canceledEventEmitted = false;
   private pendingApproval: { resolve: (approved: boolean) => void } | null = null;
+  private chatPanelId: string | null = null;
+  private turnCreatedNodeIds: string[] = [];
+  private designRootId: string | null = null;  // persists across turns for edit-turn links
   private runStats = {
     toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
     tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
@@ -310,11 +313,62 @@ export class AgentRuntime {
    * turnMessages are NOT cleared here — they stay available for getMessages()
    * (used by debrief). They're cleared at the start of the next run().
    */
+  // ── Chat Panel System ─────────────────────────────────────────────
+  // Persistent chat container: all messages (user + agent) render into
+  // a single panel. Created on first use, reused across turns.
+
   /**
-   * Render agent's text response as a styled bubble on the canvas.
+   * Create chat panel if it doesn't exist, return its node ID.
+   * Returns null on failure (non-fatal — caller falls back gracefully).
+   */
+  private async ensureChatPanel(iteration: number): Promise<string | null> {
+    if (this.chatPanelId) return this.chatPanelId;
+
+    const markup = `chat-panel\n  chat-title: Genable`;
+    const result = await this.toolDispatcher.dispatch(
+      [{ id: this.generateId('chat-init'), name: 'render', args: { markup } }],
+      iteration,
+    );
+
+    // Extract panel ID (first created node = the chat-panel frame)
+    const content = result.toolResultsMessage?.content;
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        const idMap = (part as any).functionResponse?.response?.data?.idMap;
+        if (idMap?.n1) {
+          this.chatPanelId = String(idMap.n1);
+          return this.chatPanelId;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Render user's prompt as a message in the chat panel.
+   */
+  private async renderUserMessage(prompt: string, iteration: number): Promise<void> {
+    const panelId = await this.ensureChatPanel(iteration);
+    if (!panelId) return;
+
+    let text = prompt.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    if (text.length > 200) text = text.slice(0, 200) + '…';
+
+    const markup = `user-bubble\n  user-name: You\n  user-text: ${text}`;
+    await this.toolDispatcher.dispatch(
+      [{ id: this.generateId('user-msg'), name: 'render', args: { markup, parentId: panelId } }],
+      iteration,
+    );
+  }
+
+  /**
+   * Render agent's text response in the chat panel with optional design links.
    * Non-fatal: failures are logged, never block the turn.
    */
-  private async renderBubble(text: string, iteration: number): Promise<void> {
+  private async renderAgentBubble(text: string, iteration: number): Promise<void> {
+    const panelId = await this.ensureChatPanel(iteration);
+    if (!panelId) return;
+
     // Strip markdown formatting for clean display
     let clean = text
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // **bold** → bold
@@ -326,14 +380,65 @@ export class AgentRuntime {
     // Truncate to max 300 chars
     if (clean.length > 300) clean = clean.slice(0, 300) + '…';
 
-    // Escape single quotes (markup uses single-quote internally in flat ops)
-    const safe = clean.replace(/'/g, "\\'").replace(/"/g, "'");
+    // Flatten to single line (render markup is line-based, newlines would break parsing)
+    clean = clean.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
-    const markup = `bubble\n  agent-name: Genable\n  agent-text: ${safe}`;
+    const markupLines = [
+      'bubble',
+      '  agent-name: Genable',
+      `  agent-text: ${clean}`,
+    ];
+
+    // Update persistent design root from this turn's creations
+    if (this.turnCreatedNodeIds.length > 0) {
+      this.designRootId = this.turnCreatedNodeIds[0];
+    }
+    // Add hyperlink: current turn's root, or fallback to previous turn's design
+    const linkNodeId = this.turnCreatedNodeIds.length > 0
+      ? this.turnCreatedNodeIds[0]
+      : this.designRootId;
+    if (linkNodeId) {
+      markupLines.push(`  link-text [link:NODE:${linkNodeId}]: → View design`);
+    }
+
+    const markup = markupLines.join('\n');
     await this.toolDispatcher.dispatch(
-      [{ id: this.generateId('bubble'), name: 'render', args: { markup } }],
+      [{ id: this.generateId('bubble'), name: 'render', args: { markup, parentId: panelId } }],
       iteration,
     );
+  }
+
+  /**
+   * Extract the root design node ID from tool result data.
+   * For chains, picks the shallowest path (fewest `/` segments) — the design root.
+   */
+  private collectCreatedNodeIds(data: any): void {
+    // Direct idMap (non-chained commands like single mk)
+    if (!data.chain && data.idMap && typeof data.idMap === 'object') {
+      const ids = Object.values(data.idMap) as string[];
+      if (ids.length > 0) this.turnCreatedNodeIds.push(String(ids[0]));
+      return;
+    }
+    // Chained commands (&&): find the shallowest path's node ID
+    if (Array.isArray(data.chain)) {
+      let bestId: string | null = null;
+      let bestDepth = Infinity;
+      for (const step of data.chain) {
+        const idMap = step.data?.idMap;
+        if (!idMap || typeof idMap !== 'object') continue;
+        const ids = Object.values(idMap) as string[];
+        if (ids.length === 0) continue;
+        // Extract path depth from command string: "mk /A/B/C ..." → depth 3
+        const cmd = step.command || '';
+        const pathMatch = cmd.match(/\/([\w/]+)\//);
+        const depth = pathMatch ? pathMatch[1].split('/').length : Infinity;
+        if (depth < bestDepth) {
+          bestDepth = depth;
+          bestId = String(ids[0]);
+        }
+      }
+      if (bestId) this.turnCreatedNodeIds.push(bestId);
+    }
   }
 
   private endTurn(): void {
@@ -482,6 +587,17 @@ export class AgentRuntime {
       iteration: 0,
       maxIterations: this.maxIterations,
     });
+
+    // ── Render user message in chat panel ──
+    this.turnCreatedNodeIds = [];
+    try {
+      await Promise.race([
+        this.renderUserMessage(userPrompt, 0),
+        new Promise(r => setTimeout(r, 5000)),
+      ]);
+    } catch (e: any) {
+      console.warn('[ChatPanel] User message render failed (non-fatal):', e?.message);
+    }
 
     // ════════════════════════════════════════════
     // ITERATION LOOP
@@ -685,6 +801,11 @@ export class AgentRuntime {
             if (part.functionResponse?.response?.success === false) {
               this.runStats.toolErrorCount++;
             }
+            // Track created node IDs for design link generation
+            const data = (part as any).functionResponse?.response?.data;
+            if (data) {
+              this.collectCreatedNodeIds(data);
+            }
           }
         }
         this.turnMessages.push(dispatchResult.toolResultsMessage);
@@ -776,12 +897,12 @@ export class AgentRuntime {
           console.warn(`[AgentRuntime] Truncation limit reached (3). Forcing turn end.`);
         }
 
-        // Auto-bubble: render agent's reply on canvas BEFORE turn_end
+        // Auto-bubble: render agent's reply in chat panel BEFORE turn_end
         // (so dev bridge nodeTree snapshot captures it)
         if (response.text) {
           try {
             await Promise.race([
-              this.renderBubble(response.text, iteration),
+              this.renderAgentBubble(response.text, iteration),
               new Promise(r => setTimeout(r, 5000)),
             ]);
           } catch (e: any) {

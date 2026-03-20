@@ -109,6 +109,7 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
   if (node.type === 'TEXT') {
     const t = node as TextNode;
     violations.push(...validateTextNode(t, intended));
+    violations.push(...validateLowContrast(t));
   }
 
   // 4. Frame children overflow
@@ -117,6 +118,8 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
     violations.push(...validateSiblingConsistency(node as FrameNode));
     violations.push(...validateMissingAutoLayout(node as FrameNode));
     violations.push(...validateHugFillCycle(node as FrameNode));
+    violations.push(...validateEmptyFrame(node as FrameNode));
+    violations.push(...validateCornerRadiusMismatch(node as FrameNode));
   }
 
   // 5a. White-on-white border
@@ -127,6 +130,11 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
   // 6. Sizing reverted (FILL → FIXED because parent lacks auto-layout)
   if (intended) {
     violations.push(...validateSizingRevert(node, intended));
+  }
+
+  // 7. Small tap target (interactive elements below 44×44)
+  if ('width' in node && 'height' in node) {
+    violations.push(...validateSmallTapTarget(node));
   }
 
   return violations;
@@ -558,6 +566,234 @@ function validateSizingRevert(node: SceneNode, intended: PostOpIntended): Valida
           ],
     });
   }
+
+  return violations;
+}
+
+// ──────────────────────────────────────────────
+// Low contrast detection (text vs background)
+// ──────────────────────────────────────────────
+
+/**
+ * Detect text with insufficient contrast against its nearest background.
+ * Walks up the parent chain to find the nearest ancestor with a solid fill,
+ * then computes the WCAG contrast ratio.
+ * Threshold: 3:1 minimum (more permissive than WCAG AA 4.5:1).
+ */
+function validateLowContrast(t: TextNode): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  const textFills = (t as any).fills;
+  if (!Array.isArray(textFills)) return violations;
+
+  const textSolid = textFills.find(
+    (f: Paint) => f.type === 'SOLID' && f.visible !== false
+  ) as SolidPaint | undefined;
+  if (!textSolid) return violations;
+
+  const bgColor = findNearestBackground(t);
+  if (!bgColor) return violations;
+
+  const textLum = relativeLuminance(textSolid.color);
+  const bgLum = relativeLuminance(bgColor);
+  const ratio = contrastRatio(textLum, bgLum);
+
+  if (ratio < 3) {
+    violations.push({
+      code: 'LOW_CONTRAST',
+      message: `'${t.name}' has contrast ratio ${ratio.toFixed(1)}:1 against background (minimum 3:1)`,
+      nodeId: t.id,
+      nodeName: t.name,
+      context: {
+        textColor: colorToHex(textSolid.color),
+        backgroundColor: colorToHex(bgColor),
+        contrastRatio: parseFloat(ratio.toFixed(2)),
+      },
+      hints: [
+        bgLum > 0.5
+          ? `Darken text color (e.g. #1A1A1A) for sufficient contrast`
+          : `Lighten text color (e.g. #FFFFFF) for sufficient contrast`,
+        `Or change the background color to increase contrast`,
+      ],
+    });
+  }
+
+  return violations;
+}
+
+/**
+ * Walk up the parent chain to find the nearest ancestor with a visible solid fill.
+ */
+function findNearestBackground(node: SceneNode): RGB | null {
+  let current = node.parent;
+  while (current) {
+    if ('fills' in current) {
+      const fills = (current as any).fills;
+      if (Array.isArray(fills)) {
+        const solidFill = fills.find(
+          (f: Paint) => f.type === 'SOLID' && f.visible !== false
+        ) as SolidPaint | undefined;
+        if (solidFill) return solidFill.color;
+      }
+    }
+    current = (current as any).parent || null;
+  }
+  return null;
+}
+
+function relativeLuminance(color: RGB): number {
+  const linearize = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * linearize(color.r) + 0.7152 * linearize(color.g) + 0.0722 * linearize(color.b);
+}
+
+function contrastRatio(l1: number, l2: number): number {
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function colorToHex(color: RGB): string {
+  const toHex = (c: number) => Math.round(c * 255).toString(16).padStart(2, '0').toUpperCase();
+  return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`;
+}
+
+// ──────────────────────────────────────────────
+// Empty frame detection
+// ──────────────────────────────────────────────
+
+/**
+ * Detect empty frames with no children and no fill.
+ * Frames that serve as spacers (very narrow) or have a visible fill are excluded.
+ */
+function validateEmptyFrame(frame: FrameNode): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  if (frame.children && frame.children.length > 0) return violations;
+
+  // Skip spacers/dividers (very thin)
+  if (frame.width <= 4 || frame.height <= 4) return violations;
+
+  // Skip frames with visible fill (decorative backgrounds, color blocks)
+  const fills = (frame as any).fills;
+  if (Array.isArray(fills) && fills.some((f: Paint) => f.visible !== false && f.type === 'SOLID')) {
+    return violations;
+  }
+
+  violations.push({
+    code: 'EMPTY_FRAME',
+    message: `'${frame.name}' is an empty frame with no children and no fill`,
+    nodeId: frame.id,
+    nodeName: frame.name,
+    context: {
+      width: Math.round(frame.width),
+      height: Math.round(frame.height),
+    },
+    hints: [
+      `Add content to this frame or delete it if unneeded`,
+      `If this is a spacer, use padding/gap on the parent instead`,
+    ],
+  });
+
+  return violations;
+}
+
+// ──────────────────────────────────────────────
+// Corner radius mismatch (child > parent)
+// ──────────────────────────────────────────────
+
+/**
+ * Detect children with cornerRadius larger than their parent frame.
+ * This creates visual artifacts where inner corners poke through the parent shape.
+ * Also flags parents with cornerRadius but no clipsContent.
+ */
+function validateCornerRadiusMismatch(frame: FrameNode): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  if (!frame.children || frame.children.length === 0) return violations;
+
+  const parentRadius = getMaxCornerRadius(frame);
+  if (parentRadius === 0) return violations;
+
+  for (const child of frame.children) {
+    if (!('cornerRadius' in child)) continue;
+    const childRadius = getMaxCornerRadius(child);
+    if (childRadius > parentRadius) {
+      const innerRadius = Math.max(0, parentRadius - Math.min(
+        (frame as any).paddingTop || 0,
+        (frame as any).paddingLeft || 0,
+        (frame as any).paddingRight || 0,
+        (frame as any).paddingBottom || 0,
+      ));
+      violations.push({
+        code: 'CORNER_RADIUS_MISMATCH',
+        message: `'${child.name}' cornerRadius ${childRadius}px > parent '${frame.name}' cornerRadius ${parentRadius}px`,
+        nodeId: child.id,
+        nodeName: child.name,
+        context: {
+          childCornerRadius: childRadius,
+          parentCornerRadius: parentRadius,
+          parentClipsContent: !!(frame as any).clipsContent,
+        },
+        hints: [
+          `Reduce child cornerRadius to ~${innerRadius}px (parent radius minus padding)`,
+          `Or increase parent cornerRadius to ${childRadius}px`,
+          ...((frame as any).clipsContent ? [] : [`Set parent clipsContent to true to clip overflow`]),
+        ],
+      });
+      break; // Only report first mismatch per frame
+    }
+  }
+
+  return violations;
+}
+
+function getMaxCornerRadius(node: any): number {
+  if (typeof node.cornerRadius === 'number') return node.cornerRadius;
+  // Mixed corners — check individual values
+  const corners = [
+    node.topLeftRadius || 0,
+    node.topRightRadius || 0,
+    node.bottomLeftRadius || 0,
+    node.bottomRightRadius || 0,
+  ];
+  return Math.max(...corners);
+}
+
+// ──────────────────────────────────────────────
+// Small tap target detection
+// ──────────────────────────────────────────────
+
+const INTERACTIVE_PATTERN = /button|btn|icon|link|toggle|switch|checkbox|radio|tab\b|chip|tag|action|close|back|menu|cta/i;
+
+/**
+ * Detect interactive-looking elements (by name) that are too small for comfortable tapping.
+ * WCAG 2.5.5 recommends at least 44×44px touch targets.
+ */
+function validateSmallTapTarget(node: SceneNode): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  if (!INTERACTIVE_PATTERN.test(node.name)) return violations;
+
+  const w = (node as any).width as number;
+  const h = (node as any).height as number;
+  if (w >= 44 || h >= 44) return violations; // At least one dimension is large enough
+
+  violations.push({
+    code: 'SMALL_TAP_TARGET',
+    message: `'${node.name}' is ${Math.round(w)}×${Math.round(h)}px — below 44×44px minimum tap target`,
+    nodeId: node.id,
+    nodeName: node.name,
+    context: {
+      width: Math.round(w),
+      height: Math.round(h),
+      minimumSize: 44,
+    },
+    hints: [
+      `Increase size to at least 44×44px for accessibility`,
+      `Or wrap in a larger transparent frame with padding for the tap area`,
+    ],
+  });
 
   return violations;
 }

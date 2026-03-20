@@ -44,6 +44,10 @@ const SEVERITY_MAP: Record<string, 'warning' | 'error'> = {
   HUG_FILL_CYCLE: 'error',
   WHITE_ON_WHITE: 'warning',
   SIZING_REVERTED: 'error',
+  LOW_CONTRAST: 'warning',
+  SMALL_TAP_TARGET: 'warning',
+  CORNER_RADIUS_MISMATCH: 'warning',
+  EMPTY_FRAME: 'warning',
 };
 
 const MAX_DEFAULTS_APPLIED = 10;

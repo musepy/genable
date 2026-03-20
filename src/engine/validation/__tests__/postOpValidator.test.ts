@@ -22,6 +22,8 @@ function mockFrame(overrides: Partial<FrameNode> & { children?: any[]; parent?: 
     paddingBottom: 0,
     paddingLeft: 0,
     itemSpacing: 0,
+    fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+    strokes: [],
     children: [],
     parent: null,
     ...overrides,
@@ -377,6 +379,278 @@ describe('postOpValidator structured output', () => {
       expect(mismatch).toBeDefined();
       expect(mismatch!.context.childWidths).toEqual([300, 250]);
       expect(mismatch!.hints.some(h => h.includes('FILL'))).toBe(true);
+    });
+  });
+
+  describe('LOW_CONTRAST', () => {
+    it('detects dark text on dark background', () => {
+      const parent = mockFrame({
+        id: 'dark-bg',
+        name: 'DarkCard',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.1, g: 0.1, b: 0.1 } }],
+      });
+      const node = mockText({
+        id: 'dark-text',
+        name: 'Label',
+        characters: 'Hello',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.15, g: 0.15, b: 0.15 } }],
+        parent,
+      });
+      const violations = validatePostOp(node);
+
+      const lc = violations.find(a => a.code === 'LOW_CONTRAST');
+      expect(lc).toBeDefined();
+      expect(lc!.context.contrastRatio).toBeLessThan(3);
+      expect(lc!.hints.length).toBeGreaterThan(0);
+    });
+
+    it('detects light text on light background', () => {
+      const parent = mockFrame({
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.95, g: 0.95, b: 0.95 } }],
+      });
+      const node = mockText({
+        id: 'light-text',
+        name: 'Subtitle',
+        characters: 'Hello',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.9, g: 0.9, b: 0.9 } }],
+        parent,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'LOW_CONTRAST')).toBeDefined();
+    });
+
+    it('does NOT flag high-contrast text', () => {
+      const parent = mockFrame({
+        fills: [{ type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1 } }],
+      });
+      const node = mockText({
+        characters: 'Hello',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.1, g: 0.1, b: 0.1 } }],
+        parent,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'LOW_CONTRAST')).toBeUndefined();
+    });
+
+    it('does NOT flag when no background found', () => {
+      const node = mockText({
+        characters: 'Hello',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.5, g: 0.5, b: 0.5 } }],
+        parent: null,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'LOW_CONTRAST')).toBeUndefined();
+    });
+
+    it('walks up parent chain to find background', () => {
+      const grandparent = mockFrame({
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.12, g: 0.12, b: 0.12 } }],
+        parent: null,
+      });
+      // Middle frame has no fill
+      const middleFrame = mockFrame({ fills: [], parent: grandparent });
+      const node = mockText({
+        id: 'deep-text',
+        name: 'DeepLabel',
+        characters: 'Hello',
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.15, g: 0.15, b: 0.15 } }],
+        parent: middleFrame,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'LOW_CONTRAST')).toBeDefined();
+    });
+  });
+
+  describe('EMPTY_FRAME', () => {
+    it('detects empty frame with no children and no fill', () => {
+      const node = mockFrame({
+        id: 'empty-1',
+        name: 'EmptyContainer',
+        children: [],
+        fills: [],
+      });
+      const violations = validatePostOp(node);
+
+      const ef = violations.find(a => a.code === 'EMPTY_FRAME');
+      expect(ef).toBeDefined();
+      expect(ef!.context.width).toBe(400);
+      expect(ef!.context.height).toBe(300);
+    });
+
+    it('does NOT flag frame with children', () => {
+      const node = mockFrame({
+        children: [{ name: 'Child', type: 'FRAME', width: 100, height: 50 }],
+        fills: [],
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'EMPTY_FRAME')).toBeUndefined();
+    });
+
+    it('does NOT flag empty frame with visible fill (decorative)', () => {
+      const node = mockFrame({
+        children: [],
+        fills: [{ type: 'SOLID', visible: true, color: { r: 0.2, g: 0.5, b: 0.8 } }],
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'EMPTY_FRAME')).toBeUndefined();
+    });
+
+    it('does NOT flag thin spacer frames', () => {
+      const node = mockFrame({
+        children: [],
+        fills: [],
+        width: 400,
+        height: 2, // thin divider
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'EMPTY_FRAME')).toBeUndefined();
+    });
+  });
+
+  describe('CORNER_RADIUS_MISMATCH', () => {
+    it('detects child cornerRadius > parent cornerRadius', () => {
+      const children = [
+        {
+          id: 'inner-1',
+          name: 'InnerCard',
+          type: 'FRAME',
+          width: 200,
+          height: 100,
+          cornerRadius: 24,
+        },
+      ];
+      const node = mockFrame({
+        id: 'outer-1',
+        name: 'OuterCard',
+        cornerRadius: 12,
+        children,
+      });
+      const violations = validatePostOp(node);
+
+      const crm = violations.find(a => a.code === 'CORNER_RADIUS_MISMATCH');
+      expect(crm).toBeDefined();
+      expect(crm!.context.childCornerRadius).toBe(24);
+      expect(crm!.context.parentCornerRadius).toBe(12);
+      expect(crm!.hints.length).toBeGreaterThan(0);
+    });
+
+    it('does NOT flag when child radius <= parent radius', () => {
+      const children = [
+        {
+          id: 'inner-2',
+          name: 'InnerCard',
+          type: 'FRAME',
+          width: 200,
+          height: 100,
+          cornerRadius: 8,
+        },
+      ];
+      const node = mockFrame({
+        cornerRadius: 16,
+        children,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'CORNER_RADIUS_MISMATCH')).toBeUndefined();
+    });
+
+    it('does NOT flag when parent has no corner radius', () => {
+      const children = [
+        {
+          id: 'inner-3',
+          name: 'RoundedChild',
+          type: 'FRAME',
+          width: 200,
+          height: 100,
+          cornerRadius: 16,
+        },
+      ];
+      const node = mockFrame({
+        cornerRadius: 0,
+        children,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'CORNER_RADIUS_MISMATCH')).toBeUndefined();
+    });
+
+    it('suggests clipsContent when parent lacks it', () => {
+      const children = [
+        {
+          id: 'inner-4',
+          name: 'BigRadius',
+          type: 'FRAME',
+          width: 200,
+          height: 100,
+          cornerRadius: 20,
+        },
+      ];
+      const node = mockFrame({
+        cornerRadius: 12,
+        clipsContent: false,
+        children,
+      });
+      const violations = validatePostOp(node);
+      const crm = violations.find(a => a.code === 'CORNER_RADIUS_MISMATCH');
+      expect(crm).toBeDefined();
+      expect(crm!.hints.some(h => h.includes('clipsContent'))).toBe(true);
+    });
+  });
+
+  describe('SMALL_TAP_TARGET', () => {
+    it('detects small button below 44×44', () => {
+      const node = mockFrame({
+        id: 'tiny-btn',
+        name: 'CloseButton',
+        width: 24,
+        height: 24,
+      });
+      const violations = validatePostOp(node);
+
+      const stt = violations.find(a => a.code === 'SMALL_TAP_TARGET');
+      expect(stt).toBeDefined();
+      expect(stt!.context.width).toBe(24);
+      expect(stt!.context.height).toBe(24);
+      expect(stt!.context.minimumSize).toBe(44);
+    });
+
+    it('detects small icon element', () => {
+      const node = mockFrame({
+        id: 'tiny-icon',
+        name: 'MenuIcon',
+        width: 16,
+        height: 16,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'SMALL_TAP_TARGET')).toBeDefined();
+    });
+
+    it('does NOT flag large button', () => {
+      const node = mockFrame({
+        name: 'SubmitButton',
+        width: 120,
+        height: 48,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'SMALL_TAP_TARGET')).toBeUndefined();
+    });
+
+    it('does NOT flag non-interactive elements', () => {
+      const node = mockFrame({
+        name: 'DecorativeBox',
+        width: 20,
+        height: 20,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'SMALL_TAP_TARGET')).toBeUndefined();
+    });
+
+    it('does NOT flag when at least one dimension >= 44', () => {
+      const node = mockFrame({
+        name: 'WideButton',
+        width: 200,
+        height: 30,
+      });
+      const violations = validatePostOp(node);
+      expect(violations.find(a => a.code === 'SMALL_TAP_TARGET')).toBeUndefined();
     });
   });
 

@@ -20,10 +20,6 @@ import { handleComp } from './compHandlers';
 import { handleRender } from './renderHandler';
 import { handleToken } from './tokenHandler';
 import { handleMemoryCommand } from './memoryHandler';
-import {
-  handleDesign, handleReplace, handleQuery,
-  handleMkdir, handleMktext, handleWrite, handleLn,
-} from './legacyHandlers';
 
 // ── Command handler type ──
 
@@ -52,15 +48,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
     success: false as const,
     error: { code: 'LOCAL_ONLY', message: 'man command is handled locally. This is an internal routing error.' },
   }),
-
-  // Legacy tools
-  design: handleDesign,
-  replace: handleReplace,
-  query: handleQuery,
-  mkdir: handleMkdir,
-  mktext: handleMktext,
-  write: handleWrite,
-  ln: handleLn,
 };
 
 // ── Dispatch function ──
@@ -78,7 +65,7 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
       success: false,
       error: {
         code: 'UNKNOWN_TOOL',
-        message: `Unknown command "${toolName}".${hint} Available: ${Object.keys(COMMAND_HANDLERS).filter(k => !['design', 'replace', 'query', 'mkdir', 'mktext', 'write', 'ln'].includes(k)).join(', ')}`,
+        message: `Unknown command "${toolName}".${hint} Available: ${Object.keys(COMMAND_HANDLERS).join(', ')}`,
       },
     };
   }

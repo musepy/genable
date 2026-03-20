@@ -33,7 +33,7 @@ Set screenshot=true to capture a visual screenshot.
 1. `ls({path: "/"})` — see page overview, find root node names
 2. `tree({path: "/Card/"})` — discover structure, get suggestedReads
 3. `cat({path: "/Card/Header/Title"})` — get full details for specific nodes
-4. `design(...)` — edit based on detailed inspection
+4. `mk /Card/Header/Title size:28` — edit based on detailed inspection
 
 ### Path Resolution
 - "/" = current page root

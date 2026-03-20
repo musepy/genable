@@ -3,30 +3,20 @@
  * @description Barrel export for unified tool definitions.
  *
  * LLM-facing API: a single `run` tool that dispatches to individual commands.
- *
- * VFS spike: ls/cat/tree (filesystem metaphor) replace context/outline/inspect.
- * Write commands (design, replace, query) unchanged.
+ * VFS read: ls/cat/tree. Write: mk/mv/rm/cp. Search: grep/sed. Knowledge: man.
  */
 
 // VFS read commands — filesystem metaphor
 export { lsDefinition, catDefinition, treeDefinition } from './vfs';
 
-// New Unix CLI commands
+// Unix CLI commands
 export { mkDefinition } from './mk';
 export { grepDefinition } from './grep';
 export { sedDefinition } from './sed';
 export { manDefinition } from './man';
 
-// Legacy write commands — kept for backward compat
-export { designDefinition } from './design';
-export { replaceDefinition } from './replace';
-export { queryDefinition } from './query';
-
-// FS write commands — path-based create/modify/delete
-export {
-  mkdirDefinition, mktextDefinition, writeDefinition,
-  rmDefinition, cpDefinition, lnDefinition,
-} from './fs';
+// FS write commands — path-based
+export { rmDefinition, cpDefinition } from './fs';
 
 // Command registry — internal dispatch, help, and validation
 export {

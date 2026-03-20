@@ -10,10 +10,13 @@ export interface Env {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+type UserPlan = 'free' | 'pro' | 'team' | 'unlimited';
+type UserStatus = 'active' | 'inactive' | 'expired';
+
 interface UserRecord {
   email: string;
-  plan: 'free' | 'pro' | 'team' | 'unlimited';
-  status: 'active' | 'inactive' | 'expired';
+  plan: UserPlan;
+  status: UserStatus;
   created_at: string;
   expires_at: string;
 }
@@ -24,7 +27,7 @@ interface UsageRecord {
   last_call: string;
 }
 
-const PLAN_LIMITS: Record<string, number> = {
+const PLAN_LIMITS: Record<UserPlan, number> = {
   free: 10,
   pro: 200,
   team: 1000,

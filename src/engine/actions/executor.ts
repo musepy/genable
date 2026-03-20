@@ -49,6 +49,10 @@ function actionToCommand(action: string): string {
  * Persists across ActionExecutor instances and execute() calls so that a component
  * created in one tool call can be instantiated in a later tool call.
  * Call ActionExecutor.clearComponentRegistry() on session reset ("New Design").
+ *
+ * SAFETY INVARIANT: Safe because tool dispatch is strictly sequential
+ * (for-await in toolDispatcher.ts). If dispatch ever becomes concurrent,
+ * these Maps must be replaced with a synchronized structure.
  */
 const componentRegistry = new Map<string, string>();
 /** Maps toCamelCase(nodeName) → real Figma ID for name-based instance lookup */

@@ -201,6 +201,27 @@ npx tsx tools/autoresearch/run.ts --compare baseline
 | Stale references in prompt | Adding "XML skeletons" or old tool names | Read actual tool call logs first |
 | Over-constraining | Adding rules → LLM over-engineers (more nodes, more errors) | Prefer removing/simplifying rules |
 | Non-determinism | Score varies ±1-2 between identical runs | Only trust ≥2 point changes |
+| mk path-with-spaces | maxDepth=0, all scores 100% (false) | Fixed 2026-03-20: smart path extraction in evaluator |
+| mk vs jsx baseline comparison | baseline-v2 inflated (90.7 → 88.4 corrected) | Always use baseline-v2-corrected for comparison |
+
+## Evaluator Fixes (March 2026)
+
+### mk fallback parser space-in-path bug
+mk paths like `/Login Card/Header/` contain spaces. The evaluator's `split(/\s+/)` broke them
+into separate tokens → all nodes became orphan roots → maxDepth=0 → every metric auto-passed.
+**Fix**: Smart path extraction — scan tokens until hitting a type keyword or `key:value` pattern.
+**Impact**: baseline-v2 login dropped from 100 → 88.5 after fix. Mean 90.7 → 88.4.
+
+### JSX fallback parser
+Added `buildNodesFromJsx()` to handle `jsx` tool calls in the fallback path (Priority 3).
+Uses regex-based tag/attribute extraction with stack-based parent linkage.
+JSX tree reconstruction is inherently more reliable than mk path reconstruction because
+nesting IS the structure — no path parsing ambiguity.
+
+### Baselines
+- `baseline-v2.json` — original mk baseline (inflated, DO NOT USE for comparison)
+- `baseline-v2-corrected.json` — same data, re-evaluated with fixed parser (mean 88.4)
+- `jsx-v1.json` — first JSX benchmark (mean 91.2, +2.8 vs corrected mk)
 
 ## File Reference
 

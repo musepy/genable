@@ -97,6 +97,7 @@ const EXPANDERS: Record<string, Expander> = {
   },
 
   justifyContent: (v) => ({ primaryAxisAlignItems: mapAlign(String(v)) }),
+  justify: (v) => ({ primaryAxisAlignItems: mapAlign(String(v)) }),
   alignItems: (v) => ({ counterAxisAlignItems: mapAlign(String(v)) }),
 
   // ── Spacing ────────────────────────────────────────────────────────────

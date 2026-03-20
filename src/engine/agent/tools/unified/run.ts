@@ -30,6 +30,7 @@ function buildRunDescription(): string {
     ],
     Write: [
       ['mk /path/ [type] key:value... [-- text]', 'create or update (upsert)'],
+      ['jsx <markup>', 'create design tree with nested JSX syntax (batch)'],
       ['  padding:$layout/pad  fill:$bg/primary', '→ $varName binds a Figma variable by name'],
       ['  textStyle:Heading/H1  fillStyle:Brand', '→ applies a local style by name'],
       ['  weight:semibold (or semi-bold)', '→ aliases: thin,light,medium,semibold,bold,extrabold,black'],
@@ -99,6 +100,7 @@ function buildRunDescription(): string {
     '  run({command: "sed /Card/ fillColor:#FFF/#000"})',
     '  run({command: "mk /Card/ frame w:400 && mk $LAST/Title text size:24 -- Hello"})',
     '  run({command: "mk", input: "/Card/ frame w:400 layout:column\\n/Card/Title text size:24 -- Hello"})',
+    '  run({command: "jsx", input: "<frame name=\'Card\' w={400} layout=\'column\' p={24}>\\n  <text name=\'Title\' size={24}>Hello</text>\\n</frame>"})',
   );
 
   return lines.join('\n');

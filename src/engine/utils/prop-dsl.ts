@@ -43,7 +43,7 @@ const STRING_VALUE_PROPS = new Set([
   'strokeJoin', 'strokeCap', 'blendMode', 'dashPattern',
   'textDecoration', 'textTruncation', 'fontStyle', 'scaleMode',
   // Abbreviations that must stay as strings
-  'weight', 'font', 'alignMain', 'alignCross', 'textAlign',
+  'weight', 'font', 'alignMain', 'alignCross', 'justify', 'textAlign',
   'positioning', 'strokeA', 'strokeJ', 'strokeC', 'dash',
   'sizingH', 'sizingV', 'blend', 'wrap', 'pin', 'overflow',
   'decoration', 'whiteSpace', 'italic', 'fit', 'outline',

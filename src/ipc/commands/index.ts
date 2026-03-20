@@ -18,6 +18,7 @@ import { handleJs } from './jsHandler';
 import { handleVar } from './varHandlers';
 import { handleComp } from './compHandlers';
 import { handleRender } from './renderHandler';
+import { handleJsx } from './jsxHandler';
 import { handleToken } from './tokenHandler';
 import { handleMemoryCommand } from './memoryHandler';
 
@@ -42,6 +43,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   var: handleVar,
   comp: handleComp,
   render: handleRender,
+  jsx: handleJsx,
   token: handleToken,
   // man is handled locally in sandbox — should not arrive at IPC
   man: async () => ({

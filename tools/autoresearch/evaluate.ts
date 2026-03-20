@@ -94,6 +94,118 @@ export interface EvalResult {
 
 // ─── Reconstruct nodes from mk tool calls ───────────────────────
 
+/** Parse JSX markup into synthetic SerializedNode tree. */
+function buildNodesFromJsx(markup: string): SerializedNode[] {
+  // Lightweight JSX parser for the evaluator fallback — extract tags, attrs, nesting
+  const roots: SerializedNode[] = [];
+  const stack: SerializedNode[] = [];
+  let idCounter = 0;
+
+  // Simple regex-based tokenizer (sufficient for evaluator — not the full parser)
+  let pos = 0;
+  while (pos < markup.length) {
+    // Skip whitespace
+    while (pos < markup.length && /\s/.test(markup[pos])) pos++;
+    if (pos >= markup.length) break;
+
+    // Match opening/self-closing tag: <tag attrs... /> or <tag attrs...>
+    if (markup[pos] === '<' && markup[pos + 1] !== '/') {
+      const tagMatch = markup.slice(pos).match(/^<(\w+)((?:\s+[\w.$:-]+(?:=(?:\{[^}]*\}|"[^"]*"|'[^']*'|\S+))?)*)\s*(\/?)>/);
+      if (!tagMatch) { pos++; continue; }
+      const [fullMatch, tag, attrsStr, selfClosing] = tagMatch;
+      pos += fullMatch.length;
+
+      // Parse attributes
+      const props: Record<string, string> = {};
+      let name = '';
+      const attrRegex = /([\w.$:-]+)=(?:\{([^}]*)\}|"([^"]*)"|'([^']*)'|(\S+))/g;
+      let am;
+      while ((am = attrRegex.exec(attrsStr)) !== null) {
+        const key = am[1];
+        const val = am[2] ?? am[3] ?? am[4] ?? am[5] ?? '';
+        if (key === 'name') { name = val; continue; }
+        props[key] = val;
+      }
+
+      // Determine node type
+      const VALID_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'component', 'instance']);
+      const effectiveTag = VALID_TYPES.has(tag) ? tag : 'frame';
+      let nodeType = effectiveTag === 'text' ? 'TEXT' : effectiveTag === 'rect' ? 'RECTANGLE' :
+        effectiveTag === 'ellipse' ? 'ELLIPSE' : effectiveTag === 'line' ? 'LINE' : 'FRAME';
+
+      const node: SerializedNode = {
+        id: `jsx-${++idCounter}`,
+        type: nodeType,
+        name: name || tag,
+        visible: true,
+        width: 100, height: 100,
+      };
+
+      // Map props (same as mk handler)
+      if (props.layout) node.layoutMode = props.layout === 'row' ? 'HORIZONTAL' : props.layout === 'column' ? 'VERTICAL' : props.layout;
+      if (props.w) {
+        if (props.w === 'fill') node.layoutSizingHorizontal = 'FILL';
+        else if (props.w === 'hug') node.layoutSizingHorizontal = 'HUG';
+        else { node.layoutSizingHorizontal = 'FIXED'; node.width = parseFloat(props.w) || 100; }
+      }
+      if (props.h) {
+        if (props.h === 'fill') node.layoutSizingVertical = 'FILL';
+        else if (props.h === 'hug') node.layoutSizingVertical = 'HUG';
+        else { node.layoutSizingVertical = 'FIXED'; node.height = parseFloat(props.h) || 100; }
+      }
+      if (props.gap) node.itemSpacing = parseFloat(props.gap) || 0;
+      if (props.p) {
+        const pVal = parseFloat(props.p) || 0;
+        node.paddingTop = pVal; node.paddingRight = pVal; node.paddingBottom = pVal; node.paddingLeft = pVal;
+      }
+      if (props.bg && props.bg !== 'transparent') node.fills = [{ type: 'SOLID', visible: true }];
+      if (props.corner) node.cornerRadius = props.corner === 'full' ? 999 : parseFloat(props.corner) || 0;
+      if (node.layoutMode && node.layoutMode !== 'NONE') {
+        if (!node.layoutSizingHorizontal) node.layoutSizingHorizontal = 'HUG';
+        if (!node.layoutSizingVertical) node.layoutSizingVertical = 'HUG';
+      }
+      if (nodeType === 'TEXT') {
+        if (props.size) node.fontSize = parseFloat(props.size);
+        if (props.weight) node.fontName = { family: 'Inter', style: props.weight };
+        else node.fontName = { family: 'Inter', style: 'Regular' };
+        if (props.fill) node.fills = [{ type: 'SOLID', visible: true }];
+        node.textAutoResize = props.w === 'fill' ? 'HEIGHT' : 'WIDTH_AND_HEIGHT';
+        // Capture text content after tag until </text>
+        const closeIdx = markup.indexOf(`</${tag}>`, pos);
+        if (closeIdx >= 0) {
+          const textContent = markup.slice(pos, closeIdx).trim();
+          if (textContent) node.characters = textContent;
+          pos = closeIdx;
+        }
+      }
+
+      // Parent linkage via stack
+      if (stack.length > 0) {
+        const parent = stack[stack.length - 1];
+        if (!parent.children) parent.children = [];
+        parent.children.push(node);
+      } else {
+        roots.push(node);
+      }
+
+      if (!selfClosing && nodeType !== 'TEXT') {
+        stack.push(node);
+      }
+    }
+    // Closing tag: </tag>
+    else if (markup[pos] === '<' && markup[pos + 1] === '/') {
+      const closeMatch = markup.slice(pos).match(/^<\/\w+>/);
+      pos += closeMatch ? closeMatch[0].length : 1;
+      stack.pop();
+    }
+    else {
+      pos++;
+    }
+  }
+
+  return roots;
+}
+
 /** Parse mk batch lines into synthetic SerializedNode tree. */
 function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
   const nodeMap = new Map<string, SerializedNode>();
@@ -102,12 +214,20 @@ function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
   for (const tc of meta.toolCallDetails) {
     if (tc.status !== 'success') continue;
     let batchText = '';
+    let jsxMarkup = '';
     try {
       const params = JSON.parse(tc.params);
       if (tc.name === 'mk' && params.batch) batchText = params.batch;
       else if (tc.name === 'render' && params.markup) batchText = params.markup;
+      else if (tc.name === 'jsx' && params.markup) jsxMarkup = params.markup;
       else continue;
     } catch { continue; }
+
+    // Handle JSX tool calls
+    if (jsxMarkup) {
+      roots.push(...buildNodesFromJsx(jsxMarkup));
+      continue;
+    }
 
     for (const line of batchText.split('\n')) {
       const trimmed = line.trim();
@@ -118,9 +238,20 @@ function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
       const propPart = textSep >= 0 ? trimmed.slice(0, textSep) : trimmed;
       const textContent = textSep >= 0 ? trimmed.slice(textSep + 4) : undefined;
 
-      const tokens = propPart.split(/\s+/);
-      const pathToken = tokens[0];
-      if (!pathToken?.startsWith('/')) continue;
+      // Smart path extraction: paths start with / and may contain spaces.
+      // The path ends at the first token that is a known type or contains ':'
+      if (!propPart.startsWith('/')) continue;
+      const types = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector']);
+      const allTokens = propPart.split(/\s+/);
+      let pathEndIdx = 1; // at least first token is part of path
+      for (let k = 1; k < allTokens.length; k++) {
+        const tok = allTokens[k];
+        // If it's a known type or has key:value format, path has ended
+        if (types.has(tok) || tok.includes(':')) break;
+        // If it ends with '/' it's still part of the path (e.g. "Card/" in "/Login Card/")
+        pathEndIdx = k + 1;
+      }
+      const pathToken = allTokens.slice(0, pathEndIdx).join(' ');
 
       // Extract path segments
       const cleanPath = pathToken.replace(/^\/+|\/+$/g, '');
@@ -128,9 +259,8 @@ function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
       const name = segments[segments.length - 1] || 'unnamed';
 
       // Detect type
-      const types = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector']);
       let nodeType = 'FRAME';
-      const restTokens = tokens.slice(1);
+      const restTokens = allTokens.slice(pathEndIdx);
       if (restTokens.length > 0 && types.has(restTokens[0])) {
         const t = restTokens.shift()!;
         nodeType = t === 'text' ? 'TEXT' : t === 'rect' ? 'RECTANGLE' : t === 'icon' ? 'FRAME' : t.toUpperCase();

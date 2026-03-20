@@ -23,6 +23,7 @@ import { varDefinition } from './var';
 import { compDefinition } from './comp';
 import { renderDefinition } from './render';
 import { tokenDefinition } from './token';
+import { jsxDefinition } from './jsx';
 
 /** Built-in `more` command — reads from overflow store (runs locally, no IPC). */
 const moreDefinition: ToolDefinition = {
@@ -55,6 +56,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   // Semantic rendering
   [renderDefinition.name, renderDefinition],
   [tokenDefinition.name, tokenDefinition],
+  [jsxDefinition.name, jsxDefinition],
   // FS write commands — path-based
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],
@@ -393,6 +395,29 @@ Props use mk shorthand: size, weight, fill, corner, p, gap, layout, w, h, etc.
 
 See also: render (use tokens), man (design guidelines)`,
 
+  jsx: `jsx — Create design trees with nested JSX-like syntax.
+
+Usage:
+  run({command: "jsx", input: "<frame name='Card' w={400} layout='column' p={24} bg='#FFF' corner={12}>\\n  <text name='Title' size={24} weight='Bold' fill='#111'>Card Title</text>\\n  <text name='Body' size={14} fill='#666' w='fill'>Description</text>\\n</frame>"})
+
+Elements: frame, text, rect, ellipse, line, icon, image, instance, component, group, section, vector
+
+Attributes: same shorthands as mk (w, h, bg, layout, gap, p, corner, fill, size, weight)
+
+Syntax:
+  <type name="..." key={number} key="string">children</type>
+  <type key={value}/>                                          self-closing
+  <text size={24}>text content here</text>                     text content
+  <instance ref="Button" variant="Size=Large"/>                component instance
+
+Multiple roots:
+  <frame name="A" ...>...</frame>
+  <frame name="B" ...>...</frame>
+
+Use jsx for tree creation (5+ nodes). Use mk for updates and single-node ops.
+
+See also: mk (updates, single node), cat (inspect result), man (design guidelines)`,
+
   render: `render — Create designs using style tokens (semantic markup).
 
 Usage:
@@ -441,6 +466,7 @@ const COMMAND_SEE_ALSO: Record<string, string> = {
   more: 'cat (read nodes), grep (search), tree (structure)',
   var: 'comp (component variants), mk (create with $var binding), grep (discover values)',
   comp: 'var (design tokens), mk (create frames), cp (clone with overrides)',
+  jsx: 'mk (updates, single node), cat (inspect result), man (design guidelines)',
   render: 'mk (custom designs), token (customize styles), cat (inspect result)',
   token: 'render (use tokens), var (design tokens), man (guidelines)',
 };

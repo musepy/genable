@@ -492,6 +492,15 @@ export function mapToToolArgs(
       return args;
     }
 
+    case 'jsx': {
+      const markup = input || pos.join('\n') || '';
+      if (!markup) return null; // help mode
+      const args: Record<string, any> = { markup };
+      const parentId = flags['p'] || flags['parent'];
+      if (parentId) args.parentId = parentId;
+      return args;
+    }
+
     // ── Design system commands ──
 
     case 'var': {

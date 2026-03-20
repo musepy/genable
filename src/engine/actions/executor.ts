@@ -917,19 +917,21 @@ export class ActionExecutor {
 
         case 'delete': {
           if (!targetNode) return { success: false, error: 'Node not found' };
+          const deleteWarnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
           if (!this.isAgentOwned(targetNode)) {
-            return { success: false, error: `Cannot delete node '${targetNode.name}' (${targetNode.id}) — not created by agent. Only agent-created nodes can be deleted.` };
+            deleteWarnings.push({ code: 'NOT_AGENT_OWNED', severity: 'warning', message: `Deleting '${targetNode.name}' (${targetNode.id}) — not created by agent.` });
           }
           if (!targetNode.removed) {
             targetNode.remove();
           }
-          return { success: true, nodeId: targetNode.id };
+          return { success: true, nodeId: targetNode.id, warnings: deleteWarnings.length ? deleteWarnings : undefined };
         }
 
         case 'move': {
           if (!targetNode) return { success: false, error: 'Node not found' };
+          const moveWarnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
           if (!this.isAgentOwned(targetNode)) {
-            return { success: false, error: `Cannot move node '${targetNode.name}' (${targetNode.id}) — not created by agent. Only agent-created nodes can be moved.` };
+            moveWarnings.push({ code: 'NOT_AGENT_OWNED', severity: 'warning', message: `Moving '${targetNode.name}' (${targetNode.id}) — not created by agent.` });
           }
           if (!parentNode || !('insertChild' in parentNode)) {
              return { success: false, error: 'Invalid parent node for move' };
@@ -939,7 +941,7 @@ export class ActionExecutor {
           } else {
              parentNode.appendChild(targetNode);
           }
-          return { success: true, nodeId: targetNode.id };
+          return { success: true, nodeId: targetNode.id, warnings: moveWarnings.length ? moveWarnings : undefined };
         }
 
         case 'componentProperty': {

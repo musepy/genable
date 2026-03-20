@@ -8,6 +8,7 @@
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
+import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { logger } from '../../utils/logger';
 import { resolvePathToNode, hasGlob, resolveGlobPaths, buildNodePath, isSessionNode } from './pathResolver';
@@ -248,8 +249,8 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
     const entries: any[] = [];
     for (const gNode of globNodes.slice(0, 10)) {
       const serialized = NodeSerializer.serializeWithCompression(gNode, { maxDepth: catDepth, pruneDefaults: true });
-      const xml = FlatOpsSerializer.serialize(serialized, { maxDepth: catDepth });
-      entries.push({ name: gNode.name, id: gNode.id, type: gNode.type.toLowerCase(), xml });
+      const nodeJson = JsonNodeSerializer.serialize(serialized, { maxDepth: catDepth });
+      entries.push(nodeJson);
     }
     return {
       success: true,
@@ -269,8 +270,8 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
   if (resolved.isPage) {
     const page = resolved.page;
     const topLevel = page.children.map(n => ({
-      name: n.name, id: n.id, type: n.type.toLowerCase(),
-      w: Math.round(n.width), h: Math.round(n.height),
+      type: n.type.toLowerCase(), id: n.id, name: n.name,
+      width: Math.round(n.width), height: Math.round(n.height),
     }));
     return {
       success: true,
@@ -289,20 +290,23 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
     pruneDefaults: true,
   });
 
-  const catFullXml = FlatOpsSerializer.serialize(catSerialized, { maxDepth: catDepth });
+  // JSON output (primary) with flat-ops fallback for large nodes
+  const catJson = JsonNodeSerializer.serialize(catSerialized, { maxDepth: catDepth });
+  const catJsonStr = JSON.stringify(catJson);
   const catData: any = { path: catPath };
   const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
 
-  if (catFullXml.length > AUTO_DEGRADE_CHARS) {
-    const catStructuralXml = FlatOpsSerializer.serialize(catSerialized, {
+  if (catJsonStr.length > AUTO_DEGRADE_CHARS) {
+    // Large node: structural JSON (minimal properties)
+    const catStructural = JsonNodeSerializer.serialize(catSerialized, {
       maxDepth: catDepth,
       structural: true,
     });
-    catData.tree = catStructuralXml;
+    catData.node = catStructural;
     const childCount = 'children' in catNode ? (catNode as any).children.length : 0;
-    catData.hint = `Large node (${childCount} children, ${catFullXml.length} chars). Use tree("${catPath}") to discover structure, then cat specific children.`;
+    catData.hint = `Large node (${childCount} children, ${catJsonStr.length} chars). Use tree("${catPath}") to discover structure, then cat specific children.`;
   } else {
-    catData.tree = catFullXml;
+    catData.node = catJson;
   }
 
   if (wantScreenshot && catNode.visible && catNode.width > 0 && catNode.height > 0) {

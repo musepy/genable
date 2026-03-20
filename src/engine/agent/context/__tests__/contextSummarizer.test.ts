@@ -368,6 +368,65 @@ describe('buildCompressionSummary', () => {
     expect(summary).toContain('45');
   });
 
+  it('handles already-compressed tool results from turnResultCompressor', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Create a dashboard' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'jsx', args: { xml: '<frame name="Dashboard"/>' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          {
+            functionResponse: {
+              name: 'jsx',
+              response: {
+                _compressed: true,
+                summary: 'created 5 nodes [Dashboard=100:1, Header=100:2, Sidebar=100:3, Main=100:4, Footer=100:5]',
+                idMap: { Dashboard: '100:1', Header: '100:2', Sidebar: '100:3', Main: '100:4', Footer: '100:5' },
+              },
+            },
+          },
+        ],
+      },
+      { id: 'm2', role: 'model', content: 'Dashboard layout created.' },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('created 5 nodes');
+    expect(summary).toContain('Dashboard=100:1');
+    expect(summary).toContain('Agent: Dashboard layout created.');
+  });
+
+  it('handles compressed failed results from turnResultCompressor', () => {
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Edit the card' },
+      {
+        id: 'm1', role: 'model', content: [
+          { functionCall: { name: 'edit', args: { xml: '<frame id="99:1"/>' } } },
+        ],
+      },
+      {
+        id: 't1', role: 'tool', content: [
+          {
+            functionResponse: {
+              name: 'edit',
+              response: {
+                _compressed: true,
+                summary: 'PARTIAL_FAILURE: 2 failed, 1 succeeded',
+                success: false,
+                error: { code: 'PARTIAL_FAILURE', message: '2 ops failed' },
+              },
+            },
+          },
+        ],
+      },
+    ];
+    const summary = buildCompressionSummary(messages);
+    expect(summary).toContain('FAIL');
+    expect(summary).toContain('PARTIAL_FAILURE: 2 failed, 1 succeeded');
+  });
+
   it('preserves per-op error details in design result summary', () => {
     const messages: LLMMessage[] = [
       { id: 'u1', role: 'user', content: 'Build a card' },

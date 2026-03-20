@@ -156,6 +156,24 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
     if (!resp) continue;
 
     const name = part.functionResponse.name;
+
+    // Already compressed by turnResultCompressor — reuse its summary directly
+    if (resp._compressed && resp.summary) {
+      const brief = resp.success === false
+        ? `FAIL: ${resp.summary}`
+        : resp.summary;
+      let pendingIdx = -1;
+      for (let i = turn.toolActions.length - 1; i >= 0; i--) {
+        if (turn.toolActions[i].startsWith(`→ ${name}(`)) { pendingIdx = i; break; }
+      }
+      if (pendingIdx >= 0) {
+        turn.toolActions[pendingIdx] += ` → ${brief}`;
+      } else {
+        turn.toolActions.push(`→ ${name} → ${brief}`);
+      }
+      continue;
+    }
+
     const ok = resp.success !== false;
     const brief = ok
       ? summarizeSuccessResult(name, resp)

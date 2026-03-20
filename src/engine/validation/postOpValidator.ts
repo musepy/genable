@@ -109,6 +109,7 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
   if (node.type === 'TEXT') {
     const t = node as TextNode;
     violations.push(...validateTextNode(t, intended));
+    violations.push(...validateTextMissingStyle(t));
     violations.push(...validateLowContrast(t));
   }
 
@@ -121,6 +122,9 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
     violations.push(...validateEmptyFrame(node as FrameNode));
     violations.push(...validateCornerRadiusMismatch(node as FrameNode));
   }
+
+  // 5. Banned names — Figma default names indicate LLM forgot to name the node
+  violations.push(...validateBannedName(node));
 
   // 5a. White-on-white border
   if ('fills' in node && 'strokes' in node) {
@@ -794,6 +798,97 @@ function validateSmallTapTarget(node: SceneNode): ValidationViolation[] {
       `Or wrap in a larger transparent frame with padding for the tap area`,
     ],
   });
+
+  return violations;
+}
+
+// ──────────────────────────────────────────────
+// Banned name detection (Figma defaults)
+// ──────────────────────────────────────────────
+
+/**
+ * Figma default node names — prefix match (case-insensitive).
+ * Flagged because the LLM forgot to provide a semantic name.
+ * Only check frames/components (structural nodes) — rect/line/ellipse are often decorative.
+ */
+const BANNED_NAME_PREFIXES = ['frame', 'unnamed', 'group', 'section'];
+
+function validateBannedName(node: SceneNode): ValidationViolation[] {
+  // Only check structural node types that should have semantic names
+  if (node.type !== 'FRAME' && node.type !== 'COMPONENT') return [];
+
+  const nameLower = node.name.toLowerCase();
+  const matchedPrefix = BANNED_NAME_PREFIXES.find(p => nameLower.startsWith(p));
+  if (!matchedPrefix) return [];
+
+  return [{
+    code: 'BANNED_NAME',
+    message: `'${node.name}' has a generic Figma default name — give it a semantic name`,
+    nodeId: node.id,
+    nodeName: node.name,
+    context: {
+      type: node.type,
+      matchedPrefix,
+      childCount: 'children' in node ? (node as any).children?.length ?? 0 : 0,
+    },
+    hints: [
+      `Rename to describe its purpose (e.g. "Header", "Card", "Nav Bar")`,
+    ],
+  }];
+}
+
+// ──────────────────────────────────────────────
+// Text missing style detection
+// ──────────────────────────────────────────────
+
+/**
+ * Detect text nodes with missing essential styles:
+ * - No visible fill (invisible text)
+ * - Font size below readable threshold
+ */
+function validateTextMissingStyle(t: TextNode): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+  const content = t.characters || '';
+  if (!content) return violations;
+
+  // Check for missing/empty fills (invisible text)
+  const fills = (t as any).fills;
+  const hasVisibleFill = Array.isArray(fills) && fills.some(
+    (f: Paint) => f.visible !== false && f.type === 'SOLID'
+  );
+  if (!hasVisibleFill) {
+    violations.push({
+      code: 'TEXT_MISSING_STYLE',
+      message: `'${t.name}' has no visible fill — text is invisible`,
+      nodeId: t.id,
+      nodeName: t.name,
+      context: {
+        fills: Array.isArray(fills) ? fills.length : 0,
+        content: content.slice(0, 30),
+      },
+      hints: [
+        `Add a text fill color (e.g. fill="#1A1A1A" for dark text)`,
+      ],
+    });
+  }
+
+  // Check for unreadably small font
+  const fontSize = getFontSize(t);
+  if (fontSize < 8) {
+    violations.push({
+      code: 'TEXT_MISSING_STYLE',
+      message: `'${t.name}' has fontSize=${fontSize}px — below readable threshold (8px)`,
+      nodeId: t.id,
+      nodeName: t.name,
+      context: {
+        fontSize,
+        content: content.slice(0, 30),
+      },
+      hints: [
+        `Increase fontSize to at least 10px for body text or 12px for labels`,
+      ],
+    });
+  }
 
   return violations;
 }

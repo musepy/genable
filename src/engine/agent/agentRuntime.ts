@@ -23,6 +23,7 @@ import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { buildCompressionSummary, capSummary } from './context/contextSummarizer';
+import { compressConsumedToolResults } from './context/turnResultCompressor';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
@@ -148,6 +149,18 @@ export class AgentRuntime {
       ...options.tools.map((tool) => tool.name),
       ...COMMAND_NAMES,
     ]);
+    // Hook system (must be initialized before ToolDispatcher so interceptors can reference hookRunner)
+    this.hookRegistry = new HookRegistry();
+    if (options.hooks) {
+      this.hookRegistry.registerAll(options.hooks);
+    } else {
+      const { hooks, reset } = createBuiltinHooksWithState();
+      this.hookRegistry.registerAll(hooks);
+      this.resetBuiltinState = reset;
+    }
+    this.hookRunner = new HookRunner(this.hookRegistry, (event) => this.emitRuntimeEvent(event as RuntimeEventPayload));
+
+    // ToolDispatcher with beforeToolExec/afterToolExec hook interceptors
     this.toolDispatcher = new ToolDispatcher(
       options.toolExecutors || {},
       options.ipcBridge,
@@ -160,20 +173,40 @@ export class AgentRuntime {
         throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
         onToolCall: options.onToolCall,
         onToolResult: options.onToolResult,
+        beforeToolExec: async (tc) => {
+          const ctx: HookContext = {
+            iteration: this.currentIteration,
+            maxIterations: this.maxIterations,
+            currentToolCall: tc,
+            messages: this.turnMessages,
+            loopPolicy: this.loopPolicy,
+            generateId: (prefix) => this.generateId(prefix),
+          };
+          const result = await this.hookRunner.run('beforeToolExec', ctx);
+          if (result.action === 'skip' || result.action === 'abort') {
+            return { action: result.action, reason: result.reason };
+          }
+          return undefined;
+        },
+        afterToolExec: async (tc, toolResult) => {
+          const ctx: HookContext = {
+            iteration: this.currentIteration,
+            maxIterations: this.maxIterations,
+            currentToolCall: tc,
+            toolResult,
+            messages: this.turnMessages,
+            loopPolicy: this.loopPolicy,
+            generateId: (prefix) => this.generateId(prefix),
+          };
+          const result = await this.hookRunner.run('afterToolExec', ctx);
+          if (result.modifiedResult !== undefined) {
+            return { action: 'continue', modifiedResult: result.modifiedResult };
+          }
+          return undefined;
+        },
         formatToolResults: (results) => options.provider.formatToolResults(results),
       },
     );
-
-    // Hook system
-    this.hookRegistry = new HookRegistry();
-    if (options.hooks) {
-      this.hookRegistry.registerAll(options.hooks);
-    } else {
-      const { hooks, reset } = createBuiltinHooksWithState();
-      this.hookRegistry.registerAll(hooks);
-      this.resetBuiltinState = reset;
-    }
-    this.hookRunner = new HookRunner(this.hookRegistry);
 
     // Register subtask executor (bounded self-recursion)
     this.toolDispatcher.mergeExecutors({
@@ -568,9 +601,7 @@ export class AgentRuntime {
     });
 
     let iteration = 0;
-    let emptyArgsCount = 0;
     let truncationCount = 0;
-    let consecutiveFailIterations = 0;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
     clearOverflows();
@@ -605,6 +636,29 @@ export class AgentRuntime {
     while (iteration < this.maxIterations) {
       this.throwIfCanceled(iteration + 1);
       this.currentIteration = iteration;
+
+      // ──── INTRA-TURN COMPRESSION ────
+      // After the LLM has consumed a tool result, compress it to a compact summary.
+      // Preserves node IDs and error details; drops verbose content.
+      if (iteration > 0) {
+        const compressed = compressConsumedToolResults(this.turnMessages);
+        if (compressed > 0) {
+          console.log(`[Context] Compressed ${compressed} consumed tool result(s) in current turn`);
+        }
+      }
+
+      // ──── HOOK: beforeIteration ────
+      const beforeIterCtx: HookContext = {
+        iteration,
+        maxIterations: this.maxIterations,
+        messages: this.turnMessages,
+        loopPolicy: this.loopPolicy,
+        generateId: (prefix) => this.generateId(prefix),
+      };
+      const beforeIterResult = await this.hookRunner.run('beforeIteration', beforeIterCtx);
+      if (beforeIterResult.action === 'abort') {
+        throw new Error(beforeIterResult.reason || 'Aborted by beforeIteration hook');
+      }
 
       const prompt = this.assemblePrompt();
       const currentTokens = this.lastPromptTokens;
@@ -742,41 +796,10 @@ export class AgentRuntime {
         this.runStats.tokenUsage.callCount++;
       }
 
-      // ──── EMPTY ARGS GUARD (universal, all providers) ────
-      // Some models (e.g. Kimi K2.5) return tool calls with empty/null args.
-      // Strip them and inject a self-correct hint so the LLM regenerates.
-      // Bounded: max 3 consecutive empty-args iterations before abort.
-      if (toolCallsForExecution.length > 0) {
-        const emptyArgsCalls = toolCallsForExecution.filter(tc =>
-          tc.args == null
-          || (typeof tc.args === 'object' && Object.keys(tc.args).length === 0)
-          || tc.args === ''
-        );
-        if (emptyArgsCalls.length > 0) {
-          emptyArgsCount++;
-          if (emptyArgsCount > 3) {
-            throw new Error('Model repeatedly returns empty tool arguments (3+ times). Aborting.');
-          }
-          const names = emptyArgsCalls.map(tc => tc.name).join(', ');
-          console.warn(`[AgentRuntime] Stripping ${emptyArgsCalls.length} tool call(s) with empty args: ${names} (${emptyArgsCount}/3)`);
-          toolCallsForExecution = toolCallsForExecution.filter(tc => !emptyArgsCalls.includes(tc));
-          // Inject hint so LLM self-corrects on next iteration
-          this.turnMessages.push({
-            id: this.generateId('empty_hint'),
-            role: 'user',
-            content: `Your tool call to ${names} had empty arguments and was not executed. Please provide the required parameters (e.g. xml for create/edit) and try again.`,
-            synthetic: true,
-          });
-          if (toolCallsForExecution.length === 0) {
-            iteration++;
-            continue;
-          }
-        } else {
-          emptyArgsCount = 0; // Reset on valid args
-        }
-      }
-
       // ──── TOOL EXECUTION ────
+      // Empty-args filtering is handled by builtin hooks:
+      //   emptyArgsCounter (afterLLMResponse) → counts/aborts/injects hint
+      //   emptyArgsSkip (beforeToolExec) → skips individual empty-args calls
       if (toolCallsForExecution.length > 0) {
         if (this.options.requireToolApproval) {
           this.emitRuntimeEvent({
@@ -811,75 +834,34 @@ export class AgentRuntime {
         }
         this.turnMessages.push(dispatchResult.toolResultsMessage);
 
-        // ──── GUARDRAIL: MANDATORY REPAIR + CONSECUTIVE FAILURE TRACKING ────
+        // Guardrails (consecutiveFailure, partialFailure, budget) are now
+        // handled by builtin afterIteration hooks.
+
+        // ──── HOOK: afterIteration ────
+        // Collect per-tool results for iteration-level analysis hooks
+        const iterationToolResults: Array<{ toolCall: LLMToolCall; result: any }> = [];
         if (Array.isArray(content)) {
-          // Check if ALL tool calls in this iteration failed
-          const allFailed = content.every((part: any) =>
-            part.functionResponse?.response?.success === false
-          );
-
-          if (allFailed) {
-            consecutiveFailIterations++;
-          } else {
-            consecutiveFailIterations = 0;
-          }
-
-          // P2: PARTIAL_FAILURE → inject mandatory repair instruction
-          const partialFailures = content
-            .filter((part: any) => part.functionResponse?.response?.error?.code === 'PARTIAL_FAILURE')
-            .map((part: any) => part.functionResponse.response);
-
-          if (partialFailures.length > 0) {
-            const errorSummaries: string[] = [];
-            for (const pf of partialFailures) {
-              const errors = pf.data?.errors;
-              if (Array.isArray(errors)) {
-                for (const e of errors.slice(0, 5)) {
-                  errorSummaries.push(`- ${e.op}: ${e.error}`);
-                }
-              }
-            }
-            if (errorSummaries.length > 0) {
-              this.turnMessages.push({
-                id: this.generateId('repair'),
-                role: 'user',
-                content: `⚠ PARTIAL_FAILURE detected. Before proceeding, you MUST fix these errors:\n${errorSummaries.join('\n')}\nUse the idMap from successful nodes to reference them. Do NOT create new content until these are resolved.`,
-                synthetic: true,
-              });
-            }
-          }
-
-          // Consecutive failure escalation: after N consecutive all-fail iterations,
-          // inject a strategy-change directive
-          if (consecutiveFailIterations >= AGENT_RUNTIME_CONSTANTS.CONSECUTIVE_FAILURE_THRESHOLD) {
-            this.turnMessages.push({
-              id: this.generateId('strategy'),
-              role: 'user',
-              content: `⚠ ${consecutiveFailIterations} consecutive iterations have ALL failed. Your current approach is not working. `
-                + `STOP and change strategy: use context/outline to re-examine the canvas state, `
-                + `verify node IDs exist, or explain the blocker to the user.`,
-              synthetic: true,
+          for (let i = 0; i < toolCallsForExecution.length && i < content.length; i++) {
+            iterationToolResults.push({
+              toolCall: toolCallsForExecution[i],
+              result: (content[i] as any)?.functionResponse?.response,
             });
           }
         }
-
-        // Note: no iteration budget injection. The agent stops naturally via
-        // text-only response. Safety net is maxIterations=200 (ceiling, not target).
-
-        iteration++;
-
-        // ── BUDGET WARNING ──
-        const remaining = this.maxIterations - iteration; // iteration was just incremented
-        const threshold = Math.ceil(this.maxIterations * 0.2);
-        if (remaining === threshold && remaining > 0) {
-          this.turnMessages.push({
-            id: this.generateId('budget'),
-            role: 'user',
-            content: `[Budget] ${remaining} iterations remaining out of ${this.maxIterations}. Wrap up your current work — summarize progress and tell the user what's left if you can't finish.`,
-            synthetic: true,
-          });
+        const afterIterCtx: HookContext = {
+          iteration,
+          maxIterations: this.maxIterations,
+          messages: this.turnMessages,
+          loopPolicy: this.loopPolicy,
+          generateId: (prefix) => this.generateId(prefix),
+          iterationToolResults,
+        };
+        const afterIterResult = await this.hookRunner.run('afterIteration', afterIterCtx);
+        if (afterIterResult.action === 'abort') {
+          throw new Error(afterIterResult.reason || 'Aborted by afterIteration hook');
         }
 
+        iteration++;
         continue;
       } else {
         // ──── TRUNCATION GUARD ────

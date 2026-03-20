@@ -3,6 +3,10 @@ import { HookRegistry } from '../hooks/hookRegistry';
 import { HookRunner } from '../hooks/hookRunner';
 import { HookRegistration, HookContext, HookResult } from '../hooks/hookTypes';
 import { createBuiltinHooks, createBuiltinHooksWithState } from '../hooks/builtinHooks';
+import { createEmptyArgsGuard } from '../hooks/emptyArgsGuard';
+import { createConsecutiveFailureGuard } from '../hooks/consecutiveFailureGuard';
+import { createPartialFailureGuard } from '../hooks/partialFailureGuard';
+import { createBudgetGuard } from '../hooks/budgetGuard';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -230,7 +234,9 @@ describe('createBuiltinHooks', () => {
 describe('createBuiltinHooksWithState', () => {
   it('should provide a reset function', () => {
     const { hooks, reset } = createBuiltinHooksWithState();
-    expect(hooks).toHaveLength(2);
+    // 2 original (emptyResponse, loopDetection) + 5 guard hooks
+    // (emptyArgsCounter, emptyArgsSkip, consecutiveFailure, partialFailure, budget)
+    expect(hooks).toHaveLength(7);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();
@@ -278,5 +284,190 @@ describe('Builtin: loopDetectionHook', () => {
     });
     const result = await runner.run('afterLLMResponse', ctx);
     expect(result.action).toBe('continue');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Guard hooks (Wave 2 migration)
+// ═══════════════════════════════════════════════════════════════
+
+describe('emptyArgsGuard', () => {
+  it('should abort after repeated empty-args iterations', async () => {
+    const guard = createEmptyArgsGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const emptyToolCalls = [{ id: '1', name: 'run', args: null }];
+
+    // Iterations 1-3: continue with injected message
+    for (let i = 0; i < 3; i++) {
+      const ctx = makeCtx({ toolCalls: emptyToolCalls });
+      const result = await runner.run('afterLLMResponse', ctx);
+      expect(result.action).toBe('continue');
+      expect(ctx.messages.length).toBeGreaterThan(0);
+    }
+
+    // Iteration 4: abort
+    const ctx = makeCtx({ toolCalls: emptyToolCalls });
+    const result = await runner.run('afterLLMResponse', ctx);
+    expect(result.action).toBe('abort');
+  });
+
+  it('should reset count on valid args', async () => {
+    const guard = createEmptyArgsGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    // 2 empty iterations
+    for (let i = 0; i < 2; i++) {
+      await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ id: '1', name: 'run', args: null }] }));
+    }
+
+    // Valid args → reset
+    await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ id: '1', name: 'run', args: { command: 'ls /' } }] }));
+
+    // 3 more empty → should NOT abort (count was reset)
+    for (let i = 0; i < 3; i++) {
+      const result = await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ id: '1', name: 'run', args: null }] }));
+      expect(result.action).toBe('continue');
+    }
+  });
+
+  it('should skip individual empty-args tool calls in beforeToolExec', async () => {
+    const guard = createEmptyArgsGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const ctx = makeCtx({ currentToolCall: { id: '1', name: 'run', args: {} } });
+    const result = await runner.run('beforeToolExec', ctx);
+    expect(result.action).toBe('skip');
+  });
+});
+
+describe('consecutiveFailureGuard', () => {
+  it('should inject strategy change after threshold consecutive failures', async () => {
+    const guard = createConsecutiveFailureGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const failResults = [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: false } }];
+
+    // 2 failures → no message (threshold is 3)
+    for (let i = 0; i < 2; i++) {
+      const result = await runner.run('afterIteration', makeCtx({ iterationToolResults: failResults }));
+      expect(result.action).toBe('continue');
+      expect(result.injectMessage).toBeUndefined();
+    }
+
+    // 3rd failure → inject message into ctx.messages
+    const ctx3 = makeCtx({ iterationToolResults: failResults });
+    const result = await runner.run('afterIteration', ctx3);
+    expect(result.action).toBe('continue');
+    const injected = ctx3.messages.find(m => m.content?.toString().includes('consecutive iterations have ALL failed'));
+    expect(injected).toBeTruthy();
+  });
+
+  it('should reset count on successful iteration', async () => {
+    const guard = createConsecutiveFailureGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    // 2 failures
+    for (let i = 0; i < 2; i++) {
+      await runner.run('afterIteration', makeCtx({
+        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: false } }],
+      }));
+    }
+
+    // 1 success → reset
+    await runner.run('afterIteration', makeCtx({
+      iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: true } }],
+    }));
+
+    // 2 more failures → no inject (count reset)
+    for (let i = 0; i < 2; i++) {
+      const ctx = makeCtx({
+        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: false } }],
+      });
+      await runner.run('afterIteration', ctx);
+      expect(ctx.messages).toHaveLength(0);
+    }
+  });
+});
+
+describe('partialFailureGuard', () => {
+  it('should inject repair message on PARTIAL_FAILURE', async () => {
+    const guard = createPartialFailureGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const ctx = makeCtx({
+      iterationToolResults: [{
+        toolCall: { id: '1', name: 'jsx', args: {} },
+        result: {
+          success: false,
+          error: { code: 'PARTIAL_FAILURE' },
+          data: { errors: [{ op: 'create /Card/Title', error: 'Font not found' }] },
+        },
+      }],
+    });
+    const result = await runner.run('afterIteration', ctx);
+    expect(result.action).toBe('continue');
+    const injected = ctx.messages.find(m => m.content?.toString().includes('PARTIAL_FAILURE'));
+    expect(injected).toBeTruthy();
+    expect(injected!.content).toContain('Font not found');
+  });
+
+  it('should not inject when no partial failures', async () => {
+    const guard = createPartialFailureGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const ctx = makeCtx({
+      iterationToolResults: [{
+        toolCall: { id: '1', name: 'jsx', args: {} },
+        result: { success: true },
+      }],
+    });
+    const result = await runner.run('afterIteration', ctx);
+    expect(result.action).toBe('continue');
+    expect(ctx.messages).toHaveLength(0);
+  });
+});
+
+describe('budgetGuard', () => {
+  it('should inject budget warning at 20% remaining', async () => {
+    const guard = createBudgetGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    // maxIterations=10, threshold=ceil(10*0.2)=2
+    // Hook sees iteration=7 (0-based), next will be 8, remaining = 10-8 = 2 = threshold
+    const ctx = makeCtx({ iteration: 7, maxIterations: 10 });
+    const result = await runner.run('afterIteration', ctx);
+    expect(result.action).toBe('continue');
+    // injectMessage is pushed into ctx.messages by hookRunner (not returned on aggregated)
+    const injected = ctx.messages.find(m => m.content?.toString().includes('iterations remaining'));
+    expect(injected).toBeTruthy();
+  });
+
+  it('should not inject when not at threshold', async () => {
+    const guard = createBudgetGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const ctx = makeCtx({ iteration: 3, maxIterations: 10 });
+    const result = await runner.run('afterIteration', ctx);
+    expect(result.action).toBe('continue');
+    expect(ctx.messages).toHaveLength(0);
   });
 });

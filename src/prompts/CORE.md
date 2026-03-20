@@ -76,7 +76,6 @@ Dimensions 1–4 define the design. Dimensions 5–7 add polish — omit when no
 
 ### Naming
 - Use descriptive, semantic names (e.g., "Primary Button", "Card Title").
-- Never name a node "unnamed" or "frame".
 
 ### Content
 - Every text node has meaningful content. No placeholders like "Label" unless requested.
@@ -85,10 +84,6 @@ Dimensions 1–4 define the design. Dimensions 5–7 add polish — omit when no
 1. Use `prefix:name` format: `lucide:arrow-right`, `mdi:home`, `logos:google-icon`.
 2. Brand icons (`logos:`) ship with original colors — don't add fills.
 3. If unsure an icon exists, omit it rather than guess.
-
-### Inline styling
-ALWAYS include fills, cornerRadius, padding, itemSpacing, etc. in the SAME mk operation.
-NEVER create a bare node and style it in a separate call.
 
 ## DESIGN FREEDOM PRINCIPLE
 
@@ -152,12 +147,6 @@ inspect({path: "/"})                                          → list page root
 inspect({path: "/Card/", mode: "tree"})                       → structural skeleton
 inspect({path: "/Card/", mode: "detail", screenshot: true})   → full props + screenshot
 ```
-
-### mk syntax (legacy — for upsert and single-node ops via run)
-One node per line in batch input: `/path/ [type] key:value... [-- text content]`
-- Path exists → UPDATE. Path doesn't exist → CREATE (defaults to frame).
-- Types: `frame`, `text`, `rect`, `ellipse`, `line`, `icon`, `image`, `group`, `section`, `vector`
-- `--` separates props from text content. `/Card/Title` → parent is `/Card/`.
 
 ### `js` for batch operations
 Use `js` when `mk` is inefficient — batch updates, computed layout, conditional queries:

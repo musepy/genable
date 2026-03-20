@@ -18,15 +18,11 @@ import { AgentLoopPolicy } from '../agentLoopPolicy';
 /**
  * Lifecycle events in the autonomous agent loop.
  *
- * ACTIVE (wired up in agentRuntime.ts):
- *   afterLLMResponse → after LLM generates, before tool dispatch
- *     - emptyResponseHook (priority 10)
- *     - loopDetectionHook (priority 30)
- *
- * RESERVED (defined but not triggered — extension points for future hooks):
+ * ALL ACTIVE (wired in agentRuntime.ts + toolDispatcher.ts):
  *   beforeIteration  → after context management, before LLM call
- *   beforeToolExec   → before a single tool executes
- *   afterToolExec    → after a single tool executes (before result enters history)
+ *   afterLLMResponse → after LLM generates, before tool dispatch
+ *   beforeToolExec   → before a single tool executes (via dispatcher callback)
+ *   afterToolExec    → after a single tool executes (via dispatcher callback)
  *   afterIteration   → after all tool results committed to history
  */
 export type HookEvent =
@@ -69,12 +65,19 @@ export interface HookContext {
   maxIterations: number;
   /** LLM response text (available in afterLLMResponse+). */
   responseText?: string;
+  /** LLM finish reason (available in afterLLMResponse+). */
+  finishReason?: string;
   /** All tool calls from this iteration (available in afterLLMResponse+). */
   toolCalls?: LLMToolCall[];
   /** The current tool call being processed (beforeToolExec / afterToolExec). */
   currentToolCall?: LLMToolCall;
   /** The current tool result (afterToolExec only). */
   toolResult?: any;
+  /**
+   * All tool results from this iteration (afterIteration only).
+   * Each entry has the tool call and its result for iteration-level analysis.
+   */
+  iterationToolResults?: Array<{ toolCall: LLMToolCall; result: any }>;
   /** Direct access to the messages array for reading/injecting messages. */
   messages: LLMMessage[];
   /** Current loop policy (thresholds, budgets). */

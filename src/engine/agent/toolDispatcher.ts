@@ -25,6 +25,20 @@ import { presentForLLM } from './tools/unified/presentation';
 import { handleScratchCommand } from './scratchpad/handler';
 
 // ---------------------------------------------------------------------------
+// Deprecated commands — hidden from LLM + rejected at dispatch
+// ---------------------------------------------------------------------------
+
+/** Commands no longer exposed to the LLM. Use jsx/edit instead. */
+const DEPRECATED_COMMANDS = new Set(['mk', 'create', 'render']);
+
+/** Helpful migration messages for each deprecated command. */
+const DEPRECATED_SUGGESTIONS: Record<string, string> = {
+  mk: 'Use jsx({markup: "..."}) for creation or edit({path, props}) for updates.',
+  create: 'Use jsx({markup: "..."}) for structured tree creation.',
+  render: 'Use jsx({markup: "..."}) for design creation.',
+};
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -39,6 +53,14 @@ export interface ToolDispatchResult {
   toolResultsMessage: LLMMessage;
 }
 
+/** Hook-style interceptor result for beforeToolExec / afterToolExec. */
+export interface ToolInterceptResult {
+  action: 'continue' | 'skip' | 'abort';
+  reason?: string;
+  /** For afterToolExec: override the tool result. */
+  modifiedResult?: any;
+}
+
 export interface ToolDispatcherConfig {
   toolTimeoutMs: number;
   generateId: (prefix: string) => string;
@@ -47,6 +69,16 @@ export interface ToolDispatcherConfig {
   throwIfCanceled: (iteration?: number) => void;
   onToolCall?: (tc: LLMToolCall) => void;
   onToolResult?: (tc: LLMToolCall, result: any) => void;
+  /**
+   * Async hook interceptor called BEFORE each tool executes.
+   * Return 'skip' to skip this tool, 'abort' to stop the loop.
+   */
+  beforeToolExec?: (tc: LLMToolCall) => Promise<ToolInterceptResult | void>;
+  /**
+   * Async hook interceptor called AFTER each tool executes.
+   * Can modify the result via modifiedResult.
+   */
+  afterToolExec?: (tc: LLMToolCall, result: any) => Promise<ToolInterceptResult | void>;
   /** Provider-specific tool results formatter. */
   formatToolResults: (results: LLMToolResult[]) => LLMMessage;
 }
@@ -181,6 +213,21 @@ export class ToolDispatcher {
       const unwrapped = ToolDispatcher.unwrapRunCommand(expandedTc);
       const commandName = unwrapped.name;
 
+      // ── Reject deprecated commands (dual guarantee: hidden from description + rejected here) ──
+      if (DEPRECATED_COMMANDS.has(commandName)) {
+        const suggestion = DEPRECATED_SUGGESTIONS[commandName] || 'Use jsx or edit instead.';
+        toolResults.push({
+          name: originalName,
+          id: tc.id,
+          response: {
+            success: false,
+            error: { code: 'DEPRECATED_COMMAND', message: `"${commandName}" is deprecated. ${suggestion}` },
+          },
+          thought_signature: tc.thought_signature,
+        });
+        continue;
+      }
+
       // ── Dispatch tool to executor (using command name for events/display) ──
       const displayMeta = toolDisplayMap[commandName];
       this.config.emitRuntimeEvent({
@@ -192,9 +239,39 @@ export class ToolDispatcher {
       });
       this.config.onToolCall?.(unwrapped);
 
-      const result = await this.executeToolWithTimeout(unwrapped);
+      // ── beforeToolExec hook interceptor ──
+      if (this.config.beforeToolExec) {
+        const intercept = await this.config.beforeToolExec(unwrapped);
+        if (intercept?.action === 'abort') {
+          throw new Error(intercept.reason || 'Aborted by beforeToolExec hook');
+        }
+        if (intercept?.action === 'skip') {
+          // Push a skipped result so the LLM knows
+          toolResults.push({
+            name: originalName,
+            id: tc.id,
+            response: {
+              success: false,
+              error: { code: 'HOOK_SKIPPED', message: intercept.reason || `Command "${commandName}" was blocked.` },
+            },
+            thought_signature: tc.thought_signature,
+          });
+          continue;
+        }
+      }
+
+      let result = await this.executeToolWithTimeout(unwrapped);
 
       const durationMs = Date.now() - startedAt;
+
+      // ── afterToolExec hook interceptor ──
+      if (this.config.afterToolExec) {
+        const intercept = await this.config.afterToolExec(unwrapped, result);
+        if (intercept?.modifiedResult !== undefined) {
+          result = intercept.modifiedResult;
+        }
+      }
+
       const resultSuccess = result?.success !== false;
 
       // ── Track $LAST — extract last created/modified node ID ──

@@ -105,7 +105,12 @@ These rules address the most common design quality failures. Violating them prod
    - Card internals: gap={16} or gap={12}
    - Tight groups (label + sublabel): gap={4}
 
-4. **Every card/page needs at least one CTA**: login → Sign In button, profile → Follow/Message button, settings → Save button, pricing → Choose Plan button. A design without actions is a wireframe.`
+4. **Every card/page needs at least one CTA**: login → Sign In button, profile → Follow/Message button, settings → Save button, pricing → Choose Plan button. A design without actions is a wireframe.
+
+5. **Sibling cards in a row**: Each card MUST use w="fill" (NOT a fixed pixel width like w={320}). Figma auto-layout does NOT shrink fixed-width children — they overflow and get clipped. Use w="fill" so cards distribute the parent's width evenly.
+   - GOOD: \`<frame layout="row" gap={24} w="fill"><frame name="Card1" w="fill">...</frame><frame name="Card2" w="fill">...</frame></frame>\`
+   - BAD: \`<frame layout="row" gap={24} w="fill"><frame name="Card1" w={320}>...</frame><frame name="Card2" w={320}>...</frame></frame>\` (320×3 + gaps > parent width → clipped)
+   - Also: sibling cards with different content lengths should ALL use h="fill" (sizingV:fill / stretch) so they share the same height. The CTA button stays at the bottom when using layout:column + space-between or by placing it last with the feature list taking w="fill".`
     );
 
     // 5. Tool definitions (serialized, with category grouping)

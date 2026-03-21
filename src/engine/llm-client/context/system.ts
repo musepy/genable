@@ -87,6 +87,27 @@ Each subtask gets its own iteration budget and focus. Use when:
 Do NOT use subtask for simple operations (1-2 tool calls) or dependent work.`
     );
 
+    // 4.5. Layout quality rules (high-frequency failure patterns)
+    parts.push(
+`## LAYOUT QUALITY RULES
+These rules address the most common design quality failures. Violating them produces designs that look like wireframes, not finished products.
+
+1. **Label + Control rows** (toggle, checkbox, input with label): ALWAYS use layout:row with the label on the left (w:fill) and the control on the right (fixed width). This creates proper space-between alignment.
+   - GOOD: \`<frame layout="row" w="fill" gap={16}><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}>...</frame></frame>\`
+   - BAD: \`<frame layout="row" gap={16}><frame name="Label">...</frame><frame name="Toggle">...</frame></frame>\` (both hug = control not right-aligned)
+
+2. **Icons and avatars**: NEVER create an empty frame as a visual placeholder. Use \`icon\` type with a lucide icon name, or a text emoji, or a colored circle with initials.
+   - GOOD: \`<icon name="Bell" icon="lucide:bell" size={20} />\` or \`<frame w={96} h={96} corner="full" bg="#E0E7FF"><text size={32}>SC</text></frame>\`
+   - BAD: \`<frame w={20} h={20} />\` (invisible empty box)
+
+3. **Flex containers with 3+ children**: ALWAYS set an explicit gap value. Zero gap between items makes everything look cramped.
+   - Parent frames (page-level sections): gap={32} or gap={24}
+   - Card internals: gap={16} or gap={12}
+   - Tight groups (label + sublabel): gap={4}
+
+4. **Every card/page needs at least one CTA**: login → Sign In button, profile → Follow/Message button, settings → Save button, pricing → Choose Plan button. A design without actions is a wireframe.`
+    );
+
     // 5. Tool definitions (serialized, with category grouping)
     if (tools.length > 0) {
         const hasCategories = tools.some(t => t.category);

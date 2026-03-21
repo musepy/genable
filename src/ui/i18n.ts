@@ -57,6 +57,12 @@ const translations = {
       },
     },
     
+    // Memory Suggestions (shown when memories exist)
+    memorySuggestions: [
+      { icon: 'Palette', title: 'Show Design System', description: 'Show me my saved design system preferences and tokens.' },
+      { icon: 'Brain', title: 'Update Memory', description: 'Remember this design preference for future sessions.' },
+    ],
+
     // Prompt Suggestions (icon = Lucide icon name)
     promptSuggestions: [
       { icon: 'LayoutDashboard', title: 'Dashboard', description: 'A metrics scorecard showing 5 row items with columns: "Card Name", "Month", "Quarter", "Year", "Growth" and a trend indicator.' },
@@ -118,6 +124,12 @@ const translations = {
       },
     },
     
+    // Memory Suggestions (shown when memories exist)
+    memorySuggestions: [
+      { icon: 'Palette', title: '显示设计系统', description: '显示我保存的设计系统偏好和 token。' },
+      { icon: 'Brain', title: '更新记忆', description: '记住这个设计偏好，以便将来使用。' },
+    ],
+
     // Prompt Suggestions (icon = Lucide icon name)
     promptSuggestions: [
       { icon: 'LayoutDashboard', title: '仪表盘', description: '包含 "卡片名称"、"月份"、"季度"、"年份"、"增长" 列及趋势指示器的5行指标记分卡。' },

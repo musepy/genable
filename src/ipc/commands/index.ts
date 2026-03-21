@@ -24,6 +24,7 @@ import { handleInspect } from './inspectHandler';
 import { handleEdit } from './editHandler';
 import { handleToken } from './tokenHandler';
 import { handleMemoryCommand } from './memoryHandler';
+import { handleScanTokens } from './tokenScanner';
 
 // ── Command handler type ──
 
@@ -51,6 +52,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   inspect: handleInspect,
   edit: handleEdit,
   token: handleToken,
+  'scan-tokens': handleScanTokens,
   // man is handled locally in sandbox — should not arrive at IPC
   man: async () => ({
     success: false as const,

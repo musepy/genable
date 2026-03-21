@@ -72,6 +72,7 @@ export function useChat({
   const [runtimeProgress, setRuntimeProgress] = useState<{ iteration: number; maxIterations: number } | null>(null)
   const [runtimeContextUsage, setRuntimeContextUsage] = useState<AgentRuntimeContextUsage | null>(null)
   const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null)
+  const [memoryCount, setMemoryCount] = useState<number>(0)
 
   const [thinkingLevel] = useState<'minimal' | 'low' | 'high'>('high')
 
@@ -222,6 +223,9 @@ export function useChat({
         setLoadingStatus(event.message)
         if (event.iteration && event.maxIterations) {
           setRuntimeProgress({ iteration: event.iteration, maxIterations: event.maxIterations })
+        }
+        if ((event as any).memoryCount !== undefined) {
+          setMemoryCount((event as any).memoryCount)
         }
         break
       }
@@ -799,6 +803,7 @@ export function useChat({
     runtimePhase,
     runtimeProgress,
     runtimeContextUsage,
+    memoryCount,
     // Pass-through props
     apiKey,
     setApiKey,

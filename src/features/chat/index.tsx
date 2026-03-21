@@ -55,7 +55,7 @@ const userItemStyle = {
   WebkitUserSelect: 'text' as const,
 };
 
-function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, reasoningText, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, onStop, onContinue, onErrorAction, anchorRef }: {
+function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, reasoningText, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, onStop, onContinue, onErrorAction, anchorRef, memoryCount }: {
   history: any[];
   expandedRawIds: Set<number>;
   toggleRaw: (id: number) => void;
@@ -70,6 +70,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
   onContinue: () => void;
   onErrorAction: (action: ErrorActionType) => void;
   anchorRef: any;
+  memoryCount: number;
 }) {
   const isEmpty = history.length === 0 && !loading;
 
@@ -77,11 +78,17 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', flex: 1, gap: tokens.space[2], color: tokens.colors.textSecondary, textAlign: 'center', paddingTop: tokens.space[5] }}>
         <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.accent }} />
-        <span style={{ 
+        <span style={{
           fontSize: tokens.fontSize[2],
           lineHeight: 'var(--typography-line-height-2)',
         }}>{t.emptyStateHint}</span>
-        {/* Chips are handled in the parent for now to access setPrompt */}
+        {memoryCount > 0 && (
+          <span style={{
+            fontSize: 11,
+            color: tokens.colors.textSecondary,
+            marginTop: tokens.space[1],
+          }}>{memoryCount} item{memoryCount !== 1 ? 's' : ''} remembered</span>
+        )}
       </div>
     );
   }
@@ -191,6 +198,7 @@ export function ChatFeature(props: UseChatProps) {
     runtimePhase,
     runtimeProgress,
     runtimeContextUsage,
+    memoryCount,
   } = useChat(props)
 
   const { copy } = useClipboard()
@@ -275,12 +283,15 @@ export function ChatFeature(props: UseChatProps) {
           onContinue={continueGeneration}
           onErrorAction={(action) => errorActions[action]()}
           anchorRef={anchorRef}
+          memoryCount={memoryCount}
         />
 
         {isEmpty && chipsState.visible && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 0 }}>
             <PromptChips
-              suggestions={t.promptSuggestions}
+              suggestions={memoryCount > 0
+                ? [...t.memorySuggestions, ...t.promptSuggestions]
+                : t.promptSuggestions}
               onSelect={selectSavedPrompt}
               visible={chipsState.visible}
               enabled={chipsState.enabled}

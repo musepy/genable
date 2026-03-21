@@ -52,23 +52,32 @@ export async function memoryGetAll(): Promise<Record<string, string>> {
 
 /** Set a memory value. Creates or updates. */
 export async function memorySet(key: string, value: string): Promise<void> {
-  await figma.clientStorage.setAsync(PREFIX + key, value);
-  const index = await loadIndex();
-  if (!index.includes(key)) {
-    index.push(key);
-    await saveIndex(index);
+  try {
+    await figma.clientStorage.setAsync(PREFIX + key, value);
+    const index = await loadIndex();
+    if (!index.includes(key)) {
+      index.push(key);
+      await saveIndex(index);
+    }
+  } catch (e) {
+    console.warn('[memoryStore] Failed to write memory:', key, e);
   }
 }
 
 /** Delete a memory by key. Returns true if existed. */
 export async function memoryDelete(key: string): Promise<boolean> {
-  const index = await loadIndex();
-  const existed = index.includes(key);
-  if (existed) {
-    await figma.clientStorage.deleteAsync(PREFIX + key);
-    await saveIndex(index.filter(k => k !== key));
+  try {
+    const index = await loadIndex();
+    const existed = index.includes(key);
+    if (existed) {
+      await figma.clientStorage.deleteAsync(PREFIX + key);
+      await saveIndex(index.filter(k => k !== key));
+    }
+    return existed;
+  } catch (e) {
+    console.warn('[memoryStore] Failed to delete memory:', key, e);
+    return false;
   }
-  return existed;
 }
 
 /** Clear all memories. */

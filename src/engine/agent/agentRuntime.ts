@@ -619,6 +619,85 @@ export class AgentRuntime {
       maxIterations: this.maxIterations,
     });
 
+    // ── Load persistent memory on first turn ──
+    if (this.conversationHistory.length === 0 && this.options.ipcBridge) {
+      try {
+        const memResult = await Promise.race([
+          this.options.ipcBridge.callTool('cat', { path: '/.agent/memory/' }),
+          new Promise<null>(r => setTimeout(() => r(null), 2000)),
+        ]);
+        if (memResult && memResult.success && memResult.data?.memories) {
+          const memories = memResult.data.memories as Record<string, string>;
+          const keys = Object.keys(memories);
+          if (keys.length > 0) {
+            const memoryText = keys.map(k => `- ${k}: ${memories[k]}`).join('\n');
+            this.turnMessages.unshift({
+              id: this.generateId('mem'),
+              role: 'user',
+              content: `[System: Loaded ${keys.length} persistent memories from previous sessions]\n${memoryText}`,
+              hidden: true,
+            });
+            this.emitRuntimeEvent({
+              type: 'status',
+              phase: 'execution',
+              message: `Memory loaded (${keys.length} items)`,
+              iteration: 0,
+              maxIterations: this.maxIterations,
+              memoryCount: keys.length,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[Memory] Failed to load persistent memory (non-fatal):', e);
+      }
+
+      // ── Token scan: Memory Diff + Onboarding ──
+      try {
+        const scanResult = await Promise.race([
+          this.options.ipcBridge.callTool('scan-tokens', {}),
+          new Promise<null>(r => setTimeout(() => r(null), 3000)),
+        ]);
+        if (scanResult && scanResult.success && scanResult.data) {
+          const { snapshot, summary, tokenCount } = scanResult.data;
+          if (tokenCount > 0) {
+            // Try to load previous snapshot for diff
+            const prevSnapshotResult = await Promise.race([
+              this.options.ipcBridge.callTool('cat', { path: '/.agent/memory/_token_snapshot' }),
+              new Promise<null>(r => setTimeout(() => r(null), 1000)),
+            ]);
+
+            let diffText = '';
+            if (prevSnapshotResult?.success && prevSnapshotResult.data?.value) {
+              try {
+                const { diffTokenSnapshots } = await import('./context/tokenDiffer');
+                const prevSnapshot = JSON.parse(prevSnapshotResult.data.value);
+                const diff = diffTokenSnapshots(prevSnapshot, snapshot);
+                if (diff && diff.hasChanges) {
+                  diffText = `\n\n[Design system changes since last session]\n${diff.summary}`;
+                }
+              } catch { /* ignore parse errors */ }
+            }
+
+            // Inject token context (onboarding or diff)
+            this.turnMessages.unshift({
+              id: this.generateId('tok'),
+              role: 'user',
+              content: `[System: Design tokens detected — ${summary}]${diffText}`,
+              hidden: true,
+            });
+
+            // Save current snapshot for next session's diff
+            this.options.ipcBridge.callTool('mk', {
+              path: '/.agent/memory/_token_snapshot',
+              textContent: JSON.stringify(snapshot),
+            }).catch(() => { /* non-fatal */ });
+          }
+        }
+      } catch (e) {
+        console.warn('[TokenScan] Failed to scan design tokens (non-fatal):', e);
+      }
+    }
+
     // ── Render user message in chat panel ──
     this.turnCreatedNodeIds = [];
     try {

@@ -18,6 +18,8 @@ import {
   FileText,
   ShoppingCart,
   CheckSquare,
+  Palette,
+  Brain,
   LucideProps,
 } from 'lucide-preact';
 
@@ -30,6 +32,8 @@ const iconMap: Record<string, ComponentType<LucideProps>> = {
   FileText,
   ShoppingCart,
   CheckSquare,
+  Palette,
+  Brain,
 };
 
 export interface PromptSuggestion {

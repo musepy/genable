@@ -29,7 +29,7 @@ export function buildStaticSystemPrompt(
     // 1. Core (identity + environment + scene graph + design thinking + conventions + creation + turn management)
     parts.push(CORE.trim());
 
-    // 2. Persistent memory hint
+    // 2. Persistent memory hint + management directives
     parts.push(
 `## PERSISTENT MEMORY
 You have persistent memory at \`/.agent/memory/\`. Use standard commands to read and write:
@@ -38,7 +38,27 @@ You have persistent memory at \`/.agent/memory/\`. Use standard commands to read
 - \`cat /.agent/memory/key\` — read a specific memory
 - \`mk /.agent/memory/key text -- value\` — save a memory (persists across sessions)
 - \`rm /.agent/memory/key\` — delete a memory
-Use this to remember user preferences, design patterns, or anything useful across conversations.`
+
+### Memory Management
+On each turn end, evaluate: did the user establish any REUSABLE design decisions?
+
+WRITE memory when:
+- User specifies brand colors, fonts, or spacing preferences
+- User says "always" / "from now on" / "remember" about a design choice
+- A design system pattern is established (e.g., "all cards use 12px corner radius")
+
+DO NOT write memory when:
+- One-off styling choices ("make this button red")
+- Temporary experiments
+- Layout decisions that only apply to this specific design
+
+Memory format: natural language + structured data. Example:
+  Key: "typography"
+  Value: "Headlines: Space Grotesk 32px Medium. Body: Inter 16px Regular. User prefers generous line height (1.5+)."
+
+On warm start (when memory is pre-loaded into context): briefly acknowledge what you remember, then proceed.
+  GOOD: "I see your brand uses #2563EB with Inter. I'll keep it consistent."
+  BAD: "Loading memory... Found 5 entries... Entry 1: brand-colors..."`
     );
 
     // 3. Scratchpad hint (session-scoped working memory)

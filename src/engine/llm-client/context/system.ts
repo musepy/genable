@@ -95,6 +95,7 @@ These rules address the most common design quality failures. Violating them prod
 1. **Label + Control rows** (toggle, checkbox, input with label): ALWAYS use layout:row with the label on the left (w:fill) and the control on the right (fixed width). This creates proper space-between alignment.
    - GOOD: \`<frame layout="row" w="fill" gap={16}><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}>...</frame></frame>\`
    - BAD: \`<frame layout="row" gap={16}><frame name="Label">...</frame><frame name="Toggle">...</frame></frame>\` (both hug = control not right-aligned)
+   - **Toggle states**: Mix ON and OFF states for realism. ON = accent color bg + knob right (\`bg="#4F46E5" justify="end"\`). OFF = gray bg + knob left (\`bg="#D1D5DB" justify="start"\`). Never make ALL toggles the same state.
 
 2. **Icons and avatars**: NEVER create an empty frame as a visual placeholder. Use \`icon\` type with a lucide icon name, or a text emoji, or a colored circle with initials.
    - GOOD: \`<icon name="Bell" icon="lucide:bell" size={20} />\` or \`<frame w={96} h={96} corner="full" bg="#E0E7FF"><text size={32}>SC</text></frame>\`

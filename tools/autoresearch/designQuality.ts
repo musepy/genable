@@ -46,6 +46,8 @@ export interface DesignQualityMetrics {
   typographyScale: number;     // 0-100
   layoutStructure: number;     // 0-100
   visualWeight: number;        // 0-100
+  promptCoverage: number;      // 0-100 (prompt-aware: does design match expectations?)
+  aiSlopScore: number;         // 0-100 (higher = cleaner, lower = more slop)
 }
 
 export interface DesignQualityResult {
@@ -362,9 +364,178 @@ function calcVisualWeight(all: Array<{ node: SerializedNode; depth: number }>): 
   };
 }
 
+// ─── Dimension 7: Prompt Coverage (Codex suggestion) ─────────────
+// Does the design actually match what was requested?
+// Prompt-specific rubrics for known test prompts.
+
+function calcPromptCoverage(all: Array<{ node: SerializedNode; depth: number }>, promptId?: string): { score: number; issues: string[] } {
+  const issues: string[] = [];
+  if (!promptId) return { score: 70, issues: [] }; // No prompt context — neutral score
+
+  const names = all.map(a => a.node.name.toLowerCase());
+  const allText = all.filter(a => a.node.type === 'TEXT').map(a => (a.node.characters || '').toLowerCase());
+  const hasName = (pattern: RegExp) => names.some(n => pattern.test(n)) || allText.some(t => pattern.test(t));
+  const countName = (pattern: RegExp) => names.filter(n => pattern.test(n)).length;
+
+  let score = 70; // default
+
+  switch (promptId) {
+    case 'login': {
+      const hasInput = countName(/input|email|password|field/);
+      const hasButton = hasName(/sign.?in|login|submit|button/);
+      const hasCard = countName(/card|form|container|login/);
+      score = Math.round(
+        35 * Math.min(hasCard, 1) +
+        35 * Math.min(hasInput / 2, 1) +
+        30 * (hasButton ? 1 : 0)
+      );
+      if (!hasButton) issues.push('MISSING_PRIMARY_ACTION: No sign-in button detected');
+      if (hasInput < 2) issues.push(`Only ${hasInput} input field(s) — login needs email + password`);
+      break;
+    }
+    case 'dashboard': {
+      const hasNav = hasName(/nav|sidebar|menu/);
+      const hasCards = countName(/card|metric|stat|kpi/);
+      const hasSections = countName(/section|header|content/);
+      score = Math.round(
+        30 * (hasNav ? 1 : 0) +
+        35 * Math.min(hasCards / 3, 1) +
+        35 * Math.min(hasSections / 2, 1)
+      );
+      if (!hasNav) issues.push('WEAK_SECTIONING: No navigation/sidebar detected for dashboard');
+      if (hasCards < 3) issues.push(`Only ${hasCards} metric cards — dashboard prompt asks for 4`);
+      break;
+    }
+    case 'pricing': {
+      const hasTiers = countName(/basic|pro|enterprise|tier|plan|pricing/);
+      const hasButtons = countName(/button|cta|get.?started|choose|select/);
+      const hasPrice = hasName(/\$|price|\/mo|\/month/);
+      score = Math.round(
+        40 * Math.min(hasTiers / 3, 1) +
+        30 * (hasPrice ? 1 : 0.3) +
+        30 * Math.min(hasButtons / 2, 1)
+      );
+      if (hasTiers < 3) issues.push(`Only ${hasTiers} pricing tiers — prompt asks for 3`);
+      break;
+    }
+    case 'profile': {
+      const hasAvatar = hasName(/avatar|photo|image|profile.?pic/);
+      const hasName_ = hasName(/name|title|user/);
+      const hasStats = countName(/follow|post|stat|count/);
+      score = Math.round(
+        35 * (hasAvatar ? 1 : 0.3) +
+        35 * (hasName_ ? 1 : 0.3) +
+        30 * Math.min(hasStats / 2, 1)
+      );
+      break;
+    }
+    case 'settings': {
+      const hasToggles = countName(/toggle|switch|checkbox|notification|dark.?mode|privacy/);
+      const hasSections = countName(/section|header|group/);
+      score = Math.round(
+        40 * Math.min(hasToggles / 3, 1) +
+        30 * (hasSections >= 1 ? 1 : 0.3) +
+        30 * (hasToggles >= 2 ? 1 : 0.5)
+      );
+      if (hasToggles < 3) issues.push(`Only ${hasToggles} toggle/switch elements — prompt asks for 3+`);
+      break;
+    }
+  }
+
+  return { score: Math.max(0, Math.min(100, score)), issues };
+}
+
+// ─── Dimension 8: AI Slop Detection (Codex suggestion) ───────────
+// Detects common "AI-generated design" anti-patterns.
+
+function calcAiSlopScore(all: Array<{ node: SerializedNode; depth: number }>): { score: number; issues: string[]; flags: string[] } {
+  const issues: string[] = [];
+  const flags: string[] = [];
+  let penalty = 0;
+
+  const frames = all.filter(a => a.node.type === 'FRAME' || a.node.type === 'COMPONENT');
+  const maxDepth = all.length > 0 ? Math.max(...all.map(a => a.depth)) : 0;
+
+  // FLAT_STACK: maxDepth <= 2 and most nodes in one subtree
+  if (maxDepth <= 2 && all.length > 10) {
+    penalty += 20;
+    flags.push('FLAT_STACK');
+    issues.push('AI Slop: Flat stack layout — no meaningful nesting');
+  }
+
+  // WRAPPER_SOUP: >25% of containers are single-child unstyled wrappers
+  const containers = frames.filter(f => f.node.children && f.node.children.length > 0);
+  const wrappers = containers.filter(f => {
+    const kids = f.node.children || [];
+    if (kids.length !== 1) return false;
+    const noStyle = !f.node.fills || f.node.fills.length === 0 || f.node.fills.every((fl: any) => fl.visible === false);
+    const noPadding = !f.node.paddingTop && !f.node.paddingRight && !f.node.paddingBottom && !f.node.paddingLeft;
+    return noStyle && noPadding;
+  });
+  if (containers.length > 3 && wrappers.length / containers.length > 0.25) {
+    penalty += 15;
+    flags.push('WRAPPER_SOUP');
+    issues.push(`AI Slop: ${wrappers.length}/${containers.length} containers are single-child unstyled wrappers`);
+  }
+
+  // NO_FOCAL_ELEMENT: no large text (>24px) or prominent button
+  const focalElements = all.filter(a =>
+    (a.node.type === 'TEXT' && a.node.fontSize && a.node.fontSize >= 24) ||
+    /button|btn|cta/i.test(a.node.name)
+  );
+  if (focalElements.length === 0 && all.length > 5) {
+    penalty += 20;
+    flags.push('NO_FOCAL_ELEMENT');
+    issues.push('AI Slop: No focal element — missing large heading or prominent button');
+  }
+
+  // CLONED_REPETITION: 3+ siblings with identical structure, no highlighted variant
+  for (const { node } of frames) {
+    const kids = node.children || [];
+    if (kids.length < 3) continue;
+    // Check if all children have same type + same child count
+    const childSignatures = kids.map(k => `${k.type}:${(k.children || []).length}`);
+    const signatureCounts = new Map<string, number>();
+    for (const sig of childSignatures) signatureCounts.set(sig, (signatureCounts.get(sig) || 0) + 1);
+    for (const [sig, count] of signatureCounts) {
+      if (count >= 3) {
+        // Check if any clone has a visual differentiator (different fill, larger size)
+        const clones = kids.filter((k, i) => childSignatures[i] === sig);
+        const fills = clones.map(k => JSON.stringify(k.fills || []));
+        const allSameFill = fills.every(f => f === fills[0]);
+        if (allSameFill) {
+          penalty += 15;
+          flags.push('CLONED_REPETITION');
+          issues.push(`AI Slop: ${count} identical children in "${node.name}" — no highlighted variant`);
+          break;
+        }
+      }
+    }
+  }
+
+  // TYPOGRAPHY_ONE_OFFS: >50% of text styles used only once
+  const textStyles = all
+    .filter(a => a.node.type === 'TEXT' && a.node.fontSize)
+    .map(a => `${a.node.fontSize}:${a.node.fontName?.style || 'Regular'}`);
+  const styleCounts = new Map<string, number>();
+  for (const s of textStyles) styleCounts.set(s, (styleCounts.get(s) || 0) + 1);
+  const singletons = [...styleCounts.values()].filter(c => c === 1).length;
+  if (textStyles.length > 4 && singletons / styleCounts.size > 0.5) {
+    penalty += 15;
+    flags.push('TYPOGRAPHY_ONE_OFFS');
+    issues.push(`AI Slop: ${singletons}/${styleCounts.size} text styles used only once — no reuse`);
+  }
+
+  return {
+    score: Math.max(0, 100 - penalty),
+    issues,
+    flags,
+  };
+}
+
 // ─── Main Evaluator ──────────────────────────────────────────────
 
-export function evaluateDesignQuality(nodes: SerializedNode[]): DesignQualityResult {
+export function evaluateDesignQuality(nodes: SerializedNode[], promptId?: string): DesignQualityResult {
   const all = flatten(nodes);
   const allIssues: string[] = [];
 
@@ -374,9 +545,12 @@ export function evaluateDesignQuality(nodes: SerializedNode[]): DesignQualityRes
   const typography = calcTypographyScale(all);
   const layout = calcLayoutStructure(all);
   const weight = calcVisualWeight(all);
+  const prompt = calcPromptCoverage(all, promptId);
+  const slop = calcAiSlopScore(all);
 
   allIssues.push(...hierarchy.issues, ...spacing.issues, ...color.issues,
-    ...typography.issues, ...layout.issues, ...weight.issues);
+    ...typography.issues, ...layout.issues, ...weight.issues,
+    ...prompt.issues, ...slop.issues);
 
   const metrics: DesignQualityMetrics = {
     hierarchyQuality: Math.round(hierarchy.score),
@@ -385,9 +559,21 @@ export function evaluateDesignQuality(nodes: SerializedNode[]): DesignQualityRes
     typographyScale: Math.round(typography.score),
     layoutStructure: Math.round(layout.score),
     visualWeight: Math.round(weight.score),
+    promptCoverage: Math.round(prompt.score),
+    aiSlopScore: Math.round(slop.score),
   };
 
-  const score = Math.round(geometricMean(Object.values(metrics)));
+  // Weighted score (Codex recommendation): hierarchy and layout weighted higher
+  const score = Math.round(
+    0.18 * metrics.hierarchyQuality +
+    0.14 * metrics.spacingConsistency +
+    0.10 * metrics.colorPalette +
+    0.12 * metrics.typographyScale +
+    0.14 * metrics.layoutStructure +
+    0.08 * metrics.visualWeight +
+    0.14 * metrics.promptCoverage +
+    0.10 * metrics.aiSlopScore
+  );
 
   return {
     metrics,
@@ -468,7 +654,23 @@ export function evaluateDesignQuality(nodes: SerializedNode[]): DesignQualityRes
       process.exit(1);
     }
 
-    const result = evaluateDesignQuality(nodes);
+    // Try to infer promptId from meta or CLI arg
+    let promptId = process.argv[3]; // optional 3rd arg
+    if (!promptId) {
+      try {
+        const metaJson = await readFile(join(resultDir, 'meta.json'), 'utf-8');
+        const meta = JSON.parse(metaJson);
+        const prompt = (meta.finalText || '').toLowerCase();
+        if (prompt.includes('login') || prompt.includes('sign in')) promptId = 'login';
+        else if (prompt.includes('dashboard') || prompt.includes('metric')) promptId = 'dashboard';
+        else if (prompt.includes('pricing') || prompt.includes('tier')) promptId = 'pricing';
+        else if (prompt.includes('profile') || prompt.includes('avatar')) promptId = 'profile';
+        else if (prompt.includes('settings') || prompt.includes('toggle')) promptId = 'settings';
+      } catch {}
+    }
+    if (promptId) console.log(`Prompt: ${promptId}`);
+
+    const result = evaluateDesignQuality(nodes, promptId);
 
     console.log(`DESIGN QUALITY SCORE: ${result.score}/100\n`);
     console.log('Dimensions:');

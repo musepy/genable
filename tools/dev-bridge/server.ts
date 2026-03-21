@@ -61,9 +61,10 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-// --- result waiters (long-poll support) ---
+// --- long-poll waiters ---
 
 const resultWaiters = new Map<string, Array<(data: any) => void>>();
+const triggerWaiters: Array<(data: any) => void> = [];
 
 function notifyWaiters(id: string, data: any) {
   const waiters = resultWaiters.get(id);
@@ -71,6 +72,11 @@ function notifyWaiters(id: string, data: any) {
     for (const resolve of waiters) resolve(data);
     resultWaiters.delete(id);
   }
+}
+
+function notifyTriggerWaiters(data: any) {
+  const waiters = triggerWaiters.splice(0);
+  for (const resolve of waiters) resolve(data);
 }
 
 // --- auto-cleanup ---
@@ -100,12 +106,48 @@ async function cleanupOldResults() {
 
 // --- routes ---
 
-async function handleTriggerGet(res: ServerResponse) {
+async function handleTriggerGet(waitSec: number, res: ServerResponse) {
+  // Try immediate read first
   try {
     const data = await readFile(TRIGGER_FILE, 'utf-8');
     json(res, 200, JSON.parse(data));
-  } catch {
-    // no pending trigger
+    return;
+  } catch { /* no pending trigger */ }
+
+  // No trigger — if wait requested, long-poll until one arrives
+  if (waitSec > 0) {
+    const timeoutMs = Math.min(waitSec, 60) * 1000; // cap at 60s
+    let resolved = false;
+
+    const timeout = setTimeout(async () => {
+      if (resolved) return;
+      // Re-check file before giving up (race window)
+      try {
+        const data = await readFile(TRIGGER_FILE, 'utf-8');
+        resolved = true;
+        const idx = triggerWaiters.indexOf(resolve);
+        if (idx >= 0) triggerWaiters.splice(idx, 1);
+        json(res, 200, JSON.parse(data));
+        return;
+      } catch { /* still nothing */ }
+
+      resolved = true;
+      const idx = triggerWaiters.indexOf(resolve);
+      if (idx >= 0) triggerWaiters.splice(idx, 1);
+      cors(res);
+      res.writeHead(204);
+      res.end();
+    }, timeoutMs);
+
+    function resolve(data: any) {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      json(res, 200, data);
+    }
+
+    triggerWaiters.push(resolve);
+  } else {
     cors(res);
     res.writeHead(204);
     res.end();
@@ -129,6 +171,9 @@ async function handleTriggerPost(req: IncomingMessage, res: ServerResponse) {
   await writeFile(TRIGGER_FILE, JSON.stringify(payload, null, 2));
   json(res, 201, { ok: true, id: payload.id });
   console.log(`[trigger] new prompt: "${payload.prompt.slice(0, 80)}..."`);
+
+  // Wake up any long-polling plugin connections immediately
+  notifyTriggerWaiters(payload);
 }
 
 async function handleTriggerDelete(res: ServerResponse) {
@@ -196,15 +241,29 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
   // await cleanupOldResults();
 }
 
-async function handleResultGet(res: ServerResponse) {
+async function handleResultGet(filterTriggerId: string | null, res: ServerResponse) {
   try {
     const entries = await readdir(RESULT_DIR);
     if (entries.length === 0) {
-      json(res, 204, null);
+      json(res, 200, { status: 'no_results' });
       return;
     }
 
-    // find most recent result dir
+    // If filtering by trigger ID, try direct lookup first
+    if (filterTriggerId) {
+      const directPath = join(RESULT_DIR, filterTriggerId, 'meta.json');
+      try {
+        const meta = await readFile(directPath, 'utf-8');
+        json(res, 200, { id: filterTriggerId, ...JSON.parse(meta) });
+        return;
+      } catch {
+        // Not found — might still be pending
+        json(res, 200, { id: filterTriggerId, status: 'pending', triggerId: filterTriggerId });
+        return;
+      }
+    }
+
+    // No filter — find most recent result dir
     let latest = '';
     let latestTime = 0;
     for (const entry of entries) {
@@ -339,7 +398,8 @@ const server = createServer(async (req, res) => {
     if (path === '/health') {
       json(res, 200, { status: 'ok', uptime: process.uptime() });
     } else if (path === '/trigger' && method === 'GET') {
-      await handleTriggerGet(res);
+      const waitSec = Number(url.searchParams.get('wait')) || 0;
+      await handleTriggerGet(waitSec, res);
     } else if (path === '/trigger' && method === 'POST') {
       if (!checkAuth(req, res)) return;
       await handleTriggerPost(req, res);
@@ -350,7 +410,8 @@ const server = createServer(async (req, res) => {
       if (!checkAuth(req, res)) return;
       await handleResultPost(req, res);
     } else if (path === '/result' && method === 'GET') {
-      await handleResultGet(res);
+      const filterTriggerId = url.searchParams.get('trigger') || null;
+      await handleResultGet(filterTriggerId, res);
     } else if (path.startsWith('/result/') && method === 'GET') {
       const id = path.slice('/result/'.length);
       const waitSec = Number(url.searchParams.get('wait')) || 0;

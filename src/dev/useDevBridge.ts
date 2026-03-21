@@ -8,7 +8,8 @@ import type { DevBridgeExportHandler, DevBridgeExportResultHandler } from '../ty
 
 const BRIDGE_URL = 'http://localhost:3456'
 const HEALTH_INTERVAL_MS = 10_000
-const POLL_INTERVAL_MS = 2_000
+const LONG_POLL_WAIT_SEC = 30
+const RESULT_TIMEOUT_MS = 120_000 // Force post result if agent runs >2min
 
 type DevBridgeStatus = 'disconnected' | 'connected' | 'polling' | 'executing'
 type RunState = 'idle' | 'running' | 'canceled' | 'error'
@@ -118,6 +119,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     const durationMs = Date.now() - triggerStartTimeRef.current
     triggerIdRef.current = null
     triggerStartTimeRef.current = 0
+    clearResultTimeout()
 
     console.log(`[DevBridge] Run ended (${prev} → ${curr}), posting result for ${triggerId}`)
 
@@ -219,23 +221,113 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     }
   }, [state.runtimeState])
 
-  // Main lifecycle: health-check → poll loop
+  // Result timeout: if agent runs too long, force-post a timeout result
+  const resultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearResultTimeout = () => {
+    if (resultTimeoutRef.current) {
+      clearTimeout(resultTimeoutRef.current)
+      resultTimeoutRef.current = null
+    }
+  }
+
+  const startResultTimeout = (triggerId: string) => {
+    clearResultTimeout()
+    resultTimeoutRef.current = setTimeout(() => {
+      if (triggerIdRef.current !== triggerId) return
+      console.warn(`[DevBridge] Result timeout after ${RESULT_TIMEOUT_MS}ms for ${triggerId}`)
+      triggerIdRef.current = null
+      triggerStartTimeRef.current = 0
+      fetchBridge('/result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          triggerId,
+          status: 'timeout',
+          finalText: `Agent did not complete within ${RESULT_TIMEOUT_MS / 1000}s`,
+          durationMs: RESULT_TIMEOUT_MS,
+          modelName: stateRef.current.modelName,
+          toolCallSummary: { total: 0, errors: 0 },
+        }),
+      }).catch(() => {})
+      setStatus('connected')
+    }, RESULT_TIMEOUT_MS)
+  }
+
+  // Main lifecycle: health-check → long-poll loop
   useEffect(() => {
     let healthTimer: ReturnType<typeof setInterval> | null = null
-    let pollTimer: ReturnType<typeof setInterval> | null = null
     let disposed = false
+    let longPollActive = false
 
-    const startPolling = () => {
-      if (pollTimer || disposed) return
+    const longPollLoop = async () => {
+      if (disposed || longPollActive) return
+      longPollActive = true
       setStatus('polling')
-      pollTimer = setInterval(pollTrigger, POLL_INTERVAL_MS)
-    }
 
-    const stopPolling = () => {
-      if (pollTimer) {
-        clearInterval(pollTimer)
-        pollTimer = null
+      while (!disposed) {
+        const { loading, runtimeState } = stateRef.current
+        // Wait if busy
+        if (loading || runtimeState === 'running' || triggerIdRef.current) {
+          await new Promise(r => setTimeout(r, 1000))
+          continue
+        }
+
+        // Long-poll: hangs until server has a trigger or timeout
+        const res = await fetchBridge(`/trigger?wait=${LONG_POLL_WAIT_SEC}`)
+        if (disposed) break
+
+        if (!res) {
+          // Server gone — back to health-checking
+          setStatus('disconnected')
+          longPollActive = false
+          return
+        }
+
+        // 204 = no trigger (timeout), loop again
+        if (res.status === 204) continue
+
+        let trigger: TriggerPayload
+        try {
+          trigger = await res.json()
+        } catch {
+          continue
+        }
+
+        if (!trigger || !trigger.prompt) continue
+
+        // Claim the trigger
+        await fetchBridge('/trigger', { method: 'DELETE' })
+
+        triggerIdRef.current = trigger.id
+        triggerStartTimeRef.current = Date.now()
+        setStatus('executing')
+
+        // Start result timeout protection
+        startResultTimeout(trigger.id)
+
+        // Switch model if requested
+        if (trigger.model && callbacksRef.current.switchModel) {
+          const [provider, ...modelParts] = trigger.model.split('/')
+          const model = modelParts.join('/')
+          if (provider && model) {
+            console.log(`[DevBridge] Switching model to ${provider}/${model}`)
+            callbacksRef.current.switchModel(provider, model)
+            await new Promise(r => setTimeout(r, 500))
+          }
+        }
+
+        // Reset session if requested
+        if (trigger.reset) {
+          callbacksRef.current.handleRestore()
+          await new Promise(r => setTimeout(r, 100))
+        }
+
+        callbacksRef.current.generateFromPrompt(trigger.prompt)
+        // Don't loop immediately — wait for result to be posted (useEffect on runtimeState)
+        // The long-poll will resume after triggerIdRef is cleared
       }
+      longPollActive = false
     }
 
     const checkHealth = async () => {
@@ -243,64 +335,10 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
       if (disposed) return
       if (res && res.ok) {
         setStatus(prev => (prev === 'disconnected' ? 'connected' : prev))
-        startPolling()
+        longPollLoop() // Start long-poll if not already running
       } else {
-        stopPolling()
         setStatus('disconnected')
       }
-    }
-
-    const pollTrigger = async () => {
-      const { loading, runtimeState } = stateRef.current
-      // Skip if busy
-      if (loading || runtimeState === 'running' || triggerIdRef.current) return
-
-      const res = await fetchBridge('/trigger')
-      if (!res || !res.ok) {
-        // Server gone — back to health-checking
-        if (!res) {
-          stopPolling()
-          setStatus('disconnected')
-        }
-        return
-      }
-
-      let trigger: TriggerPayload
-      try {
-        trigger = await res.json()
-      } catch {
-        return
-      }
-
-      if (!trigger || !trigger.prompt) return
-
-      // Claim the trigger
-      await fetchBridge('/trigger', { method: 'DELETE' })
-
-      triggerIdRef.current = trigger.id
-      triggerStartTimeRef.current = Date.now()
-      setStatus('executing')
-
-      // Switch model if requested (triggers session reset via useChat's useEffect)
-      if (trigger.model && callbacksRef.current.switchModel) {
-        const [provider, ...modelParts] = trigger.model.split('/')
-        const model = modelParts.join('/')
-        if (provider && model) {
-          console.log(`[DevBridge] Switching model to ${provider}/${model}`)
-          callbacksRef.current.switchModel(provider, model)
-          // Wait for session reset to settle
-          await new Promise(r => setTimeout(r, 500))
-        }
-      }
-
-      // Reset session if requested
-      if (trigger.reset) {
-        callbacksRef.current.handleRestore()
-        // Small delay to let state settle after reset
-        await new Promise(r => setTimeout(r, 100))
-      }
-
-      callbacksRef.current.generateFromPrompt(trigger.prompt)
     }
 
     // Initial health check, then periodic
@@ -310,7 +348,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     return () => {
       disposed = true
       if (healthTimer) clearInterval(healthTimer)
-      stopPolling()
+      clearResultTimeout()
     }
   }, [])
 

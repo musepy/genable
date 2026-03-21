@@ -107,7 +107,11 @@ These rules address the most common design quality failures. Violating them prod
 
 4. **Every card/page needs at least one CTA**: login → Sign In button, profile → Follow/Message button, settings → Save button, pricing → Choose Plan button. A design without actions is a wireframe.
 
-5. **Sibling cards in a row**: Each card MUST use w="fill" (NOT a fixed pixel width like w={320}). Figma auto-layout does NOT shrink fixed-width children — they overflow and get clipped. Use w="fill" so cards distribute the parent's width evenly.
+5. **Figma ≠ CSS: space-between needs a fill child**: In CSS flexbox, space-between distributes space automatically. In Figma, if ALL children are hug/fixed, space-between has NO visible effect — children just stack from the start. You MUST make at least one child w="fill" (or h="fill" for vertical) to push siblings apart.
+   - Toggle row: \`<frame layout="row" w="fill"><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}/></frame>\` — Label w:fill pushes Toggle to right edge
+   - Card with CTA at bottom: \`<frame layout="column" h="fill"><frame name="Header">...</frame><frame name="Features" h="fill">...</frame><frame name="CTA" w="fill"/></frame>\` — Features h:fill pushes CTA to bottom
+
+6. **Sibling cards in a row**: Each card MUST use w="fill" (NOT a fixed pixel width like w={320}). Figma auto-layout does NOT shrink fixed-width children — they overflow and get clipped. Use w="fill" so cards distribute the parent's width evenly.
    - GOOD: \`<frame layout="row" gap={24} w="fill"><frame name="Card1" w="fill">...</frame><frame name="Card2" w="fill">...</frame></frame>\`
    - BAD: \`<frame layout="row" gap={24} w="fill"><frame name="Card1" w={320}>...</frame><frame name="Card2" w={320}>...</frame></frame>\` (320×3 + gaps > parent width → clipped)
    - Also: sibling cards with different content lengths should ALL use h="fill" (sizingV:fill / stretch) so they share the same height. The CTA button stays at the bottom when using layout:column + space-between or by placing it last with the feature list taking w="fill".`

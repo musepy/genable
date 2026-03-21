@@ -31,8 +31,8 @@ const MAX_RESULTS = 5;
 // --- helpers ---
 
 function cors(res: ServerResponse) {
-  // Restrict to localhost only — prevents cross-origin attacks from browser tabs
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost');
+  // Figma plugin iframes have origin 'null' — must use wildcard for dev bridge
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }

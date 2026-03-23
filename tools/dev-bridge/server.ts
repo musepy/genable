@@ -61,6 +61,19 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
+// --- SSE stream clients ---
+
+const streamClients = new Map<string, Set<ServerResponse>>();
+
+function sendSSE(triggerId: string, event: string, data: any) {
+  const clients = streamClients.get(triggerId);
+  if (!clients) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of clients) {
+    try { res.write(payload); } catch { clients.delete(res); }
+  }
+}
+
 // --- long-poll waiters ---
 
 const resultWaiters = new Map<string, Array<(data: any) => void>>();
@@ -233,6 +246,15 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
 
   json(res, 201, { ok: true, id, path: resultDir });
   console.log(`[result] saved to ${resultDir}`);
+
+  // Notify SSE stream clients that the run is done
+  sendSSE(rawId, 'done', { triggerId: rawId, durationMs: payload.durationMs, toolCalls: payload.toolCallSummary });
+  // Close all SSE connections for this trigger
+  const clients = streamClients.get(rawId);
+  if (clients) {
+    for (const c of clients) try { c.end(); } catch {}
+    streamClients.delete(rawId);
+  }
 
   // Notify any long-poll waiters
   notifyWaiters(id, payload);
@@ -416,6 +438,29 @@ const server = createServer(async (req, res) => {
       const id = path.slice('/result/'.length);
       const waitSec = Number(url.searchParams.get('wait')) || 0;
       await handleResultById(id, waitSec, res);
+    } else if (path.startsWith('/event/') && method === 'POST') {
+      // Plugin posts tool call events as they happen
+      const id = path.slice('/event/'.length);
+      const body = await readBody(req);
+      const event = JSON.parse(body.toString('utf-8'));
+      sendSSE(id, event.type || 'tool', event);
+      json(res, 200, { ok: true });
+    } else if (path.startsWith('/stream/') && method === 'GET') {
+      // SSE stream for a trigger — client subscribes to live events
+      const id = path.slice('/stream/'.length);
+      cors(res);
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      });
+      res.write(`event: connected\ndata: {"triggerId":"${id}"}\n\n`);
+      if (!streamClients.has(id)) streamClients.set(id, new Set());
+      streamClients.get(id)!.add(res);
+      req.on('close', () => {
+        streamClients.get(id)?.delete(res);
+        if (streamClients.get(id)?.size === 0) streamClients.delete(id);
+      });
     } else if (path === '/recordings' && method === 'GET') {
       await handleRecordingsList(res);
     } else if (path.match(/^\/recordings\/[^/]+\/events$/) && method === 'GET') {

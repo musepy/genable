@@ -104,6 +104,40 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
   // Track previous runtimeState for transition detection
   const prevRuntimeStateRef = useRef<RunState>(state.runtimeState)
 
+  // Stream tool call events to bridge as they happen
+  const lastToolCountRef = useRef<number>(0)
+  useEffect(() => {
+    if (!triggerIdRef.current) return
+    const allToolCalls = state.history.flatMap(m => m.toolCalls || [])
+    const newCount = allToolCalls.length
+    if (newCount <= lastToolCountRef.current) return
+    // Post each new tool call to the stream
+    for (let i = lastToolCountRef.current; i < newCount; i++) {
+      const tc = allToolCalls[i]
+      const quality = (() => {
+        try {
+          const r = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result
+          const stderr = r?._stderr || ''
+          const line = stderr.split('\n').find((l: string) => l.includes('[quality]'))
+          return line?.trim() || null
+        } catch { return null }
+      })()
+      fetchBridge(`/event/${triggerIdRef.current}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'tool',
+          index: i + 1,
+          name: tc.name,
+          status: tc.status,
+          error: tc.error || null,
+          quality,
+        }),
+      }).catch(() => {})
+    }
+    lastToolCountRef.current = newCount
+  }, [state.history])
+
   // Post result back to bridge when a bridge-initiated run ends
   useEffect(() => {
     const prev = prevRuntimeStateRef.current
@@ -300,6 +334,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
 
         triggerIdRef.current = trigger.id
         triggerStartTimeRef.current = Date.now()
+        lastToolCountRef.current = 0
         setStatus('executing')
 
         // Start result timeout protection

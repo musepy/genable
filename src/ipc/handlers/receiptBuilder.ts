@@ -95,8 +95,22 @@ export interface BuildCreateReceiptParams {
  */
 export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<string, any> {
   const { result, violations, softCreateLimit, createLineCount } = params;
+
+  // Build name→id map so agent can reference nodes by ID while knowing what they are
+  // Duplicate names get suffixed: "Check", "Check #2", "Check #3"
+  const idMap: Record<string, string> = {};
+  const nameCounts = new Map<string, number>();
+  for (const [sym, nodeId] of Object.entries(result.idMap)) {
+    const node = figma.getNodeById(nodeId);
+    let name = node && 'name' in node ? (node as SceneNode).name : sym;
+    const count = (nameCounts.get(name) || 0) + 1;
+    nameCounts.set(name, count);
+    if (count > 1) name = `${name} #${count}`;
+    idMap[name] = nodeId;
+  }
+
   const receipt: Record<string, any> = {
-    idMap: result.idMap,
+    idMap,
     created: result.stats.created,
   };
   if (result.stats.edited > 0) receipt.edited = result.stats.edited;

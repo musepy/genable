@@ -103,6 +103,8 @@ class ToolDispatcherCanceledError extends Error {
 export class ToolDispatcher {
   /** Last created/modified node ID — expanded as $LAST in commands. */
   private lastNodeId: string | undefined;
+  /** Last created/modified node name — used with lastNodeId for $LAST expansion. */
+  private lastNodeName: string | undefined;
 
   constructor(
     private toolExecutors: Record<string, ToolExecutor>,
@@ -197,13 +199,16 @@ export class ToolDispatcher {
       // ── Expand $LAST variable ──
       let expandedTc = tc;
       if (this.lastNodeId) {
+        const lastRef = this.lastNodeName
+          ? `${this.lastNodeName}#${this.lastNodeId}`
+          : `#${this.lastNodeId}`;
         // In run CLI commands
         if (tc.name === 'run' && typeof tc.args?.command === 'string' && tc.args.command.includes('$LAST')) {
-          expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, `/#${this.lastNodeId}/`) } };
+          expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, lastRef) } };
         }
         // In first-class tools with path arg (inspect, edit)
         else if (typeof tc.args?.path === 'string' && tc.args.path.includes('$LAST')) {
-          expandedTc = { ...tc, args: { ...tc.args, path: tc.args.path.replace(/\$LAST/g, `/#${this.lastNodeId}/`) } };
+          expandedTc = { ...tc, args: { ...tc.args, path: tc.args.path.replace(/\$LAST/g, lastRef) } };
         }
       }
 
@@ -463,11 +468,14 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       // ; : always run (no skip logic)
       // | : always run (pipe data handled below)
 
-      // $LAST expansion: replace $LAST in positional args with last node path
+      // $LAST expansion: replace $LAST in positional args with last node ref
       if (this.lastNodeId) {
+        const lastRef = this.lastNodeName
+          ? `${this.lastNodeName}#${this.lastNodeId}`
+          : `#${this.lastNodeId}`;
         for (let j = 0; j < cmd.positionalArgs.length; j++) {
           if (cmd.positionalArgs[j].includes('$LAST')) {
-            cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, `/#${this.lastNodeId}/`);
+            cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, lastRef);
           }
         }
       }
@@ -582,8 +590,19 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       candidate = String(data.id);
     }
 
-    if (candidate && ToolDispatcher.FIGMA_ID_RE.test(candidate)) {
+    if (!candidate) return;
+
+    // Support name#id format: "Card#1:2" → extract bare ID + name
+    const nameIdMatch = candidate.match(/^(.+)#(\d+:\d+)$/);
+    if (nameIdMatch) {
+      this.lastNodeName = nameIdMatch[1];
+      this.lastNodeId = nameIdMatch[2];
+      return;
+    }
+
+    if (ToolDispatcher.FIGMA_ID_RE.test(candidate)) {
       this.lastNodeId = candidate;
+      this.lastNodeName = undefined;
     }
   }
 
@@ -609,12 +628,12 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       args.__pipedText = data.tree;
     }
 
-    // grep node search → cat/tree/ls/sed: inject first result's ID as path
+    // grep node search → cat/tree/ls/sed: inject first result's ref as path
     if (data?.results && Array.isArray(data.results) && data.results.length > 0) {
       const firstNode = data.results[0];
       if (firstNode?.id && ['cat', 'tree', 'ls', 'sed', 'mk', 'rm'].includes(commandName)) {
         if (!args.path || args.path === '/') {
-          args.path = `/#${firstNode.id}/`;
+          args.path = firstNode.name ? `${firstNode.name}#${firstNode.id}` : `#${firstNode.id}`;
         }
       }
     }
@@ -624,7 +643,9 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const ids = Object.values(data.idMap);
       if (ids.length > 0 && ['cat', 'tree', 'ls'].includes(commandName)) {
         if (!args.path || args.path === '/') {
-          args.path = `/#${ids[ids.length - 1]}/`;
+          const lastVal = String(ids[ids.length - 1]);
+          // idMap values are already name#id format — use directly
+          args.path = lastVal;
         }
       }
     }

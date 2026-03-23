@@ -75,7 +75,7 @@ function buildRunDescription(): string {
   }
 
   lines.push(
-    'Path: "/" = page root, "/Card/" = by name, "/#100:5/" = by Figma ID (# prefix).',
+    'Path: "/" = page root, "/Card/" = by name, "Card#100:5" = by name#id (from ls/receipt).',
     'Glob: /Card/Btn* matches children starting with "Btn".',
     '$LAST: expands to last created/modified node ID.',
     'Chain: cmd1 && cmd2 (and), cmd1 ; cmd2 (seq), cmd1 || cmd2 (or), cmd1 | cmd2 (pipe)',

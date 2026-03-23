@@ -15,7 +15,11 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 const sessionNodeIds = new Set<string>();
 
 export function registerSessionNodes(ids: string[]) {
-  for (const id of ids) sessionNodeIds.add(id);
+  for (const rawId of ids) {
+    // Strip name# prefix if present (e.g. "Card#1:2" → "1:2")
+    const m = rawId.match(/^.+#(\d+:\d+)$/);
+    sessionNodeIds.add(m ? m[1] : rawId);
+  }
 }
 
 export function clearSessionNodes() {
@@ -74,6 +78,27 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
 
     // Current directory: "." → no-op
     if (segment === '.') continue;
+
+    // name#id format: "Card#1:2" → resolve by Figma ID (name is display-only)
+    const nameIdMatch = segment.match(/^(.+)#(\d+:\d+)$/);
+    if (nameIdMatch) {
+      const nodeId = nameIdMatch[2];
+      const node = await figma.getNodeByIdAsync(nodeId);
+      if (!node) {
+        return {
+          ok: false,
+          response: {
+            success: false,
+            error: {
+              code: 'PATH_NOT_FOUND',
+              message: `Node ID "${nodeId}" not found. Use inspect({path: "/"}) to discover available nodes.`,
+            },
+          },
+        };
+      }
+      current = node;
+      continue;
+    }
 
     // Explicit ID prefix: #1058:12304 → resolve by Figma ID
     if (segment.startsWith('#')) {
@@ -172,6 +197,17 @@ export function buildNodePath(node: BaseNode): string {
     current = current.parent;
   }
   return '/' + parts.join('/');
+}
+
+export function buildNodeRef(node: BaseNode): string {
+  return `${node.name}#${node.id}`;
+}
+
+export function parseRef(ref: string): { name?: string; id: string } {
+  const m = ref.match(/^(.+)#(\d+:\d+)$/);
+  if (m) return { name: m[1], id: m[2] };
+  if (ref.startsWith('#')) return { id: ref.slice(1) };
+  return { id: ref };
 }
 
 export function normalizePath(path: string): string {

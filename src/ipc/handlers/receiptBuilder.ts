@@ -113,7 +113,7 @@ export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<str
     const count = (nameCounts.get(name) || 0) + 1;
     nameCounts.set(name, count);
     if (count > 1) name = `${name} #${count}`;
-    idMap[name] = `/#${lr.nodeId}`;
+    idMap[name] = `${name}#${lr.nodeId}`;
   }
   // Fallback: if lineResults don't have names, use original symbol map
   if (Object.keys(idMap).length === 0) {

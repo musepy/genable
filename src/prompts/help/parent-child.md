@@ -28,7 +28,7 @@ mk /ExistingCard/Footer/Btn/Label text size:12 fill:#FFF weight:Medium -- Action
 mk /Card/Icon frame w:40 h:40 bg:#EEE corner:20 && cat $LAST -s
 ```
 
-**By ID** — use `/#nodeId/` prefix for precise targeting:
+**By name#id** — use ref from ls/receipt for precise targeting:
 ```
-mk /#1134:25994/NewChild text size:14 fill:#333 -- Inserted by ID
+mk /NewChild#1134:25994/ text size:14 fill:#333 -- Inserted by ref
 ```

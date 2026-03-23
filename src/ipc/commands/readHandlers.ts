@@ -11,17 +11,15 @@ import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { logger } from '../../utils/logger';
-import { resolvePathToNode, hasGlob, resolveGlobPaths, buildNodePath, isSessionNode } from './pathResolver';
+import { resolvePathToNode, hasGlob, resolveGlobPaths, buildNodePath, buildNodeRef, isSessionNode } from './pathResolver';
 import { exportNodeToBase64 } from './shared';
 
 // ── ls ──
 
-function formatLsEntry(node: SceneNode, showId = false): string {
+function formatLsEntry(node: SceneNode): string {
   const hasChildren = 'children' in node && (node as any).children.length > 0;
-  const baseName = hasChildren ? `${node.name}/` : node.name;
-  // Show ID suffix for duplicate-named siblings (like `ls -i` in Unix)
-  // Use # prefix so the ID is directly usable as a path: /#1058:12304/
-  const name = showId ? `${baseName} (#${node.id})` : baseName;
+  const ref = buildNodeRef(node);
+  const name = hasChildren ? `${ref}/` : ref;
   const type = node.type.toLowerCase();
   const w = Math.round(node.width);
   const h = Math.round(node.height);
@@ -91,20 +89,9 @@ export async function handleLs(parameters: any): Promise<ToolResponse> {
     containerName = node.name;
   }
 
-  // Detect duplicate names — show ID for disambiguation (like `ls -i`)
-  const nameCounts = new Map<string, number>();
-  for (const child of children) {
-    nameCounts.set(child.name, (nameCounts.get(child.name) || 0) + 1);
-  }
-
   const lines: string[] = [];
-  const nameSeenCount = new Map<string, number>();
   for (const child of children) {
-    const isDuplicate = (nameCounts.get(child.name) || 0) > 1;
-    const seenBefore = (nameSeenCount.get(child.name) || 0) > 0;
-    // First occurrence: no ID (it's the default path target). Subsequent: show ID.
-    lines.push(formatLsEntry(child, isDuplicate && seenBefore));
-    nameSeenCount.set(child.name, (nameSeenCount.get(child.name) || 0) + 1);
+    lines.push(formatLsEntry(child));
   }
 
   const page = figma.currentPage;
@@ -201,7 +188,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
     if (suggestedReads.length > 0) {
       treeData.suggestedReads = suggestedReads.map(id => {
         const n = page.findOne(node => node.id === id);
-        return n ? `${buildNodePath(n)} (${id})` : id;
+        return n ? buildNodeRef(n) : id;
       });
     }
 
@@ -222,7 +209,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
   if ('children' in treeNode) {
     for (const child of (treeNode as any).children) {
       if ('children' in child && child.children.length > 3) {
-        suggestedReads.push(`${treePath.replace(/\/$/, '')}/${child.name}/ (${child.id})`);
+        suggestedReads.push(buildNodeRef(child));
       }
     }
   }

@@ -136,6 +136,7 @@ Update existing nodes — structured JSON props:
 
 ```
 edit({path: "/Card/", props: {corner: 16, bg: "#F8F9FA"}})
+edit({path: "Card#1:2", props: {corner: 16, bg: "#F8F9FA"}})
 edit({path: "/Card/Title", props: {size: 20}, content: "New Title"})
 ```
 

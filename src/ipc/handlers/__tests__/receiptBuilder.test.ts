@@ -50,7 +50,7 @@ describe('buildCreateReceipt', () => {
     const receipt = buildCreateReceipt({ result });
 
     expect(receipt.created).toBe(2);
-    expect(receipt.idMap).toEqual({ a: '1:1', b: '1:2' });
+    expect(receipt.idMap).toEqual({ a: 'a#1:1', b: 'b#1:2' });
     expect(receipt.failed).toBeUndefined();
     expect(receipt.errors).toBeUndefined();
   });

@@ -39,7 +39,7 @@ Set screenshot=true to capture a visual screenshot.
 - "/" = current page root
 - "/Card/" = child named "Card"
 - "/Card/Header/Title" = nested path
-- "/100:5/" = direct Figma node ID (use when name is ambiguous)
+- "Card#100:5" = name#id ref (from ls/receipt output — unique, O(1) lookup)
 
 ### XML Output Format (read tools)
 tree and cat return compact XML. Note: read output is XML, write input is flat ops — they are different formats.

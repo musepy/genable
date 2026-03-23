@@ -20,7 +20,7 @@ export const lsDefinition: ToolDefinition = {
   description: `List children of a design node — like Unix ls.
 
 Path format: "/" for page root, "/NodeName/" for named nodes, "/Parent/Child/" for nested.
-Segments match by node name. Use Figma node ID directly if ambiguous: "/100:5/".
+Segments match by node name. Use name#id ref from ls output: "Card#100:5".
 
 Shows: name, type, dimensions, layout, key visual properties for each child.
 Nodes with children shown with trailing "/".

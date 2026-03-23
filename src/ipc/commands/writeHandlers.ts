@@ -26,8 +26,8 @@ async function executeSingleMk(
     return { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' } };
   }
 
-  // ID-based path: if nodeName looks like a Figma ID (contains ':'), resolve and update directly
-  if (nodeName.includes(':')) {
+  // ID-based path: if nodeName is a bare Figma ID (digits:digits), resolve and update directly
+  if (/^\d+:\d+$/.test(nodeName)) {
     const node = await figma.getNodeByIdAsync(nodeName);
     if (node && 'visible' in node) {
       const nodeId = node.id;

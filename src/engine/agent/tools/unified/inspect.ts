@@ -28,7 +28,7 @@ Examples:
   inspect({path: "/Card/Header/", mode: "detail"})                    → full properties
   inspect({path: "/Card/", mode: "detail", screenshot: true})         → properties + screenshot
 
-Path syntax: "/" = page root, "/Card/" = by name, "/#100:5/" = by Figma ID (# prefix).
+Path syntax: "/" = page root, "/Card/" = by name, "Card#100:5" = by name#id (from ls/receipt).
 Glob: /Card/Btn* matches children starting with "Btn".`,
   parameters: {
     type: 'object',

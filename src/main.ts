@@ -170,7 +170,7 @@ export default async function () {
       const nodes: Array<{ node: SceneNode; id: string; name: string; area: number }> = [];
       if (rootNodeIds && rootNodeIds.length > 0) {
         for (const id of rootNodeIds) {
-          const node = figma.getNodeById(id) as SceneNode | null;
+          const node = await figma.getNodeByIdAsync(id) as SceneNode | null;
           if (node && 'width' in node && 'height' in node) {
             nodes.push({ node, id, name: node.name, area: node.width * node.height });
           }

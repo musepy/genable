@@ -51,8 +51,8 @@ function extractRootNodeIds(history: ChatMessage[]): string[] {
     if (!msg.toolCalls) continue
     for (const tc of msg.toolCalls) {
       if (tc.status !== 'success' || !tc.result) continue
-      // Accept current (mk/render) and legacy (design/create) tool names
-      if (tc.name !== 'mk' && tc.name !== 'render' && tc.name !== 'design' && tc.name !== 'create') continue
+      // Accept current (jsx/mk/render) and legacy (design/create) tool names
+      if (tc.name !== 'jsx' && tc.name !== 'mk' && tc.name !== 'render' && tc.name !== 'design' && tc.name !== 'create') continue
       const result = typeof tc.result === 'string' ? (() => { try { return JSON.parse(tc.result) } catch { return null } })() : tc.result
       // Current shape: { success, data: { idMap: { n1: "802:1526", ... } } }
       // Legacy shape: { idMap: { symbol: "802:1526", ... } }

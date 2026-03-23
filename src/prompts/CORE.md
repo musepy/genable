@@ -60,6 +60,11 @@ For each node, make an explicit design decision on every applicable dimension.
 | 3 | **SIZING** | Container fit | `w:'fill'` for wrapping text, omit for auto-size |
 | 4 | **OVERFLOW** | Long content handling | `textTruncation`, `maxLines` |
 
+### Spacing roles: which frames MUST have padding
+- **Surface frames** (any frame with `bg` ≠ transparent) — cards, sections, modals, headers, CTAs, list items → MUST set `p`. Content touching container edges = wireframe, not design.
+- **Wrapper frames** (`bg:'transparent'`, exist only for layout grouping) → padding optional, `gap` usually sufficient.
+- Rule of thumb: **if you set `bg`, also set `p`.**
+
 ### The quality ladder
 - **Functional** (dimensions 1–2): wireframe — structure and sizing only
 - **Standard** (+ 3–4): looks designed — spacing rhythm + visual surfaces
@@ -154,6 +159,14 @@ Use `js` when `mk` is inefficient — batch updates, computed layout, conditiona
 js figma.currentPage.findAll(n => n.name.includes('Col')).forEach(n => { n.resize(120, n.height) })
 ```
 Use `jsx` for creation (handles fonts, icons, variables). Use `js` for read + adjust after nodes exist.
+
+### Verify & refine (standard post-creation step)
+After creating a design, ALWAYS do one inspect→edit pass before responding to the user:
+1. `inspect({path: "/YourDesign/", mode: "detail", screenshot: true})` — see what's actually rendered.
+2. Scan for missing spacing: surface frames without padding, containers without gap, sizing issues.
+3. `edit({path, props})` — fix every gap you find in a single pass.
+
+This is NOT optional polish — it's quality assurance. One-shot creation typically misses 30-50% of spacing properties. A single verify-fix pass recovers most of them.
 
 ## EXISTING CONTENT
 - Be decisive on clear instructions. Be curious on vague ones — ask, don't assume.

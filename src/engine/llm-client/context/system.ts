@@ -95,7 +95,10 @@ These rules address the most common design quality failures. Violating them prod
 1. **Label + Control rows** (toggle, checkbox, input with label): ALWAYS use layout:row with the label on the left (w:fill) and the control on the right (fixed width). This creates proper space-between alignment.
    - GOOD: \`<frame layout="row" w="fill" gap={16}><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}>...</frame></frame>\`
    - BAD: \`<frame layout="row" gap={16}><frame name="Label">...</frame><frame name="Toggle">...</frame></frame>\` (both hug = control not right-aligned)
-   - **Toggle states**: Mix ON and OFF states for realism. ON = accent color bg + knob right (\`bg="#4F46E5" justify="end"\`). OFF = gray bg + knob left (\`bg="#D1D5DB" justify="start"\`). Never make ALL toggles the same state.
+   - **Toggle switch structure**: The track is a pill-shaped frame. The knob sits inside and moves LEFT (OFF) or RIGHT (ON) via primaryAxisAlignItems.
+     - ON:  \`<frame w={44} h={24} corner="full" bg="#4F46E5" layout="row" p={2} align="center" justify="end"><frame w={20} h={20} corner="full" bg="#FFFFFF" shadow="0,1,3,0,#0000001A"/></frame>\`
+     - OFF: \`<frame w={44} h={24} corner="full" bg="#D1D5DB" layout="row" p={2} align="center" justify="start"><frame w={20} h={20} corner="full" bg="#FFFFFF" shadow="0,1,3,0,#0000001A"/></frame>\`
+     - Key: knob (20px) must be clearly smaller than track height (24px). Use justify="end" for ON, justify="start" for OFF. Mix ON/OFF states for realism — never all the same.
 
 2. **Icons and avatars**: NEVER create an empty frame as a visual placeholder. Use \`icon\` type with a lucide icon name, or a text emoji, or a colored circle with initials.
    - GOOD: \`<icon name="Bell" icon="lucide:bell" size={20} />\` or \`<frame w={96} h={96} corner="full" bg="#E0E7FF"><text size={32}>SC</text></frame>\`

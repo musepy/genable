@@ -171,11 +171,13 @@ function buildNodesFromJsx(markup: string): SerializedNode[] {
         if (props.fill) node.fills = [{ type: 'SOLID', visible: true }];
         node.textAutoResize = props.w === 'fill' ? 'HEIGHT' : 'WIDTH_AND_HEIGHT';
         // Capture text content after tag until </text>
+        // Skip past the closing tag entirely — TEXT nodes are NOT pushed to the stack,
+        // so we must not let the closing-tag handler run (it would pop the parent frame).
         const closeIdx = markup.indexOf(`</${tag}>`, pos);
         if (closeIdx >= 0) {
           const textContent = markup.slice(pos, closeIdx).trim();
           if (textContent) node.characters = textContent;
-          pos = closeIdx;
+          pos = closeIdx + tag.length + 3; // skip past "</text>"
         }
       }
 
@@ -280,7 +282,7 @@ function buildNodesFromToolCalls(meta: Meta): SerializedNode[] {
   const nodeMap = new Map<string, SerializedNode>();
   const roots: SerializedNode[] = [];
 
-  for (const tc of meta.toolCallDetails) {
+  for (const tc of (meta.toolCallDetails ?? [])) {
     if (tc.status !== 'success') continue;
     let batchText = '';
     let jsxMarkup = '';
@@ -556,19 +558,26 @@ function calcSpacingCompleteness(all: Array<{ node: SerializedNode; depth: numbe
     let nodeScore = 0;
     let checks = 0;
 
-    // itemSpacing (between children)
+    // itemSpacing or SPACE_BETWEEN (between children)
     checks++;
-    if (node.itemSpacing !== undefined && node.itemSpacing !== null) nodeScore++;
+    const hasSpaceBetween = node.primaryAxisAlignItems === 'SPACE_BETWEEN';
+    if ((node.itemSpacing !== undefined && node.itemSpacing !== null) || hasSpaceBetween) nodeScore++;
     else issues.push(`Frame "${node.name}" missing itemSpacing`);
 
-    // padding (at least one side > 0 for container frames)
-    checks++;
-    const hasPadding = (node.paddingTop || 0) > 0 ||
-      (node.paddingRight || 0) > 0 ||
-      (node.paddingBottom || 0) > 0 ||
-      (node.paddingLeft || 0) > 0;
-    if (hasPadding) nodeScore++;
-    // Not having padding is not always an issue, so softer penalty
+    // padding — only require for surface frames (those with a visible fill).
+    // Wrapper frames (transparent, layout-only) don't need padding.
+    const hasFill = node.fills && node.fills.length > 0 &&
+      node.fills.some((f: any) => f.visible !== false);
+    if (hasFill) {
+      checks++;
+      const hasPadding = (node.paddingTop || 0) > 0 ||
+        (node.paddingRight || 0) > 0 ||
+        (node.paddingBottom || 0) > 0 ||
+        (node.paddingLeft || 0) > 0;
+      if (hasPadding) nodeScore++;
+      else issues.push(`Surface frame "${node.name}" has fill but no padding`);
+    }
+    // Wrapper frames (no fill) — skip padding check entirely
 
     complete += nodeScore / checks;
   }
@@ -643,21 +652,40 @@ export async function evaluate(resultDir: string): Promise<EvalResult> {
 
   let treeNodes: SerializedNode[] = [];
 
-  // Priority 1: tree.json (Figma serialized)
+  // Check if agent actually created any design (jsx/mk/create calls)
+  const hasCreationCalls = meta.toolCallDetails?.some(tc =>
+    tc.status === 'success' && ['jsx', 'mk', 'render', 'design', 'create'].includes(tc.name)
+  ) ?? false;
+  const rootIds = meta.rootNodeIds || [];
+
+  // Priority 1: tree.json (Figma serialized) — only use if we have rootNodeIds to filter
   try {
     const treeRaw = await readFile(join(resultDir, 'tree.json'), 'utf-8');
     const treeData = JSON.parse(treeRaw);
     const raw = treeData.nodes || [];
-    // Filter to current run's roots if available
-    treeNodes = filterTreeByRootIds(raw, meta.rootNodeIds || []);
+    if (rootIds.length > 0) {
+      // Filter to current run's roots only
+      treeNodes = filterTreeByRootIds(raw, rootIds);
+    } else if (!hasCreationCalls) {
+      // No creation calls and no rootIds — agent reused existing design, skip full tree
+      treeNodes = [];
+    } else {
+      treeNodes = filterTreeByRootIds(raw, rootIds);
+    }
   } catch {
     // Priority 2: nodeTree in meta.json
     if (meta.nodeTree?.nodes?.length) {
-      treeNodes = filterTreeByRootIds(meta.nodeTree.nodes, meta.rootNodeIds || []);
+      if (rootIds.length > 0) {
+        treeNodes = filterTreeByRootIds(meta.nodeTree.nodes, rootIds);
+      } else if (!hasCreationCalls) {
+        treeNodes = [];
+      } else {
+        treeNodes = filterTreeByRootIds(meta.nodeTree.nodes, rootIds);
+      }
     }
   }
 
-  // Priority 3: Reconstruct from mk tool call parameters
+  // Priority 3: Reconstruct from tool call parameters (jsx/mk/create)
   if (treeNodes.length === 0) {
     treeNodes = buildNodesFromToolCalls(meta);
   }

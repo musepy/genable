@@ -22,7 +22,8 @@ const LAYOUT_MAP: Record<string, string> = {
 const ALIGN_MAP: Record<string, string> = {
   center: 'CENTER', start: 'MIN', end: 'MAX',
   flexstart: 'MIN', flexend: 'MAX',
-  spacebetween: 'SPACE_BETWEEN', baseline: 'BASELINE',
+  spacebetween: 'SPACE_BETWEEN', between: 'SPACE_BETWEEN',
+  baseline: 'BASELINE',
 };
 
 const PATTERNS: Record<string, Record<string, any>> = {

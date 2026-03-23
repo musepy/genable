@@ -35,10 +35,9 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
       break;
   }
 
-  // ── Quality scoring on detail inspect ──
-  // When agent inspects with detail mode, append quality scores so it can
-  // verify its fixes are working. Agent loops until ✅ 100%.
-  if (mode === 'detail' && result.success) {
+  // ── Quality scoring on every inspect ──
+  // Append quality scores so agent can verify fixes. Loops until ✅ 100%.
+  if (result.success) {
     try {
       const resolved = await resolvePathToNode(path);
       if (resolved.ok && !('isPage' in resolved && resolved.isPage)) {

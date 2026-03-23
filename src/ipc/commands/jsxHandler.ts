@@ -15,6 +15,7 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 import { parseJsx } from '../../engine/jsx/jsxParser';
 import { jsxToFlatOps } from '../../engine/jsx/jsxToFlatOps';
 import { executeFlatOps } from './shared';
+import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
   const { markup, parentId } = parameters;
@@ -54,6 +55,26 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     result._stderr = result._stderr
       ? parseWarnings + '\n' + result._stderr
       : parseWarnings;
+  }
+
+  // ── Post-creation quality scoring ──
+  // Score the created nodes and append feedback for the agent.
+  // Agent sees scores + specific issues → can loop to fix.
+  if (result.success && result.data?.idMap) {
+    try {
+      const rootIds = Object.values(result.data.idMap as Record<string, string>);
+      // Only score the first root (the top-level created node)
+      const rootId = rootIds[0];
+      if (rootId) {
+        const report = await scoreCreatedNodes([rootId]);
+        const qualityStr = formatQualityReport(report);
+        if (qualityStr) {
+          result._stderr = result._stderr
+            ? result._stderr + '\n' + qualityStr
+            : qualityStr;
+        }
+      }
+    } catch { /* quality scoring is best-effort, don't fail the tool */ }
   }
 
   return result;

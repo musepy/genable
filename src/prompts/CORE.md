@@ -28,15 +28,6 @@ Your actions map directly to Figma Plugin API operations.
   - `w:360` = explicit pixels (always works)
 - The runtime auto-injects `layout:'column'` when you set padding/gap/alignment without layout. But expressing layout intent explicitly produces better designs.
 
-### Spacing: No Margin — Use gap + Nesting
-- **No margin property.** No mt/mb/ml/mr. Figma does not have margins.
-- Spacing between children = parent's `gap`. EVERY frame with `layout` and 2+ children MUST set `gap`.
-- For uniform spacing: `gap={16}` on parent — all children get 16px between them.
-- For varying spacing between sections: nest into sub-frames, each with its own `gap`.
-  - GOOD: `<frame gap={24}><frame name="Header" gap={8}>Title+Subtitle</frame><frame name="Form" gap={16}>inputs</frame></frame>`
-  - BAD: `<frame><text>Title</text><text mt={8}>Subtitle</text><frame mt={24}>input</frame></frame>` ← mt is dropped!
-- For single-child offset: wrap in a frame with padding instead of margin.
-
 ### Text Sizing
 - `w:'fill'` on text → wraps within parent width. **Use for body text, descriptions, any text > ~30 chars.**
 - Short labels (buttons, headings) → omit width, text auto-sizes.
@@ -68,11 +59,6 @@ For each node, make an explicit design decision on every applicable dimension.
 | 2 | **COLOR** | Text color (no inheritance between nodes) | `fill` |
 | 3 | **SIZING** | Container fit | `w:'fill'` for wrapping text, omit for auto-size |
 | 4 | **OVERFLOW** | Long content handling | `textTruncation`, `maxLines` |
-
-### Spacing roles: which frames MUST have padding
-- **Surface frames** (any frame with `bg` ≠ transparent) — cards, sections, modals, headers, CTAs, list items → MUST set `p`. Content touching container edges = wireframe, not design.
-- **Wrapper frames** (`bg:'transparent'`, exist only for layout grouping) → padding optional, `gap` usually sufficient.
-- Rule of thumb: **if you set `bg`, also set `p`.**
 
 ### The quality ladder
 - **Functional** (dimensions 1–2): wireframe — structure and sizing only
@@ -168,14 +154,6 @@ Use `js` when `mk` is inefficient — batch updates, computed layout, conditiona
 js figma.currentPage.findAll(n => n.name.includes('Col')).forEach(n => { n.resize(120, n.height) })
 ```
 Use `jsx` for creation (handles fonts, icons, variables). Use `js` for read + adjust after nodes exist.
-
-### Verify & refine (standard post-creation step)
-After creating a design, ALWAYS do one inspect→edit pass before responding to the user:
-1. `inspect({path: "/YourDesign/", mode: "detail", screenshot: true})` — see what's actually rendered.
-2. Scan for missing spacing: surface frames without padding, containers without gap, sizing issues.
-3. `edit({path, props})` — fix every gap you find in a single pass.
-
-This is NOT optional polish — it's quality assurance. One-shot creation typically misses 30-50% of spacing properties. A single verify-fix pass recovers most of them.
 
 ## EXISTING CONTENT
 - Be decisive on clear instructions. Be curious on vague ones — ask, don't assume.

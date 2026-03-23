@@ -459,6 +459,221 @@
     }
     .expand-btn:hover { text-decoration: underline; }
 
+    /* ===== Conversation Flow ===== */
+    .conv-flow { display: flex; flex-direction: column; gap: 12px; }
+    .conv-msg {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .conv-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .conv-avatar.user { background: #1e40af; color: #93c5fd; }
+    .conv-avatar.model { background: #581c87; color: #d8b4fe; }
+    .conv-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .conv-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-dimmed);
+      margin-bottom: 4px;
+    }
+    .conv-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg-tool-body);
+      border-radius: 6px;
+      padding: 10px 14px;
+      border: 1px solid var(--border-card);
+    }
+    .conv-text:empty { display: none; }
+    .conv-toolcalls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .conv-tc {
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .conv-tc summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      background: var(--bg-card);
+      transition: background .15s;
+    }
+    .conv-tc summary::-webkit-details-marker { display: none; }
+    .conv-tc summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .conv-tc[open] summary::before { transform: rotate(90deg); }
+    .conv-tc summary:hover { background: var(--bg-detail-hover); }
+    .conv-tc-name { font-weight: 600; color: var(--text-primary); }
+    .conv-tc-status-ok { color: #22c55e; font-size: 11px; }
+    .conv-tc-status-err { color: #ef4444; font-size: 11px; }
+    .conv-tc-body {
+      padding: 8px 12px 12px 12px;
+      background: var(--bg-tool-body);
+    }
+    .conv-tc-section {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin: 8px 0 4px 0;
+    }
+    .conv-tc-section:first-child { margin-top: 0; }
+    .conv-tc-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+    .conv-tc-error {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+    [data-theme="light"] .conv-tc-error { color: #dc2626; }
+
+    /* ===== LLM Context card ===== */
+    .llm-ctx-list { display: flex; flex-direction: column; gap: 8px; }
+    .llm-ctx-item {
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .llm-ctx-item summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      background: var(--bg-card);
+    }
+    .llm-ctx-item summary::-webkit-details-marker { display: none; }
+    .llm-ctx-item summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .llm-ctx-item[open] summary::before { transform: rotate(90deg); }
+    .llm-ctx-item summary:hover { background: var(--bg-detail-hover); }
+    .llm-ctx-iter {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .llm-ctx-label { font-weight: 600; color: var(--text-primary); }
+    .llm-ctx-meta { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+    .llm-ctx-body {
+      padding: 10px 14px;
+      background: var(--bg-tool-body);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .llm-ctx-msgs {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .llm-ctx-msg {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+    }
+    .llm-ctx-msg-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      width: 52px;
+      flex-shrink: 0;
+    }
+    .llm-ctx-msg-role.system { color: #f59e0b; }
+    .llm-ctx-msg-role.user { color: #3b82f6; }
+    .llm-ctx-msg-role.model { color: #a855f7; }
+    .llm-ctx-msg-role.tool { color: #22c55e; }
+    .llm-ctx-msg-len {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .llm-ctx-msg-flags {
+      font-size: 10px;
+      color: var(--text-dimmed);
+    }
+    .llm-ctx-tools {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-card);
+    }
+    .llm-ctx-tools-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .llm-ctx-tool-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .llm-ctx-tool-tag {
+      font-size: 10px;
+      background: var(--bg-idx);
+      color: var(--text-secondary);
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .llm-ctx-cache {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-card);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
     /* Footer: screenshot + final text */
     .footer-grid {
       display: grid;
@@ -594,6 +809,18 @@
     <div class="card" id="live-feed-card" style="display:none">
       <div class="card-title">Live Tool Calls</div>
       <div class="live-tools" id="live-tools"></div>
+    </div>
+
+    <!-- Conversation Flow -->
+    <div class="card" id="conv-card" style="display:none">
+      <div class="card-title">Conversation Flow</div>
+      <div class="conv-flow" id="conv-container"></div>
+    </div>
+
+    <!-- LLM Context (per iteration) -->
+    <div class="card" id="llm-ctx-card" style="display:none">
+      <div class="card-title">LLM Context (per iteration)</div>
+      <div class="llm-ctx-list" id="llm-ctx-container"></div>
     </div>
 
     <!-- Tool call details -->
@@ -850,6 +1077,8 @@ function updateLastLiveTool(name, status, durationMs) {
 function clearDisplay() {
   document.getElementById('overview-card').style.display = 'none';
   document.getElementById('timeline-card').style.display = 'none';
+  document.getElementById('conv-card').style.display = 'none';
+  document.getElementById('llm-ctx-card').style.display = 'none';
   document.getElementById('tools-card').style.display = 'none';
   document.getElementById('footer-grid').style.display = 'none';
   document.getElementById('live-feed-card').style.display = 'none';
@@ -861,6 +1090,8 @@ function renderFull(id, events, meta) {
   document.getElementById('empty-state').style.display = 'none';
   renderOverview(meta);
   renderTimeline(events);
+  renderConversation(meta.conversationHistory || []);
+  renderLLMContext(events);
   renderToolDetails(meta.toolCallDetails || []);
   renderFooter(id, meta);
 }
@@ -1014,6 +1245,167 @@ function renderTimeline(events) {
       '<div class="timeline-bars">' + barsHTML + '</div>' +
       '<span class="timeline-duration">' + formatDuration(totalDur) + '</span>';
     container.appendChild(row);
+  }
+}
+
+// ===== Conversation Flow =====
+function renderConversation(history) {
+  if (!history || history.length === 0) return;
+  const card = document.getElementById('conv-card');
+  card.style.display = '';
+  const container = document.getElementById('conv-container');
+  container.innerHTML = '';
+
+  for (const msg of history) {
+    const isUser = msg.role === 'user';
+    const div = document.createElement('div');
+    div.className = 'conv-msg';
+
+    // Avatar
+    const avatarCls = isUser ? 'user' : 'model';
+    const avatarIcon = isUser ? 'U' : 'A';
+
+    let bodyHTML = '<div class="conv-role">' + (isUser ? 'User' : 'Agent') + '</div>';
+
+    // Text
+    if (msg.text) {
+      bodyHTML += '<div class="conv-text">' + escHtml(msg.text) + '</div>';
+    }
+
+    // Tool calls
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      bodyHTML += '<div class="conv-toolcalls">';
+      for (const tc of msg.toolCalls) {
+        const isErr = tc.status === 'error';
+        const paramsStr = formatToolJSON(tc.parameters);
+        const resultStr = formatToolJSON(tc.result);
+        bodyHTML += '<details class="conv-tc">' +
+          '<summary>' +
+            '<span class="conv-tc-name">' + escHtml(tc.name || '?') + '</span>' +
+            '<span class="' + (isErr ? 'conv-tc-status-err' : 'conv-tc-status-ok') + '">' +
+              (isErr ? '✗ Error' : '✓ OK') + '</span>' +
+          '</summary>' +
+          '<div class="conv-tc-body">' +
+            '<div class="conv-tc-section">Parameters</div>' +
+            '<pre class="conv-tc-json">' + escHtml(truncate(paramsStr, 1500)) + '</pre>' +
+            (tc.error ? '<div class="conv-tc-section">Error</div><div class="conv-tc-error">' + escHtml(tc.error) + '</div>' : '') +
+            '<div class="conv-tc-section">Result</div>' +
+            '<pre class="conv-tc-json">' + escHtml(truncate(resultStr, 1500)) + '</pre>' +
+          '</div>' +
+        '</details>';
+      }
+      bodyHTML += '</div>';
+    }
+
+    div.innerHTML =
+      '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>' +
+      '<div class="conv-body">' + bodyHTML + '</div>';
+    container.appendChild(div);
+  }
+}
+
+// ===== LLM Context =====
+function renderLLMContext(events) {
+  const llmRequests = events.filter(e => e.type === 'llm_request');
+  if (llmRequests.length === 0) return;
+
+  const card = document.getElementById('llm-ctx-card');
+  card.style.display = '';
+  const container = document.getElementById('llm-ctx-container');
+  container.innerHTML = '';
+
+  // Pair with responses for token usage
+  const llmResponses = events.filter(e => e.type === 'llm_response');
+  const responseMap = {};
+  for (const r of llmResponses) {
+    responseMap[r.llmCallId] = r;
+  }
+
+  for (const req of llmRequests) {
+    const resp = responseMap[req.llmCallId];
+    const details = document.createElement('details');
+    details.className = 'llm-ctx-item';
+
+    // Summary line
+    const msgCount = req.messageCount || req.messages?.length || 0;
+    const toolCount = req.toolNames?.length || 0;
+    const usage = resp?.usage;
+    let metaStr = msgCount + ' msgs, ' + toolCount + ' tools';
+    if (usage) {
+      metaStr += ' | ' + (usage.promptTokens || 0) + ' prompt tok';
+      if (usage.cachedTokens) metaStr += ' (' + usage.cachedTokens + ' cached)';
+    }
+    if (req.config) {
+      metaStr += ' | think=' + (req.config.thinkingLevel || '?');
+    }
+
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<span class="llm-ctx-iter">Iter ' + req.iteration + '</span>' +
+      '<span class="llm-ctx-label">LLM Request</span>' +
+      '<span class="llm-ctx-meta">' + escHtml(metaStr) + '</span>';
+    details.appendChild(summary);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'llm-ctx-body';
+
+    // Messages table
+    let msgsHTML = '<div class="llm-ctx-msgs">';
+    if (req.messages && req.messages.length > 0) {
+      for (const m of req.messages) {
+        const roleCls = (m.role === 'system' ? 'system' : m.role === 'user' ? 'user' : m.role === 'model' || m.role === 'assistant' ? 'model' : 'tool');
+        const flags = [];
+        if (m.hidden) flags.push('hidden');
+        if (m.pinned) flags.push('📌');
+        msgsHTML += '<div class="llm-ctx-msg">' +
+          '<span class="llm-ctx-msg-role ' + roleCls + '">' + escHtml(m.role) + '</span>' +
+          '<span class="llm-ctx-msg-len">' + (m.contentLength || 0) + ' chars</span>' +
+          (flags.length ? '<span class="llm-ctx-msg-flags">' + flags.join(' ') + '</span>' : '') +
+        '</div>';
+      }
+    }
+    msgsHTML += '</div>';
+
+    // Tools available
+    let toolsHTML = '';
+    if (req.toolNames && req.toolNames.length > 0) {
+      toolsHTML = '<div class="llm-ctx-tools">' +
+        '<div class="llm-ctx-tools-label">Tools Available</div>' +
+        '<div class="llm-ctx-tool-tags">';
+      for (const t of req.toolNames) {
+        toolsHTML += '<span class="llm-ctx-tool-tag">' + escHtml(t) + '</span>';
+      }
+      toolsHTML += '</div></div>';
+    }
+
+    // Cache info
+    let cacheHTML = '';
+    if (req.cache) {
+      cacheHTML = '<div class="llm-ctx-cache">' +
+        'Cache: ' + req.cache.cacheableMessages + '/' + req.cache.totalMessages + ' msgs cacheable' +
+        ' (~' + req.cache.cacheableTokensEstimate + ' tok)' +
+      '</div>';
+    }
+
+    // Response shape
+    let respHTML = '';
+    if (resp) {
+      const shape = resp.responseShape || {};
+      respHTML = '<div class="llm-ctx-cache">' +
+        'Response: ' + formatDuration(resp.durationMs) +
+        ' | text=' + (shape.textLength || 0) + ' chars' +
+        ' | thoughts=' + (shape.thoughtsLength || 0) + ' chars' +
+        ' | tools=' + (shape.toolCallCount || 0);
+      if (shape.toolCallNames?.length) {
+        respHTML += ' (' + shape.toolCallNames.join(', ') + ')';
+      }
+      respHTML += '</div>';
+    }
+
+    body.innerHTML = msgsHTML + toolsHTML + cacheHTML + respHTML;
+    details.appendChild(body);
+    container.appendChild(details);
   }
 }
 

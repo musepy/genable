@@ -104,15 +104,11 @@ export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<str
   for (const lr of result.lineResults) {
     if (lr.status !== 'ok' && lr.status !== 'warning') continue;
     if (!lr.symbol || !lr.nodeId) continue;
-    // Extract name from the operation's raw JSON (available without Figma API call)
-    let name = lr.symbol;
-    try {
-      const rawObj = JSON.parse(lr.raw);
-      if (rawObj.props?.name) name = rawObj.props.name;
-    } catch { /* use symbol */ }
-    const count = (nameCounts.get(name) || 0) + 1;
-    nameCounts.set(name, count);
-    if (count > 1) name = `${name} #${count}`;
+    // Use human-readable name from LineResult (populated by executor from action props)
+    const baseName = lr.name ?? lr.symbol;
+    const count = (nameCounts.get(baseName) || 0) + 1;
+    nameCounts.set(baseName, count);
+    const name = count > 1 ? `${baseName} #${count}` : baseName;
     idMap[name] = `${name}#${lr.nodeId}`;
   }
   // Fallback: if lineResults don't have names, use original symbol map

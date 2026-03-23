@@ -6,10 +6,11 @@ import { ValidationViolation } from '../../../engine/validation/postOpValidator'
 function makeLineResult(overrides: Partial<LineResult> = {}): LineResult {
   return {
     line: 1,
-    raw: '{}',
+    raw: 'node1 = frame(root, {name:"Node1", w:100})',
     status: 'ok',
     command: 'create',
     symbol: 'node1',
+    name: 'Node1',
     nodeId: '1:1',
     ...overrides,
   };
@@ -42,17 +43,26 @@ function makeViolation(overrides: Partial<ValidationViolation> = {}): Validation
 }
 
 describe('buildCreateReceipt', () => {
-  it('returns correct created count and idMap', () => {
-    const lr1 = makeLineResult({ symbol: 'a', nodeId: '1:1' });
-    const lr2 = makeLineResult({ line: 2, symbol: 'b', nodeId: '1:2' });
+  it('returns correct created count and idMap with real names', () => {
+    const lr1 = makeLineResult({ symbol: 'a', name: 'Card', nodeId: '1:1' });
+    const lr2 = makeLineResult({ line: 2, symbol: 'b', name: 'Header', nodeId: '1:2' });
     const result = makeResult([lr1, lr2], { a: '1:1', b: '1:2' });
 
     const receipt = buildCreateReceipt({ result });
 
     expect(receipt.created).toBe(2);
-    expect(receipt.idMap).toEqual({ a: 'a#1:1', b: 'b#1:2' });
+    expect(receipt.idMap).toEqual({ Card: 'Card#1:1', Header: 'Header#1:2' });
     expect(receipt.failed).toBeUndefined();
     expect(receipt.errors).toBeUndefined();
+  });
+
+  it('falls back to symbol when name is missing', () => {
+    const lr1 = makeLineResult({ symbol: 'a', name: undefined, nodeId: '1:1' });
+    const result = makeResult([lr1], { a: '1:1' });
+
+    const receipt = buildCreateReceipt({ result });
+
+    expect(receipt.idMap).toEqual({ a: 'a#1:1' });
   });
 
   it('populates defaultsApplied from *_DEFAULT warnings', () => {

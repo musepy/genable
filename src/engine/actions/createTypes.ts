@@ -90,6 +90,8 @@ export interface LineResult {
   command?: string;
   /** Binding symbol if the operation assigned a variable (e.g. 'btn'). */
   symbol?: string;
+  /** Human-readable node name from the operation's props (e.g. 'Card'). */
+  name?: string;
   /** Real Figma node ID of the created or affected node, if applicable. */
   nodeId?: string;
   /** Error message if status is 'failed'. */

@@ -219,6 +219,8 @@ export interface JsonSerializeOptions {
   maxChildren?: number;
   /** Structural mode: only name, layout, dimensions. */
   structural?: boolean;
+  /** Skeleton mode: only id, name, children — pure hierarchy, no properties. */
+  skeleton?: boolean;
 }
 
 export class JsonNodeSerializer {
@@ -226,7 +228,40 @@ export class JsonNodeSerializer {
     const maxDepth = options?.maxDepth ?? MAX_DEPTH;
     const maxChildren = options?.maxChildren ?? MAX_CHILDREN;
     const structural = options?.structural ?? false;
+    const skeleton = options?.skeleton ?? false;
+    if (skeleton) {
+      return this.serializeSkeletonNode(node, 0, maxDepth, maxChildren);
+    }
     return this.serializeNode(node, 0, maxDepth, maxChildren, structural);
+  }
+
+  /**
+   * Skeleton mode: only id, name, children — pure hierarchy for tree navigation.
+   * No properties, no type, no truncation markers.
+   */
+  private static serializeSkeletonNode(
+    node: NodeLayer,
+    depth: number,
+    maxDepth: number,
+    maxChildren: number,
+  ): any {
+    const tag = TAG_MAP[node.type] || 'frame';
+    const props = (node.props || {}) as Record<string, any>;
+    const result: any = { id: node.id, name: props.name || undefined, type: tag };
+
+    const children = node.children;
+    if (children && children.length > 0 && depth < maxDepth) {
+      const sliced = children.slice(0, maxChildren);
+      result.children = sliced.map((child: NodeLayer) =>
+        this.serializeSkeletonNode(child, depth + 1, maxDepth, maxChildren)
+      );
+      const truncated = children.length - sliced.length;
+      if (truncated > 0) {
+        result.children.push(`... +${truncated} more`);
+      }
+    }
+
+    return result;
   }
 
   private static serializeNode(

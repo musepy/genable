@@ -11,20 +11,22 @@ import { executeFlatOps, mkPropToFlatOps, escapeFlatOpsStr } from './shared';
 import { resolvePathToNode } from './pathResolver';
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
-  const { path, props, content } = parameters;
+  // Accept both "node" (new) and "path" (legacy) parameter names
+  const ref = parameters.node || parameters.path;
+  const { props, content } = parameters;
 
-  if (!path) {
+  if (!ref) {
     return {
       success: true,
       data: {
         message: 'edit — Update properties on existing nodes.',
-        usage: 'edit({path: "/Card/", props: {corner: 16, bg: "#FFF"}})',
+        usage: 'edit({node: "Card#1:2", props: {corner: 16, bg: "#FFF"}})',
       },
     };
   }
 
-  // Resolve path — edit requires node to exist
-  const resolved = await resolvePathToNode(path);
+  // Resolve ref — edit requires node to exist
+  const resolved = await resolvePathToNode(ref);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
     return { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot edit the page root. Specify a node path.' } };

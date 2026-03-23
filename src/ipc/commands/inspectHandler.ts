@@ -9,14 +9,16 @@ import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 import { resolvePathToNode } from './pathResolver';
 
 export async function handleInspect(parameters: any): Promise<ToolResponse> {
-  const { path, mode, screenshot, depth } = parameters;
+  // Accept both "node" (new) and "path" (legacy) parameter names
+  const ref = parameters.node || parameters.path;
+  const { mode, screenshot, depth } = parameters;
 
-  if (!path) {
+  if (!ref) {
     return {
       success: true,
       data: {
         message: 'inspect — Read the design tree.',
-        usage: 'inspect({path: "/", mode: "tree"})',
+        usage: 'inspect({node: "/", mode: "tree"})',
         modes: { list: 'ls — list children', tree: 'tree — structural skeleton', detail: 'cat — full properties' },
       },
     };
@@ -25,21 +27,20 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
   let result: ToolResponse;
   switch (mode) {
     case 'tree':
-      result = await handleTree({ path, depth });
+      result = await handleTree({ path: ref, depth });
       break;
     case 'detail':
-      result = await handleCat({ path, screenshot, depth });
+      result = await handleCat({ path: ref, screenshot, depth });
       break;
     default:
-      result = await handleLs({ path });
+      result = await handleLs({ path: ref });
       break;
   }
 
   // ── Quality scoring on every inspect ──
-  // Append quality scores so agent can verify fixes. Loops until ✅ 100%.
   if (result.success) {
     try {
-      const resolved = await resolvePathToNode(path);
+      const resolved = await resolvePathToNode(ref);
       let scoreIds: string[] = [];
       if (resolved.ok) {
         if ('isPage' in resolved && resolved.isPage) {

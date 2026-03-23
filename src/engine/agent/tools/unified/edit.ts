@@ -16,27 +16,26 @@ export const editDefinition: ToolDefinition = {
   description: `Update properties or text content of an existing node.
 
 Parameters:
-  path: Path to existing node (must exist — fails if not found)
+  node: Node ref from jsx/inspect results. Use "name#id" format (e.g. "Card#1:2").
   props: Properties to update as key-value object (same shorthands: w, h, bg, corner, fill, size, weight, layout, gap, p, etc.)
   content: New text content (for text nodes)
 
 Examples:
-  edit({path: "/Card/", props: {corner: 16, bg: "#F8F9FA", p: 24}})
-  edit({path: "/Card/Title", content: "Updated Title"})
-  edit({path: "/Card/Title", props: {size: 20, weight: "Bold"}, content: "New Text"})
-  edit({path: "/Card/Button/", props: {bg: "#4F46E5", corner: 8}})
+  edit({node: "Card#100:5", props: {corner: 16, bg: "#F8F9FA", p: 24}})
+  edit({node: "Title#100:6", content: "Updated Title"})
+  edit({node: "Title#100:6", props: {size: 20, weight: "Bold"}, content: "New Text"})
 
 Rules:
   - Node MUST exist — edit never creates new nodes
   - Only listed props change — everything else is preserved
-  - Use jsx for creation, edit for modification`,
+  - Use name#id refs from jsx tree or inspect results — do NOT construct paths`,
   parameters: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: 'Path to existing node' },
+      node: { type: 'string', description: 'Node ref in "name#id" format from jsx/inspect results' },
       props: { type: 'object', description: 'Properties to update (key-value pairs)' },
       content: { type: 'string', description: 'New text content (for text nodes)' },
     },
-    required: ['path'],
+    required: ['node'],
   },
 };

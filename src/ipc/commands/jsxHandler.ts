@@ -12,10 +12,60 @@
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { parseJsx } from '../../engine/jsx/jsxParser';
+import { parseJsx, type JsxNode } from '../../engine/jsx/jsxParser';
 import { jsxToFlatOps } from '../../engine/jsx/jsxToFlatOps';
 import { executeFlatOps } from './shared';
 import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
+
+// ── Build nested tree from JsxNode AST + executor symbol→id mapping ──
+
+interface TreeNode {
+  id: string;
+  name: string;
+  type: string;
+  children?: TreeNode[];
+}
+
+/**
+ * Rebuild the nested tree structure from the original JSX AST,
+ * filling in real Figma IDs from the executor's symbol map.
+ *
+ * jsxToFlatOps assigns symbols n1, n2, n3... via DFS traversal.
+ * We replay the same DFS order to match symbols to JsxNodes.
+ */
+function buildTreeFromJsx(
+  roots: JsxNode[],
+  symbolToId: Map<string, string>,
+): TreeNode[] {
+  let counter = 0;
+
+  function visit(node: JsxNode): TreeNode | null {
+    const sym = `n${++counter}`;
+    const nodeId = symbolToId.get(sym);
+    if (!nodeId) return null; // failed or skipped node
+
+    const name = (node.attrs.name as string) || node.tag;
+    const result: TreeNode = { id: nodeId, name, type: node.tag };
+
+    if (node.children.length > 0) {
+      const kids: TreeNode[] = [];
+      for (const child of node.children) {
+        const childTree = visit(child);
+        if (childTree) kids.push(childTree);
+      }
+      if (kids.length > 0) result.children = kids;
+    }
+
+    return result;
+  }
+
+  const trees: TreeNode[] = [];
+  for (const root of roots) {
+    const tree = visit(root);
+    if (tree) trees.push(tree);
+  }
+  return trees;
+}
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
   const { markup, parentId } = parameters;
@@ -57,14 +107,44 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
       : parseWarnings;
   }
 
+  // ── Replace flat idMap with nested tree ──
+  // idMap values are inserted in lineResults order = DFS order = jsxToFlatOps emit order.
+  // Extract nodeIds by position, then rebuild the tree from the JSX AST.
+  if (result.data?.idMap) {
+    const idMap = result.data.idMap as Record<string, string>;
+    // Extract nodeId from each "name#nodeId" value, in insertion order
+    const nodeIds: string[] = [];
+    for (const ref of Object.values(idMap)) {
+      const hashIdx = ref.lastIndexOf('#');
+      nodeIds.push(hashIdx >= 0 ? ref.slice(hashIdx + 1) : ref);
+    }
+
+    // DFS counter matches nodeIds by position (same DFS order as jsxToFlatOps)
+    let idx = 0;
+    const symbolToId = new Map<string, string>();
+    function assignIds(node: JsxNode): void {
+      const sym = `n${idx + 1}`;
+      if (idx < nodeIds.length) {
+        symbolToId.set(sym, nodeIds[idx]);
+      }
+      idx++;
+      for (const child of node.children) assignIds(child);
+    }
+    for (const root of roots) assignIds(root);
+
+    const tree = buildTreeFromJsx(roots, symbolToId);
+    if (tree.length > 0) {
+      delete result.data.idMap;
+      result.data.tree = tree.length === 1 ? tree[0] : tree;
+    }
+  }
+
   // ── Post-creation quality scoring ──
-  // Score the created nodes and append feedback for the agent.
-  // Agent sees scores + specific issues → can loop to fix.
-  if (result.success && result.data?.idMap) {
+  if (result.data?.tree) {
     try {
-      const rootIds = Object.values(result.data.idMap as Record<string, string>);
-      // Only score the first root (the top-level created node)
-      const rootId = rootIds[0];
+      // Extract root ID from tree
+      const treeData = result.data.tree;
+      const rootId = Array.isArray(treeData) ? treeData[0]?.id : treeData?.id;
       if (rootId) {
         const report = await scoreCreatedNodes([rootId]);
         const qualityStr = formatQualityReport(report);

@@ -182,10 +182,13 @@ export class ActionExecutor {
         ...(result.warnings?.map(w => ({ code: w.code, message: w.message })) ?? []),
       ];
 
+      // Extract human-readable name from the action's props (all create actions carry props.name)
+      const opName = ('props' in resolvedAction && (resolvedAction as any).props?.name as string | undefined) || undefined;
+
       const lr: LineResult = {
         line: op.lineNumber, raw: op.raw,
         status: succeeded ? 'ok' : 'failed',
-        command, symbol: op.symbol,
+        command, symbol: op.symbol, name: opName,
         nodeId: succeeded ? result.nodeId : undefined,
         error: succeeded ? undefined : (result.error ?? 'Unknown error'),
         warnings: allWarnings.length > 0 ? allWarnings : undefined,

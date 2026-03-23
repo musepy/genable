@@ -7,7 +7,6 @@
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
-import { FlatOpsSerializer } from '../../engine/flat/flatOpsSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { logger } from '../../utils/logger';
@@ -200,9 +199,9 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
     maxDepth: treeDepth,
     pruneDefaults: true,
   });
-  const treeXml = FlatOpsSerializer.serialize(treeSerialized, {
+  const treeJson = JsonNodeSerializer.serialize(treeSerialized, {
     maxDepth: treeDepth,
-    structural: true,
+    skeleton: true,
   });
 
   const suggestedReads: string[] = [];
@@ -214,7 +213,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
     }
   }
 
-  const treeData: any = { tree: treeXml, path: treePath };
+  const treeData: any = { tree: treeJson, path: treePath };
   if (suggestedReads.length > 0) treeData.suggestedReads = suggestedReads;
 
   return { success: true, data: treeData };

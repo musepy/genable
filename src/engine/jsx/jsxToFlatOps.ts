@@ -42,6 +42,15 @@ export function jsxToFlatOps(roots: JsxNode[]): string {
         variantSelector = String(value);
         continue;
       }
+      // Expand object-valued padding into individual pt/pb/pl/pr tokens
+      if ((key === 'p' || key === 'padding') && typeof value === 'object' && value !== null) {
+        const v = value as Record<string, number>;
+        if (v.top != null || v.t != null) propTokens.push(`pt:${v.top ?? v.t}`);
+        if (v.right != null || v.r != null) propTokens.push(`pr:${v.right ?? v.r}`);
+        if (v.bottom != null || v.b != null) propTokens.push(`pb:${v.bottom ?? v.b}`);
+        if (v.left != null || v.l != null) propTokens.push(`pl:${v.left ?? v.l}`);
+        continue;
+      }
       propTokens.push(`${key}:${value}`);
     }
 

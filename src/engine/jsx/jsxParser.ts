@@ -16,7 +16,7 @@
 
 export interface JsxNode {
   tag: string;
-  attrs: Record<string, string | number>;
+  attrs: Record<string, any>;
   children: JsxNode[];
   textContent?: string;
   line: number;
@@ -188,8 +188,8 @@ class Parser {
     this.expect('>');
   }
 
-  private parseAttributes(elementLine: number): Record<string, string | number> {
-    const attrs: Record<string, string | number> = {};
+  private parseAttributes(elementLine: number): Record<string, any> {
+    const attrs: Record<string, any> = {};
 
     while (this.pos < this.input.length) {
       this.skipWhitespace();
@@ -224,20 +224,32 @@ class Parser {
     return attrs;
   }
 
-  private parseAttrValue(elementLine: number): string | number | null {
+  private parseAttrValue(elementLine: number): any {
     const ch = this.peek();
 
-    // {400} or {value} — curly braces
+    // {400} or {value} or {{top:12, bottom:8}} — curly braces with nesting
     if (ch === '{') {
       this.advance(1);
       let val = '';
-      while (this.pos < this.input.length && this.peek() !== '}') {
-        val += this.input[this.pos];
-        if (this.input[this.pos] === '\n') this.line++;
+      let depth = 1;
+      while (this.pos < this.input.length && depth > 0) {
+        const c = this.input[this.pos];
+        if (c === '{') depth++;
+        else if (c === '}') { depth--; if (depth === 0) break; }
+        val += c;
+        if (c === '\n') this.line++;
         this.pos++;
       }
       if (this.peek() === '}') this.advance(1);
       val = val.trim();
+      // Try parsing as JSON object (e.g. {top:12, bottom:8} → add quotes for JSON5)
+      if (val.startsWith('{') && val.endsWith('}')) {
+        try {
+          // JSON5-like: {top:12, b:8} → add quotes around unquoted keys
+          const jsonified = val.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
+          return JSON.parse(jsonified) as any;
+        } catch { /* fall through to string */ }
+      }
       const num = Number(val);
       return !isNaN(num) && val !== '' ? num : val;
     }

@@ -23,6 +23,17 @@ describe('jsxParser', () => {
       const { roots } = parseJsx('<rect w="fill" h={1} fill="#E5E7EB"/>');
       expect(roots[0].attrs).toEqual({ w: 'fill', h: 1, fill: '#E5E7EB' });
     });
+
+    it('parses nested braces as object value', () => {
+      const { roots, errors } = parseJsx('<frame p={{top:24,bottom:8,left:16,right:16}}/>');
+      expect(errors).toHaveLength(0);
+      expect(roots[0].attrs.p).toEqual({ top: 24, bottom: 8, left: 16, right: 16 });
+    });
+
+    it('parses nested braces with short keys', () => {
+      const { roots } = parseJsx('<frame p={{t:8,b:24}}/>');
+      expect(roots[0].attrs.p).toEqual({ t: 8, b: 24 });
+    });
   });
 
   describe('nested elements', () => {

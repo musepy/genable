@@ -96,6 +96,27 @@ describe('expandShorthands', () => {
       expect(result.paddingLeft).toBe(24);
       expect(result.paddingTop).toBe(16);
     });
+    it('object {top, right, bottom, left} → individual sides', () => {
+      const result = expandShorthands({ padding: { top: 12, right: 16, bottom: 12, left: 16 } });
+      expect(result.paddingTop).toBe(12);
+      expect(result.paddingRight).toBe(16);
+      expect(result.paddingBottom).toBe(12);
+      expect(result.paddingLeft).toBe(16);
+    });
+    it('object short keys {t, r, b, l} → individual sides', () => {
+      const result = expandShorthands({ p: { t: 8, b: 8, l: 20, r: 20 } });
+      expect(result.paddingTop).toBe(8);
+      expect(result.paddingRight).toBe(20);
+      expect(result.paddingBottom).toBe(8);
+      expect(result.paddingLeft).toBe(20);
+    });
+    it('partial object only sets specified sides', () => {
+      const result = expandShorthands({ p: { top: 12, bottom: 12 } });
+      expect(result.paddingTop).toBe(12);
+      expect(result.paddingBottom).toBe(12);
+      expect(result.paddingRight).toBeUndefined();
+      expect(result.paddingLeft).toBeUndefined();
+    });
   });
 
   describe('gap / crossGap', () => {

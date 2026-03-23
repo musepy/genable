@@ -96,17 +96,28 @@ export interface BuildCreateReceiptParams {
 export function buildCreateReceipt(params: BuildCreateReceiptParams): Record<string, any> {
   const { result, violations, softCreateLimit, createLineCount } = params;
 
-  // Build name→id map so agent can reference nodes by ID while knowing what they are
-  // Duplicate names get suffixed: "Check", "Check #2", "Check #3"
+  // Keep original symbol→id map for now. Name lookup is done asynchronously
+  // in a post-processing step to avoid blocking with sync figma API calls.
+  // The executor's lineResults already contain node names from the creation ops.
   const idMap: Record<string, string> = {};
   const nameCounts = new Map<string, number>();
-  for (const [sym, nodeId] of Object.entries(result.idMap)) {
-    const node = figma.getNodeById(nodeId);
-    let name = node && 'name' in node ? (node as SceneNode).name : sym;
+  for (const lr of result.lineResults) {
+    if (lr.status !== 'ok' && lr.status !== 'warning') continue;
+    if (!lr.symbol || !lr.nodeId) continue;
+    // Extract name from the operation's raw JSON (available without Figma API call)
+    let name = lr.symbol;
+    try {
+      const rawObj = JSON.parse(lr.raw);
+      if (rawObj.props?.name) name = rawObj.props.name;
+    } catch { /* use symbol */ }
     const count = (nameCounts.get(name) || 0) + 1;
     nameCounts.set(name, count);
     if (count > 1) name = `${name} #${count}`;
-    idMap[name] = nodeId;
+    idMap[name] = lr.nodeId;
+  }
+  // Fallback: if lineResults don't have names, use original symbol map
+  if (Object.keys(idMap).length === 0) {
+    Object.assign(idMap, result.idMap);
   }
 
   const receipt: Record<string, any> = {

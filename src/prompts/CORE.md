@@ -28,6 +28,15 @@ Your actions map directly to Figma Plugin API operations.
   - `w:360` = explicit pixels (always works)
 - The runtime auto-injects `layout:'column'` when you set padding/gap/alignment without layout. But expressing layout intent explicitly produces better designs.
 
+### Spacing: No Margin — Use gap + Nesting
+- **No margin property.** No mt/mb/ml/mr. Figma does not have margins.
+- Spacing between children = parent's `gap`. EVERY frame with `layout` and 2+ children MUST set `gap`.
+- For uniform spacing: `gap={16}` on parent — all children get 16px between them.
+- For varying spacing between sections: nest into sub-frames, each with its own `gap`.
+  - GOOD: `<frame gap={24}><frame name="Header" gap={8}>Title+Subtitle</frame><frame name="Form" gap={16}>inputs</frame></frame>`
+  - BAD: `<frame><text>Title</text><text mt={8}>Subtitle</text><frame mt={24}>input</frame></frame>` ← mt is dropped!
+- For single-child offset: wrap in a frame with padding instead of margin.
+
 ### Text Sizing
 - `w:'fill'` on text → wraps within parent width. **Use for body text, descriptions, any text > ~30 chars.**
 - Short labels (buttons, headings) → omit width, text auto-sizes.

@@ -122,4 +122,33 @@ describe('jsxToFlatOps', () => {
     const result = jsxToFlatOps([]);
     expect(result).toBe('');
   });
+
+  it('converts children mt to parent gap', () => {
+    const result = jsxToFlatOps([
+      node('frame', { name: 'Card', layout: 'column', p: 32 }, [
+        node('text', { name: 'Title' }, [], 'Title'),
+        node('text', { name: 'Subtitle', mt: 8 }, [], 'Sub'),
+        node('frame', { name: 'Input1', mt: 24 }),
+        node('frame', { name: 'Input2', mt: 16 }),
+        node('frame', { name: 'Button', mt: 24 }),
+      ]),
+    ]);
+    // Parent should get gap:24 (mode of [8, 24, 16, 24])
+    expect(result).toContain('gap:24');
+    // Children should NOT have mt
+    expect(result).not.toContain('mt:');
+  });
+
+  it('does not override explicit gap with mt conversion', () => {
+    const result = jsxToFlatOps([
+      node('frame', { name: 'Card', layout: 'column', gap: 12 }, [
+        node('text', { name: 'A', mt: 24 }, [], 'A'),
+        node('text', { name: 'B', mt: 24 }, [], 'B'),
+      ]),
+    ]);
+    // Explicit gap preserved
+    expect(result).toContain('gap:12');
+    // mt NOT converted (gap already set)
+    expect(result).toContain('mt:24');
+  });
 });

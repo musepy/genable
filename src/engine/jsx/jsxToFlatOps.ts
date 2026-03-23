@@ -92,6 +92,40 @@ export function jsxToFlatOps(roots: JsxNode[]): string {
     // Container nodes (frame, rect, ellipse, etc.)
     const effectiveType = node.tag === 'component' ? 'component' : node.tag;
 
+    // ── Margin→Gap conversion (Runtime as Browser) ──
+    // LLMs write mt/mb (CSS margin) on children, but Figma has no margins.
+    // Convert children's mt/mb values into parent's gap if parent doesn't already have one.
+    const hasGap = propTokens.some(t => t.startsWith('gap:'));
+    if (!hasGap && node.children.length > 1) {
+      const marginValues: number[] = [];
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        const mt = child.attrs['mt'] ?? child.attrs['marginTop'];
+        const mb = child.attrs['mb'] ?? child.attrs['marginBottom'];
+        // Skip first child's mt (that's more like parent padding-top)
+        if (i > 0 && mt != null) marginValues.push(Number(mt));
+        if (mb != null) marginValues.push(Number(mb));
+      }
+      if (marginValues.length > 0) {
+        // Use mode (most common value) as gap
+        const freq = new Map<number, number>();
+        for (const v of marginValues) freq.set(v, (freq.get(v) || 0) + 1);
+        const gap = [...freq.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        propTokens.push(`gap:${gap}`);
+      }
+      // Strip mt/mb/ml/mr from all children
+      for (const child of node.children) {
+        delete child.attrs['mt'];
+        delete child.attrs['mb'];
+        delete child.attrs['ml'];
+        delete child.attrs['mr'];
+        delete child.attrs['marginTop'];
+        delete child.attrs['marginBottom'];
+        delete child.attrs['marginLeft'];
+        delete child.attrs['marginRight'];
+      }
+    }
+
     // Inject layout defaults for frames with layout
     const injected = injectLayoutDefaults(effectiveType, propTokens);
 

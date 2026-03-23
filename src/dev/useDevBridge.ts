@@ -9,7 +9,7 @@ import type { DevBridgeExportHandler, DevBridgeExportResultHandler } from '../ty
 const BRIDGE_URL = 'http://localhost:3456'
 const HEALTH_INTERVAL_MS = 10_000
 const LONG_POLL_WAIT_SEC = 30
-const RESULT_TIMEOUT_MS = 120_000 // Force post result if agent runs >2min
+const RESULT_TIMEOUT_MS = 300_000 // Force post result if agent runs >5min
 
 type DevBridgeStatus = 'disconnected' | 'connected' | 'polling' | 'executing'
 type RunState = 'idle' | 'running' | 'canceled' | 'error'
@@ -236,8 +236,8 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     resultTimeoutRef.current = setTimeout(() => {
       if (triggerIdRef.current !== triggerId) return
       console.warn(`[DevBridge] Result timeout after ${RESULT_TIMEOUT_MS}ms for ${triggerId}`)
-      triggerIdRef.current = null
-      triggerStartTimeRef.current = 0
+      // DON'T clear triggerIdRef — let the real completion handler still fire
+      // and post the actual result, overwriting this timeout placeholder
       fetchBridge('/result', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -250,7 +250,6 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           toolCallSummary: { total: 0, errors: 0 },
         }),
       }).catch(() => {})
-      setStatus('connected')
     }, RESULT_TIMEOUT_MS)
   }
 

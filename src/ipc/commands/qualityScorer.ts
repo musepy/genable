@@ -92,7 +92,7 @@ function scoreSpacing(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: frame.id, nodeName: frame.name, dimension: 'spacing',
         message: `${childCount} children, no gap`,
-        fix: `edit({path: "/${frame.name}/", props: {gap: 16}})`,
+        fix: `edit({path: "/#${frame.id}/", props: {gap: 16}})`,
       });
     }
   }
@@ -123,7 +123,7 @@ function scorePadding(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: frame.id, nodeName: frame.name, dimension: 'padding',
         message: `has fill but no padding`,
-        fix: `edit({path: "/${frame.name}/", props: {p: 16}})`,
+        fix: `edit({path: "/#${frame.id}/", props: {p: 16}})`,
       });
     }
   }
@@ -234,7 +234,7 @@ function scoreLayoutCoverage(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: frame.id, nodeName: frame.name, dimension: 'layoutCoverage',
         message: `${frame.children.length} children but no auto-layout`,
-        fix: `edit({path: "/${frame.name}/", props: {layout: "column"}})`,
+        fix: `edit({path: "/#${frame.id}/", props: {layout: "column"}})`,
       });
     }
   }

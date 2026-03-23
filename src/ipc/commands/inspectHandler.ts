@@ -40,9 +40,21 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
   if (result.success) {
     try {
       const resolved = await resolvePathToNode(path);
-      if (resolved.ok && !('isPage' in resolved && resolved.isPage)) {
-        const nodeId = (resolved as { ok: true; isPage: false; node: SceneNode }).node.id;
-        const report = await scoreCreatedNodes([nodeId]);
+      let scoreIds: string[] = [];
+      if (resolved.ok) {
+        if ('isPage' in resolved && resolved.isPage) {
+          // Page-level: score the last top-level child (most recent design)
+          const page = resolved.page;
+          const topChildren = page.children.filter(c => c.visible);
+          if (topChildren.length > 0) {
+            scoreIds = [topChildren[topChildren.length - 1].id];
+          }
+        } else {
+          scoreIds = [resolved.node.id];
+        }
+      }
+      if (scoreIds.length > 0) {
+        const report = await scoreCreatedNodes(scoreIds);
         const qualityStr = formatQualityReport(report);
         if (qualityStr) {
           result._stderr = result._stderr

@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Timeline Dashboard</title>
+  <style>
+    /* ===== Theme Variables ===== */
+    :root,
+    [data-theme="dark"] {
+      --bg-body: #111;
+      --bg-header: #1a1a1a;
+      --bg-card: #1a1a1a;
+      --bg-input: #2a2a2a;
+      --bg-hover: #333;
+      --bg-code: #1a1a1a;
+      --bg-tool-body: #151515;
+      --bg-live-item: #1f1f1f;
+      --bg-detail-hover: #222;
+      --bg-idx: #2a2a2a;
+      --bg-bar-live: #2a2a2a;
+
+      --border-header: #333;
+      --border-card: #2a2a2a;
+      --border-input: #444;
+      --border-row: #1f1f1f;
+      --border-detail: #222;
+      --border-tooltip: #555;
+      --border-bar-live: #555;
+
+      --text-primary: #e0e0e0;
+      --text-heading: #fff;
+      --text-secondary: #aaa;
+      --text-muted: #888;
+      --text-dimmed: #666;
+      --text-code: #b0b0b0;
+      --text-final: #ccc;
+      --text-status: #999;
+      --text-empty: #666;
+      --text-bar: #fff;
+
+      --tooltip-bg: #333;
+      --tooltip-text: #e0e0e0;
+
+      --dot-idle: #666;
+
+      --theme-toggle-icon: '☀️';
+    }
+
+    [data-theme="light"] {
+      --bg-body: #f5f6f8;
+      --bg-header: #fff;
+      --bg-card: #fff;
+      --bg-input: #fff;
+      --bg-hover: #e8eaed;
+      --bg-code: #f5f5f5;
+      --bg-tool-body: #fafbfc;
+      --bg-live-item: #f5f6f8;
+      --bg-detail-hover: #f5f6f8;
+      --bg-idx: #eef0f2;
+      --bg-bar-live: #e8eaed;
+
+      --border-header: #e2e4e8;
+      --border-card: #e2e4e8;
+      --border-input: #d0d4da;
+      --border-row: #eef0f2;
+      --border-detail: #eef0f2;
+      --border-tooltip: #d0d4da;
+      --border-bar-live: #bbb;
+
+      --text-primary: #2c2c2c;
+      --text-heading: #111;
+      --text-secondary: #555;
+      --text-muted: #777;
+      --text-dimmed: #999;
+      --text-code: #444;
+      --text-final: #333;
+      --text-status: #777;
+      --text-empty: #aaa;
+      --text-bar: #fff;
+
+      --tooltip-bg: #fff;
+      --tooltip-text: #333;
+
+      --dot-idle: #bbb;
+
+      --theme-toggle-icon: '🌙';
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-body);
+      color: var(--text-primary);
+      min-height: 100vh;
+      transition: background .25s, color .25s;
+    }
+    code, pre, .mono {
+      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border-header);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      transition: background .25s, border-color .25s;
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-heading);
+      white-space: nowrap;
+    }
+    .header-spacer { flex: 1; }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mode-btn {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all .15s;
+    }
+    .mode-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-heading); }
+    select, input[type="text"] {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    select:focus, input[type="text"]:focus { border-color: #3b82f6; }
+    select { max-width: 280px; }
+    input[type="text"] { width: 400px; }
+    .btn {
+      background: #3b82f6;
+      border: none;
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background .15s;
+    }
+    .btn:hover { background: #2563eb; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+    }
+    .btn-ghost:hover { background: var(--bg-input); color: var(--text-heading); }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+
+    /* Theme toggle */
+    .theme-toggle {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      border-color: #3b82f6;
+    }
+
+    /* Main content */
+    .main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+
+    /* Mode panels */
+    .mode-panel { display: none; align-items: center; gap: 8px; }
+    .mode-panel.active { display: flex; }
+
+    /* Live status */
+    .live-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-status);
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--dot-idle);
+    }
+    .live-dot.connected { background: #22c55e; animation: pulse 2s infinite; }
+    .live-dot.running { background: #f59e0b; animation: pulse 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      transition: background .25s, border-color .25s;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dimmed);
+      margin-bottom: 12px;
+    }
+
+    /* Overview */
+    .overview-prompt {
+      font-size: 14px;
+      color: var(--text-heading);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .overview-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .stat-value.model { color: #a78bfa; }
+    .stat-value.duration { color: #f59e0b; }
+    .stat-value.tools { color: #22c55e; }
+    .stat-value.errors { color: #ef4444; }
+    .stat-value.iterations { color: #3b82f6; }
+
+    /* Timeline */
+    .timeline-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-row);
+    }
+    .timeline-row:last-child { border-bottom: none; }
+    .timeline-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      width: 56px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .timeline-label.setup { color: var(--text-dimmed); font-style: italic; }
+    .timeline-ctx {
+      font-size: 10px;
+      color: #f59e0b;
+      background: rgba(245,158,11,.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .timeline-bars {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+    .bar {
+      height: 26px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-bar);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 36px;
+      position: relative;
+      cursor: default;
+    }
+    .bar-llm {
+      background: #1e40af;
+      border: 1px solid #2563eb;
+    }
+    .bar-tool-ok {
+      background: #166534;
+      border: 1px solid #22c55e;
+    }
+    .bar-tool-err {
+      background: #7f1d1d;
+      border: 1px solid #ef4444;
+    }
+    .bar-text {
+      background: #581c87;
+      border: 1px solid #a855f7;
+    }
+    .bar-live {
+      background: var(--bg-bar-live);
+      border: 1px solid var(--border-bar-live);
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    .timeline-duration {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      flex-shrink: 0;
+      width: 50px;
+      text-align: right;
+    }
+
+    /* Tooltip */
+    .bar[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 0;
+      background: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      white-space: pre;
+      z-index: 50;
+      pointer-events: none;
+      border: 1px solid var(--border-tooltip);
+      max-width: 400px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    }
+
+    /* Tool call details */
+    .tool-detail {
+      border-bottom: 1px solid var(--border-detail);
+    }
+    .tool-detail:last-child { border-bottom: none; }
+    .tool-detail summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+    }
+    .tool-detail summary::-webkit-details-marker { display: none; }
+    .tool-detail summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .tool-detail[open] summary::before { transform: rotate(90deg); }
+    .tool-detail summary:hover { background: var(--bg-detail-hover); }
+    .tool-idx {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .tool-name { font-weight: 600; color: var(--text-primary); }
+    .tool-status-ok { color: #22c55e; font-size: 11px; }
+    .tool-status-err { color: #ef4444; font-size: 11px; }
+    .tool-dur { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+    .tool-body {
+      padding: 8px 12px 12px 28px;
+      background: var(--bg-tool-body);
+    }
+    .tool-section-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin: 8px 0 4px 0;
+    }
+    .tool-section-label:first-child { margin-top: 0; }
+    .tool-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+    .tool-error-banner {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+    [data-theme="light"] .tool-error-banner {
+      color: #dc2626;
+    }
+    .expand-btn {
+      background: none;
+      border: none;
+      color: #3b82f6;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 4px 0;
+    }
+    .expand-btn:hover { text-decoration: underline; }
+
+    /* Footer: screenshot + final text */
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) {
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+    .screenshot-img {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid var(--border-card);
+    }
+    .final-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-final);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-empty);
+      font-size: 13px;
+    }
+    .empty-state .icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+
+    /* Live tool list */
+    .live-tools {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .live-tool-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--bg-live-item);
+      border-radius: 4px;
+      font-size: 12px;
+      animation: fadeIn .3s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .live-tool-item .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .live-tool-item .dot.ok { background: #22c55e; }
+    .live-tool-item .dot.err { background: #ef4444; }
+
+    /* Light theme bar adjustments */
+    [data-theme="light"] .bar-llm {
+      background: #2563eb;
+      border-color: #1d4ed8;
+    }
+    [data-theme="light"] .bar-tool-ok {
+      background: #16a34a;
+      border-color: #15803d;
+    }
+    [data-theme="light"] .bar-tool-err {
+      background: #dc2626;
+      border-color: #b91c1c;
+    }
+    [data-theme="light"] .bar-text {
+      background: #7c3aed;
+      border-color: #6d28d9;
+    }
+    [data-theme="light"] .timeline-ctx {
+      background: rgba(245,158,11,.15);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Agent Timeline</h1>
+    <div class="controls">
+      <button class="mode-btn active" data-mode="history" onclick="switchMode('history')">History</button>
+      <button class="mode-btn" data-mode="live" onclick="switchMode('live')">Live</button>
+    </div>
+    <div class="header-spacer"></div>
+
+    <!-- History controls -->
+    <div class="mode-panel active" id="history-controls">
+      <select id="recording-select" onchange="loadRecording(this.value)">
+        <option value="">-- select recording --</option>
+      </select>
+      <button class="btn btn-ghost" onclick="refreshRecordings()">Refresh</button>
+    </div>
+
+    <!-- Live controls -->
+    <div class="mode-panel" id="live-controls">
+      <input type="text" id="live-prompt" placeholder="Enter a design prompt..." onkeydown="if(event.key==='Enter')sendLivePrompt()">
+      <button class="btn" id="live-send-btn" onclick="sendLivePrompt()">Send</button>
+      <button class="btn btn-danger" id="live-stop-btn" style="display:none" onclick="stopLive()">Stop</button>
+      <div class="live-status" id="live-status">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="live-status-text">Idle</span>
+      </div>
+    </div>
+
+    <!-- Theme toggle -->
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark"></button>
+  </div>
+
+  <div class="main">
+    <!-- Overview -->
+    <div class="card" id="overview-card" style="display:none">
+      <div class="card-title">Overview</div>
+      <div class="overview-prompt" id="overview-prompt"></div>
+      <div class="overview-stats" id="overview-stats"></div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card" id="timeline-card" style="display:none">
+      <div class="card-title">Iteration Timeline</div>
+      <div id="timeline-container"></div>
+    </div>
+
+    <!-- Live tool feed -->
+    <div class="card" id="live-feed-card" style="display:none">
+      <div class="card-title">Live Tool Calls</div>
+      <div class="live-tools" id="live-tools"></div>
+    </div>
+
+    <!-- Tool call details -->
+    <div class="card" id="tools-card" style="display:none">
+      <div class="card-title">Tool Call Details</div>
+      <div id="tools-container"></div>
+    </div>
+
+    <!-- Footer: screenshot + final text -->
+    <div class="footer-grid" id="footer-grid" style="display:none">
+      <div class="card" id="screenshot-card">
+        <div class="card-title">Screenshot</div>
+        <img id="screenshot-img" class="screenshot-img" style="display:none">
+        <div id="screenshot-empty" class="empty-state" style="padding:30px">No screenshot</div>
+      </div>
+      <div class="card" id="finaltext-card">
+        <div class="card-title">Agent Response</div>
+        <div class="final-text" id="final-text"></div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="empty-state">
+      <div class="icon">&#9776;</div>
+      <div>Select a recording or send a live prompt to begin</div>
+    </div>
+  </div>
+
+<script>
+// ===== Theme =====
+function getPreferredTheme() {
+  const stored = localStorage.getItem('dashboard-theme');
+  if (stored) return stored;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('theme-toggle');
+  btn.textContent = theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19';
+  btn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('dashboard-theme', next);
+  applyTheme(next);
+}
+
+// Apply theme immediately
+applyTheme(getPreferredTheme());
+
+// ===== State =====
+const BASE = location.origin;
+let currentMode = 'history';
+let liveEventSource = null;
+let liveTriggerId = null;
+let liveToolCount = 0;
+
+// ===== Mode switching =====
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('history-controls').classList.toggle('active', mode === 'history');
+  document.getElementById('live-controls').classList.toggle('active', mode === 'live');
+  if (mode === 'live') {
+    clearDisplay();
+    document.getElementById('live-feed-card').style.display = '';
+  } else {
+    document.getElementById('live-feed-card').style.display = 'none';
+    stopLive();
+  }
+}
+
+// ===== History mode =====
+async function refreshRecordings() {
+  try {
+    const res = await fetch(BASE + '/recordings');
+    const list = await res.json();
+    const select = document.getElementById('recording-select');
+    select.innerHTML = '<option value="">-- select recording --</option>';
+    const withEvents = list.filter(r => r.hasEvents);
+    for (const rec of withEvents) {
+      const opt = document.createElement('option');
+      opt.value = rec.id;
+      const d = new Date(rec.mtime);
+      opt.textContent = rec.id + ' (' + d.toLocaleString() + ')';
+      select.appendChild(opt);
+    }
+  } catch (e) {
+    console.error('Failed to fetch recordings:', e);
+  }
+}
+
+async function loadRecording(id) {
+  if (!id) return;
+  clearDisplay();
+  try {
+    const [eventsRes, metaRes] = await Promise.all([
+      fetch(BASE + '/recordings/' + id + '/events'),
+      fetch(BASE + '/result/' + id),
+    ]);
+    const events = await eventsRes.json();
+    const meta = await metaRes.json();
+    renderFull(id, events, meta);
+  } catch (e) {
+    console.error('Failed to load recording:', e);
+  }
+}
+
+// ===== Live mode =====
+async function sendLivePrompt() {
+  const input = document.getElementById('live-prompt');
+  const prompt = input.value.trim();
+  if (!prompt) return;
+
+  stopLive();
+  clearDisplay();
+  document.getElementById('live-feed-card').style.display = '';
+
+  try {
+    const res = await fetch(BASE + '/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    liveTriggerId = data.id;
+    liveToolCount = 0;
+
+    setLiveStatus('connected', 'Waiting for agent...');
+    document.getElementById('live-send-btn').style.display = 'none';
+    document.getElementById('live-stop-btn').style.display = '';
+
+    // Subscribe to SSE
+    liveEventSource = new EventSource(BASE + '/stream/' + liveTriggerId);
+
+    liveEventSource.addEventListener('connected', () => {
+      setLiveStatus('connected', 'Connected, waiting...');
+    });
+
+    liveEventSource.addEventListener('tool', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', 'Running... Tool #' + (ev.index || ''));
+      appendLiveTool(ev);
+    });
+
+    liveEventSource.addEventListener('status', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', ev.message || 'Running...');
+    });
+
+    liveEventSource.addEventListener('iteration_start', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', 'Iteration ' + ev.iteration + '/' + (ev.maxIterations || '?'));
+    });
+
+    liveEventSource.addEventListener('tool_call', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', 'Calling: ' + (ev.toolCall?.name || ''));
+      appendLiveTool({ index: ++liveToolCount, name: ev.toolCall?.name, status: 'running' });
+    });
+
+    liveEventSource.addEventListener('tool_result', (e) => {
+      const ev = JSON.parse(e.data);
+      updateLastLiveTool(ev.toolResult?.name, ev.toolResult?.success ? 'ok' : 'err', ev.toolResult?.durationMs);
+    });
+
+    liveEventSource.addEventListener('text_delta', (e) => {
+      setLiveStatus('running', 'Generating text...');
+    });
+
+    liveEventSource.addEventListener('done', async (e) => {
+      setLiveStatus('connected', 'Done! Loading results...');
+      closeLiveStream();
+      // Load full result
+      try {
+        const [eventsRes, metaRes] = await Promise.all([
+          fetch(BASE + '/recordings/' + liveTriggerId + '/events'),
+          fetch(BASE + '/result/' + liveTriggerId),
+        ]);
+        const events = await eventsRes.json();
+        const meta = await metaRes.json();
+        document.getElementById('live-feed-card').style.display = 'none';
+        renderFull(liveTriggerId, events, meta);
+        setLiveStatus('', 'Completed');
+        // Also refresh recordings list
+        refreshRecordings();
+      } catch (err) {
+        setLiveStatus('', 'Error loading results: ' + err.message);
+      }
+      document.getElementById('live-send-btn').style.display = '';
+      document.getElementById('live-stop-btn').style.display = 'none';
+    });
+
+    liveEventSource.onerror = () => {
+      setLiveStatus('', 'Disconnected');
+    };
+  } catch (e) {
+    setLiveStatus('', 'Error: ' + e.message);
+    document.getElementById('live-send-btn').style.display = '';
+    document.getElementById('live-stop-btn').style.display = 'none';
+  }
+}
+
+function stopLive() {
+  closeLiveStream();
+  setLiveStatus('', 'Idle');
+  document.getElementById('live-send-btn').style.display = '';
+  document.getElementById('live-stop-btn').style.display = 'none';
+}
+
+function closeLiveStream() {
+  if (liveEventSource) {
+    liveEventSource.close();
+    liveEventSource = null;
+  }
+}
+
+function setLiveStatus(state, text) {
+  const dot = document.getElementById('live-dot');
+  dot.className = 'live-dot' + (state ? ' ' + state : '');
+  document.getElementById('live-status-text').textContent = text;
+}
+
+function appendLiveTool(ev) {
+  const container = document.getElementById('live-tools');
+  const item = document.createElement('div');
+  item.className = 'live-tool-item';
+  item.id = 'live-tool-' + (ev.index || liveToolCount);
+  const statusClass = ev.status === 'running' ? '' : (ev.status === 'error' || ev.status === 'err' ? 'err' : 'ok');
+  item.innerHTML = '<span class="dot ' + statusClass + '"></span>' +
+    '<span class="tool-name">#' + (ev.index || '') + ' ' + (ev.name || '') + '</span>' +
+    (ev.quality ? '<span style="color:#f59e0b;font-size:10px">' + ev.quality + '</span>' : '') +
+    (ev.error ? '<span style="color:#ef4444;font-size:10px">' + ev.error + '</span>' : '') +
+    (ev.status === 'running' ? '<span style="color:var(--text-muted);font-size:10px">running...</span>' : '');
+  container.appendChild(item);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateLastLiveTool(name, status, durationMs) {
+  const items = document.querySelectorAll('.live-tool-item');
+  const last = items[items.length - 1];
+  if (!last) return;
+  const dot = last.querySelector('.dot');
+  if (dot) dot.className = 'dot ' + status;
+  if (durationMs !== undefined) {
+    last.innerHTML += '<span class="tool-dur" style="margin-left:auto">' + formatDuration(durationMs) + '</span>';
+  }
+}
+
+// ===== Rendering =====
+function clearDisplay() {
+  document.getElementById('overview-card').style.display = 'none';
+  document.getElementById('timeline-card').style.display = 'none';
+  document.getElementById('tools-card').style.display = 'none';
+  document.getElementById('footer-grid').style.display = 'none';
+  document.getElementById('live-feed-card').style.display = 'none';
+  document.getElementById('empty-state').style.display = '';
+  document.getElementById('live-tools').innerHTML = '';
+}
+
+function renderFull(id, events, meta) {
+  document.getElementById('empty-state').style.display = 'none';
+  renderOverview(meta);
+  renderTimeline(events);
+  renderToolDetails(meta.toolCallDetails || []);
+  renderFooter(id, meta);
+}
+
+function renderOverview(meta) {
+  const card = document.getElementById('overview-card');
+  card.style.display = '';
+
+  // Extract prompt from conversation history
+  const prompt = meta.conversationHistory?.[0]?.text || meta.logs?.match(/Prompt: "(.+?)"/)?.[1] || '(unknown)';
+  document.getElementById('overview-prompt').textContent = '"' + prompt + '"';
+
+  const stats = document.getElementById('overview-stats');
+  const s = meta.toolCallSummary || {};
+  stats.innerHTML = statHTML('Model', meta.modelName || '?', 'model') +
+    statHTML('Duration', formatDuration(meta.durationMs), 'duration') +
+    statHTML('Tools', (s.total || 0) + ' calls', 'tools') +
+    statHTML('Errors', (s.errors || 0) + '', 'errors') +
+    statHTML('Iterations', countIterations(meta.runtimeEvents || []) + '', 'iterations') +
+    statHTML('Status', meta.status || '?', '');
+}
+
+function statHTML(label, value, cls) {
+  return '<div class="stat"><span class="stat-label">' + label + '</span><span class="stat-value ' + cls + '">' + value + '</span></div>';
+}
+
+function countIterations(events) {
+  let max = 0;
+  for (const e of events) {
+    if (e.iteration > max) max = e.iteration;
+  }
+  return max;
+}
+
+// ===== Timeline rendering =====
+function renderTimeline(events) {
+  const card = document.getElementById('timeline-card');
+  card.style.display = '';
+  const container = document.getElementById('timeline-container');
+  container.innerHTML = '';
+
+  // Group events by iteration
+  const groups = new Map(); // iteration -> events[]
+  const setupEvents = [];
+  for (const e of events) {
+    const iter = e.iteration || 0;
+    if (iter === 0) {
+      setupEvents.push(e);
+      continue;
+    }
+    if (!groups.has(iter)) groups.set(iter, []);
+    groups.get(iter).push(e);
+  }
+
+  // Calculate max total duration for scaling
+  let maxDuration = 0;
+  for (const [, evts] of groups) {
+    let dur = 0;
+    for (const e of evts) {
+      if (e.type === 'llm_response') dur += e.durationMs || 0;
+      if (e.type === 'tool_result') dur += e.toolResult?.durationMs || 0;
+    }
+    if (dur > maxDuration) maxDuration = dur;
+  }
+  if (maxDuration === 0) maxDuration = 1;
+
+  // Setup row
+  if (setupEvents.length > 0) {
+    const statusMsgs = setupEvents.filter(e => e.type === 'status').map(e => e.message).filter(Boolean);
+    if (statusMsgs.length > 0) {
+      const row = document.createElement('div');
+      row.className = 'timeline-row';
+      row.innerHTML = '<span class="timeline-label setup">Setup</span>' +
+        '<div class="timeline-bars"><span style="color:var(--text-muted);font-size:11px">' + statusMsgs.join(' \u2192 ') + '</span></div>';
+      container.appendChild(row);
+    }
+  }
+
+  // Iteration rows
+  for (const [iter, evts] of groups) {
+    const row = document.createElement('div');
+    row.className = 'timeline-row';
+
+    // Extract data
+    const llmReq = evts.find(e => e.type === 'llm_request');
+    const llmRes = evts.find(e => e.type === 'llm_response');
+    const toolCalls = evts.filter(e => e.type === 'tool_call');
+    const toolResults = evts.filter(e => e.type === 'tool_result');
+    const textDeltas = evts.filter(e => e.type === 'text_delta');
+    const ctxUsage = evts.find(e => e.type === 'context_usage');
+    const errors = evts.filter(e => e.type === 'error');
+
+    let barsHTML = '';
+
+    // LLM bar
+    if (llmRes) {
+      const llmDur = llmRes.durationMs || 0;
+      const pct = Math.max(8, (llmDur / maxDuration) * 100);
+      const shape = llmRes.responseShape || {};
+      const usage = llmRes.usage || {};
+      let tooltip = 'LLM ' + formatDuration(llmDur);
+      if (usage.promptTokens) tooltip += '\nPrompt: ' + usage.promptTokens + ' tok';
+      if (usage.completionTokens) tooltip += '\nCompletion: ' + usage.completionTokens + ' tok';
+      if (usage.cachedTokens) tooltip += '\nCached: ' + usage.cachedTokens + ' tok';
+      if (shape.toolCallCount) tooltip += '\nTool calls: ' + shape.toolCallCount;
+      if (shape.toolCallNames?.length) tooltip += ' (' + shape.toolCallNames.join(', ') + ')';
+      barsHTML += '<div class="bar bar-llm" style="width:' + pct + '%" data-tooltip="' + escHtml(tooltip) + '">' +
+        'LLM ' + formatDuration(llmDur) + '</div>';
+    }
+
+    // Tool bars
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      const tr = toolResults.find(r => r.toolResult?.id === tc.toolCall?.id) || toolResults[i];
+      const name = tc.toolCall?.displayName || tc.toolCall?.name || '?';
+      const success = tr?.toolResult?.success !== false;
+      const dur = tr?.toolResult?.durationMs || 0;
+      const pct = Math.max(5, (dur / maxDuration) * 100);
+      let tooltip = name + ' ' + formatDuration(dur);
+      if (tr?.toolResult?.error) tooltip += '\nError: ' + tr.toolResult.error.slice(0, 200);
+      const cls = success ? 'bar-tool-ok' : 'bar-tool-err';
+      barsHTML += '<div class="bar ' + cls + '" style="width:' + pct + '%" data-tooltip="' + escHtml(tooltip) + '">' +
+        name + ' ' + formatDuration(dur) + '</div>';
+    }
+
+    // Text output indicator
+    if (textDeltas.length > 0) {
+      const totalChars = textDeltas.reduce((s, e) => s + (e.text?.length || 0), 0);
+      barsHTML += '<div class="bar bar-text" style="width:auto;flex-shrink:0">' + totalChars + ' chars</div>';
+    }
+
+    // Error badges
+    for (const err of errors) {
+      barsHTML += '<div class="bar bar-tool-err" style="width:auto;flex-shrink:0" data-tooltip="' + escHtml(err.message || '') + '">ERR</div>';
+    }
+
+    // Context usage badge
+    let ctxHTML = '';
+    if (ctxUsage?.usage) {
+      const u = ctxUsage.usage;
+      ctxHTML = '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+    }
+
+    // Total duration for this iteration
+    let totalDur = 0;
+    if (llmRes) totalDur += llmRes.durationMs || 0;
+    for (const tr of toolResults) totalDur += tr.toolResult?.durationMs || 0;
+
+    row.innerHTML = '<span class="timeline-label">Iter ' + iter + '</span>' +
+      ctxHTML +
+      '<div class="timeline-bars">' + barsHTML + '</div>' +
+      '<span class="timeline-duration">' + formatDuration(totalDur) + '</span>';
+    container.appendChild(row);
+  }
+}
+
+// ===== Tool call details =====
+function renderToolDetails(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return;
+  const card = document.getElementById('tools-card');
+  card.style.display = '';
+  const container = document.getElementById('tools-container');
+  container.innerHTML = '';
+
+  toolCalls.forEach((tc, i) => {
+    const details = document.createElement('details');
+    details.className = 'tool-detail';
+
+    const isError = tc.status === 'error';
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<span class="tool-idx">' + (i + 1) + '</span>' +
+      '<span class="tool-name">' + escHtml(tc.name || '?') + '</span>' +
+      '<span class="' + (isError ? 'tool-status-err' : 'tool-status-ok') + '">' + (isError ? 'Error' : 'OK') + '</span>' +
+      '<span class="tool-dur">' + formatDuration(tc.durationMs) + '</span>';
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'tool-body';
+
+    // Params
+    const paramsJSON = formatToolJSON(tc.params);
+    body.innerHTML = '<div class="tool-section-label">Parameters</div>' +
+      '<pre class="tool-json">' + escHtml(truncate(paramsJSON, 2000)) + '</pre>';
+    if (paramsJSON.length > 2000) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full (' + paramsJSON.length + ' chars)';
+      expandBtn.onclick = function() {
+        this.previousElementSibling.textContent = paramsJSON;
+        this.remove();
+      };
+      body.appendChild(expandBtn);
+    }
+
+    // Error
+    if (tc.error) {
+      body.innerHTML += '<div class="tool-section-label">Error</div>' +
+        '<div class="tool-error-banner">' + escHtml(tc.error) + '</div>';
+    }
+
+    // Result
+    const resultJSON = formatToolJSON(tc.result);
+    body.innerHTML += '<div class="tool-section-label">Result</div>' +
+      '<pre class="tool-json">' + escHtml(truncate(resultJSON, 2000)) + '</pre>';
+    if (resultJSON.length > 2000) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full (' + resultJSON.length + ' chars)';
+      expandBtn.onclick = function() {
+        this.previousElementSibling.textContent = resultJSON;
+        this.remove();
+      };
+      body.appendChild(expandBtn);
+    }
+
+    details.appendChild(body);
+    container.appendChild(details);
+  });
+}
+
+// ===== Footer =====
+function renderFooter(id, meta) {
+  const grid = document.getElementById('footer-grid');
+  grid.style.display = '';
+
+  // Screenshot
+  const img = document.getElementById('screenshot-img');
+  const emptyScreen = document.getElementById('screenshot-empty');
+  img.src = BASE + '/recordings/' + id + '/screenshot';
+  img.style.display = '';
+  emptyScreen.style.display = 'none';
+  img.onerror = function() {
+    this.style.display = 'none';
+    emptyScreen.style.display = '';
+  };
+
+  // Final text
+  document.getElementById('final-text').textContent = meta.finalText || '(no text response)';
+}
+
+// ===== Helpers =====
+function formatDuration(ms) {
+  if (ms === undefined || ms === null) return '?';
+  if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
+  return ms + 'ms';
+}
+
+function formatToolJSON(raw) {
+  if (!raw) return '(empty)';
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return raw;
+    }
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
+function truncate(str, max) {
+  if (str.length <= max) return str;
+  return str.slice(0, max) + '\n... (' + (str.length - max) + ' chars truncated)';
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ===== Init =====
+refreshRecordings();
+</script>
+</body>
+</html>

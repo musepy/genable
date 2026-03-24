@@ -13,29 +13,31 @@ export const editDefinition: ToolDefinition = {
   category: 'modify',
   executionStrategy: 'sequential',
   display: { displayName: 'Edit', group: 'design' },
-  description: `Update properties or text content of an existing node.
+  description: `Update properties or text content of existing nodes. Supports single and batch.
 
-Parameters:
-  node: Node ref from jsx/inspect results. Use "name#id" format (e.g. "Card#1:2").
-  props: Properties to update as key-value object (same shorthands: w, h, bg, corner, fill, size, weight, layout, gap, p, etc.)
-  content: New text content (for text nodes)
+Single:
+  edit({node: "Card#1:2", props: {corner: 16, bg: "#F8F9FA"}})
+  edit({node: "Title#1:3", content: "Updated Title"})
 
-Examples:
-  edit({node: "Card#100:5", props: {corner: 16, bg: "#F8F9FA", p: 24}})
-  edit({node: "Title#100:6", content: "Updated Title"})
-  edit({node: "Title#100:6", props: {size: 20, weight: "Bold"}, content: "New Text"})
+Batch (preferred when editing multiple nodes):
+  edit({nodes: [
+    {node: "Form#1:1", props: {w: "fill"}},
+    {node: "Email Field#1:2", props: {w: "fill"}},
+    {node: "Button#1:3", props: {bg: "#4F46E5", corner: 8}}
+  ]})
 
 Rules:
-  - Node MUST exist — edit never creates new nodes
-  - Only listed props change — everything else is preserved
-  - Use name#id refs from jsx tree or inspect results — do NOT construct paths`,
+  - Nodes MUST exist — edit never creates
+  - Only listed props change — everything else preserved
+  - Use name#id refs from jsx tree or inspect results
+  - Batch multiple edits into one call — do NOT call edit() per node`,
   parameters: {
     type: 'object',
     properties: {
-      node: { type: 'string', description: 'Node ref in "name#id" format from jsx/inspect results' },
-      props: { type: 'object', description: 'Properties to update (key-value pairs)' },
-      content: { type: 'string', description: 'New text content (for text nodes)' },
+      node: { type: 'string', description: 'Single node ref in "name#id" format' },
+      nodes: { type: 'array', description: 'Batch: array of {node, props?, content?} objects', items: { type: 'object', description: '{node, props?, content?}' } },
+      props: { type: 'object', description: 'Properties to update (single mode)' },
+      content: { type: 'string', description: 'New text content (single mode)' },
     },
-    required: ['node'],
   },
 };

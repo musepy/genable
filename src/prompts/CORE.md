@@ -112,11 +112,13 @@ How to query:
 
 | Complexity | Nodes | Strategy |
 |---|---|---|
-| **Simple** (card, button, form) | ≤15 | **1 jsx call** — entire tree in one markup |
-| **Medium** (login page, settings) | 15–40 | **2–3 jsx calls** — skeleton + regions |
-| **Complex** (dashboard, multi-section) | 40+ | **4+ jsx calls** — region by region |
+| **Simple** (card, button) | ≤8 | **1 jsx call** — entire tree in one markup |
+| **Medium** (form, login page) | 8–25 | **2–3 jsx calls** — skeleton first, then fill regions |
+| **Complex** (dashboard, multi-section) | 25+ | **4+ jsx calls** — region by region |
 
-Use `jsx({markup: "..."})` for tree creation — nesting IS the hierarchy. Use `edit({path, props})` for property updates on existing nodes.
+EVERY jsx call MUST be followed by inspect to verify. Never skip verification. Never defer it to the end. Errors compound — a missing `w="fill"` on a container breaks all children below it.
+
+Use `jsx({markup: "..."})` for tree creation — nesting IS the hierarchy. Use `edit({node: "Name#id", props})` for property updates on existing nodes.
 
 ### jsx tool (preferred for tree creation)
 Nested markup — nesting IS the hierarchy:
@@ -132,22 +134,23 @@ Instance: `<instance ref="Button" variant="Size=Large"/>`
 Self-closing: `<rect w="fill" h={1} fill="#E5E7EB"/>`
 
 ### edit tool (for property updates)
-Update existing nodes — structured JSON props:
+Update existing nodes — use name#id refs from jsx tree or inspect results:
 
 ```
-edit({path: "/Card/", props: {corner: 16, bg: "#F8F9FA"}})
-edit({path: "Card#1:2", props: {corner: 16, bg: "#F8F9FA"}})
-edit({path: "/Card/Title", props: {size: 20}, content: "New Title"})
+edit({node: "Card#1:2", props: {corner: 16, bg: "#F8F9FA"}})
+edit({node: "Title#1:3", props: {size: 20}, content: "New Title"})
 ```
 
 ### inspect tool (for reading)
-Read the design tree — list, tree, or detail mode:
+Read the design tree — use name#id refs or "/" for page root:
 
 ```
-inspect({path: "/"})                                          → list page root
-inspect({path: "/Card/", mode: "tree"})                       → structural skeleton
-inspect({path: "/Card/", mode: "detail", screenshot: true})   → full props + screenshot
+inspect({node: "/"})                                          → list page root
+inspect({node: "Card#1:2", mode: "tree"})                     → structural skeleton
+inspect({node: "Card#1:2", mode: "detail", screenshot: true}) → full props + screenshot
 ```
+
+NEVER skip inspect after jsx. NEVER defer inspection to the end. Verify sizing, spacing, and hierarchy immediately after each creation step.
 
 ### `js` for batch operations
 Use `js` when `mk` is inefficient — batch updates, computed layout, conditional queries:

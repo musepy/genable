@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { presentForLLM } from '../presentation';
 
-describe('presentForLLM — noise stripping', () => {
-  it('strips mk result to idMap + key fields, removes noise', () => {
+describe('presentForLLM — flat response format', () => {
+  it('flattens data to top level, strips noise', () => {
     const result = {
       success: true,
       data: {
@@ -13,93 +13,82 @@ describe('presentForLLM — noise stripping', () => {
       },
     };
     const presented = presentForLLM(result, 'mk', 50);
-    expect(presented.data.idMap).toEqual({ Card: '100:1', Title: '100:2' });
-    expect(presented.data.created).toBe(2); // kept for LLM context
-    expect(presented.data.count).toBeUndefined(); // noise stripped
-    expect(presented.data.diagnostics).toBeUndefined(); // noise stripped
+    // Data fields promoted to top level
+    expect(presented.idMap).toEqual({ Card: '100:1', Title: '100:2' });
+    expect(presented.created).toBe(2);
+    // Noise stripped
+    expect(presented.count).toBeUndefined();
+    expect(presented.diagnostics).toBeUndefined();
+    // No data wrapper
+    expect(presented.data).toBeUndefined();
+    expect(presented.success).toBeUndefined();
     expect(presented._meta).toContain('exit:0');
   });
 
-  it('strips ls result to listing only', () => {
+  it('flattens ls result — listing at top level', () => {
     const result = {
       success: true,
       data: {
         listing: 'Card\nButton\nHeader',
         count: 3,
-        path: '/',
       },
     };
     const presented = presentForLLM(result, 'ls', 30);
-    expect(presented.data).toEqual({ listing: 'Card\nButton\nHeader' });
-    expect(presented.data.count).toBeUndefined();
-    expect(presented.data.path).toBeUndefined();
+    expect(presented.listing).toBe('Card\nButton\nHeader');
+    expect(presented.count).toBeUndefined();
+    expect(presented.data).toBeUndefined();
   });
 
-  it('strips cat result to tree only', () => {
+  it('flattens cat result — node fields at top level (no node wrapper)', () => {
     const result = {
       success: true,
       data: {
-        tree: '<frame name="Card">...</frame>',
-        path: '/Card/',
-        nodeCount: 5,
+        type: 'frame', id: '1:1', name: 'Card',
+        width: 300, height: 400,
       },
     };
     const presented = presentForLLM(result, 'cat', 20);
-    expect(presented.data).toEqual({ tree: '<frame name="Card">...</frame>' });
+    expect(presented.type).toBe('frame');
+    expect(presented.id).toBe('1:1');
+    expect(presented.name).toBe('Card');
+    expect(presented.data).toBeUndefined();
   });
 
-  it('strips grep node-search to results only', () => {
+  it('flattens grep results to top level', () => {
     const result = {
       success: true,
       data: {
         results: [{ id: '1:1', name: 'Card' }, { id: '1:2', name: 'Button' }],
         totalSearched: 100,
-        elapsed: 15,
       },
     };
     const presented = presentForLLM(result, 'grep', 15);
-    expect(presented.data).toEqual({
-      results: [{ id: '1:1', name: 'Card' }, { id: '1:2', name: 'Button' }],
-    });
+    expect(presented.results).toHaveLength(2);
+    expect(presented.totalSearched).toBeUndefined();
   });
 
-  it('strips grep property-mode to properties only', () => {
-    const result = {
-      success: true,
-      data: {
-        properties: { bg: '#FFF', color: '#000' },
-        nodeCount: 5,
-      },
-    };
-    const presented = presentForLLM(result, 'grep', 10);
-    expect(presented.data).toEqual({
-      properties: { bg: '#FFF', color: '#000' },
-    });
-  });
-
-  it('strips success:true (redundant with exit:0)', () => {
+  it('no success field on success (exit:0 in _meta is sufficient)', () => {
     const result = {
       success: true,
       data: { idMap: { Card: '100:1' } },
     };
     const presented = presentForLLM(result, 'mk', 10);
-    expect(presented.data.success).toBeUndefined();
+    expect(presented.success).toBeUndefined();
   });
 
-  it('keeps success:false and error for failures (top-level)', () => {
+  it('error as string replaces success:false + error object', () => {
     const result = {
       success: false,
-      data: { idMap: {} },
+      data: {},
       error: { code: 'EXEC_ERROR', message: 'Failed to create' },
     };
     const presented = presentForLLM(result, 'mk', 10);
-    // success/error live at result top-level, not inside data
-    expect(presented.success).toBe(false);
-    expect(presented.error).toEqual({ code: 'EXEC_ERROR', message: 'Failed to create' });
+    expect(presented.error).toBe('Failed to create');
+    expect(presented.success).toBeUndefined();
     expect(presented._meta).toContain('exit:1');
   });
 
-  it('strips chain results per sub-command name', () => {
+  it('flattens chain sub-results too', () => {
     const result = {
       success: true,
       data: {
@@ -112,20 +101,41 @@ describe('presentForLLM — noise stripping', () => {
           {
             command: 'cat /Card/',
             success: true,
-            data: { tree: '<frame name="Card">...</frame>', path: '/Card/' },
+            data: { node: { type: 'frame', id: '1:1' }, extra: 'noise' },
           },
         ],
       },
     };
     const presented = presentForLLM(result, 'run', 100);
-    const chain = presented.data.chain;
+    const chain = presented.chain;
     expect(chain).toHaveLength(2);
     // tree sub-result: keep tree, strip nodeCount
     expect(chain[0].command).toBe('tree /');
-    expect(chain[0].data).toEqual({ tree: '<frame/>' });
-    // cat sub-result: keep tree, strip path
+    expect(chain[0].tree).toBe('<frame/>');
+    expect(chain[0].data).toBeUndefined();
+    // cat sub-result: keep node, strip extra
     expect(chain[1].command).toBe('cat /Card/');
-    expect(chain[1].data).toEqual({ tree: '<frame name="Card">...</frame>' });
+    expect(chain[1].node).toEqual({ type: 'frame', id: '1:1' });
+    expect(chain[1].data).toBeUndefined();
+  });
+
+  it('chain sub-result error flattened to string', () => {
+    const result = {
+      success: false,
+      data: {
+        chain: [
+          {
+            command: 'cat /Missing/',
+            success: false,
+            error: { code: 'NOT_FOUND', message: 'Node not found' },
+            data: {},
+          },
+        ],
+      },
+    };
+    const presented = presentForLLM(result, 'run', 50);
+    expect(presented.chain[0].error).toBe('Node not found');
+    expect(presented.chain[0].success).toBeUndefined();
   });
 
   it('passes through unknown command data unchanged', () => {
@@ -134,16 +144,17 @@ describe('presentForLLM — noise stripping', () => {
       data: { foo: 'bar', baz: 42 },
     };
     const presented = presentForLLM(result, 'unknown_cmd', 10);
-    expect(presented.data).toEqual({ foo: 'bar', baz: 42 });
+    expect(presented.foo).toBe('bar');
+    expect(presented.baz).toBe(42);
   });
 
-  it('passes through man command data unchanged (null keep list)', () => {
+  it('wraps string data as output field', () => {
     const result = {
       success: true,
       data: 'mk — create nodes\n\nUsage: mk /path/ [type]',
     };
     const presented = presentForLLM(result, 'man', 5);
-    expect(presented.data).toBe('mk — create nodes\n\nUsage: mk /path/ [type]');
+    expect(presented.output).toBe('mk — create nodes\n\nUsage: mk /path/ [type]');
   });
 
   it('strips design result to lean shape', () => {
@@ -155,24 +166,15 @@ describe('presentForLLM — noise stripping', () => {
         edited: 1,
         deleted: 0,
         defaultsApplied: [{ property: 'textAutoResize' }],
-        defaultsAppliedCount: 2,
-        violations: [{ code: 'TEXT_OVERFLOW' }],
         warningCount: 1,
-        nodeLimitWarning: 'too many',
       },
     };
     const presented = presentForLLM(result, 'design', 200);
-    expect(presented.data.idMap).toEqual({ Card: '100:1' });
-    expect(presented.data.created).toBe(3);
-    expect(presented.data.edited).toBe(1);
-    // Noise fields stripped
-    expect(presented.data.defaultsApplied).toBeUndefined();
-    expect(presented.data.defaultsAppliedCount).toBeUndefined();
-    expect(presented.data.violations).toBeUndefined();
-    expect(presented.data.warningCount).toBeUndefined();
-    expect(presented.data.nodeLimitWarning).toBeUndefined();
-    // deleted:0 is kept (numeric zero is still a valid value)
-    expect(presented.data.deleted).toBe(0);
+    expect(presented.idMap).toEqual({ Card: '100:1' });
+    expect(presented.created).toBe(3);
+    expect(presented.deleted).toBe(0);
+    expect(presented.defaultsApplied).toBeUndefined();
+    expect(presented.warningCount).toBeUndefined();
   });
 
   it('skips empty arrays and empty objects in keep fields', () => {
@@ -181,15 +183,12 @@ describe('presentForLLM — noise stripping', () => {
       data: {
         idMap: {},
         created: 0,
-        edited: 0,
         degraded: [],
-        failed: 0,
       },
     };
     const presented = presentForLLM(result, 'design', 10);
-    // All kept fields are empty/zero → stripped
-    expect(presented.data.idMap).toBeUndefined();
-    expect(presented.data.degraded).toBeUndefined();
+    expect(presented.idMap).toBeUndefined();
+    expect(presented.degraded).toBeUndefined();
   });
 
   it('preserves stderr extraction before stripping', () => {
@@ -202,11 +201,25 @@ describe('presentForLLM — noise stripping', () => {
       },
     };
     const presented = presentForLLM(result, 'mk', 50);
-    // Stderr should capture warnings/violations
     expect(presented._stderr).toContain('font fallback');
     expect(presented._stderr).toContain('sizing reverted');
-    // But they should be stripped from data
-    expect(presented.data.warnings).toBeUndefined();
-    expect(presented.data.violations).toBeUndefined();
+    expect(presented.warnings).toBeUndefined();
+    expect(presented.violations).toBeUndefined();
+  });
+
+  it('jsx result: node fields spread to top level', () => {
+    const result = {
+      success: true,
+      data: {
+        id: '1:1', name: 'Card', type: 'frame', children: ['Title#1:2'],
+        created: 5,
+      },
+    };
+    const presented = presentForLLM(result, 'jsx', 2000);
+    expect(presented.id).toBe('1:1');
+    expect(presented.name).toBe('Card');
+    expect(presented.children).toEqual(['Title#1:2']);
+    expect(presented.created).toBe(5);
+    expect(presented.data).toBeUndefined();
   });
 });

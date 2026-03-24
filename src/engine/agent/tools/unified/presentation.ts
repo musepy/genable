@@ -34,7 +34,7 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   // Read commands — LLM needs the content
   ls:      ['listing'],
   tree:    ['tree'],
-  cat:     ['tree', '__image'],
+  cat:     null,                        // node fields spread to top level — pass through
   // Search commands
   grep:    ['results', 'properties'],   // results = node mode, properties = prop mode
   sed:     ['replaced', 'details'],
@@ -42,10 +42,10 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   man:     null,                        // pass through
   // First-class tools
   inspect: null,                        // delegates to ls/tree/cat — pass through
-  jsx:     ['idMap', 'created', 'failed', 'errors'],
+  jsx:     null,                        // node fields spread to top level — pass through
   // Legacy tool names
   design:  ['idMap', 'created', 'edited', 'deleted', 'failed', 'errors', 'degraded', 'degradedHint'],
-  edit:    ['idMap', 'edited', 'failed', 'errors', 'changeSummary'],
+  edit:    ['edited', 'failed', 'errors', 'changeSummary'],
   create:  ['idMap'],
 };
 
@@ -60,38 +60,45 @@ const OVERFLOW_HINTS: Record<string, string> = {
 /**
  * Transform a raw command result into LLM-ready format.
  *
- * - Adds _meta footer with exit code and timing
- * - Extracts stderr from warnings/errors
- * - Guards against overflow (>200 lines) and binary content
+ * Flattens {success, data: {...}} into {...} — no wrapper envelope.
+ * Error: presence of `error` field = failure (replaces success boolean).
+ * Matches Open-Pencil's response convention: data fields at top level, error as string.
  *
- * Does NOT modify the result's core data — commands own their output format.
+ * Pipeline: raw result → exit code + stderr (from raw) → flatten data → strip noise → guards
  */
 export function presentForLLM(result: any, commandName: string, durationMs: number): any {
-  const cleaned = { ...result };
-
-  // Strip internal `name` field (used by old cleaner for routing)
-  delete cleaned.name;
-
-  // 1. Exit code
+  // 1. Exit code + stderr from raw result (before flattening)
   const exitCode = computeExitCode(result);
+  const stderr = extractStderr(result);
+
+  // 2. Flatten: merge data fields to top level, strip noise
+  // Shallow clone to avoid mutating the original result.data (stored by reference in history)
+  let cleaned: any = {};
+  if (result?.data && typeof result.data === 'object') {
+    cleaned = { ...stripForLLM(result.data, commandName) };
+  } else if (typeof result?.data === 'string') {
+    cleaned = { output: result.data };
+  }
+
+  // 3. Error replaces success boolean — only present on failure
+  if (result?.success === false) {
+    const err = result.error;
+    cleaned.error = typeof err === 'string' ? err : (err?.message || 'Unknown error');
+  }
+
+  // 4. Meta footer
   cleaned._meta = formatMeta(exitCode, durationMs);
 
-  // 2. Stderr — surface warnings/errors as separate signal
-  const stderr = extractStderr(result);
+  // 5. Stderr
   if (stderr) cleaned._stderr = stderr;
 
-  // 3. Overflow + binary guard on text fields
+  // 6. Overflow + binary guard on text fields
   const hint = OVERFLOW_HINTS[commandName];
   const TEXT_FIELDS = ['listing', 'tree'] as const;
   for (const field of TEXT_FIELDS) {
-    if (cleaned.data?.[field] && typeof cleaned.data[field] === 'string') {
-      cleaned.data[field] = guardBinary(truncateOverflow(cleaned.data[field], hint));
+    if (cleaned[field] && typeof cleaned[field] === 'string') {
+      cleaned[field] = guardBinary(truncateOverflow(cleaned[field], hint));
     }
-  }
-
-  // 4. Strip noise — keep only fields the LLM needs per command
-  if (cleaned.data && typeof cleaned.data === 'object') {
-    cleaned.data = stripForLLM(cleaned.data, commandName);
   }
 
   return cleaned;
@@ -108,19 +115,20 @@ export function presentForLLM(result: any, commandName: string, durationMs: numb
  * Unknown commands pass through unchanged.
  */
 function stripForLLM(data: any, commandName: string): any {
-  // Chain results: strip each sub-result's data individually
+  // Chain results: flatten each sub-result (same convention as top-level)
   if (data.chain && Array.isArray(data.chain)) {
     return {
       chain: data.chain.map((sub: any) => {
         const subCmd = extractCommandName(sub.command);
-        if (!subCmd || !sub.data || typeof sub.data !== 'object') return sub;
-        const result: any = { command: sub.command };
-        result.data = stripFields(sub.data, subCmd);
-        if (sub.success === false) {
-          result.success = false;
-          if (sub.error) result.error = sub.error;
+        const flat: any = { command: sub.command };
+        if (subCmd && sub.data && typeof sub.data === 'object') {
+          Object.assign(flat, stripFields(sub.data, subCmd));
         }
-        return result;
+        if (sub.success === false) {
+          const err = sub.error;
+          flat.error = typeof err === 'string' ? err : (err?.message || 'error');
+        }
+        return flat;
       }),
     };
   }
@@ -144,13 +152,6 @@ function stripFields(data: any, commandName: string): any {
       stripped[field] = data[field];
     }
   }
-
-  // Keep failure signals — LLM needs to know about errors
-  if (data.success === false) {
-    stripped.success = false;
-    if (data.error) stripped.error = data.error;
-  }
-  // Strip redundant success: true (exit:0 in _meta already signals this)
 
   return stripped;
 }

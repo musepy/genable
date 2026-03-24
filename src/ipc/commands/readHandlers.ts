@@ -56,7 +56,6 @@ export async function handleLs(parameters: any): Promise<ToolResponse> {
       success: true,
       data: {
         listing: lines.join('\n'),
-        path: lsPath,
         container: `glob(${lsPath})`,
         count: globNodes.length,
         footer: `[${globNodes.length} matches]`,
@@ -107,7 +106,6 @@ export async function handleLs(parameters: any): Promise<ToolResponse> {
     success: true,
     data: {
       listing: lines.join('\n'),
-      path: lsPath,
       container: containerName,
       count: children.length,
       footer: footer + selectionInfo,
@@ -183,7 +181,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
       buildTreeLines(child, lines, isLast ? '└── ' : '├── ', isLast ? '    ' : '│   ', treeDepth - 1, suggestedReads);
     }
 
-    const treeData: any = { tree: lines.join('\n'), path: treePath };
+    const treeData: any = { tree: lines.join('\n') };
     if (suggestedReads.length > 0) {
       treeData.suggestedReads = suggestedReads.map(id => {
         const n = page.findOne(node => node.id === id);
@@ -213,7 +211,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
     }
   }
 
-  const treeData: any = { tree: treeJson, path: treePath };
+  const treeData: any = { tree: treeJson };
   if (suggestedReads.length > 0) treeData.suggestedReads = suggestedReads;
 
   return { success: true, data: treeData };
@@ -262,7 +260,6 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
     return {
       success: true,
       data: {
-        path: '/',
         page: { name: page.name, childCount: page.children.length },
         children: topLevel,
         hint: 'Use ls("/") or tree("/") to navigate, cat("/NodeName/") for full details.',
@@ -279,7 +276,7 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
   // JSON output (primary) with flat-ops fallback for large nodes
   const catJson = JsonNodeSerializer.serialize(catSerialized, { maxDepth: catDepth });
   const catJsonStr = JSON.stringify(catJson);
-  const catData: any = { path: catPath };
+  const catData: any = {};
   const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
 
   if (catJsonStr.length > AUTO_DEGRADE_CHARS) {
@@ -288,11 +285,13 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
       maxDepth: catDepth,
       structural: true,
     });
-    catData.node = catStructural;
+    // Spread node fields directly into data (no `node` wrapper)
+    Object.assign(catData, catStructural);
     const childCount = 'children' in catNode ? (catNode as any).children.length : 0;
     catData.hint = `Large node (${childCount} children, ${catJsonStr.length} chars). Use tree("${catPath}") to discover structure, then cat specific children.`;
   } else {
-    catData.node = catJson;
+    // Spread node fields directly into data (no `node` wrapper)
+    Object.assign(catData, catJson);
   }
 
   if (wantScreenshot && catNode.visible && catNode.width > 0 && catNode.height > 0) {

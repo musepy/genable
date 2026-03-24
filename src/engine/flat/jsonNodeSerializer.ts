@@ -93,24 +93,9 @@ const DEFAULTS: Record<string, any> = {
   constrainProportions: false,
 };
 
-/** Properties to include in full mode. */
-const INCLUDE_PROPS = new Set([
-  'name', 'fills', 'strokes', 'layoutMode', 'gap',
-  'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-  'fontSize', 'fontWeight', 'fontFamily', 'characters', 'cornerRadius',
-  'width', 'height', 'layoutSizingHorizontal', 'layoutSizingVertical',
-  'primaryAxisAlignItems', 'counterAxisAlignItems',
-  'opacity', 'visible', 'effects', 'strokeWeight', 'strokeAlign',
-  'strokeJoin', 'strokeCap', 'dashPattern',
-  'strokeTopWeight', 'strokeRightWeight', 'strokeBottomWeight', 'strokeLeftWeight',
-  'blendMode', 'cornerSmoothing',
-  'textAlignHorizontal', 'lineHeight', 'letterSpacing',
-  'layoutPositioning', 'x', 'y', 'iconName',
-  'clipsContent', 'layoutWrap',
-  'strokesIncludedInLayout', 'itemReverseZIndex',
-  'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
-  'constrainProportions', 'constraints',
-]);
+// Full-mode properties are now emitted in semantic order inside addFullProps() —
+// text: content → typography → fill → sizing → position
+// frame: sizing → layout → visual → position
 
 /** Properties for structural (skeleton) mode. */
 const STRUCTURAL_PROPS = new Set([
@@ -477,14 +462,7 @@ export class JsonNodeSerializer {
     // Name always first property
     if (props.name) result.name = props.name;
 
-    // Add properties
-    if (structural) {
-      this.addStructuralProps(result, props);
-    } else {
-      this.addFullProps(result, props, tag);
-    }
-
-    // Text content — use "content" instead of "characters"
+    // Text content right after name — most identifying property for text
     if (tag === 'text' && props.characters) {
       const charStr = String(props.characters);
       if (structural && charStr.length > 30) {
@@ -492,6 +470,13 @@ export class JsonNodeSerializer {
       } else {
         result.content = charStr;
       }
+    }
+
+    // Add properties
+    if (structural) {
+      this.addStructuralProps(result, props);
+    } else {
+      this.addFullProps(result, props, tag);
     }
 
     // Truncation markers
@@ -534,87 +519,79 @@ export class JsonNodeSerializer {
   }
 
   private static addFullProps(result: any, props: Record<string, any>, tag: string): void {
-    // Compact padding
+    // Pre-compute compound values
     const hasPaddingProps = props.paddingTop !== undefined || props.paddingRight !== undefined ||
       props.paddingBottom !== undefined || props.paddingLeft !== undefined;
     const paddingValue = hasPaddingProps ? compactPaddingJson(props) : null;
-    const paddingConsumed = new Set(['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']);
-
-    // Fills/strokes
     const fillsMixed = props.fills === MIXED;
     const strokesMixed = props.strokes === MIXED;
+    const effectsMixed = props.effects === MIXED;
     const fillResult = fillsMixed ? null : formatFillsJson(props.fills);
     const strokeResult = strokesMixed ? null : formatFillsJson(props.strokes);
-
-    // Effects
-    const effectsMixed = props.effects === MIXED;
     const effectStr = effectsMixed ? null : formatEffectsJson(props.effects);
 
-    // Iterate properties
-    for (const key of INCLUDE_PROPS) {
-      if (key === 'name' || key === 'characters') continue;
-      if (key === 'fills' || key === 'strokes' || key === 'effects') continue;
-      if (paddingConsumed.has(key)) continue;
-
+    // Helper: emit a single property with middle-name mapping, enum mapping, default filtering
+    const emit = (key: string) => {
       const value = props[key];
-      if (value === undefined || value === null) continue;
-
-      if (value === MIXED) {
-        result[MIDDLE_NAMES[key] || key] = 'mixed';
-        continue;
-      }
-
-      if (key in DEFAULTS && value === DEFAULTS[key]) continue;
-
+      if (value === undefined || value === null) return;
+      if (value === MIXED) { result[MIDDLE_NAMES[key] || key] = 'mixed'; return; }
+      if (key in DEFAULTS && value === DEFAULTS[key]) return;
       // Suppress uniform per-side stroke weights
-      if ((key === 'strokeTopWeight' || key === 'strokeRightWeight' || key === 'strokeBottomWeight' || key === 'strokeLeftWeight')) {
+      if (key === 'strokeTopWeight' || key === 'strokeRightWeight' || key === 'strokeBottomWeight' || key === 'strokeLeftWeight') {
         const sw = props.strokeWeight;
-        if (sw !== undefined && sw !== MIXED && value === sw) continue;
+        if (sw !== undefined && sw !== MIXED && value === sw) return;
       }
-
-      // clipsContent → overflow semantics
-      if (key === 'clipsContent') {
-        result.overflow = value ? 'hidden' : 'visible';
-        continue;
-      }
-
-      // dashPattern → compact format
-      if (key === 'dashPattern' && Array.isArray(value)) {
-        if (value.length > 0) result.dashPattern = value;
-        continue;
-      }
-
-      // constraints → compact format
+      if (key === 'clipsContent') { result.overflow = value ? 'hidden' : 'visible'; return; }
+      if (key === 'dashPattern' && Array.isArray(value)) { if (value.length > 0) result.dashPattern = value; return; }
       if (key === 'constraints' && typeof value === 'object') {
         const ir = constraintsSpec.fromFigma(value);
         const defaultIr = constraintsSpec.defaultValue!;
-        if (!constraintsSpec.isEqual(ir, defaultIr)) {
-          result.pin = constraintsSpec.formatXml(ir);
-        }
-        continue;
+        if (!constraintsSpec.isEqual(ir, defaultIr)) result.pin = constraintsSpec.formatXml(ir);
+        return;
       }
-
-      // Skip unhandled objects
-      if (typeof value === 'object') continue;
-
+      if (typeof value === 'object') return;
       const outKey = MIDDLE_NAMES[key] || key;
       const cssMap = ENUM_TO_CSS[key];
       result[outKey] = cssMap ? (cssMap[String(value)] ?? value) : value;
+    };
+    const emitFills = () => { if (fillsMixed) result.fill = 'mixed'; else if (fillResult) result[fillResult.key] = fillResult.value; };
+    const emitStrokes = () => { if (strokesMixed) result.stroke = 'mixed'; else if (strokeResult) result.stroke = strokeResult.value; };
+    const emitEffects = () => { if (effectsMixed) result.shadow = 'mixed'; else if (effectStr) result.shadow = effectStr; };
+    const emitPadding = () => { if (paddingValue !== null) result.padding = paddingValue; };
+
+    // ── Semantic ordering by node type ──
+    if (tag === 'text') {
+      // Text: typography → fill → sizing → position → other
+      emit('fontSize'); emit('fontWeight'); emit('fontFamily');
+      emit('textAlignHorizontal'); emit('lineHeight'); emit('letterSpacing');
+      emitFills();
+      emit('width'); emit('height');
+      emit('layoutSizingHorizontal'); emit('layoutSizingVertical');
+      emit('layoutPositioning'); emit('x'); emit('y');
+      emit('opacity'); emit('visible');
+      emit('minWidth'); emit('maxWidth'); emit('minHeight'); emit('maxHeight');
+      emit('constrainProportions'); emit('constraints');
+    } else {
+      // Frame/container: sizing → layout → visual → position → other
+      emit('width'); emit('height');
+      emit('layoutSizingHorizontal'); emit('layoutSizingVertical');
+      emit('layoutMode');
+      emit('gap'); emit('counterAxisSpacing');
+      emit('primaryAxisAlignItems'); emit('counterAxisAlignItems');
+      emitPadding();
+      emit('layoutWrap'); emit('clipsContent');
+      emitFills();
+      emit('cornerRadius'); emit('cornerSmoothing');
+      emitStrokes();
+      emit('strokeWeight'); emit('strokeAlign'); emit('strokeJoin'); emit('strokeCap');
+      emit('strokeTopWeight'); emit('strokeRightWeight'); emit('strokeBottomWeight'); emit('strokeLeftWeight');
+      emit('dashPattern'); emit('strokesIncludedInLayout');
+      emitEffects();
+      emit('layoutPositioning'); emit('x'); emit('y');
+      emit('opacity'); emit('visible'); emit('blendMode'); emit('itemReverseZIndex');
+      emit('minWidth'); emit('maxWidth'); emit('minHeight'); emit('maxHeight');
+      emit('constrainProportions'); emit('constraints');
+      emit('iconName');
     }
-
-    // Padding
-    if (paddingValue !== null) result.padding = paddingValue;
-
-    // Fills
-    if (fillsMixed) result.fill = 'mixed';
-    else if (fillResult) result[fillResult.key] = fillResult.value;
-
-    // Strokes
-    if (strokesMixed) result.stroke = 'mixed';
-    else if (strokeResult) result.stroke = strokeResult.value;
-
-    // Effects
-    if (effectsMixed) result.shadow = 'mixed';
-    else if (effectStr) result.shadow = effectStr;
   }
 }

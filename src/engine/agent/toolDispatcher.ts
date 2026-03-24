@@ -587,7 +587,12 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const ids = Object.values(data.idMap);
       if (ids.length > 0) candidate = String(ids[ids.length - 1]);
     } else if (data.id) {
-      candidate = String(data.id);
+      // jsx spreads {id, name, type, children} directly into data
+      if (data.name) {
+        candidate = `${data.name}#${data.id}`;
+      } else {
+        candidate = String(data.id);
+      }
     }
 
     if (!candidate) return;

@@ -115,15 +115,21 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
     if (rootResults.length > 0) {
       delete result.data.idMap;
-      result.data.node = rootResults.length === 1 ? rootResults[0] : rootResults;
+      // Spread node fields directly into data (no `node` wrapper)
+      const rootData = rootResults.length === 1 ? rootResults[0] : rootResults[0];
+      if (rootData) {
+        Object.assign(result.data, rootData);
+        if (rootResults.length > 1) {
+          result.data.roots = rootResults;
+        }
+      }
     }
   }
 
   // ── Post-creation quality scoring ──
-  if (result.success && result.data?.node) {
+  if (result.success && result.data?.id) {
     try {
-      const nodeData = result.data.node;
-      const rootId = Array.isArray(nodeData) ? nodeData[0]?.id : nodeData?.id;
+      const rootId = result.data.id;
       if (rootId) {
         const report = await scoreCreatedNodes([rootId]);
         const qualityStr = formatQualityReport(report);

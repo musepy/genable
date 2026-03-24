@@ -6,6 +6,7 @@ import guidelinesCatalog from '../../generated/guidelines-catalog.json'
 import styleCatalog from '../../generated/style-catalog.json'
 import { matchStyleGuide, normalizeStyleTags, StyleGuideEntry } from './styleGuideMatcher'
 import { helpIndex } from '../../engine/agent/tools/helpIndex'
+import { agentTools } from '../../engine/agent/tools'
 import skillsRegistry from '../../generated/skills-registry.json'
 
 // ==========================================
@@ -31,7 +32,7 @@ import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
 } from '../../shared/protocol/agentRuntimeEvents'
-import { useDevBridge } from '../../dev/useDevBridge'
+import { useDevBridge, GenerateOptions } from '../../dev/useDevBridge'
 import { useMcpBridge } from '../../dev/useMcpBridge'
 
 interface UseChatProps {
@@ -321,7 +322,7 @@ export function useChat({
     }
   }
 
-  const generateFromPrompt = async (inputPrompt: string) => {
+  const generateFromPrompt = async (inputPrompt: string, options?: GenerateOptions) => {
     const normalizedPrompt = inputPrompt.trim()
     if (!normalizedPrompt) return
 
@@ -354,6 +355,18 @@ export function useChat({
 
     setPrompt('')
 
+    // Tool filter: restrict LLM to only specified tools (e.g. ["jsx"])
+    // Force-recreate orchestrator when filter changes
+    const filteredTools = options?.toolFilter
+      ? agentTools.filter(t => options.toolFilter!.includes(t.name))
+      : undefined
+    if (options?.toolFilter) {
+      // Destroy existing orchestrator — tool set changed
+      activeOrchestratorRef.current?.endSession()
+      activeOrchestratorRef.current = null
+      console.log(`[useChat] Tool filter active: [${options.toolFilter.join(', ')}]`)
+    }
+
     // Reuse or create orchestrator (session persists across turns)
     if (!activeOrchestratorRef.current) {
       activeOrchestratorRef.current = new AgentOrchestrator({
@@ -364,6 +377,7 @@ export function useChat({
         workerUrl: 'https://figma-ai-generator.muse40007.workers.dev',
         requireToolApproval: false,
         onRuntimeEvent: handleRuntimeEvent,
+        ...(filteredTools ? { tools: filteredTools } : {}),
       })
     }
 

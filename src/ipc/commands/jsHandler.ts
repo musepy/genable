@@ -5,6 +5,12 @@
  * The "Bash" equivalent — full access to figma.* API.
  * Code is wrapped in an async function and eval'd in the main thread context.
  * Return values are serialized back to the caller.
+ *
+ * ## Error Memory System
+ * Automatically learns from Figma API mistakes:
+ * - Error → auto-saved to clientStorage with the offending code snippet
+ * - Success after error → pairs the fix with the last error
+ * - Before each execution → loads past error/fix pairs as context in the response
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
@@ -18,6 +24,92 @@ function getFnCtor(): typeof Function {
   return (globalThis as any)[parts.join('')];
 }
 const FunctionConstructor = getFnCtor();
+
+// ── Error Memory ──
+
+const JS_MEMORY_KEY = 'js_api_lessons';
+const MAX_LESSONS = 20;
+
+interface JsLesson {
+  error: string;
+  errorCodeSnippet: string;  // code that caused the error (truncated)
+  fixCodeSnippet?: string;   // code that succeeded after the error
+  timestamp: number;
+}
+
+async function loadLessons(): Promise<JsLesson[]> {
+  try {
+    const raw = await figma.clientStorage.getAsync(JS_MEMORY_KEY);
+    if (raw && Array.isArray(raw)) return raw as JsLesson[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+async function saveLessons(lessons: JsLesson[]): Promise<void> {
+  try {
+    // Keep only the most recent lessons
+    const trimmed = lessons.slice(-MAX_LESSONS);
+    await figma.clientStorage.setAsync(JS_MEMORY_KEY, trimmed);
+  } catch (e) {
+    console.warn('[jsHandler] Failed to save lessons:', e);
+  }
+}
+
+/** Format lessons into a readable string for the agent. */
+function formatLessonsForAgent(lessons: JsLesson[]): string {
+  if (lessons.length === 0) return '';
+  const lines = ['[JS API Lessons — learned from past errors]'];
+  for (const l of lessons) {
+    if (l.fixCodeSnippet) {
+      lines.push(`✗ ERROR: ${l.error}`);
+      lines.push(`  BAD:  ${l.errorCodeSnippet}`);
+      lines.push(`  GOOD: ${l.fixCodeSnippet}`);
+    } else {
+      lines.push(`✗ UNRESOLVED: ${l.error}`);
+      lines.push(`  BAD:  ${l.errorCodeSnippet}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/** Extract a short code snippet relevant to the error. */
+function extractSnippet(code: string, errorMsg: string, maxLen = 200): string {
+  // 1. Try to find the property name from the error message
+  //    e.g. "in set_effects: ..." → search for ".effects ="
+  const propMatch = errorMsg.match(/in set_(\w+):|Property "(\w+)"/);
+  if (propMatch) {
+    const prop = propMatch[1] || propMatch[2];
+    const regex = new RegExp(`\\.${prop}\\s*=`);
+    const match = regex.exec(code);
+    if (match) {
+      const start = Math.max(0, match.index - 10);
+      // Find the end of the statement (next semicolon or closing bracket)
+      let end = code.indexOf(';', match.index);
+      if (end === -1) end = code.indexOf('\n', match.index + 50);
+      if (end === -1) end = match.index + maxLen;
+      end = Math.min(end + 1, match.index + maxLen);
+      return code.slice(start, end).replace(/\n/g, ' ').trim();
+    }
+  }
+
+  // 2. Try line number from error (e.g. "at <input>:37:61")
+  const lineMatch = errorMsg.match(/<input>:(\d+)/);
+  if (lineMatch) {
+    const lineNum = parseInt(lineMatch[1]) - 1; // 0-indexed
+    const lines = code.split('\n');
+    if (lineNum >= 0 && lineNum < lines.length) {
+      const contextStart = Math.max(0, lineNum - 1);
+      const contextEnd = Math.min(lines.length, lineNum + 2);
+      return lines.slice(contextStart, contextEnd).join(' ').trim().slice(0, maxLen);
+    }
+  }
+
+  // 3. Fallback: first N chars (but skip function declarations/boilerplate)
+  const meaningful = code.replace(/^(async\s+)?function\s+\w+\([^)]*\)\s*\{/, '').trim();
+  return meaningful.slice(0, maxLen).replace(/\n/g, ' ').trim();
+}
+
+// ── Serialization ──
 
 /**
  * Serialize a Figma node (or any value) into a JSON-safe representation.
@@ -105,45 +197,102 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
     }
   }
 
+  // Load past lessons to include in response
+  const lessons = await loadLessons();
+  const lessonsText = formatLessonsForAgent(lessons);
+
+  // Capture async Figma API validation errors (e.g. set_effects missing fields)
+  // These fire as unhandled promise rejections AFTER the property setter returns.
+  // Figma main thread has no `self`/`window` — use globalThis.onunhandledrejection.
+  const asyncErrors: string[] = [];
+  const prevHandler = (globalThis as any).onunhandledrejection;
+  (globalThis as any).onunhandledrejection = (event: any) => {
+    const msg = event?.reason?.message ?? String(event?.reason);
+    // Extract first meaningful line (skip verbose stack traces)
+    const firstLine = msg.split('\n')[0].slice(0, 200);
+    asyncErrors.push(firstLine);
+    if (event?.preventDefault) event.preventDefault();
+  };
+
   try {
     // Figma sandbox blocks eval(). Use FunctionConstructor() instead.
-    // Strategy: try expression form first, fall back to statement form.
-    // Arrow functions (=>) inside expression wrapping cause parse errors,
-    // so detect them and go straight to statement form.
     const hasReturn = /\breturn\b/.test(code);
     const hasArrow = /=>/.test(code);
 
     let result: unknown;
     if (hasReturn || hasArrow) {
-      // Statement form: code must use explicit return
-      // For arrow functions without return, wrap as: return <code>
       const body = hasReturn ? code : `return ${code}`;
       const fn = FunctionConstructor('figma', `return (async function() { ${body} })()`);
       result = await fn(figma);
     } else {
-      // Expression form: auto-return the expression value
       try {
         const fn = FunctionConstructor('figma', `return (async function() { return (${code}); })()`);
         result = await fn(figma);
       } catch {
-        // Fall back to statement form (multi-statement code without return)
         const fn = FunctionConstructor('figma', `return (async function() { ${code} })()`);
         result = await fn(figma);
       }
     }
 
-    // Serialize the result to JSON-safe format
+    // Flush microtask queue so Figma validation errors surface
+    await new Promise(r => setTimeout(r, 0));
+
+    (globalThis as any).onunhandledrejection = prevHandler;
+
     const serialized = serializeValue(result);
 
-    return { success: true, data: serialized };
+    if (asyncErrors.length > 0) {
+      // ── ERROR: auto-save to memory ──
+      const errorMsg = asyncErrors.join('; ');
+      const snippet = extractSnippet(code, errorMsg);
+      lessons.push({ error: errorMsg, errorCodeSnippet: snippet, timestamp: Date.now() });
+      await saveLessons(lessons);
+
+      const stderrParts = [`[Figma API errors]\n${asyncErrors.join('\n')}`];
+      if (lessonsText) stderrParts.unshift(lessonsText);
+
+      const response: ToolResponse = {
+        success: false,
+        error: { code: 'FIGMA_API_ERROR', message: errorMsg },
+      };
+      (response as any)._stderr = stderrParts.join('\n\n');
+      return response;
+    }
+
+    // ── SUCCESS: if there's an unresolved error, pair it with this fix ──
+    const lastUnresolved = lessons.length > 0 ? lessons[lessons.length - 1] : null;
+    if (lastUnresolved && !lastUnresolved.fixCodeSnippet) {
+      lastUnresolved.fixCodeSnippet = extractSnippet(code, lastUnresolved.error);
+      await saveLessons(lessons);
+    }
+
+    const response: ToolResponse = { success: true, data: serialized };
+    // Always include lessons as context so agent learns
+    if (lessonsText) {
+      (response as any)._stderr = lessonsText;
+    }
+    return response;
   } catch (e: any) {
+    (globalThis as any).onunhandledrejection = prevHandler;
+
+    // ── SYNC ERROR: also save to memory ──
+    const errorMsg = e?.message ?? String(e);
+    const snippet = extractSnippet(code, errorMsg);
+    lessons.push({ error: errorMsg, errorCodeSnippet: snippet, timestamp: Date.now() });
+    await saveLessons(lessons);
+
+    const allErrors = [errorMsg, ...asyncErrors];
+    const stderrParts = [`[Execution error]\n${allErrors.join('\n')}`];
+    if (lessonsText) stderrParts.unshift(lessonsText);
+
     return {
       success: false,
       error: {
         code: 'EXECUTION_ERROR',
-        message: e?.message ?? String(e),
+        message: allErrors.join('\n'),
         details: e?.stack?.split('\n').slice(0, 3).join('\n'),
       },
-    };
+      _stderr: stderrParts.join('\n\n'),
+    } as any;
   }
 }

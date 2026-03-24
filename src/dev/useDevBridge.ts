@@ -14,8 +14,13 @@ const RESULT_TIMEOUT_MS = 300_000 // Force post result if agent runs >5min
 type DevBridgeStatus = 'disconnected' | 'connected' | 'polling' | 'executing'
 type RunState = 'idle' | 'running' | 'canceled' | 'error'
 
+export interface GenerateOptions {
+  /** Restrict LLM to only these tools (e.g. ["jsx"]) */
+  toolFilter?: string[]
+}
+
 interface DevBridgeCallbacks {
-  generateFromPrompt: (prompt: string) => Promise<void>
+  generateFromPrompt: (prompt: string, options?: GenerateOptions) => Promise<void>
   handleRestore: () => void
   switchModel?: (provider: string, model: string) => void
 }
@@ -34,6 +39,8 @@ interface TriggerPayload {
   reset?: boolean
   /** Switch model before running. Format: "provider/model" e.g. "dashscope/kimi-k2.5" or "gemini/gemini-2.5-flash-preview-04-17" */
   model?: string
+  /** Restrict LLM to only these tools. E.g. ["jsx"] to cut off inspect/edit/run */
+  toolFilter?: string[]
 }
 
 async function fetchBridge(path: string, options?: RequestInit): Promise<Response | null> {
@@ -358,7 +365,9 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           await new Promise(r => setTimeout(r, 100))
         }
 
-        callbacksRef.current.generateFromPrompt(trigger.prompt)
+        callbacksRef.current.generateFromPrompt(trigger.prompt, {
+          toolFilter: trigger.toolFilter,
+        })
         // Don't loop immediately — wait for result to be posted (useEffect on runtimeState)
         // The long-poll will resume after triggerIdRef is cleared
       }

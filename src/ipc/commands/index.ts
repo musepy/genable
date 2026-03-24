@@ -11,7 +11,7 @@ import { findClosestCommand } from '../../engine/agent/tools/unified/commandRegi
 
 // Command handler groups
 import { registerSessionNodes } from './pathResolver';
-import { handleLs, handleTree, handleCat } from './readHandlers';
+import { handleTree, handleCat } from './readHandlers';
 import { handleMk, handleRm, handleMv, handleCp } from './writeHandlers';
 import { handleGrep, handleSed } from './searchHandlers';
 import { handleJs } from './jsHandler';
@@ -34,7 +34,6 @@ export type CommandHandler = (parameters: any) => Promise<ToolResponse>;
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   // Unix CLI commands
-  ls: handleLs,
   tree: handleTree,
   cat: handleCat,
   mk: handleMk,

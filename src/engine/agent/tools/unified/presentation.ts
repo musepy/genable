@@ -32,7 +32,6 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   rm:      ['deleted'],
   mv:      ['id', 'name'],
   // Read commands — LLM needs the content
-  ls:      ['listing'],
   tree:    ['tree'],
   cat:     null,                        // node fields spread to top level — pass through
   // Search commands
@@ -40,8 +39,13 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   sed:     ['replaced', 'details'],
   // Info
   man:     null,                        // pass through
-  // First-class tools
-  inspect: null,                        // delegates to ls/tree/cat — pass through
+  // First-class tools — inspect keeps node data, strips metadata
+  inspect: ['page', 'count', 'children', 'tree',
+            'type', 'id', 'name', 'role', 'size', 'visual', 'layout', 'summary',
+            'content', 'width', 'height', 'fill', 'fills', 'stroke', 'shadow',
+            'padding', 'gap', 'radius', 'fontSize', 'fontWeight', 'fontFamily',
+            'opacity', 'sizingH', 'sizingV', 'alignMain', 'alignCross', 'childCount',
+            '__image'],
   jsx:     null,                        // node fields spread to top level — pass through
   // Legacy tool names
   design:  ['idMap', 'created', 'edited', 'deleted', 'failed', 'errors', 'degraded', 'degradedHint'],
@@ -51,9 +55,8 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
 
 /** Overflow hints per command — contextual help for the LLM. */
 const OVERFLOW_HINTS: Record<string, string> = {
-  ls: 'Use tree -d 2 for overview or cat /path/ for specific node.',
-  tree: 'Use cat /path/ for specific subtree.',
-  cat: 'Use tree to discover structure, then cat specific children.',
+  tree: 'Use inspect with mode "detail" for specific node properties.',
+  cat: 'Use inspect with mode "tree" to discover structure, then detail specific children.',
   grep: 'Narrow the search query or target a specific path.',
 };
 

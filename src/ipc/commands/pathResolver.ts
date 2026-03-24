@@ -55,9 +55,50 @@ export async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
 // ── VFS path resolution ──
 
 export async function resolvePathToNode(path: string): Promise<PathResolved> {
-  const segments = path.split('/').filter(s => s.length > 0);
-
   // "/" → current page
+  if (path === '/' || path === '') {
+    return { ok: true, isPage: true, page: figma.currentPage };
+  }
+
+  // name#id format: "Card#1:2" → resolve by Figma ID
+  const nameIdMatch = path.match(/^(.+)#(\d+:\d+)$/);
+  if (nameIdMatch) {
+    const nodeId = nameIdMatch[2];
+    const node = await figma.getNodeByIdAsync(nodeId);
+    if (!node) {
+      return {
+        ok: false,
+        response: {
+          success: false,
+          error: {
+            code: 'NODE_NOT_FOUND',
+            message: `Node "${path}" not found. Use inspect({node: "/"}) to discover available nodes.`,
+          },
+        },
+      };
+    }
+    if (!('visible' in node)) {
+      return {
+        ok: false,
+        response: {
+          success: false,
+          error: {
+            code: 'INVALID_NODE_TYPE',
+            message: `"${node.name}" (${node.type}) is not a design node.`,
+          },
+        },
+      };
+    }
+    return { ok: true, isPage: false, node: node as SceneNode };
+  }
+
+  // Legacy path format — delegate to legacy resolver for backward compatibility (writeHandlers etc.)
+  return resolvePathToNodeLegacy(path);
+}
+
+/** Legacy path resolution for writeHandlers/compHandlers that still use path segments. */
+async function resolvePathToNodeLegacy(path: string): Promise<PathResolved> {
+  const segments = path.split('/').filter(s => s.length > 0);
   if (segments.length === 0) {
     return { ok: true, isPage: true, page: figma.currentPage };
   }
@@ -66,110 +107,40 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
 
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
-
-    // Parent navigation: ".." → go up to parent node
     if (segment === '..') {
-      if (current.parent && current.parent.type !== 'DOCUMENT') {
-        current = current.parent;
-      }
-      // At page level, ".." is a no-op (can't go above page)
+      if (current.parent && current.parent.type !== 'DOCUMENT') current = current.parent;
       continue;
     }
-
-    // Current directory: "." → no-op
     if (segment === '.') continue;
 
-    // name#id format: "Card#1:2" → resolve by Figma ID (name is display-only)
-    const nameIdMatch = segment.match(/^(.+)#(\d+:\d+)$/);
-    if (nameIdMatch) {
-      const nodeId = nameIdMatch[2];
-      const node = await figma.getNodeByIdAsync(nodeId);
+    const segNameId = segment.match(/^(.+)#(\d+:\d+)$/);
+    if (segNameId) {
+      const node = await figma.getNodeByIdAsync(segNameId[2]);
       if (!node) {
-        return {
-          ok: false,
-          response: {
-            success: false,
-            error: {
-              code: 'PATH_NOT_FOUND',
-              message: `Node ID "${nodeId}" not found. Use inspect({path: "/"}) to discover available nodes.`,
-            },
-          },
-        };
+        return { ok: false, response: { success: false, error: { code: 'PATH_NOT_FOUND', message: `Node ID "${segNameId[2]}" not found.` } } };
       }
       current = node;
       continue;
     }
 
-    // Explicit ID prefix: #1058:12304 → resolve by Figma ID
-    if (segment.startsWith('#')) {
-      const nodeId = segment.slice(1);
-      const node = await figma.getNodeByIdAsync(nodeId);
-      if (!node) {
-        return {
-          ok: false,
-          response: {
-            success: false,
-            error: {
-              code: 'PATH_NOT_FOUND',
-              message: `Node ID "${nodeId}" not found. Use ls("/") to discover available nodes.`,
-            },
-          },
-        };
-      }
-      current = node;
-      continue;
-    }
-
-    // All segments are name-based by default — no implicit ID guessing
     if (!('children' in current)) {
-      return {
-        ok: false,
-        response: {
-          success: false,
-          error: {
-            code: 'NOT_A_CONTAINER',
-            message: `"${current.name}" (${current.type.toLowerCase()}) has no children — cannot navigate to "${segment}". Use cat to read its properties instead.`,
-          },
-        },
-      };
+      return { ok: false, response: { success: false, error: { code: 'NOT_A_CONTAINER', message: `"${current.name}" has no children.` } } };
     }
-
     const children = (current as any).children as readonly BaseNode[];
-    // Prefer session nodes when multiple siblings share the same name
     const candidates = children.filter(c => c.name === segment);
     const match = candidates.length > 1
       ? (candidates.find(c => sessionNodeIds.has(c.id)) ?? candidates[0])
       : candidates[0];
     if (!match) {
       const available = children.slice(0, 15).map(c => c.name);
-      const suffix = children.length > 15 ? `, ... (${children.length} total)` : '';
-      return {
-        ok: false,
-        response: {
-          success: false,
-          error: {
-            code: 'PATH_NOT_FOUND',
-            message: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}${suffix}`,
-          },
-        },
-      };
+      return { ok: false, response: { success: false, error: { code: 'PATH_NOT_FOUND', message: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}` } } };
     }
     current = match;
   }
 
   if (!('visible' in current)) {
-    return {
-      ok: false,
-      response: {
-        success: false,
-        error: {
-          code: 'INVALID_NODE_TYPE',
-          message: `"${current.name}" (${current.type}) is not a design node. Use ls on parent path to find valid design nodes.`,
-        },
-      },
-    };
+    return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `"${current.name}" (${current.type}) is not a design node.` } } };
   }
-
   return { ok: true, isPage: false, node: current as SceneNode };
 }
 

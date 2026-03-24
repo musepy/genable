@@ -8,110 +8,9 @@
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
-import { CONTEXT_CONSTANTS } from '../../engine/agent/context/constants';
 import { logger } from '../../utils/logger';
-import { resolvePathToNode, hasGlob, resolveGlobPaths, buildNodePath, buildNodeRef, isSessionNode } from './pathResolver';
+import { resolvePathToNode, buildNodeRef } from './pathResolver';
 import { exportNodeToBase64 } from './shared';
-
-// ── ls ──
-
-function formatLsEntry(node: SceneNode): string {
-  const hasChildren = 'children' in node && (node as any).children.length > 0;
-  const ref = buildNodeRef(node);
-  const name = hasChildren ? `${ref}/` : ref;
-  const type = node.type.toLowerCase();
-  const w = Math.round(node.width);
-  const h = Math.round(node.height);
-
-  const props: string[] = [];
-  if ('layoutMode' in node && (node as any).layoutMode !== 'NONE') {
-    props.push(`layout:${(node as any).layoutMode === 'HORIZONTAL' ? 'row' : 'column'}`);
-  }
-  if ('itemSpacing' in node && typeof (node as any).itemSpacing === 'number' && (node as any).itemSpacing > 0) {
-    props.push(`gap:${(node as any).itemSpacing}`);
-  }
-  if (node.type === 'TEXT') {
-    const text = (node as any).characters as string;
-    const preview = text.length > 30 ? text.slice(0, 27) + '...' : text;
-    props.push(`"${preview}"`);
-  }
-
-  const propsStr = props.length > 0 ? `  ${props.join('  ')}` : '';
-  const isOwned = isSessionNode(node.id) || node.getPluginData('_agent') === 'created';
-  const sessionTag = isOwned ? '  [yours]' : '';
-  return `${name.padEnd(24)} ${type.padEnd(8)} ${w}×${h}${propsStr}${sessionTag}`;
-}
-
-export async function handleLs(parameters: any): Promise<ToolResponse> {
-  const lsPath = parameters.path || '/';
-
-  // Glob support
-  if (hasGlob(lsPath)) {
-    const globNodes = await resolveGlobPaths(lsPath);
-    if (globNodes.length === 0) {
-      return { success: false, error: { code: 'NO_MATCH', message: `No nodes matched pattern "${lsPath}".` } };
-    }
-    const lines = globNodes.map(n => formatLsEntry(n));
-    return {
-      success: true,
-      data: {
-        listing: lines.join('\n'),
-        container: `glob(${lsPath})`,
-        count: globNodes.length,
-        footer: `[${globNodes.length} matches]`,
-      },
-    };
-  }
-
-  const resolved = await resolvePathToNode(lsPath);
-  if (!resolved.ok) return resolved.response;
-
-  let children: readonly SceneNode[];
-  let containerName: string;
-
-  if (resolved.isPage) {
-    children = resolved.page.children;
-    containerName = resolved.page.name;
-  } else {
-    const node = resolved.node;
-    if (!('children' in node)) {
-      return {
-        success: false,
-        error: {
-          code: 'NOT_A_CONTAINER',
-          message: `"${node.name}" (${node.type.toLowerCase()}) has no children. Use cat("${lsPath}") to see its properties.`,
-        },
-      };
-    }
-    children = (node as any).children as SceneNode[];
-    containerName = node.name;
-  }
-
-  const lines: string[] = [];
-  for (const child of children) {
-    lines.push(formatLsEntry(child));
-  }
-
-  const page = figma.currentPage;
-  const footer = `[${children.length} items | page: "${page.name}"]`;
-
-  let selectionInfo = '';
-  if (resolved.isPage && page.selection.length > 0) {
-    const sel = page.selection.slice(0, 5).map(n => n.name).join(', ');
-    const more = page.selection.length > 5 ? ` (+${page.selection.length - 5} more)` : '';
-    selectionInfo = `\nSelection: ${sel}${more}`;
-  }
-
-  return {
-    success: true,
-    data: {
-      listing: lines.join('\n'),
-      container: containerName,
-      count: children.length,
-      footer: footer + selectionInfo,
-    },
-  };
-}
 
 // ── tree ──
 
@@ -224,30 +123,6 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
   const catDepth = Math.min(parameters.depth || 5, 10);
   const wantScreenshot = parameters.screenshot;
 
-  // Glob support
-  if (hasGlob(catPath)) {
-    const globNodes = await resolveGlobPaths(catPath);
-    if (globNodes.length === 0) {
-      return { success: false, error: { code: 'NO_MATCH', message: `No nodes matched pattern "${catPath}".` } };
-    }
-    const entries: any[] = [];
-    for (const gNode of globNodes.slice(0, 10)) {
-      const serialized = NodeSerializer.serializeWithCompression(gNode, { maxDepth: catDepth, pruneDefaults: true });
-      const nodeJson = JsonNodeSerializer.serialize(serialized, { maxDepth: catDepth });
-      entries.push(nodeJson);
-    }
-    return {
-      success: true,
-      data: {
-        pattern: catPath,
-        matches: entries.length,
-        total: globNodes.length,
-        nodes: entries,
-        truncated: globNodes.length > 10,
-      },
-    };
-  }
-
   const resolved = await resolvePathToNode(catPath);
   if (!resolved.ok) return resolved.response;
 
@@ -262,7 +137,7 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
       data: {
         page: { name: page.name, childCount: page.children.length },
         children: topLevel,
-        hint: 'Use ls("/") or tree("/") to navigate, cat("/NodeName/") for full details.',
+        hint: 'Use inspect({node: "/"}) to see structure.',
       },
     };
   }
@@ -273,26 +148,9 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
     pruneDefaults: true,
   });
 
-  // JSON output (primary) with flat-ops fallback for large nodes
   const catJson = JsonNodeSerializer.serialize(catSerialized, { maxDepth: catDepth });
-  const catJsonStr = JSON.stringify(catJson);
   const catData: any = {};
-  const AUTO_DEGRADE_CHARS = CONTEXT_CONSTANTS.READ_AUTO_DEGRADE_CHARS;
-
-  if (catJsonStr.length > AUTO_DEGRADE_CHARS) {
-    // Large node: structural JSON (minimal properties)
-    const catStructural = JsonNodeSerializer.serialize(catSerialized, {
-      maxDepth: catDepth,
-      structural: true,
-    });
-    // Spread node fields directly into data (no `node` wrapper)
-    Object.assign(catData, catStructural);
-    const childCount = 'children' in catNode ? (catNode as any).children.length : 0;
-    catData.hint = `Large node (${childCount} children, ${catJsonStr.length} chars). Use tree("${catPath}") to discover structure, then cat specific children.`;
-  } else {
-    // Spread node fields directly into data (no `node` wrapper)
-    Object.assign(catData, catJson);
-  }
+  Object.assign(catData, catJson);
 
   if (wantScreenshot && catNode.visible && catNode.width > 0 && catNode.height > 0) {
     try {

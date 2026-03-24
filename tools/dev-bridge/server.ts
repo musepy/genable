@@ -19,7 +19,11 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { mkdir, readFile, writeFile, rm, readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3456;
 const BRIDGE_DIR = process.env.BRIDGE_DIR || '/tmp/figma-bridge';
@@ -466,6 +470,27 @@ const server = createServer(async (req, res) => {
     } else if (path.match(/^\/recordings\/[^/]+\/events$/) && method === 'GET') {
       const id = path.split('/')[2];
       await handleRecordingEvents(id, res);
+    } else if (path.match(/^\/recordings\/[^/]+\/screenshot$/) && method === 'GET') {
+      const id = path.split('/')[2];
+      const screenshotPath = join(RESULT_DIR, id, 'screenshot.png');
+      try {
+        const buf = await readFile(screenshotPath);
+        cors(res);
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end(buf);
+      } catch {
+        json(res, 404, { error: 'Screenshot not found' });
+      }
+    } else if (path === '/dashboard' && method === 'GET') {
+      const htmlPath = join(__dirname, 'dashboard.html');
+      try {
+        const html = await readFile(htmlPath, 'utf-8');
+        cors(res);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(html);
+      } catch {
+        json(res, 500, { error: 'Dashboard file not found' });
+      }
     } else {
       json(res, 404, { error: 'Not found' });
     }
@@ -495,7 +520,9 @@ async function main() {
     console.log(`  GET  /result/:id      - read specific result`);
     console.log(`  GET  /result/:id?wait=120 - long-poll until result ready`);
     console.log(`  GET  /recordings      - list recordings with runtime events`);
-    console.log(`  GET  /recordings/:id/events - get runtime events for replay\n`);
+    console.log(`  GET  /recordings/:id/events - get runtime events for replay`);
+    console.log(`  GET  /recordings/:id/screenshot - get screenshot PNG`);
+    console.log(`  GET  /dashboard       - agent timeline dashboard\n`);
   });
 }
 

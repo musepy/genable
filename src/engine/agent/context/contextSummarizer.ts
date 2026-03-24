@@ -159,7 +159,7 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
 
     // Already compressed by turnResultCompressor — reuse its summary directly
     if (resp._compressed && resp.summary) {
-      const brief = resp.success === false
+      const brief = resp.error != null
         ? `FAIL: ${resp.summary}`
         : resp.summary;
       let pendingIdx = -1;
@@ -174,7 +174,7 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
       continue;
     }
 
-    const ok = resp.success !== false;
+    const ok = resp.error == null;
     const brief = ok
       ? summarizeSuccessResult(name, resp)
       : summarizeFailResult(name, resp);

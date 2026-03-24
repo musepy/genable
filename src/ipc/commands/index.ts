@@ -54,7 +54,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   'scan-tokens': handleScanTokens,
   // man is handled locally in sandbox — should not arrive at IPC
   man: async () => ({
-    success: false as const,
     error: { code: 'LOCAL_ONLY', message: 'man command is handled locally. This is an internal routing error.' },
   }),
 };
@@ -71,7 +70,6 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
     const suggestion = findClosestCommand(toolName);
     const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
     return {
-      success: false,
       error: {
         code: 'UNKNOWN_TOOL',
         message: `Unknown command "${toolName}".${hint} Available: ${Object.keys(COMMAND_HANDLERS).join(', ')}`,
@@ -82,7 +80,7 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
   const result = await handler(parameters);
 
   // Auto-register created node IDs for session-scoped path preference
-  if (result.success && result.data?.idMap) {
+  if (!result.error && result.data?.idMap) {
     registerSessionNodes(Object.values(result.data.idMap));
   }
 

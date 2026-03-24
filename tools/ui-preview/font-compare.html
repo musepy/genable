@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genable Font Comparison</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&family=DM+Sans:wght@400;500&family=DM+Mono:wght@400&family=Space+Grotesk:wght@400;500&family=Space+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-size: 13px; line-height: 1.5;
+      color: #202020;
+      background: #e8e8e8;
+      padding: 32px;
+    }
+    h1 {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px; font-weight: 500;
+      color: #646464; text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .grid {
+      display: flex; flex-wrap: wrap;
+      gap: 32px; justify-content: center;
+    }
+
+    .card {
+      width: 320px;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .card-label {
+      padding: 10px 16px;
+      background: #f9f9f9;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; color: #8d8d8d;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .card-body { padding: 16px; }
+
+    /* ===== Simulated plugin UI per font ===== */
+    .sim-header {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 12px;
+    }
+    .sim-chip {
+      padding: 3px 8px;
+      border: 1px solid #e8e8e8;
+      border-radius: 9999px;
+      font-size: 12px; font-weight: 500;
+    }
+    .sim-spacer { flex: 1; }
+    .sim-icon { color: #8d8d8d; font-size: 14px; }
+
+    .sim-msg-user {
+      padding: 5px 8px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      font-size: 12px; line-height: 18px;
+      margin-bottom: 6px;
+    }
+    .sim-msg-ai {
+      padding: 5px 8px;
+      font-size: 12px; line-height: 18px;
+      color: #202020;
+      margin-bottom: 8px;
+    }
+    .sim-tool {
+      font-size: 12px; color: #8d8d8d;
+      display: flex; align-items: baseline; gap: 4px;
+      margin-bottom: 8px;
+    }
+    .sim-tool .bracket { color: #d9d9d9; font-size: 13px; }
+
+    .sim-input {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 0 1px #e8e8e8;
+      padding: 8px 12px;
+      font-size: 12px; color: #8d8d8d;
+      margin-top: 4px;
+    }
+    .sim-input-footer {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding-top: 8px;
+      font-size: 11px; color: #bbbbbb;
+    }
+
+    .sim-label {
+      font-size: 12px; font-weight: 400;
+      color: #646464; margin-bottom: 4px;
+    }
+    .sim-model {
+      font-size: 12px; color: #3e63dd;
+      padding: 4px 8px;
+      background: #edf2fe;
+      border-radius: 8px;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+    .sim-model-item {
+      font-size: 12px; color: #8d8d8d;
+      padding: 4px 8px;
+    }
+
+    /* Mono specimen */
+    .mono-specimen {
+      font-size: 11px;
+      color: #646464;
+      background: #f9f9f9;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-top: 8px;
+      line-height: 16px;
+    }
+
+    /* Size specimens */
+    .size-row {
+      display: flex; align-items: baseline;
+      gap: 12px; margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #f0f0f0;
+    }
+    .size-row span {
+      color: #bbbbbb; font-size: 10px;
+      font-family: 'Inter', sans-serif;
+      width: 28px; text-align: right;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Genable — Font Comparison at Actual Plugin Size (320px)</h1>
+
+<div class="grid">
+
+<!-- ===== A: Inter (current) ===== -->
+<div class="card" style="font-family:'Inter',sans-serif">
+  <div class="card-label">Current — Inter</div>
+  <div class="card-body">
+    <div class="sim-header">
+      <div class="sim-chip">+ New Design</div>
+      <div class="sim-spacer"></div>
+      <span class="sim-icon">☾</span>
+      <span class="sim-icon">≡</span>
+    </div>
+    <div class="sim-msg-user">Design a login page with email and password</div>
+    <div class="sim-tool">
+      <span class="bracket">⎿</span>
+      <span>Create Node "login-card"</span>
+    </div>
+    <div class="sim-msg-ai">I've created a login page with email and password fields, a "Sign In" button, and social login options.</div>
+    <div class="sim-input">Describe your design...</div>
+    <div class="sim-input-footer">
+      <span>+</span>
+      <span>gemini-2.0-flash ↑</span>
+    </div>
+    <div class="size-row">
+      <span>11px</span>
+      <span style="font-size:11px;color:#202020">Keys stored locally in Figma client storage.</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>12px</span>
+      <span style="font-size:12px;color:#202020">Available Models · gemini-2.0-flash</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>13px</span>
+      <span style="font-size:13px;color:#202020;font-weight:500">Setup Connection</span>
+    </div>
+    <div class="mono-specimen" style="font-family:'Courier New',monospace">
+      mono: {"type":"FRAME","name":"login-card"}
+    </div>
+  </div>
+</div>
+
+<!-- ===== B: IBM Plex Sans ===== -->
+<div class="card" style="font-family:'IBM Plex Sans',sans-serif">
+  <div class="card-label">Option A — IBM Plex Sans</div>
+  <div class="card-body">
+    <div class="sim-header">
+      <div class="sim-chip">+ New Design</div>
+      <div class="sim-spacer"></div>
+      <span class="sim-icon">☾</span>
+      <span class="sim-icon">≡</span>
+    </div>
+    <div class="sim-msg-user">Design a login page with email and password</div>
+    <div class="sim-tool">
+      <span class="bracket">⎿</span>
+      <span>Create Node "login-card"</span>
+    </div>
+    <div class="sim-msg-ai">I've created a login page with email and password fields, a "Sign In" button, and social login options.</div>
+    <div class="sim-input">Describe your design...</div>
+    <div class="sim-input-footer">
+      <span>+</span>
+      <span>gemini-2.0-flash ↑</span>
+    </div>
+    <div class="size-row">
+      <span>11px</span>
+      <span style="font-size:11px;color:#202020">Keys stored locally in Figma client storage.</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>12px</span>
+      <span style="font-size:12px;color:#202020">Available Models · gemini-2.0-flash</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>13px</span>
+      <span style="font-size:13px;color:#202020;font-weight:500">Setup Connection</span>
+    </div>
+    <div class="mono-specimen" style="font-family:'IBM Plex Mono',monospace">
+      mono: {"type":"FRAME","name":"login-card"}
+    </div>
+  </div>
+</div>
+
+<!-- ===== C: DM Sans ===== -->
+<div class="card" style="font-family:'DM Sans',sans-serif">
+  <div class="card-label">Option B — DM Sans (recommended)</div>
+  <div class="card-body">
+    <div class="sim-header">
+      <div class="sim-chip">+ New Design</div>
+      <div class="sim-spacer"></div>
+      <span class="sim-icon">☾</span>
+      <span class="sim-icon">≡</span>
+    </div>
+    <div class="sim-msg-user">Design a login page with email and password</div>
+    <div class="sim-tool">
+      <span class="bracket">⎿</span>
+      <span>Create Node "login-card"</span>
+    </div>
+    <div class="sim-msg-ai">I've created a login page with email and password fields, a "Sign In" button, and social login options.</div>
+    <div class="sim-input">Describe your design...</div>
+    <div class="sim-input-footer">
+      <span>+</span>
+      <span>gemini-2.0-flash ↑</span>
+    </div>
+    <div class="size-row">
+      <span>11px</span>
+      <span style="font-size:11px;color:#202020">Keys stored locally in Figma client storage.</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>12px</span>
+      <span style="font-size:12px;color:#202020">Available Models · gemini-2.0-flash</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>13px</span>
+      <span style="font-size:13px;color:#202020;font-weight:500">Setup Connection</span>
+    </div>
+    <div class="mono-specimen" style="font-family:'DM Mono',monospace">
+      mono: {"type":"FRAME","name":"login-card"}
+    </div>
+  </div>
+</div>
+
+<!-- ===== D: Space Grotesk ===== -->
+<div class="card" style="font-family:'Space Grotesk',sans-serif">
+  <div class="card-label">Option C — Space Grotesk</div>
+  <div class="card-body">
+    <div class="sim-header">
+      <div class="sim-chip">+ New Design</div>
+      <div class="sim-spacer"></div>
+      <span class="sim-icon">☾</span>
+      <span class="sim-icon">≡</span>
+    </div>
+    <div class="sim-msg-user">Design a login page with email and password</div>
+    <div class="sim-tool">
+      <span class="bracket">⎿</span>
+      <span>Create Node "login-card"</span>
+    </div>
+    <div class="sim-msg-ai">I've created a login page with email and password fields, a "Sign In" button, and social login options.</div>
+    <div class="sim-input">Describe your design...</div>
+    <div class="sim-input-footer">
+      <span>+</span>
+      <span>gemini-2.0-flash ↑</span>
+    </div>
+    <div class="size-row">
+      <span>11px</span>
+      <span style="font-size:11px;color:#202020">Keys stored locally in Figma client storage.</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>12px</span>
+      <span style="font-size:12px;color:#202020">Available Models · gemini-2.0-flash</span>
+    </div>
+    <div class="size-row" style="border:none;padding-top:4px">
+      <span>13px</span>
+      <span style="font-size:13px;color:#202020;font-weight:500">Setup Connection</span>
+    </div>
+    <div class="mono-specimen" style="font-family:'Space Mono',monospace">
+      mono: {"type":"FRAME","name":"login-card"}
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

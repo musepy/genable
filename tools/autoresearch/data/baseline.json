@@ -1,0 +1,201 @@
+{
+  "timestamp": "2026-03-22T02:51:47.108Z",
+  "gitCommit": "30cc5f9",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774147603423",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.7857142857142857,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.625,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 16,
+          "maxDepth": 3,
+          "durationSec": 18.787
+        },
+        "score": 92.2,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774147624564",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.8101694915254236,
+          "fillCompleteness": 0.6694915254237288,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.75,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 142,
+          "maxDepth": 8,
+          "durationSec": 72.241
+        },
+        "score": 88.2,
+        "issues": [
+          "Frame \"Logo Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Search Icon\" has 1 children but no auto-layout",
+          "Frame \"Bell\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774147699937",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.7952830188679241,
+          "fillCompleteness": 0.6320754716981132,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.6639344262295082,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 235,
+          "maxDepth": 8,
+          "durationSec": 68.277
+        },
+        "score": 86.2,
+        "issues": [
+          "Frame \"Logo Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Search Icon\" has 1 children but no auto-layout",
+          "Frame \"Bell\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774147771305",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.820661157024793,
+          "fillCompleteness": 0.640495867768595,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.6527777777777778,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 272,
+          "maxDepth": 8,
+          "durationSec": 43.841
+        },
+        "score": 86.7,
+        "issues": [
+          "Frame \"Logo Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Search Icon\" has 1 children but no auto-layout",
+          "Frame \"Bell\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774147818052",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.8362573099415203,
+          "fillCompleteness": 0.6441717791411042,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.6649484536082474,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.6666666666666667,
+          "nodeCount": 364,
+          "maxDepth": 8,
+          "durationSec": 88.093
+        },
+        "score": 84,
+        "issues": [
+          "Frame \"Logo Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Search Icon\" has 1 children but no auto-layout",
+          "Frame \"Bell\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Arrow\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout",
+          "Frame \"Check\" has 1 children but no auto-layout"
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 87.46000000000001,
+    "minScore": 84,
+    "maxScore": 92.2,
+    "totalDurationSec": 291.23900000000003,
+    "totalNodes": 1029,
+    "totalIssues": 76
+  }
+}

@@ -71,9 +71,9 @@ export interface ToolParameter {
 
 /**
  * Standardized response format from a tool execution.
+ * Error present = failure. Absence of error = success.
  */
 export interface ToolResponse<T = any> {
-  success: boolean;
   data?: T;
   error?: {
     code: string;

@@ -1,0 +1,52 @@
+{
+  "round": 3,
+  "timestamp": "2026-03-22T03:12:15.242Z",
+  "target_dimension": "spacingCompleteness",
+  "hypothesis": "The LLM treats SPACING as optional polish rather than mandatory structure, causing it to omit padding and gap values when creating frames.",
+  "edits": [
+    {
+      "op": "modify_rule",
+      "section": "The quality ladder",
+      "old_pattern": "- **Functional** (dimensions 1–2): wireframe — structure and sizing only\n- **Standard** (+ 3–4): looks designed — spacing rhythm + visual surfaces\n- **Polished** (+ 5–7): looks professional — rounded corners, shadows, borders",
+      "new_rule": "- **Functional** (dimensions 1–3): wireframe — structure, sizing, AND spacing (padding/gap) required for all containers\n- **Standard** (+ 4): looks designed — visual surfaces (bg, fill)\n- **Polished** (+ 5–7): looks professional — rounded corners, shadows, borders"
+    },
+    {
+      "op": "add_rule",
+      "section": "Frame — 7 dimensions",
+      "rule": "**SPACING is non-optional**: Every frame with children MUST have explicit `p` (padding) and `gap` values. Default to `p={16}` and `gap={8}` when unspecified."
+    }
+  ],
+  "baseline_scores": {
+    "layoutCompleteness": 85.24741954719322,
+    "fillCompleteness": 67.43897859491655,
+    "textCompleteness": 100,
+    "sizingCompleteness": 100,
+    "spacingCompleteness": 67.13321315231066,
+    "toolEfficiency": 100,
+    "errorFreeRate": 93.33333333333333,
+    "composite": 87.46000000000001
+  },
+  "result_scores": {
+    "layoutCompleteness": 83.54467503390056,
+    "fillCompleteness": 61.32284735644969,
+    "textCompleteness": 100,
+    "sizingCompleteness": 100,
+    "spacingCompleteness": 62.754258390907225,
+    "toolEfficiency": 100,
+    "errorFreeRate": 93.33333333333333,
+    "composite": 85.78
+  },
+  "deltas": {
+    "layoutCompleteness": -1.7027445132926573,
+    "fillCompleteness": -6.116131238466856,
+    "textCompleteness": 0,
+    "sizingCompleteness": 0,
+    "spacingCompleteness": -4.378954761403435,
+    "toolEfficiency": 0,
+    "errorFreeRate": 0,
+    "composite": -1.6800000000000068
+  },
+  "decision": "REVERT",
+  "reasoning": "Regressions on: fillCompleteness -6.1",
+  "prompt_diff": "diff --git a/src/prompts/CORE.md b/src/prompts/CORE.md\nindex 6fa1460..5730074 100644\n--- a/src/prompts/CORE.md\n+++ b/src/prompts/CORE.md\n@@ -52,6 +52,7 @@ For each node, make an explicit design decision on every applicable dimension.\n | 6 | **BORDER** | Visible edges | `stroke:'1 #E5E7EB'` |\n | 7 | **DEPTH** | Elevation | `shadow:'0,4,16,0,#0000001A'` |\n \n+- **SPACING is non-optional**: Every frame with children MUST have explicit `p` (padding) and `gap` values. Default to `p={16}` and `gap={8}` when unspecified.\n ### Text — 4 dimensions\n | # | Dimension | Think about... | Props |\n |---|---|---|---|\n@@ -61,8 +62,8 @@ For each node, make an explicit design decision on every applicable dimension.\n | 4 | **OVERFLOW** | Long content handling | `textTruncation`, `maxLines` |\n \n ### The quality ladder\n-- **Functional** (dimensions 1–2): wireframe — structure and sizing only\n-- **Standard** (+ 3–4): looks designed — spacing rhythm + visual surfaces\n+- **Functional** (dimensions 1–3): wireframe — structure, sizing, AND spacing (padding/gap) required for all containers\n+- **Standard** (+ 4): looks designed — visual surfaces (bg, fill)\n - **Polished** (+ 5–7): looks professional — rounded corners, shadows, borders\n \n Dimensions 1–4 define the design. Dimensions 5–7 add polish — omit when not needed.\n"
+}

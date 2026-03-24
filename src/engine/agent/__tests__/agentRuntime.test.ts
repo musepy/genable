@@ -71,7 +71,7 @@ describe('AgentRuntime', () => {
         dispose: vi.fn()
     } as any;
 
-    mockIpcBridge.callTool.mockResolvedValue({ success: true, data: 'Some info' });
+    mockIpcBridge.callTool.mockResolvedValue({ data: 'Some info' });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
@@ -126,7 +126,7 @@ describe('AgentRuntime', () => {
 
     const firstToolTurn = (mockProvider.formatToolResults as any).mock.calls[0][0];
     const firstResponse = firstToolTurn[0].response;
-    expect(firstResponse.success).toBe(false);
+    expect(firstResponse.error).toBeDefined();
     expect(firstResponse.error.code).toBe('UNKNOWN_COMMAND');
     expect(firstResponse.error.message).toContain('Unknown command');
   });
@@ -179,7 +179,7 @@ describe('AgentRuntime', () => {
     });
 
     const mockIpcBridge = {
-      callTool: vi.fn().mockResolvedValue({ success: true, data: {} }),
+      callTool: vi.fn().mockResolvedValue({ data: {} }),
       dispose: vi.fn()
     } as any;
 
@@ -218,7 +218,7 @@ describe('AgentRuntime', () => {
 
   it('should complete after mutation with text-only response (implicit completion)', async () => {
     const toolExecutors = {
-      patchNode: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1', modified: true } }),
+      patchNode: vi.fn().mockResolvedValue({ data: { nodeId: '1:1', modified: true } }),
     };
 
     (mockProvider.generate as any)
@@ -247,8 +247,8 @@ describe('AgentRuntime', () => {
   it('should allow LLM to self-inspect before completing (autonomous choice)', async () => {
     // LLM autonomously decides to inspect, then complete — not forced by Runtime
     const toolExecutors = {
-      patchNode: vi.fn().mockResolvedValue({ success: true, data: { nodeId: '1:1', modified: true } }),
-      inspectDesign: vi.fn().mockResolvedValue({ success: true, data: { id: '1:1', type: 'FRAME' } }),
+      patchNode: vi.fn().mockResolvedValue({ data: { nodeId: '1:1', modified: true } }),
+      inspectDesign: vi.fn().mockResolvedValue({ data: { id: '1:1', type: 'FRAME' } }),
     };
 
     (mockProvider.generate as any)

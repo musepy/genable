@@ -1313,8 +1313,8 @@ export class ActionExecutor {
     const style = fontBus.buildStyleString(weight, isItalic);
 
     // Default font loading
-    const { success, loadedStyle } = await fontBus.getOrLoad(family, style);
-    if (!success && loadedStyle !== style) {
+    const { loadedStyle, error } = await fontBus.getOrLoad(family, style);
+    if (error && loadedStyle !== style) {
        warnings.push({
            code: 'FONT_FALLBACK',
            severity: 'warning',

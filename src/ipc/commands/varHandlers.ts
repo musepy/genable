@@ -22,7 +22,6 @@ export async function handleVar(parameters: any): Promise<ToolResponse> {
     case 'alias': return handleVarAlias(parameters);
     default:
       return {
-        success: false,
         error: { code: 'UNKNOWN_SUBCOMMAND', message: `Unknown var subcommand "${sub}". Use: ls, mk, bind, alias` },
       };
   }
@@ -38,7 +37,7 @@ async function handleVarLs(params: any): Promise<ToolResponse> {
   const allVariables = await figma.variables.getLocalVariablesAsync();
 
   if (collections.length === 0) {
-    return { success: true, data: { listing: '(no variable collections)', count: 0 } };
+    return { data: { listing: '(no variable collections)', count: 0 } };
   }
 
   const lines: string[] = [];
@@ -104,7 +103,6 @@ async function handleVarLs(params: any): Promise<ToolResponse> {
   }
 
   return {
-    success: true,
     data: {
       listing: lines.join('\n'),
       count: totalVars,
@@ -122,13 +120,13 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
   const modeName = params.mode as string | undefined;
 
   if (!varPath) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: var mk <collection/name> <TYPE> <value>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: var mk <collection/name> <TYPE> <value>' } };
   }
 
   // Parse collection/name from path
   const slashIdx = varPath.indexOf('/');
   if (slashIdx < 0) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Variable path must include collection: var mk <collection/name> <TYPE> <value>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Variable path must include collection: var mk <collection/name> <TYPE> <value>' } };
   }
   const collectionName = varPath.slice(0, slashIdx);
   const variableName = varPath.slice(slashIdx + 1);
@@ -146,7 +144,7 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
   // Determine type
   const type = normalizeVarType(rawType || guessType(rawValue || '', varPath));
   if (!type) {
-    return { success: false, error: { code: 'INVALID_TYPE', message: `Cannot determine variable type. Specify explicitly: var mk ${varPath} COLOR|FLOAT|BOOLEAN|STRING <value>` } };
+    return { error: { code: 'INVALID_TYPE', message: `Cannot determine variable type. Specify explicitly: var mk ${varPath} COLOR|FLOAT|BOOLEAN|STRING <value>` } };
   }
 
   // Find or create variable
@@ -164,14 +162,14 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
   if (rawValue !== undefined) {
     const figmaValue = parseValueForFigma(rawValue, type);
     if (figmaValue === undefined) {
-      return { success: false, error: { code: 'INVALID_VALUE', message: `Cannot parse "${rawValue}" as ${type}.` } };
+      return { error: { code: 'INVALID_VALUE', message: `Cannot parse "${rawValue}" as ${type}.` } };
     }
 
     if (modeName) {
       // Set for specific mode
       const mode = collection.modes.find(m => m.name.toLowerCase() === modeName.toLowerCase());
       if (!mode) {
-        return { success: false, error: { code: 'MODE_NOT_FOUND', message: `Mode "${modeName}" not found in collection "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` } };
+        return { error: { code: 'MODE_NOT_FOUND', message: `Mode "${modeName}" not found in collection "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` } };
       }
       variable.setValueForMode(mode.modeId, figmaValue);
     } else {
@@ -191,7 +189,6 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
   if (rawValue !== undefined) actions.push(`set value = ${rawValue}${modeName ? ` (mode: ${modeName})` : ''}`);
 
   return {
-    success: true,
     data: {
       message: actions.join(', '),
       variableId: variable.id,
@@ -209,7 +206,7 @@ async function handleVarMkCollection(params: any): Promise<ToolResponse> {
   const modesStr = params.modes as string | undefined;
 
   if (!collName) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: var mk --collection <name> [--modes Light,Dark]' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: var mk --collection <name> [--modes Light,Dark]' } };
   }
 
   // Check if collection already exists
@@ -217,7 +214,6 @@ async function handleVarMkCollection(params: any): Promise<ToolResponse> {
   const found = existing.find(c => c.name.toLowerCase() === collName.toLowerCase());
   if (found) {
     return {
-      success: true,
       data: {
         message: `Collection "${found.name}" already exists`,
         collectionId: found.id,
@@ -244,7 +240,6 @@ async function handleVarMkCollection(params: any): Promise<ToolResponse> {
   invalidateCaches();
 
   return {
-    success: true,
     data: {
       message: `Created collection "${collName}" with modes: ${collection.modes.map(m => m.name).join(', ')}`,
       collectionId: collection.id,
@@ -261,21 +256,21 @@ async function handleVarBind(params: any): Promise<ToolResponse> {
   const varPath = params.variable as string;
 
   if (!nodePath || !property || !varPath) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: var bind <node-path> <property> <collection/varName>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: var bind <node-path> <property> <collection/varName>' } };
   }
 
   // Resolve node
   const resolved = await resolvePathToNode(nodePath);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { success: false, error: { code: 'INVALID_NODE', message: 'Cannot bind variables to a page node.' } };
+    return { error: { code: 'INVALID_NODE', message: 'Cannot bind variables to a page node.' } };
   }
   const node = resolved.node;
 
   // Find variable
   const variable = await findVariableByPath(varPath);
   if (!variable) {
-    return { success: false, error: { code: 'VARIABLE_NOT_FOUND', message: `Variable "${varPath}" not found. Use "var ls" to list available variables.` } };
+    return { error: { code: 'VARIABLE_NOT_FOUND', message: `Variable "${varPath}" not found. Use "var ls" to list available variables.` } };
   }
 
   // Bind
@@ -295,7 +290,6 @@ async function handleVarBind(params: any): Promise<ToolResponse> {
     }
 
     return {
-      success: true,
       data: {
         message: `Bound "${variable.name}" (${variable.resolvedType}) → ${node.name}.${normalizedProp}`,
         nodeId: node.id,
@@ -304,7 +298,6 @@ async function handleVarBind(params: any): Promise<ToolResponse> {
     };
   } catch (e: any) {
     return {
-      success: false,
       error: { code: 'BIND_FAILED', message: `Failed to bind: ${e?.message ?? e}` },
     };
   }
@@ -317,19 +310,19 @@ async function handleVarAlias(params: any): Promise<ToolResponse> {
   const targetVarPath = params.target as string;
 
   if (!sourceVarPath || !targetVarPath) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: var alias <semantic/name> <target/name>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: var alias <semantic/name> <target/name>' } };
   }
 
   // Find target variable
   const targetVar = await findVariableByPath(targetVarPath);
   if (!targetVar) {
-    return { success: false, error: { code: 'VARIABLE_NOT_FOUND', message: `Target variable "${targetVarPath}" not found.` } };
+    return { error: { code: 'VARIABLE_NOT_FOUND', message: `Target variable "${targetVarPath}" not found.` } };
   }
 
   // Parse source path
   const slashIdx = sourceVarPath.indexOf('/');
   if (slashIdx < 0) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Alias path must include collection: var alias <collection/name> <target>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Alias path must include collection: var alias <collection/name> <target>' } };
   }
   const collectionName = sourceVarPath.slice(0, slashIdx);
   const variableName = sourceVarPath.slice(slashIdx + 1);
@@ -359,7 +352,6 @@ async function handleVarAlias(params: any): Promise<ToolResponse> {
   invalidateCaches();
 
   return {
-    success: true,
     data: {
       message: `Created alias: ${sourceVarPath} → ${targetVarPath}`,
       sourceId: sourceVar.id,

@@ -183,7 +183,6 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
 
   if (!code || typeof code !== 'string' || code.trim().length === 0) {
     return {
-      success: false,
       error: { code: 'EMPTY_CODE', message: 'No code provided. Usage: js <expression>' },
     };
   }
@@ -191,7 +190,6 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(code)) {
       return {
-        success: false,
         error: { code: 'BLOCKED_OPERATION', message: `Blocked: '${pattern.source}' is not allowed in js command. Use the dedicated tool commands (rm, mv, mk) instead.` },
       };
     }
@@ -252,7 +250,6 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
       if (lessonsText) stderrParts.unshift(lessonsText);
 
       const response: ToolResponse = {
-        success: false,
         error: { code: 'FIGMA_API_ERROR', message: errorMsg },
       };
       (response as any)._stderr = stderrParts.join('\n\n');
@@ -266,7 +263,7 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
       await saveLessons(lessons);
     }
 
-    const response: ToolResponse = { success: true, data: serialized };
+    const response: ToolResponse = { data: serialized };
     // Always include lessons as context so agent learns
     if (lessonsText) {
       (response as any)._stderr = lessonsText;
@@ -286,7 +283,6 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
     if (lessonsText) stderrParts.unshift(lessonsText);
 
     return {
-      success: false,
       error: {
         code: 'EXECUTION_ERROR',
         message: allErrors.join('\n'),

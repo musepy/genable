@@ -60,7 +60,7 @@ export function useModelSettings() {
       
       // Get refreshed models (will return from cache if just updated)
       const result = await ModelService.getModels(providerName, key, false)
-      if (result.success && result.models.length > 0) {
+      if (!result.error && result.models.length > 0) {
         setSuggestedModels(result.models)
         setCacheTimestamp(Date.now())
       }
@@ -233,7 +233,7 @@ export function useModelSettings() {
     try {
       const result = await ModelService.getModels(providerName, keyToUse, true)
       
-      if (result.success) {
+      if (!result.error) {
         setSuggestedModels(result.models)
         setCacheTimestamp(Date.now())
         setFetchStatus('success')

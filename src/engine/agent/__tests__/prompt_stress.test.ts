@@ -236,18 +236,17 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     design: async (params: any) => {
       const ops = params.ops || '';
       if (!ops || ops.trim().length === 0) {
-        return { success: false, error: { code: 'EMPTY_OPS', message: 'Empty ops' } };
+        return { error: { code: 'EMPTY_OPS', message: 'Empty ops' } };
       }
       // Design ops may contain create, update, or delete operations
       // For mock purposes, treat as create XML
       const result = state.processCreate(ops, params.parentId);
-      return { success: true, data: result };
+      return { data: result };
     },
 
     ls: async (params: any) => {
       const xml = state.generateReadXml(undefined, 1);
       return {
-        success: true,
         data: { xml, nodeCount: state.nodes.size },
       };
     },
@@ -255,7 +254,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     cat: async (params: any) => {
       const xml = state.generateReadXml(undefined, params.depth || 5);
       return {
-        success: true,
         data: { xml, nodeCount: state.nodes.size },
       };
     },
@@ -263,7 +261,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     tree: async (params: any) => {
       const xml = state.generateReadXml(undefined, params.depth || 3);
       return {
-        success: true,
         data: { xml, nodeCount: state.nodes.size },
       };
     },
@@ -272,7 +269,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
       const source = params.source || 'knowledge';
       if (source === 'knowledge' || source === 'help') {
         return {
-          success: true,
           data: {
             results: [{ content: `Design knowledge for "${params.query}": use consistent spacing (8px grid), clear hierarchy, sufficient contrast.` }],
           },
@@ -283,7 +279,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
         .filter(n => n.name.toLowerCase().includes((params.query || '').toLowerCase()))
         .slice(0, 10);
       return {
-        success: true,
         data: {
           nodes: matching.map(n => ({ id: n.id, name: n.name, type: n.type })),
         },
@@ -519,7 +514,7 @@ function createStressHarness(testName: string) {
         name: tc.name,
         args: tc.args,
         xml: tc.args?.xml || tc.args?.ops,
-        resultSuccess: result?.success !== false,
+        resultSuccess: result?.error == null,
         resultData: result?.data,
         durationMs: Date.now() - toolCallStart,
       };

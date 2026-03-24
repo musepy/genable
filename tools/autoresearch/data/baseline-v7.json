@@ -1,0 +1,141 @@
+{
+  "timestamp": "2026-03-23T02:57:56.260Z",
+  "gitCommit": "c36d207",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774234221371",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6818181818181818,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.8333333333333334,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.9090909090909091,
+          "nodeCount": 22,
+          "maxDepth": 4,
+          "durationSec": 106.957
+        },
+        "score": 93.4,
+        "issues": [
+          "Frame \"Password Label Row\" missing itemSpacing",
+          "Frame \"Password Input\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774234330855",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9611111111111111,
+          "fillCompleteness": 0.6904761904761905,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.6388888888888888,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 61,
+          "maxDepth": 3,
+          "durationSec": 78.449
+        },
+        "score": 90.5,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Notification\" has 1 children but no auto-layout",
+          "Frame \"Dashboard\" missing itemSpacing",
+          "Surface frame \"Dashboard\" has fill but no padding",
+          "Frame \"Sidebar\" missing itemSpacing",
+          "Frame \"Top Bar\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774234412386",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6081081081081081,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.95,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.8620689655172413,
+          "nodeCount": 88,
+          "maxDepth": 5,
+          "durationSec": 110.119
+        },
+        "score": 94,
+        "issues": [
+          "Frame \"Basic Card\" missing itemSpacing",
+          "Frame \"Pro Card\" missing itemSpacing",
+          "Frame \"Enterprise Card\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774234525162",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6666666666666666,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.875,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 15,
+          "maxDepth": 3,
+          "durationSec": 28.371
+        },
+        "score": 94.8,
+        "issues": [
+          "Frame \"Profile Card\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774234556225",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 1,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 120
+        },
+        "score": 90,
+        "issues": []
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 92.53999999999999,
+    "minScore": 90,
+    "maxScore": 94.8,
+    "totalDurationSec": 443.89599999999996,
+    "totalNodes": 186,
+    "totalIssues": 16
+  }
+}

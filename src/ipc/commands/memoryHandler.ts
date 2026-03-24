@@ -28,10 +28,10 @@ export async function handleMemoryCommand(toolName: string, parameters: any): Pr
     case 'ls': {
       const keys = await memoryList();
       if (keys.length === 0) {
-        return { success: true, data: { listing: '(empty)', path: MEMORY_PREFIX, count: 0, hint: 'Use mk to create memories: mk /.agent/memory/key text -- value' } };
+        return { data: { listing: '(empty)', path: MEMORY_PREFIX, count: 0, hint: 'Use mk to create memories: mk /.agent/memory/key text -- value' } };
       }
       const listing = keys.map(k => k).join('\n');
-      return { success: true, data: { listing, path: MEMORY_PREFIX, count: keys.length } };
+      return { data: { listing, path: MEMORY_PREFIX, count: keys.length } };
     }
 
     case 'tree': {
@@ -41,49 +41,49 @@ export async function handleMemoryCommand(toolName: string, parameters: any): Pr
         const prefix = i === keys.length - 1 ? '└── ' : '├── ';
         lines.push(prefix + keys[i]);
       }
-      return { success: true, data: { tree: lines.join('\n'), count: keys.length } };
+      return { data: { tree: lines.join('\n'), count: keys.length } };
     }
 
     case 'cat': {
       if (!key) {
         const all = await memoryGetAll();
         if (Object.keys(all).length === 0) {
-          return { success: true, data: { memories: {}, hint: 'No memories stored. Use mk /.agent/memory/key text -- value' } };
+          return { data: { memories: {}, hint: 'No memories stored. Use mk /.agent/memory/key text -- value' } };
         }
-        return { success: true, data: { memories: all } };
+        return { data: { memories: all } };
       }
       const value = await memoryGet(key);
       if (value === undefined) {
         const keys = await memoryList();
-        return { success: false, error: { code: 'NOT_FOUND', message: `Memory "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
+        return { error: { code: 'NOT_FOUND', message: `Memory "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
       }
-      return { success: true, data: { key, value } };
+      return { data: { key, value } };
     }
 
     case 'mk': {
       if (!key) {
-        return { success: false, error: { code: 'MISSING_KEY', message: 'Memory key required. Usage: mk /.agent/memory/my-key text -- value to store' } };
+        return { error: { code: 'MISSING_KEY', message: 'Memory key required. Usage: mk /.agent/memory/my-key text -- value to store' } };
       }
       const textContent = parameters.textContent;
       if (!textContent) {
-        return { success: false, error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/memory/${key} text -- value to store` } };
+        return { error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/memory/${key} text -- value to store` } };
       }
       await memorySet(key, textContent);
-      return { success: true, data: { key, stored: textContent, hint: 'Memory saved. Persists across sessions.' } };
+      return { data: { key, stored: textContent, hint: 'Memory saved. Persists across sessions.' } };
     }
 
     case 'rm': {
       if (!key) {
-        return { success: false, error: { code: 'MISSING_KEY', message: 'Specify which memory to delete. Usage: rm /.agent/memory/key' } };
+        return { error: { code: 'MISSING_KEY', message: 'Specify which memory to delete. Usage: rm /.agent/memory/key' } };
       }
       const existed = await memoryDelete(key);
       if (!existed) {
-        return { success: false, error: { code: 'NOT_FOUND', message: `Memory "${key}" not found.` } };
+        return { error: { code: 'NOT_FOUND', message: `Memory "${key}" not found.` } };
       }
-      return { success: true, data: { key, deleted: true } };
+      return { data: { key, deleted: true } };
     }
 
     default:
-      return { success: false, error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on memory paths. Use ls, cat, mk, rm.` } };
+      return { error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on memory paths. Use ls, cat, mk, rm.` } };
   }
 }

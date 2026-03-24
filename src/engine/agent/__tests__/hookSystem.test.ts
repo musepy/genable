@@ -354,7 +354,7 @@ describe('consecutiveFailureGuard', () => {
     registry.registerAll(guard.hooks);
     const runner = new HookRunner(registry);
 
-    const failResults = [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: false } }];
+    const failResults = [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: { code: 'FAIL', message: 'failed' } } }];
 
     // 2 failures → no message (threshold is 3)
     for (let i = 0; i < 2; i++) {
@@ -380,19 +380,19 @@ describe('consecutiveFailureGuard', () => {
     // 2 failures
     for (let i = 0; i < 2; i++) {
       await runner.run('afterIteration', makeCtx({
-        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: false } }],
+        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: { code: 'FAIL', message: 'failed' } } }],
       }));
     }
 
     // 1 success → reset
     await runner.run('afterIteration', makeCtx({
-      iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: true } }],
+      iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: {} }],
     }));
 
     // 2 more failures → no inject (count reset)
     for (let i = 0; i < 2; i++) {
       const ctx = makeCtx({
-        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { success: false } }],
+        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: { code: 'FAIL', message: 'failed' } } }],
       });
       await runner.run('afterIteration', ctx);
       expect(ctx.messages).toHaveLength(0);
@@ -411,7 +411,6 @@ describe('partialFailureGuard', () => {
       iterationToolResults: [{
         toolCall: { id: '1', name: 'jsx', args: {} },
         result: {
-          success: false,
           error: { code: 'PARTIAL_FAILURE' },
           data: { errors: [{ op: 'create /Card/Title', error: 'Font not found' }] },
         },
@@ -433,7 +432,7 @@ describe('partialFailureGuard', () => {
     const ctx = makeCtx({
       iterationToolResults: [{
         toolCall: { id: '1', name: 'jsx', args: {} },
-        result: { success: true },
+        result: {},
       }],
     });
     const result = await runner.run('afterIteration', ctx);

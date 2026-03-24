@@ -277,7 +277,6 @@ export async function handleRender(parameters: any): Promise<ToolResponse> {
   if (!markup || typeof markup !== 'string') {
     const tokens = listTokens();
     return {
-      success: true,
       data: {
         message: 'render — Create designs using style tokens.',
         usage: 'run({command: "render", input: "card\\n  h1: \\"Title\\"\\n  body: \\"Text\\""})',
@@ -291,7 +290,6 @@ export async function handleRender(parameters: any): Promise<ToolResponse> {
 
   if (roots.length === 0) {
     return {
-      success: false,
       error: {
         code: 'PARSE_ERROR',
         message: errors.length > 0

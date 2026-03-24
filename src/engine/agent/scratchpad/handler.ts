@@ -30,10 +30,10 @@ export async function handleScratchCommand(toolName: string, parameters: any): P
     case 'ls': {
       const keys = scratchList();
       if (keys.length === 0) {
-        return { success: true, data: { listing: '(empty)', path: SCRATCH_PREFIX, count: 0, hint: 'Use mk to create notes: mk /.agent/scratch/key text -- value' } };
+        return { data: { listing: '(empty)', path: SCRATCH_PREFIX, count: 0, hint: 'Use mk to create notes: mk /.agent/scratch/key text -- value' } };
       }
       const listing = keys.map(k => k).join('\n');
-      return { success: true, data: { listing, path: SCRATCH_PREFIX, count: keys.length } };
+      return { data: { listing, path: SCRATCH_PREFIX, count: keys.length } };
     }
 
     case 'tree': {
@@ -43,52 +43,52 @@ export async function handleScratchCommand(toolName: string, parameters: any): P
         const prefix = i === keys.length - 1 ? '\u2514\u2500\u2500 ' : '\u251c\u2500\u2500 ';
         lines.push(prefix + keys[i]);
       }
-      return { success: true, data: { tree: lines.join('\n'), count: keys.length } };
+      return { data: { tree: lines.join('\n'), count: keys.length } };
     }
 
     case 'cat': {
       if (!key) {
         const all = scratchGetAll();
         if (Object.keys(all).length === 0) {
-          return { success: true, data: { notes: {}, hint: 'No notes stored. Use mk /.agent/scratch/key text -- value' } };
+          return { data: { notes: {}, hint: 'No notes stored. Use mk /.agent/scratch/key text -- value' } };
         }
-        return { success: true, data: { notes: all } };
+        return { data: { notes: all } };
       }
       const value = scratchGet(key);
       if (value === undefined) {
         const keys = scratchList();
-        return { success: false, error: { code: 'NOT_FOUND', message: `Scratch note "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
+        return { error: { code: 'NOT_FOUND', message: `Scratch note "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
       }
-      return { success: true, data: { key, value } };
+      return { data: { key, value } };
     }
 
     case 'mk': {
       if (!key) {
-        return { success: false, error: { code: 'MISSING_KEY', message: 'Scratch key required. Usage: mk /.agent/scratch/my-key text -- value to store' } };
+        return { error: { code: 'MISSING_KEY', message: 'Scratch key required. Usage: mk /.agent/scratch/my-key text -- value to store' } };
       }
       const textContent = parameters.textContent;
       if (!textContent) {
-        return { success: false, error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/scratch/${key} text -- value to store` } };
+        return { error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/scratch/${key} text -- value to store` } };
       }
       const result = scratchSet(key, textContent);
-      if (!result.success) {
-        return { success: false, error: { code: 'STORE_ERROR', message: result.error! } };
+      if (result.error) {
+        return { error: { code: 'STORE_ERROR', message: result.error! } };
       }
-      return { success: true, data: { key, stored: textContent, hint: 'Note saved. Session-scoped — cleared when session ends.' } };
+      return { data: { key, stored: textContent, hint: 'Note saved. Session-scoped — cleared when session ends.' } };
     }
 
     case 'rm': {
       if (!key) {
-        return { success: false, error: { code: 'MISSING_KEY', message: 'Specify which note to delete. Usage: rm /.agent/scratch/key' } };
+        return { error: { code: 'MISSING_KEY', message: 'Specify which note to delete. Usage: rm /.agent/scratch/key' } };
       }
       const existed = scratchDelete(key);
       if (!existed) {
-        return { success: false, error: { code: 'NOT_FOUND', message: `Scratch note "${key}" not found.` } };
+        return { error: { code: 'NOT_FOUND', message: `Scratch note "${key}" not found.` } };
       }
-      return { success: true, data: { key, deleted: true } };
+      return { data: { key, deleted: true } };
     }
 
     default:
-      return { success: false, error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on scratch paths. Use ls, cat, mk, rm.` } };
+      return { error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on scratch paths. Use ls, cat, mk, rm.` } };
   }
 }

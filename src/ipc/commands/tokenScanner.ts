@@ -27,7 +27,6 @@ export async function handleScanTokens(): Promise<ToolResponse> {
     const total = colorCount + fontCount + spacingCount;
 
     return {
-      success: true,
       data: {
         snapshot,
         summary: total === 0
@@ -38,7 +37,6 @@ export async function handleScanTokens(): Promise<ToolResponse> {
     };
   } catch (e) {
     return {
-      success: false,
       error: {
         code: 'SCAN_FAILED',
         message: `Token scan failed: ${e instanceof Error ? e.message : String(e)}`,

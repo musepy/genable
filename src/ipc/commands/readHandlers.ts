@@ -88,7 +88,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
       });
     }
 
-    return { success: true, data: treeData };
+    return { data: treeData };
   }
 
   const treeNode = resolved.node;
@@ -113,7 +113,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
   const treeData: any = { tree: treeJson };
   if (suggestedReads.length > 0) treeData.suggestedReads = suggestedReads;
 
-  return { success: true, data: treeData };
+  return { data: treeData };
 }
 
 // ── cat ──
@@ -133,7 +133,6 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
       width: Math.round(n.width), height: Math.round(n.height),
     }));
     return {
-      success: true,
       data: {
         page: { name: page.name, childCount: page.children.length },
         children: topLevel,
@@ -161,5 +160,5 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
     }
   }
 
-  return { success: true, data: catData };
+  return { data: catData };
 }

@@ -84,7 +84,7 @@ export function presentForLLM(result: any, commandName: string, durationMs: numb
   }
 
   // 3. Error replaces success boolean — only present on failure
-  if (result?.success === false) {
+  if (result?.error != null) {
     const err = result.error;
     cleaned.error = typeof err === 'string' ? err : (err?.message || 'Unknown error');
   }
@@ -127,7 +127,7 @@ function stripForLLM(data: any, commandName: string): any {
         if (subCmd && sub.data && typeof sub.data === 'object') {
           Object.assign(flat, stripFields(sub.data, subCmd));
         }
-        if (sub.success === false) {
+        if (sub.error != null) {
           const err = sub.error;
           flat.error = typeof err === 'string' ? err : (err?.message || 'error');
         }

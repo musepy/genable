@@ -17,10 +17,10 @@ export async function handleGrep(parameters: any): Promise<ToolResponse> {
   if (grepMode === 'properties') {
     // Property discovery mode
     if (!grepPath) {
-      return { success: false, error: { code: 'MISSING_PATH', message: 'Property discovery requires a path. Usage: grep /Card/ fillColor,fontSize' } };
+      return { error: { code: 'MISSING_PATH', message: 'Property discovery requires a path. Usage: grep /Card/ fillColor,fontSize' } };
     }
     if (!grepProps || !Array.isArray(grepProps) || grepProps.length === 0) {
-      return { success: false, error: { code: 'MISSING_PROPERTIES', message: 'Specify properties to discover. Usage: grep /Card/ fillColor,fontSize' } };
+      return { error: { code: 'MISSING_PROPERTIES', message: 'Specify properties to discover. Usage: grep /Card/ fillColor,fontSize' } };
     }
 
     const grepResolved = await resolvePathToNode(grepPath);
@@ -31,7 +31,7 @@ export async function handleGrep(parameters: any): Promise<ToolResponse> {
       : grepResolved.node;
 
     if (!grepRoot) {
-      return { success: false, error: { code: 'NO_RESULTS', message: 'No nodes found to search.' } };
+      return { error: { code: 'NO_RESULTS', message: 'No nodes found to search.' } };
     }
 
     const uniqueValues: Record<string, Set<string | number>> = {};
@@ -54,7 +54,7 @@ export async function handleGrep(parameters: any): Promise<ToolResponse> {
 
     const grepResult: Record<string, (string | number)[]> = {};
     for (const [prop, valueSet] of Object.entries(uniqueValues)) grepResult[prop] = Array.from(valueSet);
-    return { success: true, data: grepResult };
+    return { data: grepResult };
   }
 
   // Node search mode
@@ -75,7 +75,7 @@ export async function handleGrep(parameters: any): Promise<ToolResponse> {
     });
   }
 
-  return { success: true, data: { results: matches, total: allNodes.length, truncated: allNodes.length > MAX_RESULTS } };
+  return { data: { results: matches, total: allNodes.length, truncated: allNodes.length > MAX_RESULTS } };
 }
 
 // ── sed ──
@@ -84,16 +84,16 @@ export async function handleSed(parameters: any): Promise<ToolResponse> {
   const { path: sedPath, replacements: sedReplacements } = parameters;
 
   if (!sedPath) {
-    return { success: false, error: { code: 'MISSING_PATH', message: 'sed requires a path. Usage: sed /Card/ fillColor:#FFF/#000' } };
+    return { error: { code: 'MISSING_PATH', message: 'sed requires a path. Usage: sed /Card/ fillColor:#FFF/#000' } };
   }
   if (!sedReplacements || typeof sedReplacements !== 'object' || Object.keys(sedReplacements).length === 0) {
-    return { success: false, error: { code: 'MISSING_REPLACEMENTS', message: 'sed requires replacement rules. Usage: sed /Card/ prop:from/to' } };
+    return { error: { code: 'MISSING_REPLACEMENTS', message: 'sed requires replacement rules. Usage: sed /Card/ prop:from/to' } };
   }
 
   const sedResolved = await resolvePathToNode(sedPath);
   if (!sedResolved.ok) return sedResolved.response;
   if (sedResolved.isPage) {
-    return { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot sed page root. Target a specific node.' } };
+    return { error: { code: 'INVALID_TARGET', message: 'Cannot sed page root. Target a specific node.' } };
   }
   const sedRoot = sedResolved.node;
 
@@ -150,8 +150,8 @@ export async function handleSed(parameters: any): Promise<ToolResponse> {
       }
     }
     await doSedReplace(sedRoot);
-    return { success: true, data: { replaced: totalReplaced, details } };
+    return { data: { replaced: totalReplaced, details } };
   } catch (e: any) {
-    return { success: false, error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error during sed' } };
+    return { error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error during sed' } };
   }
 }

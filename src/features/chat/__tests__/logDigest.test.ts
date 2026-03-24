@@ -26,7 +26,7 @@ describe('generateLogDigest', () => {
             status: 'success',
             startTime: 1000,
             endTime: 1200,
-            result: { success: true, data: { idMap: { Card: '1:1' } } }
+            result: { data: { idMap: { Card: '1:1' } } }
           }
         ],
         iterations: [{ iteration: 1, thinking: 'Thinking...', startTime: 1000 }]
@@ -58,7 +58,6 @@ describe('generateLogDigest', () => {
             startTime: 1000,
             endTime: 2000,
             result: {
-              success: true,
               data: {
                 idMap: { 'Header': '3:1', 'Footer': '3:2' }
               }
@@ -141,7 +140,6 @@ describe('generateLogDigest', () => {
             startTime: 1000,
             endTime: 1500,
             result: {
-              success: true,
               data: {
                 created: 4,
                 edited: 2,

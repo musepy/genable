@@ -44,10 +44,10 @@ export type PathResolved =
 export async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
-    return { ok: false, response: { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node "${nodeId}" not found. Use ls("/") to discover available nodes.` } } };
+    return { ok: false, response: { error: { code: 'NODE_NOT_FOUND', message: `Node "${nodeId}" not found. Use ls("/") to discover available nodes.` } } };
   }
   if (!('visible' in node)) {
-    return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `"${nodeId}" is a ${node.type}, not a design node. Use ls("/") to find design nodes.` } } };
+    return { ok: false, response: { error: { code: 'INVALID_NODE_TYPE', message: `"${nodeId}" is a ${node.type}, not a design node. Use ls("/") to find design nodes.` } } };
   }
   return { ok: true, node: node as SceneNode };
 }
@@ -69,7 +69,6 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
       return {
         ok: false,
         response: {
-          success: false,
           error: {
             code: 'NODE_NOT_FOUND',
             message: `Node "${path}" not found. Use inspect({node: "/"}) to discover available nodes.`,
@@ -81,7 +80,6 @@ export async function resolvePathToNode(path: string): Promise<PathResolved> {
       return {
         ok: false,
         response: {
-          success: false,
           error: {
             code: 'INVALID_NODE_TYPE',
             message: `"${node.name}" (${node.type}) is not a design node.`,
@@ -117,14 +115,14 @@ async function resolvePathToNodeLegacy(path: string): Promise<PathResolved> {
     if (segNameId) {
       const node = await figma.getNodeByIdAsync(segNameId[2]);
       if (!node) {
-        return { ok: false, response: { success: false, error: { code: 'PATH_NOT_FOUND', message: `Node ID "${segNameId[2]}" not found.` } } };
+        return { ok: false, response: { error: { code: 'PATH_NOT_FOUND', message: `Node ID "${segNameId[2]}" not found.` } } };
       }
       current = node;
       continue;
     }
 
     if (!('children' in current)) {
-      return { ok: false, response: { success: false, error: { code: 'NOT_A_CONTAINER', message: `"${current.name}" has no children.` } } };
+      return { ok: false, response: { error: { code: 'NOT_A_CONTAINER', message: `"${current.name}" has no children.` } } };
     }
     const children = (current as any).children as readonly BaseNode[];
     const candidates = children.filter(c => c.name === segment);
@@ -133,13 +131,13 @@ async function resolvePathToNodeLegacy(path: string): Promise<PathResolved> {
       : candidates[0];
     if (!match) {
       const available = children.slice(0, 15).map(c => c.name);
-      return { ok: false, response: { success: false, error: { code: 'PATH_NOT_FOUND', message: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}` } } };
+      return { ok: false, response: { error: { code: 'PATH_NOT_FOUND', message: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}` } } };
     }
     current = match;
   }
 
   if (!('visible' in current)) {
-    return { ok: false, response: { success: false, error: { code: 'INVALID_NODE_TYPE', message: `"${current.name}" (${current.type}) is not a design node.` } } };
+    return { ok: false, response: { error: { code: 'INVALID_NODE_TYPE', message: `"${current.name}" (${current.type}) is not a design node.` } } };
   }
   return { ok: true, isPage: false, node: current as SceneNode };
 }

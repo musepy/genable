@@ -120,12 +120,12 @@ describe('Atomic Tools Interactions', () => {
                 layoutMode: 'NONE', // Default
                 sizing: 'FIXED'      // Default
             };
-            return { success: true, data: { nodeId: generatedId } };
+            return { data: { nodeId: generatedId } };
         }
         
         if (name === 'setNodeLayout') {
             const node = figmaState[args.nodeId];
-            if (!node) return { success: false, error: { message: 'Node not found' } };
+            if (!node) return { error: { message: 'Node not found' } };
 
             // Logic: Setting HUG requires Auto Layout context (parent OR self)
             if (args.sizing === 'HUG') {
@@ -138,7 +138,6 @@ describe('Atomic Tools Interactions', () => {
                 // HUG is valid if: (1) self is Auto Layout, OR (2) parent is Auto Layout
                 if (!isSelfAutoLayout && !isParentAutoLayout) {
                     return {
-                        success: false,
                         error: { message: `HUG sizing requires Auto Layout context. Either set layoutMode to VERTICAL/HORIZONTAL, or ensure parent has Auto Layout.` }
                     };
                 }
@@ -153,10 +152,10 @@ describe('Atomic Tools Interactions', () => {
                 node.sizing = args.sizing;
             }
 
-            return { success: true, data: { nodeId: node.id } };
+            return { data: { nodeId: node.id } };
         }
         
-        return { success: false, error: { message: 'Unknown tool' } };
+        return { error: { message: 'Unknown tool' } };
     });
   });
 

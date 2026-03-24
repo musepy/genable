@@ -15,7 +15,6 @@ export async function handleCreate(parameters: any): Promise<ToolResponse> {
 
   if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
     return {
-      success: true,
       data: {
         message: 'create — Build design trees with structured JSON nodes.',
         usage: 'create({nodes: [{tag: "frame", name: "Card", w: 400, layout: "column", p: 24}, {tag: "text", name: "Title", parent: "Card", size: 24, content: "Hello"}]})',
@@ -53,7 +52,6 @@ export async function handleCreate(parameters: any): Promise<ToolResponse> {
 
   if (validNodes.length === 0) {
     return {
-      success: false,
       error: {
         code: 'VALIDATION_ERROR',
         message: errors.length > 0

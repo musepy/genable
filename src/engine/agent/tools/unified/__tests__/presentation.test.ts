@@ -4,7 +4,6 @@ import { presentForLLM } from '../presentation';
 describe('presentForLLM — flat response format', () => {
   it('flattens data to top level, strips noise', () => {
     const result = {
-      success: true,
       data: {
         idMap: { Card: '100:1', Title: '100:2' },
         created: 2,
@@ -27,21 +26,19 @@ describe('presentForLLM — flat response format', () => {
 
   it('flattens ls result — listing at top level', () => {
     const result = {
-      success: true,
       data: {
-        listing: 'Card\nButton\nHeader',
+        tree: { id: '1:1', name: 'Card', type: 'frame', children: [] },
         count: 3,
       },
     };
-    const presented = presentForLLM(result, 'ls', 30);
-    expect(presented.listing).toBe('Card\nButton\nHeader');
+    const presented = presentForLLM(result, 'tree', 30);
+    expect(presented.tree).toEqual({ id: '1:1', name: 'Card', type: 'frame', children: [] });
     expect(presented.count).toBeUndefined();
     expect(presented.data).toBeUndefined();
   });
 
   it('flattens cat result — node fields at top level (no node wrapper)', () => {
     const result = {
-      success: true,
       data: {
         type: 'frame', id: '1:1', name: 'Card',
         width: 300, height: 400,
@@ -56,7 +53,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('flattens grep results to top level', () => {
     const result = {
-      success: true,
       data: {
         results: [{ id: '1:1', name: 'Card' }, { id: '1:2', name: 'Button' }],
         totalSearched: 100,
@@ -69,7 +65,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('no success field on success (exit:0 in _meta is sufficient)', () => {
     const result = {
-      success: true,
       data: { idMap: { Card: '100:1' } },
     };
     const presented = presentForLLM(result, 'mk', 10);
@@ -78,7 +73,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('error as string replaces success:false + error object', () => {
     const result = {
-      success: false,
       data: {},
       error: { code: 'EXEC_ERROR', message: 'Failed to create' },
     };
@@ -90,17 +84,14 @@ describe('presentForLLM — flat response format', () => {
 
   it('flattens chain sub-results too', () => {
     const result = {
-      success: true,
       data: {
         chain: [
           {
             command: 'tree /',
-            success: true,
             data: { tree: '<frame/>', nodeCount: 5 },
           },
           {
             command: 'cat /Card/',
-            success: true,
             data: { node: { type: 'frame', id: '1:1' }, extra: 'noise' },
           },
         ],
@@ -121,12 +112,10 @@ describe('presentForLLM — flat response format', () => {
 
   it('chain sub-result error flattened to string', () => {
     const result = {
-      success: false,
       data: {
         chain: [
           {
             command: 'cat /Missing/',
-            success: false,
             error: { code: 'NOT_FOUND', message: 'Node not found' },
             data: {},
           },
@@ -140,7 +129,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('passes through unknown command data unchanged', () => {
     const result = {
-      success: true,
       data: { foo: 'bar', baz: 42 },
     };
     const presented = presentForLLM(result, 'unknown_cmd', 10);
@@ -150,7 +138,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('wraps string data as output field', () => {
     const result = {
-      success: true,
       data: 'mk — create nodes\n\nUsage: mk /path/ [type]',
     };
     const presented = presentForLLM(result, 'man', 5);
@@ -159,7 +146,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('strips design result to lean shape', () => {
     const result = {
-      success: true,
       data: {
         idMap: { Card: '100:1' },
         created: 3,
@@ -179,7 +165,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('skips empty arrays and empty objects in keep fields', () => {
     const result = {
-      success: true,
       data: {
         idMap: {},
         created: 0,
@@ -193,7 +178,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('preserves stderr extraction before stripping', () => {
     const result = {
-      success: true,
       data: {
         idMap: { Card: '100:1' },
         warnings: [{ message: 'font fallback' }],
@@ -209,7 +193,6 @@ describe('presentForLLM — flat response format', () => {
 
   it('jsx result: node fields spread to top level', () => {
     const result = {
-      success: true,
       data: {
         id: '1:1', name: 'Card', type: 'frame', children: ['Title#1:2'],
         created: 5,

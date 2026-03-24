@@ -272,10 +272,10 @@ export class AgentRuntime {
       console.log(`[RuntimeEvent] tool_call: ${tc?.name}(${JSON.stringify(tc?.args || {})})`)
     } else if (event.type === 'tool_result') {
       const tr = (event as any).toolResult;
-      const failSuffix = !tr?.success && tr?.error
+      const failSuffix = !!tr?.error
         ? ` — ${typeof tr.error === 'string' ? tr.error : tr.error.message ?? JSON.stringify(tr.error)}`
         : '';
-      console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${tr?.success ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)${failSuffix}`);
+      console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${!tr?.error ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)${failSuffix}`);
     }
     this.options.onRuntimeEvent(full);
   }
@@ -626,7 +626,7 @@ export class AgentRuntime {
           this.options.ipcBridge.callTool('cat', { path: '/.agent/memory/' }),
           new Promise<null>(r => setTimeout(() => r(null), 2000)),
         ]);
-        if (memResult && memResult.success && memResult.data?.memories) {
+        if (memResult && !memResult.error && memResult.data?.memories) {
           const memories = memResult.data.memories as Record<string, string>;
           const keys = Object.keys(memories);
           if (keys.length > 0) {
@@ -657,7 +657,7 @@ export class AgentRuntime {
           this.options.ipcBridge.callTool('scan-tokens', {}),
           new Promise<null>(r => setTimeout(() => r(null), 3000)),
         ]);
-        if (scanResult && scanResult.success && scanResult.data) {
+        if (scanResult && !scanResult.error && scanResult.data) {
           const { snapshot, summary, tokenCount } = scanResult.data;
           if (tokenCount > 0) {
             // Try to load previous snapshot for diff
@@ -667,7 +667,7 @@ export class AgentRuntime {
             ]);
 
             let diffText = '';
-            if (prevSnapshotResult?.success && prevSnapshotResult.data?.value) {
+            if (prevSnapshotResult && !prevSnapshotResult.error && prevSnapshotResult.data?.value) {
               try {
                 const { diffTokenSnapshots } = await import('./context/tokenDiffer');
                 const prevSnapshot = JSON.parse(prevSnapshotResult.data.value);
@@ -901,7 +901,7 @@ export class AgentRuntime {
         const content = dispatchResult.toolResultsMessage.content;
         if (Array.isArray(content)) {
           for (const part of content) {
-            if (part.functionResponse?.response?.success === false) {
+            if (part.functionResponse?.response?.error != null) {
               this.runStats.toolErrorCount++;
             }
             // Track created node IDs for design link generation

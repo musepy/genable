@@ -46,7 +46,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
   if (Array.isArray(parameters.nodes)) {
     const entries = parameters.nodes as EditEntry[];
     if (entries.length === 0) {
-      return { success: false, error: { code: 'NO_CHANGES', message: 'Empty nodes array.' } };
+      return { error: { code: 'NO_CHANGES', message: 'Empty nodes array.' } };
     }
 
     const ops: string[] = [];
@@ -70,7 +70,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     }
 
     if (ops.length === 0) {
-      return { success: false, error: { code: 'NO_CHANGES', message: errors.join('; ') } };
+      return { error: { code: 'NO_CHANGES', message: errors.join('; ') } };
     }
 
     const result = await executeFlatOps(ops.join('\n'));
@@ -88,7 +88,6 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
   if (!ref) {
     return {
-      success: true,
       data: {
         message: 'edit — Update properties on existing nodes.',
         usage: 'edit({node: "Card#1:2", props: {corner: 16, bg: "#FFF"}})',
@@ -100,12 +99,12 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
   const resolved = await resolvePathToNode(ref);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot edit the page root. Specify a node ref.' } };
+    return { error: { code: 'INVALID_TARGET', message: 'Cannot edit the page root. Specify a node ref.' } };
   }
 
   const op = buildUpdateOp(resolved.node.id, props, content);
   if (!op) {
-    return { success: false, error: { code: 'NO_CHANGES', message: 'No props or content provided.' } };
+    return { error: { code: 'NO_CHANGES', message: 'No props or content provided.' } };
   }
 
   return executeFlatOps(op);

@@ -187,7 +187,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
       const nodes = params.nodes || [];
       const result = state.registerNodes(nodes);
       return {
-        success: true,
         data: {
           rootNodeId: result.rootNodeId,
           totalNodes: result.totalNodes,
@@ -199,13 +198,12 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
 
     inspectDesign: async (params: any) => {
       const result = state.inspect(params.mode || 'hierarchy', params.nodeId, params.depth || 3);
-      return { success: true, data: result };
+      return { data: result };
     },
 
     patchNode: async (params: any) => {
       state.recordPatch();
       return {
-        success: true,
         data: { propsUpdated: Object.keys(params.props || params.patch || {}) },
       };
     },
@@ -214,12 +212,10 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
       const patches = params.patches || params.operations || [];
       patches.forEach(() => state.recordPatch());
       return {
-        success: true,
         data: {
           results: patches.map((p: any, i: number) => ({
             opId: p.opId || `patch_${i}`,
             action: 'applyDesignPatch',
-            success: true,
           })),
         },
       };
@@ -228,24 +224,21 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     renderSubtree: async (params: any) => {
       const nodes = params.nodes || [];
       const result = state.registerNodes(nodes);
-      return { success: true, data: { rootNodeId: result.rootNodeId, idMap: result.idMap } };
+      return { data: { rootNodeId: result.rootNodeId, idMap: result.idMap } };
     },
 
-    deleteNode: async () => ({ success: true }),
+    deleteNode: async () => ({}),
 
     createIcon: async (params: any) => ({
-      success: true,
       data: { nodeId: `mock-icon-${Date.now().toString(36)}` },
     }),
 
     validateLayout: async () => ({
-      success: true,
       data: { valid: true, errors: [], warnings: [], summary: 'All constraints pass' },
     }),
 
     // Knowledge tools — return minimal mock data
     searchDesignKnowledge: async (params: any) => ({
-      success: true,
       data: {
         results: [{ id: 'mock', content: `Design knowledge for "${params.query}"` }],
         totalAvailable: 1,
@@ -253,7 +246,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     }),
 
     getComponentAnatomy: async (params: any) => ({
-      success: true,
       data: {
         found: true,
         blueprint: {
@@ -267,7 +259,6 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     }),
 
     getFigmaLayoutRules: async () => ({
-      success: true,
       data: { rules: [] },
     }),
   };
@@ -433,7 +424,7 @@ describe('Agent Real API Harness', () => {
         const tc: ToolCallTrace = {
           name: toolCall.name,
           argsPreview: JSON.stringify(toolCall.args).slice(0, 150),
-          resultSuccess: result?.success !== false,
+          resultSuccess: result?.error == null,
           resultPreview: JSON.stringify(result).slice(0, 200),
           durationMs: Date.now() - toolCallStartMs,
         };

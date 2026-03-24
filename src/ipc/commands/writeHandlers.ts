@@ -23,7 +23,7 @@ async function executeSingleMk(
 ): Promise<ToolResponse> {
   const { parentPath, nodeName } = splitPath(path);
   if (!nodeName) {
-    return { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' } };
+    return { error: { code: 'INVALID_PATH', message: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' } };
   }
 
   // ID-based path: if nodeName is a bare Figma ID (digits:digits), resolve and update directly
@@ -33,14 +33,14 @@ async function executeSingleMk(
       const nodeId = node.id;
       const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
       if (!propsBlock && !textContent) {
-        return { success: true, data: { message: `Node "${node.name}" (${nodeId}) — no properties to update.`, idMap: {} } };
+        return { data: { message: `Node "${node.name}" (${nodeId}) — no properties to update.`, idMap: {} } };
       }
       let ops = textContent
         ? `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escapeFlatOpsStr(textContent)}'})`
         : `update('${nodeId}', {${propsBlock}})`;
       return await executeFlatOps(ops);
     }
-    return { success: false, error: { code: 'NODE_NOT_FOUND', message: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` } };
+    return { error: { code: 'NODE_NOT_FOUND', message: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` } };
   }
 
   // Try to resolve the full path to check if node exists (for upsert)
@@ -50,7 +50,7 @@ async function executeSingleMk(
     const nodeId = existing.node.id;
     const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
     if (!propsBlock && !textContent) {
-      return { success: true, data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
+      return { data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
     }
     let ops = `update('${nodeId}', {${propsBlock}})`;
     if (textContent) {
@@ -59,7 +59,7 @@ async function executeSingleMk(
     }
     const result = await executeFlatOps(ops);
     // Include the edited node ID so callers can reference it (updates produce empty idMap)
-    if (result.success && result.data) {
+    if (!result.error && result.data) {
       result.data.idMap = { ...result.data.idMap, [nodeName]: nodeId };
     }
     return result;
@@ -71,7 +71,7 @@ async function executeSingleMk(
 
   // Guard: parent must be a container (frame/group/component/page), not text/rect/etc.
   if (!parentResolved.isPage && !('children' in parentResolved.node)) {
-    return { success: false, error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
+    return { error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
   }
 
   // Deduplicate name among siblings — like Unix, names are unique within a directory
@@ -101,7 +101,7 @@ async function executeSingleMk(
   }
 
   const response = await executeFlatOps(ops, parentId);
-  if (finalName !== nodeName && response.success) {
+  if (finalName !== nodeName && !response.error) {
     response.data = { ...response.data, renamed: { [nodeName]: finalName } };
   }
   return response;
@@ -111,7 +111,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   const lines = batchInput.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('//'));
 
   if (lines.length === 0) {
-    return { success: false, error: { code: 'EMPTY_BATCH', message: 'No mk commands in batch input.' } };
+    return { error: { code: 'EMPTY_BATCH', message: 'No mk commands in batch input.' } };
   }
 
   const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'component', 'variantset']);
@@ -192,7 +192,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   }
 
   if (parsed.length === 0) {
-    return { success: false, error: { code: 'PARSE_ERROR', message: 'No valid mk commands parsed from batch input.' } };
+    return { error: { code: 'PARSE_ERROR', message: 'No valid mk commands parsed from batch input.' } };
   }
 
   // ── Sequential symbol resolution ──
@@ -277,7 +277,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   }
 
   if (opsLines.length === 0) {
-    return { success: true, data: { message: 'All nodes already exist. No changes needed.' } };
+    return { data: { message: 'All nodes already exist. No changes needed.' } };
   }
 
   return await executeFlatOps(opsLines.join('\n'));
@@ -291,7 +291,7 @@ export async function handleMk(parameters: any): Promise<ToolResponse> {
   }
 
   if (!mkPath) {
-    return { success: false, error: { code: 'INVALID_PATH', message: 'mk requires a path. Usage: mk /Card/ frame w:400 layout:column' } };
+    return { error: { code: 'INVALID_PATH', message: 'mk requires a path. Usage: mk /Card/ frame w:400 layout:column' } };
   }
 
   // Guard: detect embedded batch commands in propTokens
@@ -312,7 +312,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   if (hasGlob(rmPath)) {
     const globNodes = await resolveGlobPaths(rmPath);
     if (globNodes.length === 0) {
-      return { success: false, error: { code: 'NO_MATCH', message: `No nodes matched pattern "${rmPath}". Use ls to check available children.` } };
+      return { error: { code: 'NO_MATCH', message: `No nodes matched pattern "${rmPath}". Use ls to check available children.` } };
     }
     const rmOps = globNodes.map(n => `delete('${n.id}')`).join('\n');
     return await executeFlatOps(rmOps);
@@ -321,7 +321,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   const rmResolved = await resolvePathToNode(rmPath);
   if (!rmResolved.ok) return rmResolved.response;
   if (rmResolved.isPage) {
-    return { success: false, error: { code: 'INVALID_TARGET', message: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' } };
+    return { error: { code: 'INVALID_TARGET', message: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' } };
   }
 
   // Capture metadata before deletion (node becomes inaccessible after remove)
@@ -332,7 +332,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   const rmResult = await executeFlatOps(`delete('${rmNodeId}')`);
 
   // Warn if deleting a node not created by this session
-  if (rmResult.success && !rmIsSessionNode) {
+  if (!rmResult.error && !rmIsSessionNode) {
     rmResult.data = {
       ...rmResult.data,
       warning: `⚠ "${rmNodeName}" was not created by you in this session.`,
@@ -348,16 +348,16 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   const { sourcePath: mvSourcePath, destPath: mvDestPath, at: mvAtIndex } = parameters;
 
   if (!mvSourcePath) {
-    return { success: false, error: { code: 'MISSING_SOURCE', message: 'mv requires a source path. Usage: mv /OldName /NewName' } };
+    return { error: { code: 'MISSING_SOURCE', message: 'mv requires a source path. Usage: mv /OldName /NewName' } };
   }
   if (!mvDestPath) {
-    return { success: false, error: { code: 'MISSING_DEST', message: 'mv requires a destination path. Usage: mv /OldName /NewName' } };
+    return { error: { code: 'MISSING_DEST', message: 'mv requires a destination path. Usage: mv /OldName /NewName' } };
   }
 
   const mvSourceResolved = await resolvePathToNode(mvSourcePath);
   if (!mvSourceResolved.ok) return mvSourceResolved.response;
   if (mvSourceResolved.isPage) {
-    return { success: false, error: { code: 'INVALID_SOURCE', message: 'Cannot move page root.' } };
+    return { error: { code: 'INVALID_SOURCE', message: 'Cannot move page root.' } };
   }
   const mvNode = mvSourceResolved.node;
   const mvOldName = mvNode.name;
@@ -374,7 +374,7 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   } else {
     const { parentPath: mvParentPath, nodeName: mvTargetName } = splitPath(mvDestPath);
     if (!mvTargetName) {
-      return { success: false, error: { code: 'INVALID_DEST', message: 'Destination must include a name, e.g. mv /Card/OldTitle /Card/NewTitle' } };
+      return { error: { code: 'INVALID_DEST', message: 'Destination must include a name, e.g. mv /Card/OldTitle /Card/NewTitle' } };
     }
     mvNewName = mvTargetName;
 
@@ -386,7 +386,7 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
     } else if ('children' in mvParentResolved.node) {
       mvNewParent = mvParentResolved.node as BaseNode & ChildrenMixin;
     } else {
-      return { success: false, error: { code: 'INVALID_DEST', message: `"${mvParentPath}" is not a container. Cannot move node there.` } };
+      return { error: { code: 'INVALID_DEST', message: `"${mvParentPath}" is not a container. Cannot move node there.` } };
     }
   }
 
@@ -414,7 +414,6 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   }
 
   return {
-    success: true,
     data: {
       id: mvNode.id,
       oldName: mvOldName,
@@ -434,22 +433,22 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
   const { sourcePath: cpSourcePath, destPath: cpDestPath, propsRaw: cpPropsRaw } = parameters;
 
   if (!cpSourcePath) {
-    return { success: false, error: { code: 'MISSING_SOURCE', message: 'cp requires a source path. Usage: cp /Source/ /Dest/ {overrides}' } };
+    return { error: { code: 'MISSING_SOURCE', message: 'cp requires a source path. Usage: cp /Source/ /Dest/ {overrides}' } };
   }
   if (!cpDestPath) {
-    return { success: false, error: { code: 'MISSING_DEST', message: 'cp requires a destination path. Usage: cp /Source/ /Dest/ {overrides}' } };
+    return { error: { code: 'MISSING_DEST', message: 'cp requires a destination path. Usage: cp /Source/ /Dest/ {overrides}' } };
   }
 
   const cpSourceResolved = await resolvePathToNode(cpSourcePath);
   if (!cpSourceResolved.ok) return cpSourceResolved.response;
   if (cpSourceResolved.isPage) {
-    return { success: false, error: { code: 'INVALID_SOURCE', message: 'Cannot clone page root.' } };
+    return { error: { code: 'INVALID_SOURCE', message: 'Cannot clone page root.' } };
   }
   const cpSourceId = cpSourceResolved.node.id;
 
   const { parentPath: cpParentPath, nodeName: cpCloneName } = splitPath(cpDestPath);
   if (!cpCloneName) {
-    return { success: false, error: { code: 'INVALID_PATH', message: 'Destination path must include a name, e.g. /Card/Hover/' } };
+    return { error: { code: 'INVALID_PATH', message: 'Destination path must include a name, e.g. /Card/Hover/' } };
   }
 
   const cpParentResolved = await resolvePathToNode(cpParentPath);

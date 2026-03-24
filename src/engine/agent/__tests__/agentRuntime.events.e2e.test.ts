@@ -53,7 +53,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       ],
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {
-        mock_tool: async () => ({ success: true, data: { ok: true } }),
+        mock_tool: async () => ({ data: { ok: true } }),
       },
       onRuntimeEvent: (event) => events.push(event),
     });
@@ -63,7 +63,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     expect(result).toBe('Done');
     expect(events.some(e => e.type === 'iteration_start')).toBe(true);
     expect(events.some(e => e.type === 'tool_call' && e.toolCall.name === 'mock_tool')).toBe(true);
-    expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'mock_tool' && e.toolResult.success)).toBe(true);
+    expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'mock_tool' && !e.toolResult.error)).toBe(true);
     expect(events.some(e => e.type === 'turn_end' && e.summary === 'Done')).toBe(true);
   });
 
@@ -94,10 +94,9 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {
         fail_tool: async () => ({
-          success: false,
           error: { code: 'FAIL_TOOL', message: 'Intentional failure' },
         }),
-        fix_tool: async () => ({ success: true, data: { repaired: true } }),
+        fix_tool: async () => ({ data: { repaired: true } }),
       },
       onRuntimeEvent: (event) => events.push(event),
     });
@@ -105,7 +104,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     const result = await runtime.run('error-recovery-flow');
 
     expect(result).toBe('Recovered');
-    expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'fail_tool' && !e.toolResult.success)).toBe(true);
+    expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'fail_tool' && !!e.toolResult.error)).toBe(true);
     expect(events.some(e => e.type === 'tool_result' && e.toolResult.name === 'fail_tool' && (e.toolResult.error || '').includes('Intentional failure'))).toBe(true);
     expect(events.some(e => e.type === 'turn_end' && e.summary === 'Recovered')).toBe(true);
   });
@@ -122,7 +121,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     ]);
 
     const events: AgentRuntimeEvent[] = [];
-    const afterTool = vi.fn(async () => ({ success: true }));
+    const afterTool = vi.fn(async () => ({}));
 
     const runtime = new AgentRuntime({
       provider,
@@ -132,7 +131,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       ],
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {
-        slow_tool: async () => new Promise(resolve => setTimeout(() => resolve({ success: true }), 40)),
+        slow_tool: async () => new Promise(resolve => setTimeout(() => resolve({}), 40)),
         after_tool: afterTool,
       },
       onRuntimeEvent: (event) => events.push(event),

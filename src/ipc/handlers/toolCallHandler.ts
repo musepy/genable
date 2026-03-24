@@ -29,7 +29,6 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
     emit('TOOL_RESULT', {
       requestId,
       response: {
-        success: false,
         error: { code: 'INTERNAL_ERROR', message },
       } as ToolResponse,
     });

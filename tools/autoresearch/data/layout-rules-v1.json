@@ -1,0 +1,207 @@
+{
+  "timestamp": "2026-03-21T12:58:40.040Z",
+  "gitCommit": "7b31d1d",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774097541843",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9062355658198556,
+          "fillCompleteness": 0.6964285714285714,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7135862913096696,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 2637,
+          "maxDepth": 7,
+          "durationSec": 31.005
+        },
+        "score": 90.3,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774097579091",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9003725782414246,
+          "fillCompleteness": 0.6930352536543423,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7153024911032029,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 2753,
+          "maxDepth": 7,
+          "durationSec": 74.346
+        },
+        "score": 90.2,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774097661040",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.8963335729690806,
+          "fillCompleteness": 0.6881188118811881,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7101947308132875,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.75,
+          "nodeCount": 2850,
+          "maxDepth": 7,
+          "durationSec": 74.949
+        },
+        "score": 87.4,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774097742361",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.8965738758029914,
+          "fillCompleteness": 0.6878068739770867,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7093287827076223,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 2872,
+          "maxDepth": 7,
+          "durationSec": 51.445
+        },
+        "score": 89.9,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Icon\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout",
+          "Frame \"Toggle\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "error",
+        "model": "unknown",
+        "metrics": {
+          "layoutCompleteness": 0,
+          "fillCompleteness": 0,
+          "textCompleteness": 0,
+          "sizingCompleteness": 0,
+          "spacingCompleteness": 0,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 0
+        },
+        "score": 0,
+        "issues": [
+          "meta.toolCallDetails is not iterable"
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 71.55999999999999,
+    "minScore": 0,
+    "maxScore": 90.3,
+    "totalDurationSec": 231.745,
+    "totalNodes": 11112,
+    "totalIssues": 81
+  }
+}

@@ -17,7 +17,7 @@ import {
 
 describe('computeExitCode', () => {
   it('returns 0 for success', () => {
-    expect(computeExitCode({ success: true, data: {} })).toBe(EXIT_SUCCESS);
+    expect(computeExitCode({ data: {} })).toBe(EXIT_SUCCESS);
   });
 
   it('returns 0 when success is not explicitly false', () => {
@@ -25,23 +25,23 @@ describe('computeExitCode', () => {
   });
 
   it('returns 1 for generic errors', () => {
-    expect(computeExitCode({ success: false, error: { code: 'EXEC_ERROR', message: 'fail' } })).toBe(EXIT_ERROR);
+    expect(computeExitCode({ error: { code: 'EXEC_ERROR', message: 'fail' } })).toBe(EXIT_ERROR);
   });
 
   it('returns 127 for UNKNOWN_COMMAND', () => {
-    expect(computeExitCode({ success: false, error: { code: 'UNKNOWN_COMMAND', message: 'not found' } })).toBe(EXIT_NOT_FOUND);
+    expect(computeExitCode({ error: { code: 'UNKNOWN_COMMAND', message: 'not found' } })).toBe(EXIT_NOT_FOUND);
   });
 
   it('returns 127 for PATH_NOT_FOUND', () => {
-    expect(computeExitCode({ success: false, error: { code: 'PATH_NOT_FOUND', message: 'no path' } })).toBe(EXIT_NOT_FOUND);
+    expect(computeExitCode({ error: { code: 'PATH_NOT_FOUND', message: 'no path' } })).toBe(EXIT_NOT_FOUND);
   });
 
   it('returns 127 for NODE_NOT_FOUND', () => {
-    expect(computeExitCode({ success: false, error: { code: 'NODE_NOT_FOUND', message: 'no node' } })).toBe(EXIT_NOT_FOUND);
+    expect(computeExitCode({ error: { code: 'NODE_NOT_FOUND', message: 'no node' } })).toBe(EXIT_NOT_FOUND);
   });
 
   it('returns 127 for NO_TOOL_EXECUTOR', () => {
-    expect(computeExitCode({ success: false, error: { code: 'NO_TOOL_EXECUTOR', message: 'no exec' } })).toBe(EXIT_NOT_FOUND);
+    expect(computeExitCode({ error: { code: 'NO_TOOL_EXECUTOR', message: 'no exec' } })).toBe(EXIT_NOT_FOUND);
   });
 
   it('returns 1 for null result', () => {
@@ -49,7 +49,7 @@ describe('computeExitCode', () => {
   });
 
   it('returns 1 for error without code', () => {
-    expect(computeExitCode({ success: false, error: { message: 'something broke' } })).toBe(EXIT_ERROR);
+    expect(computeExitCode({ error: { message: 'something broke' } })).toBe(EXIT_ERROR);
   });
 });
 
@@ -94,29 +94,28 @@ describe('formatMeta', () => {
 
 describe('extractStderr', () => {
   it('returns null when no warnings or errors', () => {
-    expect(extractStderr({ success: true, data: {} })).toBeNull();
+    expect(extractStderr({ data: {} })).toBeNull();
   });
 
   it('extracts warnings', () => {
-    const result = { success: true, data: { warnings: ['font not loaded', 'opacity clamped'] } };
+    const result = { data: { warnings: ['font not loaded', 'opacity clamped'] } };
     const stderr = extractStderr(result);
     expect(stderr).toContain('[warn] font not loaded');
     expect(stderr).toContain('[warn] opacity clamped');
   });
 
   it('extracts violations', () => {
-    const result = { success: true, data: { violations: [{ message: 'layout conflict' }] } };
+    const result = { data: { violations: [{ message: 'layout conflict' }] } };
     expect(extractStderr(result)).toContain('[warn] layout conflict');
   });
 
   it('extracts error message from failed result', () => {
-    const result = { success: false, error: { message: 'Node not found' } };
+    const result = { error: { message: 'Node not found' } };
     expect(extractStderr(result)).toContain('[error] Node not found');
   });
 
   it('combines warnings and errors', () => {
     const result = {
-      success: false,
       error: { message: 'Failed' },
       data: { warnings: ['partial save'] },
     };

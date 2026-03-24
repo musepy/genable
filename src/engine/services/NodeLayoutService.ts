@@ -15,7 +15,6 @@ import { nodeRepository } from '../figma-adapter/repositories';
 import { ToolResponse } from '../agent/tools/types';
 
 export interface LayoutResult {
-  success: boolean;
   nodeId?: string;
   error?: { code: string; message: string };
 }
@@ -35,17 +34,15 @@ export class NodeLayoutService {
     
     if (!node) {
       return {
-        success: false,
         error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` }
       };
     }
 
     try {
       this.repository.removeNode(node);
-      return { success: true };
+      return {};
     } catch (e: any) {
       return {
-        success: false,
         error: { code: 'DELETE_ERROR', message: e.message }
       };
     }

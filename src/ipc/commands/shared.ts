@@ -66,13 +66,13 @@ export async function executeFlatOps(
   try {
     compiled = compileDesignOps(opsStr, parentId, ActionExecutor.getRegisteredSymbols());
     if (compiled.ops.length === 0 && compiled.errors.length > 0) {
-      return { success: false, error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
+      return { error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
     }
     if (compiled.diagnostics.length > 0) {
       logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
     }
   } catch (e: any) {
-    return { success: false, error: { code: 'PARSE_ERROR', message: e.message } };
+    return { error: { code: 'PARSE_ERROR', message: e.message } };
   }
 
   try {
@@ -133,12 +133,12 @@ export async function executeFlatOps(
       if (result.stats.deleted) parts.push(`${result.stats.deleted} deleted`);
       if (result.stats.failed) parts.push(`${result.stats.failed} failed`);
       if (result.stats.skipped) parts.push(`${result.stats.skipped} skipped`);
-      return { success: false, data: receipt, _stderr: stderr, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
+      return { data: receipt, _stderr: stderr, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
     }
 
-    return { success: true, data: receipt, _stderr: stderr };
+    return { data: receipt, _stderr: stderr };
   } catch (e: any) {
-    return { success: false, error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
+    return { error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
   }
 }
 
@@ -174,7 +174,6 @@ export async function collectViolationsForNodeIds(
 // ── Screenshot export ──
 
 interface ScreenshotResult {
-  success: true;
   __image: { mimeType: string; data: string };
   width: number;
   height: number;
@@ -203,7 +202,6 @@ export async function exportNodeToBase64(
   const mimeType = exportFormat === 'PNG' ? 'image/png' : 'image/jpeg';
 
   return {
-    success: true,
     __image: { mimeType, data: base64 },
     width: Math.round(node.width * exportScale),
     height: Math.round(node.height * exportScale),

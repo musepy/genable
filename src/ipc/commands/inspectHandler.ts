@@ -26,7 +26,6 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
 
   if (!ref) {
     return {
-      success: false,
       error: { code: 'MISSING_PARAM', message: 'Missing required "node" parameter. Use inspect({node: "/"}) for page root.' },
     };
   }
@@ -47,7 +46,7 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
   }
 
   // Quality scoring — only when explicitly requested
-  if (wantScore && result.success) {
+  if (wantScore && !result.error) {
     await attachQualityScore(result, resolved);
   }
 
@@ -71,7 +70,6 @@ function buildTreeResult(
     });
 
     return {
-      success: true,
       data: {
         page: page.name,
         count: page.children.length,
@@ -87,7 +85,7 @@ function buildTreeResult(
   });
   const tree = JsonNodeSerializer.serialize(serialized, { maxDepth: depth, skeleton: true });
 
-  return { success: true, data: tree };
+  return { data: tree };
 }
 
 // ── Detail mode: full properties ──
@@ -104,7 +102,6 @@ function buildDetailResult(
       width: Math.round(n.width), height: Math.round(n.height),
     }));
     return {
-      success: true,
       data: {
         page: page.name,
         childCount: page.children.length,
@@ -120,7 +117,7 @@ function buildDetailResult(
   });
   const detail = JsonNodeSerializer.serialize(serialized, { maxDepth: depth });
 
-  return { success: true, data: detail };
+  return { data: detail };
 }
 
 // ── Screenshot attachment ──

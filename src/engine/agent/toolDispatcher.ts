@@ -116,13 +116,13 @@ export class ToolDispatcher {
     this.toolExecutors['more'] = async (args: any) => {
       const id = Number(args?.id);
       if (!id || isNaN(id)) {
-        return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: more <id>. The id comes from a truncated output message (overflow/N).' } };
+        return { error: { code: 'MISSING_ARG', message: 'Usage: more <id>. The id comes from a truncated output message (overflow/N).' } };
       }
       const content = getOverflow(id);
       if (!content) {
-        return { success: false, error: { code: 'NOT_FOUND', message: `Overflow ${id} not found or expired. Only the last 5 truncated outputs are kept.` } };
+        return { error: { code: 'NOT_FOUND', message: `Overflow ${id} not found or expired. Only the last 5 truncated outputs are kept.` } };
       }
-      return { success: true, data: { listing: content } };
+      return { data: { listing: content } };
     };
   }
 
@@ -225,7 +225,6 @@ export class ToolDispatcher {
           name: originalName,
           id: tc.id,
           response: {
-            success: false,
             error: { code: 'DEPRECATED_COMMAND', message: `"${commandName}" is deprecated. ${suggestion}` },
           },
           thought_signature: tc.thought_signature,
@@ -256,7 +255,6 @@ export class ToolDispatcher {
             name: originalName,
             id: tc.id,
             response: {
-              success: false,
               error: { code: 'HOOK_SKIPPED', message: intercept.reason || `Command "${commandName}" was blocked.` },
             },
             thought_signature: tc.thought_signature,
@@ -277,7 +275,7 @@ export class ToolDispatcher {
         }
       }
 
-      const resultSuccess = result?.success !== false;
+      const resultSuccess = result?.error == null;
 
       // ── Track $LAST — extract last created/modified node ID ──
       this.extractLastNodeId(result);
@@ -350,7 +348,6 @@ export class ToolDispatcher {
       }
       console.error(`[ToolDispatcher] Tool execution failed: ${tc.name}`, e);
       return {
-        success: false,
         error: {
           code: categoryToErrorCode(classifyError(e)),
           message: e.message,
@@ -366,7 +363,6 @@ export class ToolDispatcher {
     if (tc.args?.__help) {
       if (tc.name === 'run') {
         return {
-          success: true,
           data: `10 commands available. Run any command name alone for detailed usage.
 
 Read:   ls /path/          tree /path/        cat /path/ [-s]
@@ -378,7 +374,7 @@ Operators: cmd1 && cmd2 (and)  cmd1 ; cmd2 (seq)  cmd1 || cmd2 (or)
 Exit codes: 0 = success, 1 = error, 127 = not found`,
         };
       }
-      return { success: true, data: getCommandHelp(tc.name) };
+      return { data: getCommandHelp(tc.name) };
     }
 
     // ── Scratchpad intercept (sandbox-local, zero IPC) ──
@@ -394,7 +390,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
     if (!this.allowedToolNames.has(tc.name)) {
       const suggestion = findClosestCommand(tc.name);
       const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
-      return { success: false, error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${tc.name}".${hint}` } };
+      return { error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${tc.name}".${hint}` } };
     }
 
     // ── Execute via local executor or IPC ──
@@ -408,12 +404,11 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
         result = await this.ipcBridge.callTool(tc.name, tc.args);
       }
       if (result == null) {
-        return { success: false, error: { code: 'NO_TOOL_EXECUTOR', message: `Command "${tc.name}" not available.` } };
+        return { error: { code: 'NO_TOOL_EXECUTOR', message: `Command "${tc.name}" not available.` } };
       }
       return result;
     } catch (e: any) {
       return {
-        success: false,
         error: { code: 'TOOL_EXEC_EXCEPTION', message: `${tc.name}: ${e.message}` },
       };
     }
@@ -443,13 +438,12 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const cmd = chain.commands[i];
       const prevOp = i > 0 ? chain.operators[i - 1] : undefined;
       const prevResult = i > 0 ? results[i - 1] : undefined;
-      const prevSuccess = prevResult?.success !== false;
+      const prevSuccess = prevResult?.error == null;
 
       // ── Operator semantics: decide whether to run this command ──
       if (prevOp === '&&' && !prevSuccess) {
         results.push({
           command: cmd.raw,
-          success: false,
           error: { code: 'CHAIN_SKIPPED', message: `Skipped — previous command "${chain.commands[i - 1].raw}" failed. Fix the failing command first, then retry the chain.` },
         });
         continue;
@@ -459,7 +453,6 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
         // || : skip if previous succeeded
         results.push({
           command: cmd.raw,
-          success: true,
           data: { skipped: true, reason: 'Previous command succeeded (|| operator).' },
         });
         continue;
@@ -494,7 +487,6 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       if (!args) {
         results.push({
           command: cmd.raw,
-          success: false,
           error: { code: 'PARSE_ERROR', message: `Cannot parse: "${cmd.raw}". Run "${cmd.name}" alone for usage help.` },
         });
         break; // can't continue chain
@@ -504,7 +496,6 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       if (!isValidCommand(cmd.name)) {
         results.push({
           command: cmd.raw,
-          success: false,
           error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, mv, rm, cp, grep, sed, man` },
         });
         break;
@@ -532,7 +523,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
           if (query) {
             const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
             const matched = text.split('\n').filter(line => pattern.test(line));
-            result = { success: true, data: { listing: matched.join('\n') || '(no matches)' } };
+            result = { data: { listing: matched.join('\n') || '(no matches)' } };
           }
         }
 
@@ -546,10 +537,10 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
           result = await this.ipcBridge.callTool(cmd.name, args);
         }
         if (result == null) {
-          result = { success: false, error: { code: 'NO_EXECUTOR', message: `No executor for "${cmd.name}".` } };
+          result = { error: { code: 'NO_EXECUTOR', message: `No executor for "${cmd.name}".` } };
         }
       } catch (e: any) {
-        result = { success: false, error: { code: 'EXEC_ERROR', message: `${cmd.name}: ${e.message}` } };
+        result = { error: { code: 'EXEC_ERROR', message: `${cmd.name}: ${e.message}` } };
       }
 
       // Track $LAST from chain command results
@@ -564,7 +555,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
     }
 
     return {
-      success: results.every(r => r.success !== false),
+      error: results.some(r => r.error != null) ? { code: 'CHAIN_ERROR', message: 'One or more chain commands failed.' } : undefined,
       data: { chain: results },
     };
   }
@@ -580,7 +571,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
 
   private extractLastNodeId(result: any): void {
     const data = result?.data;
-    if (!data || result?.success === false) return;
+    if (!data || result?.error != null) return;
 
     let candidate: string | undefined;
     if (data.idMap && typeof data.idMap === 'object') {

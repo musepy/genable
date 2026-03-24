@@ -28,16 +28,16 @@ export function scratchGetAll(): Record<string, string> {
   return result;
 }
 
-export function scratchSet(key: string, value: string): { success: boolean; error?: string } {
-  if (!key) return { success: false, error: 'Key is required' };
+export function scratchSet(key: string, value: string): { error?: string } {
+  if (!key) return { error: 'Key is required' };
   if (value.length > MAX_VALUE_LENGTH) {
-    return { success: false, error: `Value too long (${value.length} chars, max ${MAX_VALUE_LENGTH})` };
+    return { error: `Value too long (${value.length} chars, max ${MAX_VALUE_LENGTH})` };
   }
   if (store.size >= MAX_ENTRIES && !store.has(key)) {
-    return { success: false, error: `Scratchpad full (${MAX_ENTRIES} entries). Delete some entries first.` };
+    return { error: `Scratchpad full (${MAX_ENTRIES} entries). Delete some entries first.` };
   }
   store.set(key, value);
-  return { success: true };
+  return {};
 }
 
 export function scratchDelete(key: string): boolean {

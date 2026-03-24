@@ -24,16 +24,16 @@ describe('FontBus cooldown and diagnostics', () => {
       throw new Error('connection refused');
     });
 
-    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ success: false, loadedStyle: 'Regular' });
+    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ loadedStyle: 'Regular', error: true });
     expect(loadFontAsync).toHaveBeenCalledTimes(1);
 
     // Cooldown should prevent immediate retry.
-    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ success: false, loadedStyle: 'Regular' });
+    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ loadedStyle: 'Regular', error: true });
     expect(loadFontAsync).toHaveBeenCalledTimes(1);
 
     // After cooldown expires, retry is allowed.
     vi.setSystemTime(new Date('2026-01-01T00:00:31.000Z'));
-    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ success: false, loadedStyle: 'Regular' });
+    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ loadedStyle: 'Regular', error: true });
     expect(loadFontAsync).toHaveBeenCalledTimes(2);
   });
 
@@ -55,8 +55,8 @@ describe('FontBus cooldown and diagnostics', () => {
       if (font.family === 'Arial') throw new Error('not available');
     });
 
-    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ success: true, loadedStyle: 'Regular' });
-    expect(await fontBus.getOrLoad('Arial', 'Regular')).toEqual({ success: false, loadedStyle: 'Regular' });
+    expect(await fontBus.getOrLoad('Inter', 'Regular')).toEqual({ loadedStyle: 'Regular' });
+    expect(await fontBus.getOrLoad('Arial', 'Regular')).toEqual({ loadedStyle: 'Regular', error: true });
 
     const health = fontBus.getHealth();
     expect(health.loadedCount).toBeGreaterThanOrEqual(1);

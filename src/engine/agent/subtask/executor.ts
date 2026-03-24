@@ -18,11 +18,10 @@ const MAX_CHILD_ITERATIONS = 20;
 export async function executeSubtask(
   prompt: string,
   context: SubtaskContext,
-): Promise<{ success: boolean; data?: any; error?: any }> {
+): Promise<{ data?: any; error?: any }> {
   // Depth guard
   if (context.depth >= context.maxDepth) {
     return {
-      success: false,
       error: {
         code: 'MAX_DEPTH',
         message: `Cannot create subtask: maximum recursion depth (${context.maxDepth}) reached. Complete this work inline instead.`,
@@ -32,7 +31,6 @@ export async function executeSubtask(
 
   if (!prompt || prompt.trim().length === 0) {
     return {
-      success: false,
       error: { code: 'MISSING_PROMPT', message: 'Subtask requires a prompt describing the work to delegate.' },
     };
   }
@@ -76,7 +74,6 @@ export async function executeSubtask(
   try {
     const result = await childRuntime.run(prompt);
     return {
-      success: true,
       data: {
         result,
         stats: childRuntime.getRunStats(),
@@ -85,12 +82,10 @@ export async function executeSubtask(
   } catch (error: any) {
     if (error instanceof AgentRuntimeCanceledError) {
       return {
-        success: false,
         error: { code: 'CANCELED', message: 'Subtask was canceled.' },
       };
     }
     return {
-      success: false,
       error: { code: 'SUBTASK_ERROR', message: error.message || 'Subtask failed.' },
     };
   } finally {

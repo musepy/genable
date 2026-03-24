@@ -10,7 +10,7 @@ export class FigmaSync {
   /**
    * Sync parsed tokens to Figma Local Variables.
    */
-  static async syncTokens(modes: TokenMode[], collectionName: string = 'Design Tokens'): Promise<{ success: boolean; message: string }> {
+  static async syncTokens(modes: TokenMode[], collectionName: string = 'Design Tokens'): Promise<{ message: string; error?: boolean }> {
     try {
       let collection = (await figma.variables.getLocalVariableCollectionsAsync())
         .find(c => c.name === collectionName);
@@ -156,10 +156,10 @@ export class FigmaSync {
         }
       }
 
-      return { success: true, message: `Successfully synced ${modes.length} modes to "${collectionName}".` };
+      return { message: `Successfully synced ${modes.length} modes to "${collectionName}".` };
     } catch (error: any) {
       console.error('[FigmaSync] Sync failed:', error);
-      return { success: false, message: error.message || 'Unknown error during sync' };
+      return { message: error.message || 'Unknown error during sync', error: true };
     }
   }
 

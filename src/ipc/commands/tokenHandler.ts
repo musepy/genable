@@ -18,14 +18,13 @@ export async function handleToken(parameters: any): Promise<ToolResponse> {
     case 'ls': {
       const filter = parameters.filter as 'text' | 'container' | undefined;
       const tokens = dumpTokens(filter);
-      return { success: true, data: { tokens } };
+      return { data: { tokens } };
     }
 
     case 'set': {
       const name = parameters.name as string;
       if (!name) {
         return {
-          success: false,
           error: { code: 'MISSING_PARAM', message: 'token set requires a name. Usage: token set <name> prop:value ...' },
         };
       }
@@ -33,7 +32,6 @@ export async function handleToken(parameters: any): Promise<ToolResponse> {
       const propTokens = parameters.propTokens as string[] | undefined;
       if (!propTokens || propTokens.length === 0) {
         return {
-          success: false,
           error: { code: 'MISSING_PARAM', message: 'token set requires at least one prop:value. Usage: token set bubble fill:#000 corner:20' },
         };
       }
@@ -53,7 +51,6 @@ export async function handleToken(parameters: any): Promise<ToolResponse> {
       const result = setToken(name, props, explicitType);
 
       return {
-        success: true,
         data: {
           name,
           type: result.type,
@@ -67,7 +64,6 @@ export async function handleToken(parameters: any): Promise<ToolResponse> {
       const name = parameters.name as string;
       if (!name) {
         return {
-          success: false,
           error: { code: 'MISSING_PARAM', message: 'token rm requires a name.' },
         };
       }
@@ -75,26 +71,23 @@ export async function handleToken(parameters: any): Promise<ToolResponse> {
       const removed = removeToken(name);
       if (!removed) {
         return {
-          success: false,
           error: { code: 'CANNOT_REMOVE', message: `Cannot remove "${name}" — either it's a default token or doesn't exist.` },
         };
       }
 
-      return { success: true, data: { name, action: 'removed' } };
+      return { data: { name, action: 'removed' } };
     }
 
     case 'reset': {
       resetTokens();
       const { text, container } = listTokens();
       return {
-        success: true,
         data: { action: 'reset', textCount: text.length, containerCount: container.length },
       };
     }
 
     default:
       return {
-        success: false,
         error: { code: 'UNKNOWN_SUBCOMMAND', message: `Unknown subcommand "${subcommand}". Available: ls, set, rm, reset` },
       };
   }

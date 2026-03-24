@@ -84,7 +84,7 @@ export function useMcpBridge(): { mcpBridgeStatus: McpBridgeStatus } {
               const idx = ipcCleanups.indexOf(cleanup)
               if (idx !== -1) ipcCleanups.splice(idx, 1)
 
-              console.log(`[McpBridge] ← IPC result: ${toolName} (${requestId}), success=${data.response?.success}`)
+              console.log(`[McpBridge] ← IPC result: ${toolName} (${requestId}), success=${data.response?.error == null}`)
 
               // Send result back to MCP server over WebSocket
               if (ws.readyState === WebSocket.OPEN) {

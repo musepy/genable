@@ -23,7 +23,6 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
   if (!markup || typeof markup !== 'string') {
     return {
-      success: true,
       data: {
         message: 'jsx — Create design trees with nested JSX-like syntax.',
         usage: 'jsx({markup: "<frame name=\'Card\' w={400} layout=\'column\' p={24}>\\n  <text name=\'Title\' size={24}>Card Title</text>\\n</frame>"})',
@@ -37,7 +36,6 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
   if (roots.length === 0) {
     return {
-      success: false,
       error: {
         code: 'PARSE_ERROR',
         message: errors.length > 0
@@ -65,7 +63,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   // ── Replace flat idMap with {id, name, type, children: [name#id]} ──
   // Return root + one-level direct children refs (like Open-Pencil's render).
   // Agent already knows the full tree (it wrote the JSX) — only needs IDs.
-  if (result.success && result.data?.idMap) {
+  if (!result.error && result.data?.idMap) {
     const idMap = result.data.idMap as Record<string, string>;
 
     // Build symbol → ref map (DFS order matches jsxToFlatOps)
@@ -127,7 +125,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   }
 
   // ── Post-creation quality scoring ──
-  if (result.success && result.data?.id) {
+  if (!result.error && result.data?.id) {
     try {
       const rootId = result.data.id;
       if (rootId) {

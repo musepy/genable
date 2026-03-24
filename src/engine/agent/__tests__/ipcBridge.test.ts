@@ -34,7 +34,7 @@ describe('IpcBridge (Sandbox Thread)', () => {
 
   it('T1.2.1: should emit TOOL_CALL and resolve when TOOL_RESULT is received', async () => {
     const mockParams = { query: 'test' };
-    const mockResponse = { success: true, data: { found: true } };
+    const mockResponse = { data: { found: true } };
 
     // Start the tool call
     const callPromise = bridge.callTool('searchDesignKnowledge', mockParams);
@@ -67,7 +67,7 @@ describe('IpcBridge (Sandbox Thread)', () => {
     vi.advanceTimersByTime(1100);
 
     const result = await callPromise;
-    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
     expect(result.error?.code).toBe('TIMEOUT');
     expect(result.error?.message).toContain('timed out');
   });
@@ -79,7 +79,7 @@ describe('IpcBridge (Sandbox Thread)', () => {
     // Simulate result for wrong ID
     onCallback({
       requestId: 'wrong-id',
-      response: { success: true }
+      response: {}
     });
 
     // Promise should still be pending

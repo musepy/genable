@@ -243,7 +243,6 @@ export type FlatNode = v.InferOutput<typeof FlatNodeSchema>;
  * Validation result type
  */
 export interface ValidationResult<T> {
-    success: boolean;
     data?: T;
     errors?: string[];
 }
@@ -258,7 +257,7 @@ export function validateNodeLayer(input: unknown): ValidationResult<NodeLayer> {
     const result = v.safeParse(NodeLayerSchema, input);
 
     if (result.success) {
-        return { success: true, data: result.output as NodeLayer };
+        return { data: result.output as NodeLayer };
     }
 
     // Format errors for debugging
@@ -268,7 +267,7 @@ export function validateNodeLayer(input: unknown): ValidationResult<NodeLayer> {
         return `[${path}] ${issue.message}`;
     });
 
-    return { success: false, errors };
+    return { errors };
 }
 
 /**
@@ -277,7 +276,7 @@ export function validateNodeLayer(input: unknown): ValidationResult<NodeLayer> {
 export function validateNodeLayerStrict(input: unknown): NodeLayer {
     const result = validateNodeLayer(input);
 
-    if (!result.success) {
+    if (result.errors) {
         const errorMsg = result.errors?.join('\n') || 'Unknown validation error';
         throw new Error(`NodeLayer validation failed:\n${errorMsg}`);
     }

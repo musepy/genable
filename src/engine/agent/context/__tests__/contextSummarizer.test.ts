@@ -30,7 +30,7 @@ describe('buildCompressionSummary', () => {
           {
             functionResponse: {
               name: 'create',
-              response: { success: true, data: { idMap: { Card: '100:1', Title: '100:2' } } },
+              response: { data: { idMap: { Card: '100:1', Title: '100:2' } } },
             },
           },
         ],
@@ -58,7 +58,7 @@ describe('buildCompressionSummary', () => {
           {
             functionResponse: {
               name: 'edit',
-              response: { success: false, error: { message: 'NODE_NOT_FOUND: 99:1' } },
+              response: { error: { message: 'NODE_NOT_FOUND: 99:1' } },
             },
           },
         ],
@@ -143,7 +143,6 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'design',
               response: {
-                success: true,
                 data: {
                   created: 4,
                   edited: 2,
@@ -192,7 +191,6 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'edit',
               response: {
-                success: true,
                 data: {
                   edited: 3,
                 },
@@ -217,7 +215,7 @@ describe('buildCompressionSummary', () => {
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'mk', response: { success: true, data: { idMap: { Card: '962:1', Title: '962:5' } } } } },
+          { functionResponse: { name: 'mk', response: { data: { idMap: { Card: '962:1', Title: '962:5' } } } } },
         ],
       },
     ];
@@ -236,7 +234,7 @@ describe('buildCompressionSummary', () => {
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'ls', response: { success: true, data: { listing: 'Card\nButton\nHeader\nFooter\nSidebar' } } } },
+          { functionResponse: { name: 'ls', response: { data: { listing: 'Card\nButton\nHeader\nFooter\nSidebar' } } } },
         ],
       },
     ];
@@ -254,7 +252,7 @@ describe('buildCompressionSummary', () => {
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'grep', response: { success: true, data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }] } } } },
+          { functionResponse: { name: 'grep', response: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }] } } } },
         ],
       },
     ];
@@ -272,7 +270,7 @@ describe('buildCompressionSummary', () => {
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'sed', response: { success: true, data: { replaced: 5 } } } },
+          { functionResponse: { name: 'sed', response: { data: { replaced: 5 } } } },
         ],
       },
     ];
@@ -290,7 +288,7 @@ describe('buildCompressionSummary', () => {
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'rm', response: { success: true, data: { deleted: 3 } } } },
+          { functionResponse: { name: 'rm', response: { data: { deleted: 3 } } } },
         ],
       },
     ];
@@ -312,7 +310,6 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'design',
               response: {
-                success: false,
                 error: { code: 'PARTIAL_FAILURE', message: '3 created, 2 failed' },
                 data: {
                   created: 3,
@@ -355,7 +352,6 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'design',
               response: {
-                success: false,
                 error: { code: 'BATCH_TOO_LARGE', message: '45 operations exceeds the hard limit of 30' },
               },
             },
@@ -414,7 +410,6 @@ describe('buildCompressionSummary', () => {
               response: {
                 _compressed: true,
                 summary: 'PARTIAL_FAILURE: 2 failed, 1 succeeded',
-                success: false,
                 error: { code: 'PARTIAL_FAILURE', message: '2 ops failed' },
               },
             },
@@ -441,7 +436,6 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'design',
               response: {
-                success: true,
                 data: {
                   created: 5,
                   idMap: { a: '1:1', b: '1:2' },

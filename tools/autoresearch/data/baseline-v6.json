@@ -1,0 +1,129 @@
+{
+  "timestamp": "2026-03-23T02:35:10.031Z",
+  "gitCommit": "c36d207",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774232912770",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.7857142857142857,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.875,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 16,
+          "maxDepth": 3,
+          "durationSec": 23.674
+        },
+        "score": 96,
+        "issues": [
+          "Frame \"Login Card\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774232939705",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 1,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 120
+        },
+        "score": 90,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774233061750",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6111111111111112,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.6363636363636364,
+          "nodeCount": 85,
+          "maxDepth": 5,
+          "durationSec": 92.2
+        },
+        "score": 92.5,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774233162133",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9222222222222223,
+          "fillCompleteness": 0.7222222222222222,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.4166666666666667,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 21,
+          "maxDepth": 3,
+          "durationSec": 25.492
+        },
+        "score": 86.5,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Profile Card\" missing itemSpacing",
+          "Frame \"Stat-Posts\" missing itemSpacing",
+          "Frame \"Stat-Followers\" missing itemSpacing",
+          "Frame \"Stat-Following\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774233189990",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 1,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 120
+        },
+        "score": 90,
+        "issues": []
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 91,
+    "minScore": 86.5,
+    "maxScore": 96,
+    "totalDurationSec": 381.36600000000004,
+    "totalNodes": 122,
+    "totalIssues": 6
+  }
+}

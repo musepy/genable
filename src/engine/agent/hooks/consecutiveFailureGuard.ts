@@ -29,7 +29,7 @@ export function createConsecutiveFailureGuard(): {
       if (!ctx.iterationToolResults || ctx.iterationToolResults.length === 0) return;
 
       const allFailed = ctx.iterationToolResults.every(
-        r => r.result?.success === false
+        r => r.result?.error != null
       );
 
       if (allFailed) {

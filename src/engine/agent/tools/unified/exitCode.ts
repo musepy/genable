@@ -36,7 +36,7 @@ const NOT_FOUND_CODES = new Set([
  */
 export function computeExitCode(result: any): number {
   if (!result) return EXIT_ERROR;
-  if (result.success !== false) return EXIT_SUCCESS;
+  if (result.error == null) return EXIT_SUCCESS;
 
   const code = result.error?.code;
   if (code && NOT_FOUND_CODES.has(code)) return EXIT_NOT_FOUND;
@@ -88,7 +88,7 @@ export function extractStderr(result: any): string | null {
   }
 
   // Error message (only for failed results)
-  if (result?.success === false && result?.error?.message) {
+  if (result?.error != null && result?.error?.message) {
     parts.push(`[error] ${result.error.message}`);
   }
 

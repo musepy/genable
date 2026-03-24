@@ -19,7 +19,6 @@ export async function handleComp(parameters: any): Promise<ToolResponse> {
     case 'instance': return handleCompInstance(parameters);
     default:
       return {
-        success: false,
         error: { code: 'UNKNOWN_SUBCOMMAND', message: `Unknown comp subcommand "${sub}". Use: create, combine, prop, ls, instance` },
       };
   }
@@ -30,21 +29,21 @@ export async function handleComp(parameters: any): Promise<ToolResponse> {
 async function handleCompCreate(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   if (!paths || paths.length === 0) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: comp create <path>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: comp create <path>' } };
   }
 
   const resolved = await resolvePathToNode(paths[0]);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { success: false, error: { code: 'NOT_A_FRAME', message: 'Cannot convert page to component.' } };
+    return { error: { code: 'NOT_A_FRAME', message: 'Cannot convert page to component.' } };
   }
 
   const node = resolved.node;
   if (node.type !== 'FRAME' && node.type !== 'GROUP') {
     if (node.type === 'COMPONENT') {
-      return { success: true, data: { message: `"${node.name}" is already a component.`, nodeId: node.id } };
+      return { data: { message: `"${node.name}" is already a component.`, nodeId: node.id } };
     }
-    return { success: false, error: { code: 'NOT_A_FRAME', message: `"${node.name}" is a ${node.type}, not a frame. Only frames can be converted.` } };
+    return { error: { code: 'NOT_A_FRAME', message: `"${node.name}" is a ${node.type}, not a frame. Only frames can be converted.` } };
   }
 
   // Create a new component and transfer all children + properties
@@ -97,7 +96,6 @@ async function handleCompCreate(params: any): Promise<ToolResponse> {
   node.remove();
 
   return {
-    success: true,
     data: {
       message: `Converted "${component.name}" to component`,
       nodeId: component.id,
@@ -113,7 +111,7 @@ async function handleCompCombine(params: any): Promise<ToolResponse> {
   const setName = params.name as string | undefined;
 
   if (!paths || paths.length < 2) {
-    return { success: false, error: { code: 'COMBINE_REQUIRES_2', message: 'Usage: comp combine <path1> <path2> ... [--name Name]. Requires at least 2 components.' } };
+    return { error: { code: 'COMBINE_REQUIRES_2', message: 'Usage: comp combine <path1> <path2> ... [--name Name]. Requires at least 2 components.' } };
   }
 
   // Resolve all paths to component nodes
@@ -122,11 +120,11 @@ async function handleCompCombine(params: any): Promise<ToolResponse> {
     const resolved = await resolvePathToNode(p);
     if (!resolved.ok) return resolved.response;
     if (resolved.isPage) {
-      return { success: false, error: { code: 'NOT_A_COMPONENT', message: `Page cannot be combined as variant.` } };
+      return { error: { code: 'NOT_A_COMPONENT', message: `Page cannot be combined as variant.` } };
     }
     const node = resolved.node;
     if (node.type !== 'COMPONENT') {
-      return { success: false, error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}, not a COMPONENT. Use "comp create" first to convert frames.` } };
+      return { error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}, not a COMPONENT. Use "comp create" first to convert frames.` } };
     }
     components.push(node as ComponentNode);
   }
@@ -154,7 +152,6 @@ async function handleCompCombine(params: any): Promise<ToolResponse> {
   componentSet.counterAxisSizingMode = 'AUTO';
 
   return {
-    success: true,
     data: {
       message: `Combined ${components.length} components into variant set "${componentSet.name}"`,
       nodeId: componentSet.id,
@@ -173,23 +170,23 @@ async function handleCompProp(params: any): Promise<ToolResponse> {
   const defaultValue = params.defaultValue;
 
   if (!paths || paths.length === 0 || !propName || !propType) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: comp prop <path> <name> TEXT|BOOLEAN|INSTANCE_SWAP [defaultValue]' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: comp prop <path> <name> TEXT|BOOLEAN|INSTANCE_SWAP [defaultValue]' } };
   }
 
   const validTypes = ['TEXT', 'BOOLEAN', 'INSTANCE_SWAP'];
   if (!validTypes.includes(propType)) {
-    return { success: false, error: { code: 'INVALID_TYPE', message: `Invalid property type "${propType}". Use: ${validTypes.join(', ')}` } };
+    return { error: { code: 'INVALID_TYPE', message: `Invalid property type "${propType}". Use: ${validTypes.join(', ')}` } };
   }
 
   const resolved = await resolvePathToNode(paths[0]);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { success: false, error: { code: 'NOT_A_COMPONENT', message: 'Cannot add properties to page.' } };
+    return { error: { code: 'NOT_A_COMPONENT', message: 'Cannot add properties to page.' } };
   }
 
   const node = resolved.node;
   if (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
-    return { success: false, error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}. Properties can only be added to COMPONENT or COMPONENT_SET nodes.` } };
+    return { error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}. Properties can only be added to COMPONENT or COMPONENT_SET nodes.` } };
   }
 
   // Determine default value
@@ -203,14 +200,13 @@ async function handleCompProp(params: any): Promise<ToolResponse> {
   try {
     (node as ComponentNode | ComponentSetNode).addComponentProperty(propName, propType as ComponentPropertyType, defVal);
     return {
-      success: true,
       data: {
         message: `Added ${propType} property "${propName}" to "${node.name}" (default: ${defVal})`,
         nodeId: node.id,
       },
     };
   } catch (e: any) {
-    return { success: false, error: { code: 'PROP_FAILED', message: `Failed: ${e?.message ?? e}` } };
+    return { error: { code: 'PROP_FAILED', message: `Failed: ${e?.message ?? e}` } };
   }
 }
 
@@ -219,13 +215,13 @@ async function handleCompProp(params: any): Promise<ToolResponse> {
 async function handleCompLs(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   if (!paths || paths.length === 0) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: comp ls <path>' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: comp ls <path>' } };
   }
 
   const resolved = await resolvePathToNode(paths[0]);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { success: false, error: { code: 'NOT_A_COMPONENT', message: 'Page is not a component.' } };
+    return { error: { code: 'NOT_A_COMPONENT', message: 'Page is not a component.' } };
   }
 
   const node = resolved.node;
@@ -283,10 +279,10 @@ async function handleCompLs(params: any): Promise<ToolResponse> {
       }
     }
   } else {
-    return { success: false, error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}, not a component/instance.` } };
+    return { error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}, not a component/instance.` } };
   }
 
-  return { success: true, data: { listing: lines.join('\n') } };
+  return { data: { listing: lines.join('\n') } };
 }
 
 // ── comp instance — create instance ──
@@ -296,13 +292,13 @@ async function handleCompInstance(params: any): Promise<ToolResponse> {
   const parentPath = params.parent as string | undefined;
 
   if (!paths || paths.length === 0) {
-    return { success: false, error: { code: 'MISSING_ARG', message: 'Usage: comp instance <component-path> [--parent <dest-path>]' } };
+    return { error: { code: 'MISSING_ARG', message: 'Usage: comp instance <component-path> [--parent <dest-path>]' } };
   }
 
   const resolved = await resolvePathToNode(paths[0]);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { success: false, error: { code: 'NOT_A_COMPONENT', message: 'Page is not a component.' } };
+    return { error: { code: 'NOT_A_COMPONENT', message: 'Page is not a component.' } };
   }
 
   const node = resolved.node;
@@ -314,11 +310,11 @@ async function handleCompInstance(params: any): Promise<ToolResponse> {
     // Use default variant (first child)
     const cs = node as ComponentSetNode;
     if (cs.children.length === 0) {
-      return { success: false, error: { code: 'NO_VARIANTS', message: 'ComponentSet has no variants.' } };
+      return { error: { code: 'NO_VARIANTS', message: 'ComponentSet has no variants.' } };
     }
     component = cs.defaultVariant as ComponentNode;
   } else {
-    return { success: false, error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}, not a component.` } };
+    return { error: { code: 'NOT_A_COMPONENT', message: `"${node.name}" is a ${node.type}, not a component.` } };
   }
 
   const instance = component.createInstance();
@@ -334,7 +330,6 @@ async function handleCompInstance(params: any): Promise<ToolResponse> {
   }
 
   return {
-    success: true,
     data: {
       message: `Created instance of "${component.name}"`,
       nodeId: instance.id,

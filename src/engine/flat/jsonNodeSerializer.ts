@@ -288,13 +288,26 @@ function detectRole(
 
 // ── Summary generation (algorithmic — no LLM) ──
 
-/**
- * Build summary using JSX shorthand — same vocabulary the agent writes.
- * Agent can directly compare summary with its JSX to spot missing attributes.
- */
-function buildSummary(tag: string, props: Record<string, any>, children?: NodeLayer[]): string | undefined {
-  const parts: string[] = [];
+// ── Progressive disclosure: root gets split fields, children get merged summary ──
 
+/** Size: dimensions + sizing mode. JSX shorthand. */
+function buildSize(tag: string, props: Record<string, any>): string | undefined {
+  if (tag === 'text') return undefined; // text size is in visual
+  const parts: string[] = [];
+  const sizingH = props.layoutSizingHorizontal;
+  const sizingV = props.layoutSizingVertical;
+  if (sizingH === 'FILL') parts.push('w=fill');
+  else if (sizingH === 'HUG') parts.push('w=hug');
+  else if (props.width) parts.push(`w=${Math.round(props.width)}`);
+  if (sizingV === 'FILL') parts.push('h=fill');
+  else if (sizingV === 'HUG') parts.push('h=hug');
+  else if (props.height) parts.push(`h=${Math.round(props.height)}`);
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
+/** Visual: appearance properties. JSX shorthand. */
+function buildVisual(tag: string, props: Record<string, any>): string | undefined {
+  const parts: string[] = [];
   if (tag === 'text') {
     const chars = props.characters;
     if (chars) {
@@ -306,42 +319,54 @@ function buildSummary(tag: string, props: Record<string, any>, children?: NodeLa
     const fill = extractFillColor(props);
     if (fill) parts.push(`fill=${fill}`);
   } else {
-    // Sizing: w/h with fill/hug
-    const sizingH = props.layoutSizingHorizontal;
-    const sizingV = props.layoutSizingVertical;
-    if (sizingH === 'FILL') parts.push('w=fill');
-    else if (sizingH === 'HUG') parts.push('w=hug');
-    else if (props.width) parts.push(`w=${Math.round(props.width)}`);
-
-    if (sizingV === 'FILL') parts.push('h=fill');
-    else if (sizingV === 'HUG') parts.push('h=hug');
-    else if (props.height) parts.push(`h=${Math.round(props.height)}`);
-
-    // Layout
-    if (props.layoutMode && props.layoutMode !== 'NONE') {
-      parts.push(`layout=${props.layoutMode === 'HORIZONTAL' ? 'row' : 'column'}`);
-    }
-    const gap = props.itemSpacing ?? props.gap;
-    if (gap && gap > 0) parts.push(`gap=${gap}`);
-
-    // Padding
-    const pt = props.paddingTop ?? 0;
-    const pr = props.paddingRight ?? 0;
-    const pb = props.paddingBottom ?? 0;
-    const pl = props.paddingLeft ?? 0;
-    if (pt || pr || pb || pl) {
-      if (pt === pr && pr === pb && pb === pl) parts.push(`p=${pt}`);
-      else parts.push(`p=${pt},${pr},${pb},${pl}`);
-    }
-
-    // Fill
     const fill = extractFillColor(props);
     if (fill) parts.push(`bg=${fill}`);
-
-    // Corner
     if (props.cornerRadius && props.cornerRadius > 0) parts.push(`corner=${props.cornerRadius}`);
+    const strokes = props.strokes;
+    if (strokes && Array.isArray(strokes) && strokes.length > 0) parts.push(`stroke=${strokes[0]}`);
+    const effects = props.effects;
+    if (effects && Array.isArray(effects) && effects.length > 0) parts.push(`shadow`);
   }
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}
 
+/** Layout: structure properties. JSX shorthand. */
+function buildLayout(props: Record<string, any>): string | undefined {
+  if (!props.layoutMode || props.layoutMode === 'NONE') return undefined;
+  const parts: string[] = [];
+  parts.push(`layout=${props.layoutMode === 'HORIZONTAL' ? 'row' : 'column'}`);
+  const gap = props.itemSpacing ?? props.gap;
+  if (gap && gap > 0) parts.push(`gap=${gap}`);
+  const alignMain = props.primaryAxisAlignItems;
+  if (alignMain && alignMain !== 'MIN') {
+    const map: Record<string, string> = { CENTER: 'center', MAX: 'flex-end', SPACE_BETWEEN: 'space-between' };
+    parts.push(`justify=${map[alignMain] || alignMain}`);
+  }
+  const alignCross = props.counterAxisAlignItems;
+  if (alignCross && alignCross !== 'MIN') {
+    const map: Record<string, string> = { CENTER: 'center', MAX: 'flex-end', BASELINE: 'baseline' };
+    parts.push(`align=${map[alignCross] || alignCross}`);
+  }
+  const pt = props.paddingTop ?? 0;
+  const pr = props.paddingRight ?? 0;
+  const pb = props.paddingBottom ?? 0;
+  const pl = props.paddingLeft ?? 0;
+  if (pt || pr || pb || pl) {
+    if (pt === pr && pr === pb && pb === pl) parts.push(`p=${pt}`);
+    else parts.push(`p=${pt},${pr},${pb},${pl}`);
+  }
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
+/** Merged summary for child nodes — all info in one line. */
+function buildSummary(tag: string, props: Record<string, any>): string | undefined {
+  const parts: string[] = [];
+  const size = buildSize(tag, props);
+  const visual = buildVisual(tag, props);
+  const layout = buildLayout(props);
+  if (size) parts.push(size);
+  if (visual) parts.push(visual);
+  if (layout) parts.push(layout);
   return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
@@ -395,9 +420,20 @@ export class JsonNodeSerializer {
     const role = detectRole(name, tag, props, node.children);
     if (role !== 'generic') result.role = role;
 
-    // Summary (algorithmic — one-line visual description from properties)
-    const summary = buildSummary(tag, props, node.children);
-    if (summary) result.summary = summary;
+    // Progressive disclosure: root gets split fields, children get merged summary
+    if (depth === 0) {
+      // Root node: separate size + visual + layout for easier scanning
+      const size = buildSize(tag, props);
+      const visual = buildVisual(tag, props);
+      const layout = buildLayout(props);
+      if (size) result.size = size;
+      if (visual) result.visual = visual;
+      if (layout) result.layout = layout;
+    } else {
+      // Child nodes: merged summary (one line, saves tokens)
+      const summary = buildSummary(tag, props);
+      if (summary) result.summary = summary;
+    }
 
     const children = node.children;
     if (children && children.length > 0 && depth < maxDepth) {

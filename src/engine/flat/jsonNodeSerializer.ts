@@ -212,6 +212,147 @@ function compactPaddingJson(props: Record<string, any>): any | null {
   return `${t} ${r} ${b} ${l}`;
 }
 
+// ── Role detection (algorithmic — no LLM) ──
+
+const NAME_ROLE_PATTERNS: Array<{ pattern: RegExp; role: string }> = [
+  { pattern: /btn|button/i, role: 'button' },
+  { pattern: /^nav|navbar|navigation/i, role: 'nav' },
+  { pattern: /header/i, role: 'header' },
+  { pattern: /footer/i, role: 'footer' },
+  { pattern: /sidebar/i, role: 'sidebar' },
+  { pattern: /card/i, role: 'card' },
+  { pattern: /avatar/i, role: 'avatar' },
+  { pattern: /badge/i, role: 'badge' },
+  { pattern: /tab/i, role: 'tab' },
+  { pattern: /input|field|search.?bar/i, role: 'input' },
+  { pattern: /label/i, role: 'label' },
+  { pattern: /link/i, role: 'link' },
+  { pattern: /icon/i, role: 'icon' },
+  { pattern: /image|img|photo|thumbnail|hero/i, role: 'image' },
+  { pattern: /divider|separator|rule/i, role: 'separator' },
+  { pattern: /modal|dialog|overlay/i, role: 'dialog' },
+  { pattern: /toast|snackbar|alert/i, role: 'alert' },
+  { pattern: /chip|tag|pill/i, role: 'chip' },
+  { pattern: /toggle|switch/i, role: 'toggle' },
+  { pattern: /checkbox|check.?box/i, role: 'checkbox' },
+  { pattern: /radio/i, role: 'radio' },
+  { pattern: /dropdown|select|menu/i, role: 'menu' },
+  { pattern: /tooltip/i, role: 'tooltip' },
+  { pattern: /progress|loader|spinner/i, role: 'progress' },
+  { pattern: /table/i, role: 'table' },
+  { pattern: /row/i, role: 'row' },
+  { pattern: /form/i, role: 'form' },
+  { pattern: /list/i, role: 'list' },
+];
+
+function detectRole(
+  name: string | undefined,
+  tag: string,
+  props: Record<string, any>,
+  children?: NodeLayer[],
+): string {
+  // Tier 1: name-based
+  if (name) {
+    for (const { pattern, role } of NAME_ROLE_PATTERNS) {
+      if (pattern.test(name)) return role;
+    }
+  }
+
+  // Tier 2: type-based
+  if (tag === 'text') {
+    const size = props.fontSize;
+    if (size >= 32) return 'heading(1)';
+    if (size >= 24) return 'heading(2)';
+    if (size >= 20) return 'heading(3)';
+    return 'text';
+  }
+
+  if (tag === 'icon') return 'icon';
+
+  // Tier 3: visual heuristics
+  const w = props.width ?? 0;
+  const h = props.height ?? 0;
+  // Separator: very thin in one dimension
+  if ((w > 0 && h > 0) && (w <= 2 || h <= 2)) return 'separator';
+
+  // Button-like: has fill, small, has text child, no deep children
+  const hasFill = props.fills && Array.isArray(props.fills) && props.fills.length > 0;
+  const childCount = children?.length ?? 0;
+  if (hasFill && childCount <= 2 && w > 0 && w <= 400 && h > 0 && h <= 64) {
+    const hasTextChild = children?.some(c => (c.type === 'TEXT'));
+    if (hasTextChild) return 'button';
+  }
+
+  return 'generic';
+}
+
+// ── Summary generation (algorithmic — no LLM) ──
+
+/**
+ * Build summary using JSX shorthand — same vocabulary the agent writes.
+ * Agent can directly compare summary with its JSX to spot missing attributes.
+ */
+function buildSummary(tag: string, props: Record<string, any>, children?: NodeLayer[]): string | undefined {
+  const parts: string[] = [];
+
+  if (tag === 'text') {
+    const chars = props.characters;
+    if (chars) {
+      const preview = String(chars).length > 30 ? String(chars).slice(0, 27) + '...' : String(chars);
+      parts.push(`"${preview}"`);
+    }
+    if (props.fontSize) parts.push(`size=${props.fontSize}`);
+    if (props.fontWeight && props.fontWeight !== 'normal' && props.fontWeight !== '400') parts.push(`weight=${props.fontWeight}`);
+    const fill = extractFillColor(props);
+    if (fill) parts.push(`fill=${fill}`);
+  } else {
+    // Sizing: w/h with fill/hug
+    const sizingH = props.layoutSizingHorizontal;
+    const sizingV = props.layoutSizingVertical;
+    if (sizingH === 'FILL') parts.push('w=fill');
+    else if (sizingH === 'HUG') parts.push('w=hug');
+    else if (props.width) parts.push(`w=${Math.round(props.width)}`);
+
+    if (sizingV === 'FILL') parts.push('h=fill');
+    else if (sizingV === 'HUG') parts.push('h=hug');
+    else if (props.height) parts.push(`h=${Math.round(props.height)}`);
+
+    // Layout
+    if (props.layoutMode && props.layoutMode !== 'NONE') {
+      parts.push(`layout=${props.layoutMode === 'HORIZONTAL' ? 'row' : 'column'}`);
+    }
+    const gap = props.itemSpacing ?? props.gap;
+    if (gap && gap > 0) parts.push(`gap=${gap}`);
+
+    // Padding
+    const pt = props.paddingTop ?? 0;
+    const pr = props.paddingRight ?? 0;
+    const pb = props.paddingBottom ?? 0;
+    const pl = props.paddingLeft ?? 0;
+    if (pt || pr || pb || pl) {
+      if (pt === pr && pr === pb && pb === pl) parts.push(`p=${pt}`);
+      else parts.push(`p=${pt},${pr},${pb},${pl}`);
+    }
+
+    // Fill
+    const fill = extractFillColor(props);
+    if (fill) parts.push(`bg=${fill}`);
+
+    // Corner
+    if (props.cornerRadius && props.cornerRadius > 0) parts.push(`corner=${props.cornerRadius}`);
+  }
+
+  return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
+function extractFillColor(props: Record<string, any>): string | undefined {
+  const fills = props.fills;
+  if (!fills || !Array.isArray(fills) || fills.length === 0) return undefined;
+  const first = fills[0];
+  if (typeof first === 'string') return first;
+  return undefined;
+}
+
 // ── Core ──
 
 export interface JsonSerializeOptions {
@@ -236,8 +377,8 @@ export class JsonNodeSerializer {
   }
 
   /**
-   * Skeleton mode: only id, name, children — pure hierarchy for tree navigation.
-   * No properties, no type, no truncation markers.
+   * Skeleton mode: id, name, type, role, summary, children.
+   * Role + summary are algorithmic (no LLM) — helps agent understand nodes without inspect detail.
    */
   private static serializeSkeletonNode(
     node: NodeLayer,
@@ -247,7 +388,16 @@ export class JsonNodeSerializer {
   ): any {
     const tag = TAG_MAP[node.type] || 'frame';
     const props = (node.props || {}) as Record<string, any>;
-    const result: any = { id: node.id, name: props.name || undefined, type: tag };
+    const name = props.name || undefined;
+    const result: any = { id: node.id, name, type: tag };
+
+    // Role detection (algorithmic — name patterns + type + visual heuristics)
+    const role = detectRole(name, tag, props, node.children);
+    if (role !== 'generic') result.role = role;
+
+    // Summary (algorithmic — one-line visual description from properties)
+    const summary = buildSummary(tag, props, node.children);
+    if (summary) result.summary = summary;
 
     const children = node.children;
     if (children && children.length > 0 && depth < maxDepth) {

@@ -48,10 +48,20 @@ function buildStderr(
 
 // ── Flat Ops execution pipeline ──
 
+export interface ExecuteFlatOpsOptions {
+  parentId?: string;
+  onError?: 'continue' | 'abort';
+  rollbackMode?: 'none' | 'created_nodes';
+}
+
 export async function executeFlatOps(
   opsStr: string,
-  parentId?: string,
+  parentIdOrOptions?: string | ExecuteFlatOpsOptions,
 ): Promise<ToolResponse> {
+  const opts: ExecuteFlatOpsOptions = typeof parentIdOrOptions === 'string'
+    ? { parentId: parentIdOrOptions }
+    : (parentIdOrOptions || {});
+  const parentId = opts.parentId;
   let compiled;
   try {
     compiled = compileDesignOps(opsStr, parentId, ActionExecutor.getRegisteredSymbols());
@@ -70,7 +80,9 @@ export async function executeFlatOps(
 
     const executor = new ActionExecutor();
     const result = await executor.executeDesignOps(compiled.ops, compiled.errors, {
-      onError: 'continue', rollbackMode: 'none', parentId,
+      onError: opts.onError || 'continue',
+      rollbackMode: opts.rollbackMode || 'none',
+      parentId,
     });
 
     const rootId = parentId || Object.values(result.idMap)[0];

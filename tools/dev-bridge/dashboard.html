@@ -459,6 +459,296 @@
     }
     .expand-btn:hover { text-decoration: underline; }
 
+    /* ===== Pipeline Architecture ===== */
+    .pipe-arch { display: flex; flex-direction: column; gap: 0; position: relative; }
+
+    /* Shared nodes */
+    .pipe-shared {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 0;
+    }
+    .pipe-node {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      position: relative;
+    }
+    .pipe-node:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+    .pipe-node.llm { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; }
+    .pipe-node.dispatch { background: #3b1f5e; border-color: #7c3aed; color: #c4b5fd; }
+    .pipe-node.present { background: #1a3a2a; border-color: #16a34a; color: #86efac; }
+    .pipe-node .pipe-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #f59e0b;
+      color: #000;
+      font-size: 9px;
+      font-weight: 700;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pipe-node.inactive { opacity: 0.3; cursor: default; }
+    .pipe-node.inactive:hover { transform: none; box-shadow: none; }
+
+    /* Arrow connector */
+    .pipe-arrow {
+      text-align: center;
+      color: var(--text-dimmed);
+      font-size: 18px;
+      line-height: 1;
+      padding: 2px 0;
+    }
+    .pipe-arrow-h {
+      color: var(--text-dimmed);
+      font-size: 14px;
+      margin: 0 2px;
+    }
+
+    /* Tool columns */
+    .pipe-cols {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 0 8px;
+    }
+    .pipe-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .pipe-col-head {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      position: relative;
+    }
+    .pipe-col-head:hover { transform: translateY(-1px); }
+    .pipe-col-head .pipe-col-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .pipe-col-head .pipe-col-count {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    .pipe-col-head.jsx { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+    .pipe-col-head.inspect { background: #1a3a2a; border-color: #22c55e; color: #86efac; }
+    .pipe-col-head.edit { background: #3b2f10; border-color: #f59e0b; color: #fcd34d; }
+    .pipe-col-head.run { background: #3b1f5e; border-color: #a855f7; color: #d8b4fe; }
+    .pipe-col-head.inactive { opacity: 0.25; cursor: default; }
+    .pipe-col-head.inactive:hover { transform: none; }
+
+    /* Stage pills inside columns */
+    .pipe-stages {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+      padding: 0 4px;
+    }
+    .pipe-stage-arrow {
+      color: var(--text-dimmed);
+      font-size: 11px;
+      line-height: 1;
+      opacity: 0.4;
+    }
+    .pipe-stage {
+      width: 100%;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      text-align: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      cursor: default;
+      transition: all .15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pipe-stage.active {
+      border-color: #3b82f6;
+      background: rgba(59,130,246,.1);
+      color: var(--text-primary);
+    }
+    .pipe-stage .pipe-stage-file {
+      font-size: 9px;
+      color: var(--text-dimmed);
+      display: block;
+    }
+
+    /* Pipeline detail panel (expands below) */
+    .pipe-detail {
+      margin-top: 16px;
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+      animation: fadeIn .2s;
+    }
+    .pipe-detail-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-input);
+      border-bottom: 1px solid var(--border-card);
+      font-size: 12px;
+    }
+    .pipe-detail-header .pipe-detail-title {
+      font-weight: 600;
+      color: var(--text-heading);
+    }
+    .pipe-detail-header .pipe-detail-close {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-dimmed);
+      font-size: 16px;
+      background: none;
+      border: none;
+      padding: 0 4px;
+    }
+    .pipe-detail-header .pipe-detail-close:hover { color: var(--text-primary); }
+    .pipe-detail-body {
+      padding: 12px 14px;
+    }
+    /* Trace row: horizontal flow of stages */
+    .pipe-trace {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pipe-trace-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-row);
+    }
+    .pipe-trace-row:last-child { border-bottom: none; }
+    .pipe-trace-idx {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .pipe-trace-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .pipe-trace-stages {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .pipe-trace-stage {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .pipe-trace-stage:hover { filter: brightness(1.2); }
+    .pipe-trace-stage.stage-dispatch { background: #3b1f5e; border: 1px solid #7c3aed; color: #d8b4fe; }
+    .pipe-trace-stage.stage-handler { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
+    .pipe-trace-stage.stage-exec { background: #1a3a2a; border: 1px solid #22c55e; color: #86efac; }
+    .pipe-trace-stage.stage-present { background: #3b2f10; border: 1px solid #f59e0b; color: #fcd34d; }
+    .pipe-trace-stage.stage-err { background: #3b1010; border: 1px solid #ef4444; color: #fca5a5; }
+    .pipe-trace-arrow { color: var(--text-dimmed); font-size: 10px; flex-shrink: 0; }
+    .pipe-trace-dur {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      flex-shrink: 0;
+      width: 50px;
+      text-align: right;
+    }
+    .pipe-trace-status-ok { color: #22c55e; font-size: 10px; }
+    .pipe-trace-status-err { color: #ef4444; font-size: 10px; }
+
+    /* Data popup for trace stage click */
+    .pipe-data-popup {
+      margin-top: 8px;
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      background: var(--bg-tool-body);
+      animation: fadeIn .15s;
+    }
+    .pipe-data-popup-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-card);
+    }
+    .pipe-data-popup-title { font-size: 11px; font-weight: 600; color: var(--text-heading); }
+    .pipe-data-popup-close {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-dimmed);
+      background: none;
+      border: none;
+      font-size: 14px;
+    }
+    .pipe-data-popup-body { padding: 8px 12px; }
+    .pipe-data-section { font-size: 10px; color: var(--text-dimmed); text-transform: uppercase; margin: 6px 0 3px; }
+    .pipe-data-section:first-child { margin-top: 0; }
+    .pipe-data-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 10px;
+      line-height: 1.4;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+
+    [data-theme="light"] .pipe-node.llm { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+    [data-theme="light"] .pipe-node.dispatch { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+    [data-theme="light"] .pipe-node.present { background: #dcfce7; border-color: #16a34a; color: #166534; }
+    [data-theme="light"] .pipe-col-head.jsx { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+    [data-theme="light"] .pipe-col-head.inspect { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    [data-theme="light"] .pipe-col-head.edit { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    [data-theme="light"] .pipe-col-head.run { background: #ede9fe; border-color: #a855f7; color: #5b21b6; }
+    [data-theme="light"] .pipe-trace-stage.stage-dispatch { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+    [data-theme="light"] .pipe-trace-stage.stage-handler { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+    [data-theme="light"] .pipe-trace-stage.stage-exec { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    [data-theme="light"] .pipe-trace-stage.stage-present { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    [data-theme="light"] .pipe-trace-stage.stage-err { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+
     /* ===== Conversation Flow ===== */
     .conv-flow { display: flex; flex-direction: column; gap: 12px; }
     .conv-msg {
@@ -811,6 +1101,12 @@
       <div class="live-tools" id="live-tools"></div>
     </div>
 
+    <!-- Pipeline Architecture -->
+    <div class="card" id="pipe-card" style="display:none">
+      <div class="card-title">Execution Pipeline</div>
+      <div id="pipe-container"></div>
+    </div>
+
     <!-- Conversation Flow -->
     <div class="card" id="conv-card" style="display:none">
       <div class="card-title">Conversation Flow</div>
@@ -1077,6 +1373,7 @@ function updateLastLiveTool(name, status, durationMs) {
 function clearDisplay() {
   document.getElementById('overview-card').style.display = 'none';
   document.getElementById('timeline-card').style.display = 'none';
+  document.getElementById('pipe-card').style.display = 'none';
   document.getElementById('conv-card').style.display = 'none';
   document.getElementById('llm-ctx-card').style.display = 'none';
   document.getElementById('tools-card').style.display = 'none';
@@ -1090,6 +1387,7 @@ function renderFull(id, events, meta) {
   document.getElementById('empty-state').style.display = 'none';
   renderOverview(meta);
   renderTimeline(events);
+  renderPipeline(events, meta);
   renderConversation(meta.conversationHistory || []);
   renderLLMContext(events);
   renderToolDetails(meta.toolCallDetails || []);
@@ -1246,6 +1544,287 @@ function renderTimeline(events) {
       '<span class="timeline-duration">' + formatDuration(totalDur) + '</span>';
     container.appendChild(row);
   }
+}
+
+// ===== Pipeline Architecture =====
+const TOOL_PIPELINES = {
+  jsx: {
+    color: 'jsx',
+    stages: [
+      { id: 'parse', label: 'parseJsx()', file: 'jsxParser.ts' },
+      { id: 'flat', label: 'jsxToFlatOps()', file: 'jsxToFlatOps.ts' },
+      { id: 'compile', label: 'compileDesignOps()', file: 'flatOpsParser.ts' },
+      { id: 'exec', label: 'executor.execute()', file: 'executor.ts' },
+      { id: 'receipt', label: 'buildReceipt()', file: 'receiptBuilder.ts' },
+      { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
+    ]
+  },
+  inspect: {
+    color: 'inspect',
+    stages: [
+      { id: 'route', label: 'handleInspect()', file: 'inspectHandler.ts' },
+      { id: 'read', label: 'readHandler()', file: 'readHandlers.ts' },
+      { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
+    ]
+  },
+  edit: {
+    color: 'edit',
+    stages: [
+      { id: 'parse', label: 'handleEdit()', file: 'editHandler.ts' },
+      { id: 'compile', label: 'compileDesignOps()', file: 'flatOpsParser.ts' },
+      { id: 'exec', label: 'executor.execute()', file: 'executor.ts' },
+      { id: 'receipt', label: 'buildReceipt()', file: 'receiptBuilder.ts' },
+    ]
+  },
+  run: {
+    color: 'run',
+    stages: [
+      { id: 'unwrap', label: 'unwrapRunCmd()', file: 'toolDispatcher.ts' },
+      { id: 'route', label: 'route sub-cmd', file: 'handlers/*' },
+      { id: 'exec', label: 'execute', file: 'handler.ts' },
+    ]
+  },
+};
+
+// Map tool names to pipeline keys (handle aliases)
+function toolToPipeline(name) {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  if (n === 'jsx' || n === 'mk' || n === 'render' || n === 'design' || n === 'create') return 'jsx';
+  if (n === 'inspect' || n === 'cat' || n === 'tree' || n === 'ls') return 'inspect';
+  if (n === 'edit' || n === 'update') return 'edit';
+  if (n === 'run' || n === 'man' || n === 'grep' || n === 'sed' || n === 'mv' || n === 'rm' || n === 'cp') return 'run';
+  return null;
+}
+
+let pipeDetailData = null; // currently selected detail
+
+function renderPipeline(events, meta) {
+  const card = document.getElementById('pipe-card');
+  card.style.display = '';
+  const container = document.getElementById('pipe-container');
+  container.innerHTML = '';
+
+  // Gather tool call data
+  const toolCalls = (meta.toolCallDetails || []).map((tc, i) => ({
+    ...tc,
+    index: i + 1,
+    pipeline: toolToPipeline(tc.name),
+  }));
+
+  // Count per pipeline
+  const counts = { jsx: 0, inspect: 0, edit: 0, run: 0 };
+  for (const tc of toolCalls) {
+    if (tc.pipeline && counts[tc.pipeline] !== undefined) counts[tc.pipeline]++;
+  }
+
+  // LLM call count
+  const llmCount = events.filter(e => e.type === 'llm_response').length;
+  const totalDur = meta.durationMs;
+
+  // === Build architecture diagram ===
+  let html = '<div class="pipe-arch">';
+
+  // LLM node
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node llm" onclick="pipeShowLLM()" title="Click: show LLM call details">' +
+      'LLM Generate' +
+      '<span class="pipe-badge">' + llmCount + '</span>' +
+    '</div></div>';
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // Dispatcher
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node dispatch">' +
+      'toolDispatcher.dispatch()' +
+      '<span class="pipe-badge">' + toolCalls.length + '</span>' +
+    '</div></div>';
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // 4 tool columns
+  html += '<div class="pipe-cols">';
+  for (const [key, pipe] of Object.entries(TOOL_PIPELINES)) {
+    const count = counts[key];
+    const isActive = count > 0;
+    html += '<div class="pipe-col">';
+    html += '<div class="pipe-col-head ' + key + (isActive ? '' : ' inactive') + '"' +
+      (isActive ? ' onclick="pipeShowTool(\'' + key + '\')" title="Click: show ' + key + ' calls"' : '') + '>' +
+      '<div class="pipe-col-name">' + key + '</div>' +
+      '<div class="pipe-col-count">' + count + ' call' + (count !== 1 ? 's' : '') + '</div>' +
+    '</div>';
+
+    // Stages
+    html += '<div class="pipe-stages">';
+    for (let si = 0; si < pipe.stages.length; si++) {
+      const s = pipe.stages[si];
+      html += '<div class="pipe-stage-arrow">\u2193</div>';
+      html += '<div class="pipe-stage' + (isActive ? ' active' : '') + '" title="' + escHtml(s.file) + '">' +
+        s.label + '<span class="pipe-stage-file">' + s.file + '</span></div>';
+    }
+    html += '</div>'; // stages
+    html += '</div>'; // col
+  }
+  html += '</div>'; // cols
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // presentForLLM
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node present">' +
+      'presentForLLM()' +
+      '<span class="pipe-badge">' + toolCalls.length + '</span>' +
+    '</div></div>';
+
+  // Detail panel placeholder
+  html += '<div id="pipe-detail-slot"></div>';
+
+  html += '</div>'; // pipe-arch
+  container.innerHTML = html;
+
+  // Store data for click handlers
+  pipeDetailData = { events, meta, toolCalls, counts, llmCount };
+}
+
+function pipeShowLLM() {
+  if (!pipeDetailData) return;
+  const slot = document.getElementById('pipe-detail-slot');
+  const { events } = pipeDetailData;
+  const llmReqs = events.filter(e => e.type === 'llm_request');
+  const llmResps = events.filter(e => e.type === 'llm_response');
+
+  let html = '<div class="pipe-detail">';
+  html += '<div class="pipe-detail-header">' +
+    '<span class="pipe-detail-title">LLM Calls (' + llmResps.length + ')</span>' +
+    '<button class="pipe-detail-close" onclick="this.closest(\'.pipe-detail\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-detail-body"><div class="pipe-trace">';
+
+  for (let i = 0; i < llmResps.length; i++) {
+    const req = llmReqs[i];
+    const resp = llmResps[i];
+    const usage = resp?.usage || {};
+    const shape = resp?.responseShape || {};
+    html += '<div class="pipe-trace-row">' +
+      '<span class="pipe-trace-idx">Iter ' + (resp?.iteration || i+1) + '</span>' +
+      '<div class="pipe-trace-stages">' +
+        '<span class="pipe-trace-stage stage-handler">' +
+          (req?.messageCount || '?') + ' msgs \u2192 LLM' +
+        '</span>' +
+        '<span class="pipe-trace-arrow">\u2192</span>' +
+        '<span class="pipe-trace-stage stage-exec">' +
+          (usage.promptTokens || '?') + ' prompt tok' +
+          (usage.cachedTokens ? ' (' + usage.cachedTokens + ' cached)' : '') +
+        '</span>' +
+        '<span class="pipe-trace-arrow">\u2192</span>' +
+        '<span class="pipe-trace-stage stage-present">' +
+          'text=' + (shape.textLength || 0) + ' tools=' + (shape.toolCallCount || 0) +
+          (shape.toolCallNames?.length ? ' (' + shape.toolCallNames.join(',') + ')' : '') +
+        '</span>' +
+      '</div>' +
+      '<span class="pipe-trace-dur">' + formatDuration(resp?.durationMs) + '</span>' +
+    '</div>';
+  }
+
+  html += '</div></div></div>';
+  slot.innerHTML = html;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pipeShowTool(pipeKey) {
+  if (!pipeDetailData) return;
+  const slot = document.getElementById('pipe-detail-slot');
+  const { toolCalls } = pipeDetailData;
+  const pipe = TOOL_PIPELINES[pipeKey];
+  const calls = toolCalls.filter(tc => tc.pipeline === pipeKey);
+
+  let html = '<div class="pipe-detail">';
+  html += '<div class="pipe-detail-header">' +
+    '<span class="pipe-detail-title">' + pipeKey + ' calls (' + calls.length + ')</span>' +
+    '<button class="pipe-detail-close" onclick="this.closest(\'.pipe-detail\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-detail-body"><div class="pipe-trace">';
+
+  for (const tc of calls) {
+    const isErr = tc.status === 'error';
+    // Build stage trace
+    const stages = [];
+    stages.push({ label: 'dispatch', cls: 'stage-dispatch' });
+    for (const s of pipe.stages) {
+      stages.push({ label: s.label, cls: 'stage-handler' });
+    }
+    stages.push({ label: 'presentForLLM', cls: 'stage-present' });
+    if (isErr) stages.push({ label: 'ERROR', cls: 'stage-err' });
+
+    let stagesHTML = '';
+    for (let si = 0; si < stages.length; si++) {
+      if (si > 0) stagesHTML += '<span class="pipe-trace-arrow">\u2192</span>';
+      stagesHTML += '<span class="pipe-trace-stage ' + stages[si].cls + '" ' +
+        'onclick="pipeShowCallData(' + tc.index + ', \'' + stages[si].label + '\')">' +
+        stages[si].label + '</span>';
+    }
+
+    html += '<div class="pipe-trace-row">' +
+      '<span class="pipe-trace-idx">#' + tc.index + '</span>' +
+      '<span class="pipe-trace-name">' + escHtml(tc.name) + '</span>' +
+      '<div class="pipe-trace-stages">' + stagesHTML + '</div>' +
+      '<span class="' + (isErr ? 'pipe-trace-status-err' : 'pipe-trace-status-ok') + '">' +
+        (isErr ? '\u2717' : '\u2713') + '</span>' +
+      '<span class="pipe-trace-dur">' + formatDuration(tc.durationMs) + '</span>' +
+    '</div>';
+  }
+
+  html += '</div><div id="pipe-call-data-slot"></div></div></div>';
+  slot.innerHTML = html;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pipeShowCallData(index, stage) {
+  if (!pipeDetailData) return;
+  const tc = pipeDetailData.toolCalls.find(t => t.index === index);
+  if (!tc) return;
+
+  const slot = document.getElementById('pipe-call-data-slot');
+  if (!slot) return;
+
+  const paramsStr = formatToolJSON(tc.params);
+  const resultStr = formatToolJSON(tc.result);
+  const isInput = (stage === 'dispatch');
+  const isOutput = (stage === 'presentForLLM');
+
+  let html = '<div class="pipe-data-popup">';
+  html += '<div class="pipe-data-popup-header">' +
+    '<span class="pipe-data-popup-title">#' + index + ' ' + escHtml(tc.name) + ' \u2014 ' + escHtml(stage) + '</span>' +
+    '<button class="pipe-data-popup-close" onclick="this.closest(\'.pipe-data-popup\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-data-popup-body">';
+
+  if (isInput || stage.includes('parse') || stage.includes('handle') || stage.includes('unwrap')) {
+    html += '<div class="pipe-data-section">Input (Parameters)</div>' +
+      '<pre class="pipe-data-json">' + escHtml(truncate(paramsStr, 2000)) + '</pre>';
+  }
+
+  if (isOutput || stage.includes('present') || stage.includes('Receipt') || stage.includes('score')) {
+    html += '<div class="pipe-data-section">Output (Result)</div>' +
+      '<pre class="pipe-data-json">' + escHtml(truncate(resultStr, 2000)) + '</pre>';
+  }
+
+  if (!isInput && !isOutput) {
+    // Show both for intermediate stages
+    html += '<div class="pipe-data-section">Tool Input</div>' +
+      '<pre class="pipe-data-json">' + escHtml(truncate(paramsStr, 1000)) + '</pre>' +
+      '<div class="pipe-data-section">Tool Output</div>' +
+      '<pre class="pipe-data-json">' + escHtml(truncate(resultStr, 1000)) + '</pre>';
+  }
+
+  if (tc.error) {
+    html += '<div class="pipe-data-section">Error</div>' +
+      '<div class="conv-tc-error">' + escHtml(tc.error) + '</div>';
+  }
+
+  html += '</div></div>';
+  slot.innerHTML = html;
 }
 
 // ===== Conversation Flow =====

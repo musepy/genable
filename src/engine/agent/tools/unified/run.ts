@@ -24,14 +24,14 @@ function buildRunDescription(): string {
   // Command catalog — grouped by function
   const COMMAND_CATALOG: Record<string, Array<[string, string]>> = {
     'Move & Delete': [
-      ['mv /src/ /dest/', 'move or rename node'],
-      ['rm /path/', 'delete node (supports glob: rm /Card/Old*)'],
-      ['cp /src/ /dest/ {overrides}', 'clone with overrides'],
+      ['mv Name#id /dest/', 'move or rename node'],
+      ['rm Name#id', 'delete node (supports glob: rm /Card/Old*)'],
+      ['cp Name#id /dest/ {overrides}', 'clone with overrides'],
     ],
     'Search & Replace': [
       ['grep <query>', 'search nodes by name/type'],
-      ['grep /path/ props', 'discover property values'],
-      ['sed /path/ prop:from/to', 'batch property replacement'],
+      ['grep Name#id props', 'discover property values'],
+      ['sed Name#id prop:from/to', 'batch property replacement'],
     ],
     Knowledge: [
       ['man [topic]', 'help, guidelines, style guides'],
@@ -40,15 +40,15 @@ function buildRunDescription(): string {
       ['var ls [collection]', 'list collections & variables'],
       ['var mk <coll/name> TYPE value', 'create variable (COLOR, FLOAT, BOOLEAN, STRING)'],
       ['var mk --collection <name> --modes A,B', 'create collection with modes'],
-      ['var bind /path/ prop coll/name', 'bind variable to node property'],
+      ['var bind Name#id prop coll/name', 'bind variable to node property'],
       ['var alias semantic/name target/name', 'create alias (semantic → primitive)'],
     ],
     Components: [
-      ['comp create /path/', 'convert frame to component'],
-      ['comp combine /p1/ /p2/ --name X', 'combine as variant set'],
-      ['comp prop /path/ Name TYPE [default]', 'add component property'],
-      ['comp ls /path/', 'list component properties & variants'],
-      ['comp instance /path/ [--parent /p/]', 'create instance'],
+      ['comp create Name#id', 'convert frame to component'],
+      ['comp combine N1#id N2#id --name X', 'combine as variant set'],
+      ['comp prop Name#id Prop TYPE [default]', 'add component property'],
+      ['comp ls Name#id', 'list component properties & variants'],
+      ['comp instance Name#id [--parent P#id]', 'create instance'],
     ],
     Scripting: [
       ['js <code>', 'execute JavaScript (full figma.* API access)'],
@@ -61,8 +61,8 @@ function buildRunDescription(): string {
   const lines: string[] = [
     'Advanced operations via CLI syntax. For common tasks, prefer the dedicated tools:',
     '  jsx({markup: "..."})   — create design trees',
-    '  inspect({path: "..."}) — read/inspect nodes',
-    '  edit({path: "...", props: {...}}) — update properties',
+    '  inspect({node: "Name#id"}) — read/inspect nodes',
+    '  edit({node: "Name#id", props: {...}}) — update properties',
     '',
   ];
 
@@ -75,16 +75,16 @@ function buildRunDescription(): string {
   }
 
   lines.push(
-    'Path: "/" = page root, "/Card/" = by name, "Card#100:5" = by name#id (from ls/receipt).',
+    'Node addressing: "Name#id" (e.g. "Card#100:5") from jsx/inspect results. "/" = page root.',
     'Glob: /Card/Btn* matches children starting with "Btn".',
     '$LAST: expands to last created/modified node ID.',
     'Chain: cmd1 && cmd2 (and), cmd1 ; cmd2 (seq), cmd1 || cmd2 (or), cmd1 | cmd2 (pipe)',
     '',
     'Examples:',
     '  run({command: "grep Button"})',
-    '  run({command: "sed /Card/ fillColor:#FFF/#000"})',
-    '  run({command: "mv /Card/Old/ /Card/New/"})',
-    '  run({command: "rm /Card/Placeholder*"})',
+    '  run({command: "sed Card#1:2 fillColor:#FFF/#000"})',
+    '  run({command: "mv OldTitle#1:3 /Card/NewTitle"})',
+    '  run({command: "rm Card#1:2"})',
     '  run({command: "var mk colors/primary COLOR #1A1A1A"})',
   );
 

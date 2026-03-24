@@ -11,7 +11,7 @@ export const mvDefinition: ToolDefinition = {
   executionStrategy: 'sequential',
   description: `Move, rename, or reorder a design node.
 
-**Syntax**: \`mv /source/ /dest/ [--at N]\`
+**Syntax**: \`mv Name#id /dest/ [--at N]\`
 
 - Same parent → RENAME (just changes name)
 - Different parent → MOVE (reparent + optional rename)
@@ -19,22 +19,21 @@ export const mvDefinition: ToolDefinition = {
 - \`--at N\` → reorder within parent (0 = first child, -1 = last)
 
 **Examples**:
-  mv /Card/OldTitle /Card/NewTitle            # rename
-  mv /Card/Header/Logo /Card/Footer/Logo      # move to different parent
-  mv /Card/Header/Logo /Card/Footer/          # move into Footer, keep name
-  mv /Card/Item3 /Card/Item3 --at 0           # move Item3 to first position
+  mv OldTitle#1:2 /Card/NewTitle              # rename
+  mv Logo#1:3 Footer#1:4                      # move to different parent
+  mv Item3#1:5 Item3#1:5 --at 0               # move to first position
 
-See also: cp (clone), rm (delete), mk (create/update)`,
+See also: cp (clone), rm (delete), edit (update props)`,
   parameters: {
     type: 'object',
     properties: {
       sourcePath: {
         type: 'string',
-        description: 'Path to the node to move/rename.',
+        description: 'Source node ref (Name#id) or path.',
       },
       destPath: {
         type: 'string',
-        description: 'Destination path. Last segment = new name, prefix = new parent.',
+        description: 'Destination node ref (Name#id) or path. Last segment = new name.',
       },
       at: {
         type: 'number',

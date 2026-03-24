@@ -11,13 +11,13 @@ export const sedDefinition: ToolDefinition = {
   executionStrategy: 'sequential',
   description: `Batch search-and-replace property values across a subtree — like Unix sed.
 
-**Syntax**: \`sed /path/ prop:from/to [prop:from/to ...]\`
+**Syntax**: \`sed Name#id prop:from/to [prop:from/to ...]\`
 
 **Examples**:
-  sed /Card/ fillColor:#3B82F6/#8B5CF6
-  sed /Card/ fontSize:14/16 cornerRadius:8/12
-  sed /100:5/ textColor:#000/#FFF fillColor:#FFF/#1A1A2E
+  sed Card#1:2 fillColor:#3B82F6/#8B5CF6
+  sed Card#1:2 fontSize:14/16 cornerRadius:8/12
 
+Node addressing: use Name#id refs from jsx/inspect results.
 Each \`prop:from/to\` pair replaces all occurrences of \`from\` with \`to\` in the subtree.
 Supported properties: fillColor, textColor, strokeColor, strokeWeight, opacity, cornerRadius, gap, fontSize, fontFamily, fontWeight.
 
@@ -27,7 +27,7 @@ Returns: { replaced: N, details: { prop: count } }`,
     properties: {
       path: {
         type: 'string',
-        description: 'Root path for the subtree to replace within.',
+        description: 'Node ref (Name#id) or path for the subtree root.',
       },
       replacements: {
         type: 'object',

@@ -13,16 +13,16 @@ export const rmDefinition: ToolDefinition = {
   category: 'modify',
   display: { displayName: 'Delete', group: 'design' },
   executionStrategy: 'sequential',
-  description: `Delete a node and its children at the given path.
+  description: `Delete a node and its children.
 
-CLI: rm /Card/OldSection/
-     rm /Card/Header/Icon`,
+CLI: rm Card#1:2
+     rm Header#1:3`,
   parameters: {
     type: 'object',
     properties: {
       path: {
         type: 'string',
-        description: 'Path to the node to delete.',
+        description: 'Node ref (Name#id) or path to delete.',
       },
     },
     required: ['path'],
@@ -39,23 +39,23 @@ export const cpDefinition: ToolDefinition = {
   category: 'create',
   display: { displayName: 'Clone', group: 'design' },
   executionStrategy: 'sequential',
-  description: `Clone a node to a new path with optional property overrides.
+  description: `Clone a node with optional property overrides.
 
 Deep-copies the source. Override props apply to clone root.
 Use ChildName.prop:value for child overrides.
 
-CLI: cp /Card/Default/ /Card/Hover/ {bg:#EEE}
-     cp /Card/Default/ /Card/Disabled/ {bg:#D9D9D9, Label.fill:#999}`,
+CLI: cp Card#1:2 /Card/Hover/ {bg:#EEE}
+     cp Card#1:2 /Card/Disabled/ {bg:#D9D9D9, Label.fill:#999}`,
   parameters: {
     type: 'object',
     properties: {
       sourcePath: {
         type: 'string',
-        description: 'Path to the source node to clone.',
+        description: 'Source node ref (Name#id) or path to clone.',
       },
       destPath: {
         type: 'string',
-        description: 'Path for the clone. Last segment = name, prefix = parent.',
+        description: 'Destination path. Last segment = name, prefix = parent.',
       },
       propsRaw: {
         type: 'string',

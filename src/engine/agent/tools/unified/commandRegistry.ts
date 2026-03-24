@@ -63,7 +63,7 @@ const COMMAND_MAP = new Map<string, ToolDefinition>([
   [createDefinition.name, createDefinition],
   [inspectDefinition.name, inspectDefinition],
   [editDefinition.name, editDefinition],
-  // FS write commands — path-based
+  // FS write commands
   [rmDefinition.name, rmDefinition],
   [cpDefinition.name, cpDefinition],
 ]);
@@ -184,31 +184,31 @@ See also: cat (read before writing), grep (find nodes), man (usage guides)`,
   grep: `grep — Search nodes or discover property values.
 
 Usage:
-  grep Button                        search nodes by name
-  grep frame                         search nodes by type
-  grep /Card/ fillColor,fontSize     discover property values in subtree
+  grep Button                            search nodes by name
+  grep frame                             search nodes by type
+  grep Card#1:2 fillColor,fontSize       discover property values in subtree
 
 Modes:
-  Node search — first arg is NOT a path: grep <query> [/scope/]
-  Property discovery — first arg IS a path: grep /path/ prop1,prop2
+  Node search — first arg is NOT a ref: grep <query>
+  Property discovery — first arg IS a ref: grep Name#id prop1,prop2
 
 Properties: fillColor, textColor, strokeColor, strokeWeight, opacity,
             cornerRadius, gap, fontSize, fontFamily, fontWeight
 
-See also: cat (inspect found node), sed (replace discovered values)`,
+See also: inspect (inspect found node), sed (replace discovered values)`,
 
   sed: `sed — Batch search-and-replace properties across a subtree.
 
 Usage:
-  sed /Card/ fillColor:#3B82F6/#8B5CF6
-  sed /Card/ fontSize:14/16 cornerRadius:8/12
-  sed /100:5/ textColor:#000/#FFF fillColor:#FFF/#1A1A2E
+  sed Card#1:2 fillColor:#3B82F6/#8B5CF6
+  sed Card#1:2 fontSize:14/16 cornerRadius:8/12
 
-Syntax: sed /path/ prop:from/to [prop:from/to ...]
+Syntax: sed Name#id prop:from/to [prop:from/to ...]
 
+Node addressing: use Name#id refs from jsx/inspect results.
 Use grep first to discover current values, then sed to replace them.
 
-See also: grep (discover values first), cat (verify changes)`,
+See also: grep (discover values first), inspect (verify changes)`,
 
   man: `man — Get design guidelines, style guides, and help documentation.
 
@@ -270,35 +270,40 @@ See also: tree (overview first), mk (modify what you see)`,
   mv: `mv — Move or rename a design node.
 
 Usage:
-  mv /Card/OldTitle /Card/NewTitle            # rename
-  mv /Card/Header/Logo /Card/Footer/Logo      # move + rename
-  mv /Card/Header/Logo /Card/Footer/          # move into Footer, keep name
+  mv OldTitle#1:2 /Card/NewTitle              # rename
+  mv Logo#1:3 Footer#1:4                      # move to different parent
+  mv Item#1:5 Item#1:5 --at 0                 # reorder to first position
+
+Node addressing: use Name#id refs from jsx/inspect results.
 
 Rules:
   - Dest is existing container → move INTO it (keep original name)
   - Dest doesn't exist → split into parent + name (rename + reparent)
   - Same parent → rename only
 
-See also: cp (clone), rm (delete), mk (create/update)`,
+See also: cp (clone), rm (delete), edit (update props)`,
 
   rm: `rm — Delete a node and its children.
 
 Usage:
-  rm /Card/OldSection/
-  rm /Card/Header/Icon
+  rm Card#1:2
+  rm Header#1:3
   rm /Card/Placeholder*                       # glob: delete matching nodes
 
-See also: ls (check before deleting), cp (clone instead)`,
+Node addressing: use Name#id refs from jsx/inspect results.
 
-  cp: `cp — Clone a node to a new path with overrides.
+See also: inspect (check before deleting), cp (clone instead)`,
+
+  cp: `cp — Clone a node with overrides.
 
 Usage:
-  cp /Card/Default/ /Card/Hover/ {bg:#EEE}
-  cp /Card/Default/ /Card/Disabled/ {bg:#D9D9D9, Label.fill:#999}
+  cp Card#1:2 /Card/Hover/ {bg:#EEE}
+  cp Card#1:2 /Card/Disabled/ {bg:#D9D9D9, Label.fill:#999}
 
+Node addressing: use Name#id refs from jsx/inspect results.
 Deep-copies the source. ChildName.prop:value overrides child properties.
 
-See also: mk (create from scratch), comp instance (component instances)`,
+See also: jsx (create from scratch), comp instance (component instances)`,
 
   js: `js — Execute JavaScript in the Figma plugin runtime.
 
@@ -345,32 +350,34 @@ Subcommands:
   var mk spacing/md FLOAT 16                create FLOAT variable
   var mk --collection Theme --modes Light,Dark  create collection with modes
   var mk Theme/bg COLOR #FFF --mode Light   set per-mode value
-  var bind /Card/ fills Theme/bg            bind variable to node
+  var bind Card#1:2 fills Theme/bg          bind variable to node
   var alias semantic/text colors/primary    create alias
 
 Workflow:
   1. var mk --collection ... → create collection
   2. var mk coll/name TYPE value → create variables
-  3. var bind /path/ prop coll/name → bind to design nodes
+  3. var bind Name#id prop coll/name → bind to design nodes
 
-See also: comp (component variants), mk (create nodes with $var binding), grep (discover properties)`,
+See also: comp (component variants), jsx (create nodes with $var binding), grep (discover properties)`,
 
   comp: `comp — Manage Figma components and variants.
 
 Subcommands:
-  comp create /Button/Primary                  convert frame to component
-  comp combine /Btn1/ /Btn2/ --name Button     combine as variant set
-  comp prop /Button/ Label TEXT "Click"         add component property
-  comp ls /Button/                              list properties & variants
-  comp instance /Button/ --parent /Card/        create instance
+  comp create Button#1:2                       convert frame to component
+  comp combine Btn1#1:2 Btn2#1:3 --name Button combine as variant set
+  comp prop Button#1:2 Label TEXT "Click"       add component property
+  comp ls Button#1:2                            list properties & variants
+  comp instance Button#1:2 [--parent Card#1:4]  create instance
+
+Node addressing: use Name#id refs from jsx/inspect results.
 
 Workflow:
-  1. Create frames with mk (e.g. Primary, Secondary, Ghost buttons)
-  2. comp create /each/frame → convert to components
+  1. Create frames with jsx (e.g. Primary, Secondary, Ghost buttons)
+  2. comp create Name#id → convert to components
   3. comp combine → merge into variant set
   4. comp prop → add configurable properties
 
-See also: var (design tokens), mk (create frames), cp (clone with overrides)`,
+See also: var (design tokens), jsx (create frames), cp (clone with overrides)`,
 
   more: `more — Page through truncated output.
 

@@ -11,14 +11,14 @@ export const grepDefinition: ToolDefinition = {
   executionStrategy: 'parallel',
   description: `Search nodes by name/type or discover property values in a subtree.
 
-**Node search** (first arg is NOT a path):
+**Node search** (first arg is NOT a ref):
   grep Button              → find nodes named "Button" on page
   grep frame               → find all frame nodes
 
-**Property discovery** (first arg IS a path):
-  grep /Card/ fillColor,fontSize    → discover unique values
-  grep /100:5/ textColor            → by node ID
+**Property discovery** (first arg IS a ref):
+  grep Card#1:2 fillColor,fontSize  → discover unique values in subtree
 
+Node addressing: use Name#id refs from jsx/inspect results.
 Property discovery returns all unique values found in the subtree.
 Supported properties: fillColor, textColor, strokeColor, strokeWeight, opacity, cornerRadius, gap, fontSize, fontFamily, fontWeight.`,
   parameters: {
@@ -30,7 +30,7 @@ Supported properties: fillColor, textColor, strokeColor, strokeWeight, opacity, 
       },
       path: {
         type: 'string',
-        description: 'Path scope for node search, or subtree root for property discovery.',
+        description: 'Node ref (Name#id) or path for scope/subtree root.',
       },
       properties: {
         type: 'array',

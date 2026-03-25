@@ -64,13 +64,14 @@ describe('validateDependencies', () => {
       expect(warnings[0]).toContain("'NONE'");
     });
 
-    it('warns: node has layoutMode=NONE, ops add padding', () => {
+    it('auto-fixes: node has layoutMode=NONE (default), ops add padding → inject VERTICAL', () => {
+      // Node's NONE is a default, not explicit user intent — should auto-fix
       const { fixes, warnings } = validateDependencies(
         { paddingLeft: 16 },
         { layoutMode: 'NONE' },
       );
-      expect(fixes).toEqual({});
-      expect(warnings.length).toBeGreaterThan(0);
+      expect(fixes).toEqual({ layoutMode: 'VERTICAL' });
+      expect(warnings).toHaveLength(0);
     });
   });
 

@@ -23,6 +23,9 @@ const ALIGN_MAP: Record<string, string> = {
   center: 'CENTER', start: 'MIN', end: 'MAX',
   flexstart: 'MIN', flexend: 'MAX',
   spacebetween: 'SPACE_BETWEEN', between: 'SPACE_BETWEEN',
+  // Figma only has SPACE_BETWEEN — map CSS space-around/space-evenly to closest equivalent
+  spacearound: 'SPACE_BETWEEN', around: 'SPACE_BETWEEN',
+  spaceevenly: 'SPACE_BETWEEN', evenly: 'SPACE_BETWEEN',
   baseline: 'BASELINE',
 };
 

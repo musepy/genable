@@ -289,13 +289,17 @@ export function validateDependencies(
         const gateOnNode = nodeState?.[rule.gate];
         const effective = gateInOps !== undefined ? gateInOps : gateOnNode;
 
-        if (effective === undefined) {
+        if (effective === undefined || (!checkCondition(effective, rule.condition) && gateInOps === undefined)) {
+          // Gate absent from ops: either entirely missing or only on the node with wrong value.
+          // Auto-fix: inject the correct gate value (e.g. layoutMode:'VERTICAL' when align is set
+          // but no layout was specified — the node's default 'NONE' should not block injection).
           if (rule.inject !== undefined) {
             fixes[rule.gate] = rule.inject;
           } else {
             warnings.push(`'${depName}' requires ${formatCondition(rule.gate, rule.condition)}`);
           }
         } else if (!checkCondition(effective, rule.condition)) {
+          // Gate explicitly set in ops but with wrong value — warn, don't override intent
           warnings.push(
             `'${depName}' requires ${formatCondition(rule.gate, rule.condition)}, got '${effective}'`
           );

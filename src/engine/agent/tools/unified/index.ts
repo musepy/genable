@@ -2,15 +2,11 @@
  * @file unified/index.ts
  * @description Barrel export for unified tool definitions.
  *
- * LLM-facing API: a single `run` tool that dispatches to individual commands.
- * VFS read: ls/cat/tree. Write: mk/mv/rm/cp. Search: grep/sed. Knowledge: man.
+ * LLM-facing API: jsx, inspect, edit (first-class) + `run` tool for power operations.
+ * Write: mv/rm/cp. Search: grep/sed. Knowledge: man. Script: js/var/comp.
  */
 
-// VFS read commands — filesystem metaphor
-export { lsDefinition, catDefinition, treeDefinition } from './vfs';
-
 // Unix CLI commands
-export { mkDefinition } from './mk';
 export { grepDefinition } from './grep';
 export { sedDefinition } from './sed';
 export { manDefinition } from './man';
@@ -38,7 +34,6 @@ export {
 
 // LLM-facing tools
 export { runDefinition } from './run';
-export { createDefinition } from './create';
 
 import { runDefinition } from './run';
 import { jsxDefinition } from './jsx';

@@ -29,13 +29,11 @@ import { handleScratchCommand } from './scratchpad/handler';
 // ---------------------------------------------------------------------------
 
 /** Commands no longer exposed to the LLM. Use jsx/edit instead. */
-const DEPRECATED_COMMANDS = new Set(['mk', 'create', 'render']);
+const DEPRECATED_COMMANDS = new Set(['mk']);
 
 /** Helpful migration messages for each deprecated command. */
 const DEPRECATED_SUGGESTIONS: Record<string, string> = {
   mk: 'Use jsx({markup: "..."}) for creation or edit({path, props}) for updates.',
-  create: 'Use jsx({markup: "..."}) for structured tree creation.',
-  render: 'Use jsx({markup: "..."}) for design creation.',
 };
 
 // ---------------------------------------------------------------------------
@@ -299,8 +297,8 @@ export class ToolDispatcher {
         },
       });
 
-      // Log design/create failures with per-line details for real-time debugging
-      if (!resultSuccess && (commandName === 'design' || commandName === 'create') && errorMessage) {
+      // Log design failures with per-line details for real-time debugging
+      if (!resultSuccess && commandName === 'design' && errorMessage) {
         console.warn(`[${commandName}] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
       }
 
@@ -363,11 +361,11 @@ export class ToolDispatcher {
     if (tc.args?.__help) {
       if (tc.name === 'run') {
         return {
-          data: `10 commands available. Run any command name alone for detailed usage.
+          data: `Commands available. Run any command name alone for detailed usage.
 
-Read:   ls /path/          tree /path/        cat /path/ [-s]
-Write:  mk /path/ [type]   mv /src/ /dest/    rm /path/          cp /src/ /dest/
+Write:  mv /src/ /dest/    rm /path/          cp /src/ /dest/
 Search: grep <query>       sed /path/ prop    man [topic]
+Script: js <expression>    var <subcommand>   comp <subcommand>
 
 Glob: /path/Prefix* matches children by pattern. $LAST = last created node ID.
 Operators: cmd1 && cmd2 (and)  cmd1 ; cmd2 (seq)  cmd1 || cmd2 (or)

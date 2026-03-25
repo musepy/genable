@@ -199,7 +199,7 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
 function summarizeArgs(toolName: string, args: any): string {
   if (!args || typeof args !== 'object') return '';
 
-  if (toolName === 'create' || toolName === 'edit' || toolName === 'design') {
+  if (toolName === 'edit' || toolName === 'design') {
     // XML content — just show length
     const xml = args.xml || args.content || '';
     const parts: string[] = [];
@@ -266,7 +266,7 @@ function summarizeFailResult(toolName: string, resp: any): string {
 }
 
 function summarizeSuccessResult(toolName: string, resp: any): string {
-  if (toolName === 'create' || toolName === 'mk' || toolName === 'cp') {
+  if (toolName === 'cp') {
     return summarizeIdMap(resp.data?.idMap || resp.idMap);
   }
   if (toolName === 'edit') {

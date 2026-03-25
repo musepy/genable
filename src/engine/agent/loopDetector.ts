@@ -92,10 +92,7 @@ export class LoopDetector {
       const nameSample = tc.args?.name ? `|name:${this.truncate(tc.args.name, 64)}` : '';
       const contextSample = parentId ? `|parent:${this.truncate(parentId, 32)}` : '';
 
-      if (tc.name === 'create' && tc.args?.xml) {
-        const instrHash = this.hashString(String(tc.args.xml).slice(0, 256));
-        fingerprint = `|build:${instrHash}`;
-      } else if (tc.name === 'edit' && tc.args?.xml) {
+      if (tc.name === 'edit' && tc.args?.xml) {
         const editHash = this.hashString(String(tc.args.xml).slice(0, 256));
         fingerprint = `|edit:${editHash}`;
       } else if (tc.name === 'outline' || tc.name === 'inspect') {

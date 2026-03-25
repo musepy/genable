@@ -27,13 +27,11 @@ import {
 
 const KEEP_FIELDS: Record<string, string[] | null> = {
   // Write commands — LLM needs IDs to reference created nodes + error details for repair
-  mk:      ['idMap', 'created', 'failed', 'errors', 'degraded', 'degradedHint'],
   cp:      ['idMap'],
   rm:      ['deleted'],
   mv:      ['id', 'name'],
   // Read commands — LLM needs the content
   tree:    ['tree'],
-  cat:     null,                        // node fields spread to top level — pass through
   // Search commands
   grep:    ['results', 'properties'],   // results = node mode, properties = prop mode
   sed:     ['replaced', 'details'],
@@ -47,10 +45,7 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
             'opacity', 'sizingH', 'sizingV', 'alignMain', 'alignCross', 'childCount',
             '__image'],
   jsx:     null,                        // node fields spread to top level — pass through
-  // Legacy tool names
-  design:  ['idMap', 'created', 'edited', 'deleted', 'failed', 'errors', 'degraded', 'degradedHint'],
   edit:    ['edited', 'failed', 'errors', 'changeSummary'],
-  create:  ['idMap'],
 };
 
 /** Overflow hints per command — contextual help for the LLM. */

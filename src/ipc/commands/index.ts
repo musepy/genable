@@ -17,12 +17,9 @@ import { handleGrep, handleSed } from './searchHandlers';
 import { handleJs } from './jsHandler';
 import { handleVar } from './varHandlers';
 import { handleComp } from './compHandlers';
-import { handleRender } from './renderHandler';
 import { handleJsx } from './jsxHandler';
-import { handleCreate } from './createHandler';
 import { handleInspect } from './inspectHandler';
 import { handleEdit } from './editHandler';
-import { handleToken } from './tokenHandler';
 import { handleMemoryCommand } from './memoryHandler';
 import { handleScanTokens } from './tokenScanner';
 
@@ -45,12 +42,9 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   js: handleJs,
   var: handleVar,
   comp: handleComp,
-  render: handleRender,
   jsx: handleJsx,
-  create: handleCreate,
   inspect: handleInspect,
   edit: handleEdit,
-  token: handleToken,
   'scan-tokens': handleScanTokens,
   // man is handled locally in sandbox — should not arrive at IPC
   man: async () => ({

@@ -23,8 +23,8 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
     return toolCalls.map(tc => {
-      // Strip XML from create/edit history — tool result already has success/idMap feedback.
-      if ((tc.name === 'create' || tc.name === 'edit') && typeof tc.args?.xml === 'string' && tc.args.xml.length > 500) {
+      // Strip XML from edit history — tool result already has success/idMap feedback.
+      if (tc.name === 'edit' && typeof tc.args?.xml === 'string' && tc.args.xml.length > 500) {
         return {
           ...tc,
           args: {

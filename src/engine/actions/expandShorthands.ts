@@ -91,8 +91,10 @@ const EXPANDERS: Record<string, Expander> = {
   align: (v) => {
     const parts = String(v).trim().split(/\s+/);
     if (parts.length === 1) {
-      const m = mapAlign(parts[0]);
-      return { primaryAxisAlignItems: m, counterAxisAlignItems: m };
+      // Single value: cross-axis only (matches CSS `align-items` mental model).
+      // LLMs almost always mean "vertically center in a row" when writing align="center".
+      // Use justify="center" for main-axis, or align="center center" for both.
+      return { counterAxisAlignItems: mapAlign(parts[0]) };
     }
     return { primaryAxisAlignItems: mapAlign(parts[0]), counterAxisAlignItems: mapAlign(parts[1]) };
   },

@@ -145,7 +145,7 @@ function summarizeSuccess(toolName: string, resp: any): string {
   // After presentForLLM flattening, data fields are at top level (resp.X, not resp.data.X)
 
   // Creation tools — show node count and ID mapping
-  if (toolName === 'jsx' || toolName === 'create' || toolName === 'mk' || toolName === 'cp') {
+  if (toolName === 'jsx' || toolName === 'cp') {
     // jsx spreads {id, name, type, children} to top level
     if (resp.id) {
       const childCount = Array.isArray(resp.children) ? resp.children.length : 0;

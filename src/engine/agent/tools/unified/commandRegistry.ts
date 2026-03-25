@@ -9,22 +9,16 @@
  */
 
 import { ToolDefinition } from '../types';
-import { lsDefinition, catDefinition, treeDefinition } from './vfs';
 import { rmDefinition, cpDefinition } from './fs';
 // Unix CLI commands
-import { mkDefinition } from './mk';
 import { mvDefinition } from './mv';
 import { grepDefinition } from './grep';
 import { sedDefinition } from './sed';
 import { manDefinition } from './man';
 import { jsDefinition } from './js';
-import { subtaskDefinition } from './subtask';
 import { varDefinition } from './var';
 import { compDefinition } from './comp';
-import { renderDefinition } from './render';
-import { tokenDefinition } from './token';
 import { jsxDefinition } from './jsx';
-import { createDefinition } from './create';
 import { inspectDefinition } from './inspect';
 import { editDefinition } from './edit';
 
@@ -40,27 +34,18 @@ const moreDefinition: ToolDefinition = {
 
 /** All command definitions, keyed by command name. */
 const COMMAND_MAP = new Map<string, ToolDefinition>([
-  // VFS read commands
-  [lsDefinition.name, lsDefinition],
-  [treeDefinition.name, treeDefinition],
-  [catDefinition.name, catDefinition],
-  // New Unix CLI commands
-  [mkDefinition.name, mkDefinition],
+  // Unix CLI commands
   [mvDefinition.name, mvDefinition],
   [grepDefinition.name, grepDefinition],
   [sedDefinition.name, sedDefinition],
   [manDefinition.name, manDefinition],
   [jsDefinition.name, jsDefinition],
   [moreDefinition.name, moreDefinition],
-  [subtaskDefinition.name, subtaskDefinition],
   // Design system commands
   [varDefinition.name, varDefinition],
   [compDefinition.name, compDefinition],
-  // Semantic rendering
-  [renderDefinition.name, renderDefinition],
-  [tokenDefinition.name, tokenDefinition],
+  // First-class tools (registered for help/validation)
   [jsxDefinition.name, jsxDefinition],
-  [createDefinition.name, createDefinition],
   [inspectDefinition.name, inspectDefinition],
   [editDefinition.name, editDefinition],
   // FS write commands
@@ -155,32 +140,12 @@ export function getCommandHelp(commandName: string): string {
     '',
     `Usage: run({command: "${commandName} ..."})`,
     '',
-    `See also: ${COMMAND_SEE_ALSO[commandName] || 'ls, tree, cat, mk, grep, sed'}`,
+    `See also: ${COMMAND_SEE_ALSO[commandName] || 'grep, sed, inspect, jsx, edit'}`,
   ].join('\n');
 }
 
 /** CLI-style help text for each command. */
 const COMMAND_CLI_HELP: Record<string, string> = {
-  mk: `mk — Create or update a design node (upsert).
-
-Usage:
-  mk /Card/ frame w:400 layout:column gap:16 p:24 bg:#FFF corner:12
-  mk /Card/Title text size:24 weight:Bold fill:#111 -- Card Title
-  mk /Card/ corner:16                                  # update existing
-  mk /Card/Btn ref:Button variant:'Size=Large'          # component instance
-
-Rules:
-  - Path exists → UPDATE (only listed props change, type ignored)
-  - Path doesn't exist → CREATE (type defaults to frame)
-  - Props: space-separated key:value. Quote complex values.
-  - -- separates props from text content
-  - ref:Name creates a component instance
-
-Batch (multiple lines via input):
-  run({command: "mk", input: "/Card/ frame w:400\\n/Card/Title text size:24 -- Hello"})
-
-See also: cat (read before writing), grep (find nodes), man (usage guides)`,
-
   grep: `grep — Search nodes or discover property values.
 
 Usage:
@@ -222,50 +187,7 @@ Usage:
 
 Sources: help (default), guidelines, style-tags, style
 
-See also: grep (find nodes), mk (create/update)`,
-
-  ls: `ls — List children of a design node.
-
-Usage:
-  ls /                      page root
-  ls /Card/                 Card's children
-  ls /Card/Header/          nested path
-
-Shows: name, type, dimensions, layout, key properties.
-Nodes with children shown with trailing "/".
-
-See also: tree (structural hierarchy), cat (full properties)`,
-
-  tree: `tree — Show structural tree of a design node.
-
-Usage:
-  tree /                    page structure
-  tree /Card/               Card subtree
-  tree /Card/ -d 2          shallow tree (depth 2)
-
-Flags:
-  -d N, --depth N           max depth (default 5, max 10)
-
-Returns suggestedReads — paths worth inspecting with cat.
-~100-300 tokens, much cheaper than cat for understanding structure.
-
-See also: cat (full details), ls (quick listing)`,
-
-  cat: `cat — Read full properties of a design node.
-
-Usage:
-  cat /Card/                full properties
-  cat /Card/Header/Title    specific node
-  cat /Card/ -s             with screenshot
-
-Flags:
-  -s, --screenshot          capture visual screenshot
-  -d N, --depth N           max depth (default 5, max 10)
-
-Output: XML with abbreviated attributes (w, h, layout, fill, size, weight, corner, p, shadow).
-Auto-degrades to structural view when tree is large.
-
-See also: tree (overview first), mk (modify what you see)`,
+See also: grep (find nodes), jsx (create)`,
 
   mv: `mv — Move or rename a design node.
 
@@ -322,24 +244,7 @@ Rules:
   - Results auto-serialized (nodes → {id, type, name, width, height})
   - Arrays capped at 100 items
 
-See also: cat (inspect nodes), mk (create/update), grep (search nodes)`,
-
-  subtask: `subtask — Delegate a focused sub-task to a child agent.
-
-Usage:
-  subtask Design a sidebar with nav links and user avatar
-  subtask Create a data table with 5 columns and sample rows
-
-The child agent:
-  - Shares your tools, canvas, and system prompt
-  - Has its own iteration budget (max 20 iterations)
-  - Returns its result and statistics when done
-  - Is automatically canceled if you are canceled
-
-Use for independent pieces of complex designs. Don't use for
-simple operations that take 1-2 tool calls.
-
-See also: man (design guidelines), mk (create/update)`,
+See also: inspect (inspect nodes), jsx (create), grep (search nodes)`,
 
   var: `var — Manage Figma variables (design tokens).
 
@@ -389,24 +294,7 @@ Usage:
 When a command output exceeds 200 lines, it is truncated and saved.
 The truncation message includes "overflow/N" — use more N to retrieve it.
 
-See also: cat (read nodes), grep (search), tree (structure)`,
-
-  token: `token — View and customize style tokens for render command.
-
-Subcommands:
-  token ls                                    list all tokens with values
-  token ls text                               text tokens only
-  token ls container                          container tokens only
-  token set bubble fill:#1E1B4B corner:20     update existing token
-  token set my-label --text size:14 fill:#666 create new text token
-  token set my-box --container p:32 fill:#FFF create new container token
-  token rm my-label                           remove custom token (defaults can't be removed)
-  token reset                                 reset all to defaults
-
-Tokens define visual styles for the render command.
-Props use mk shorthand: size, weight, fill, corner, p, gap, layout, w, h, etc.
-
-See also: render (use tokens), man (design guidelines)`,
+See also: inspect (read nodes), grep (search)`,
 
   jsx: `jsx — Create design trees with nested JSX-like syntax.
 
@@ -427,59 +315,23 @@ Multiple roots:
   <frame name="A" ...>...</frame>
   <frame name="B" ...>...</frame>
 
-Use jsx for tree creation (5+ nodes). Use mk for updates and single-node ops.
+Use jsx for tree creation (5+ nodes). Use edit for updates.
 
-See also: mk (updates, single node), cat (inspect result), man (design guidelines)`,
+See also: edit (update props), inspect (inspect result), man (design guidelines)`,
 
-  render: `render — Create designs using style tokens (semantic markup).
-
-Usage:
-  run({command: "render", input: "card\\n  h1: \\"Dashboard\\"\\n  body: \\"Overview\\""})
-
-Syntax (indentation = nesting):
-  container-token [override:value ...]
-    text-token: "content"
-
-Text tokens: h1, h2, h3, body, body-sm, caption, stat-value, stat-label, overline
-Container tokens: page, card, row, column, section, chip
-
-Examples:
-  card
-    h1: "Settings"
-    body: "Manage your account"
-
-  page
-    row gap:24
-      card
-        stat-value: "1,234"
-        stat-label: "Users"
-      card
-        stat-value: "$45.6K"
-        stat-label: "Revenue"
-
-Container overrides: row gap:24, card fill:#F8FAFC p:32
-
-See also: mk (custom designs), cat (inspect result)`,
 };
 
 /** Cross-references between commands for progressive discovery. */
 const COMMAND_SEE_ALSO: Record<string, string> = {
-  mk: 'cat (read before writing), grep (find nodes), man (usage guides)',
-  mv: 'cp (clone), rm (delete), mk (create/update)',
-  grep: 'cat (inspect found node), sed (replace values)',
-  sed: 'grep (discover values first), cat (verify changes)',
-  man: 'grep (find nodes), mk (create/update)',
-  ls: 'tree (structural hierarchy), cat (full properties)',
-  tree: 'cat (full details for specific nodes), ls (quick listing)',
-  cat: 'tree (overview first), mk (modify what you see)',
-  rm: 'ls (check before deleting), cp (clone instead)',
-  cp: 'mk (create from scratch), comp instance (component instances)',
-  js: 'cat (inspect nodes), mk (create/update), grep (search nodes)',
-  subtask: 'man (design guidelines), mk (create/update)',
-  more: 'cat (read nodes), grep (search), tree (structure)',
-  var: 'comp (component variants), mk (create with $var binding), grep (discover values)',
-  comp: 'var (design tokens), mk (create frames), cp (clone with overrides)',
-  jsx: 'mk (updates, single node), cat (inspect result), man (design guidelines)',
-  render: 'mk (custom designs), token (customize styles), cat (inspect result)',
-  token: 'render (use tokens), var (design tokens), man (guidelines)',
+  mv: 'cp (clone), rm (delete), edit (update props)',
+  grep: 'inspect (inspect found node), sed (replace values)',
+  sed: 'grep (discover values first), inspect (verify changes)',
+  man: 'grep (find nodes), jsx (create)',
+  rm: 'inspect (check before deleting), cp (clone instead)',
+  cp: 'jsx (create from scratch), comp instance (component instances)',
+  js: 'inspect (inspect nodes), jsx (create), grep (search nodes)',
+  more: 'inspect (read nodes), grep (search)',
+  var: 'comp (component variants), jsx (create with $var binding), grep (discover values)',
+  comp: 'var (design tokens), jsx (create frames), cp (clone with overrides)',
+  jsx: 'edit (update props), inspect (inspect result), man (design guidelines)',
 };

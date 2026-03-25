@@ -35,8 +35,13 @@ describe('expandShorthands', () => {
   // ── Alignment ──────────────────────────────────────────────────────────
 
   describe('align', () => {
-    it('"center" → both axes CENTER', () => {
+    it('"center" → cross-axis only (CSS align-items mental model)', () => {
       const result = expandShorthands({ align: 'center' });
+      expect(result.primaryAxisAlignItems).toBeUndefined();
+      expect(result.counterAxisAlignItems).toBe('CENTER');
+    });
+    it('"center center" → both axes CENTER', () => {
+      const result = expandShorthands({ align: 'center center' });
       expect(result.primaryAxisAlignItems).toBe('CENTER');
       expect(result.counterAxisAlignItems).toBe('CENTER');
     });
@@ -335,11 +340,12 @@ describe('expandShorthands', () => {
       paddingBottom: 12,
       paddingLeft: 16,
       itemSpacing: 8,
-      primaryAxisAlignItems: 'CENTER',
       counterAxisAlignItems: 'CENTER',
       cornerRadius: 12,
       fills: ['#FFFFFF'],
     });
+    // align="center" single value → cross-axis only, primaryAxis untouched
+    expect(result.primaryAxisAlignItems).toBeUndefined();
     // No shorthand keys remain
     expect(result.layout).toBeUndefined();
     expect(result.padding).toBeUndefined();

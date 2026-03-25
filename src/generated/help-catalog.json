@@ -73,24 +73,6 @@
       "content": "### COMPONENT-FIRST WORKFLOW (reusable elements)\nWhen creating 2+ similar elements (cards, list items, nav items, stat tiles):\n\n1. **Define once** — create a frame with all properties, then `comp create` to convert it to a Figma Component. Keep it small (3–8 nodes), include ALL design dimensions.\n2. **Instantiate** — `comp instance` to stamp instances. Each instance inherits all styles.\n\n```\nmk /StatCard/ frame layout:column gap:8 p:20 bg:#FFFFFF corner:12 shadow:0,2,8,0,#0000001A w:240 h:hug\nmk /StatCard/label text size:14 fill:#64748B -- Label\nmk /StatCard/value text size:28 weight:Bold fill:#0F172A -- 0\ncomp create /StatCard/\n```\nThen:\n```\nmk /Stats/ frame layout:row gap:16 w:fill h:hug bg:transparent\ncomp instance /StatCard/ --parent /Stats/\ncomp instance /StatCard/ --parent /Stats/\ncomp instance /StatCard/ --parent /Stats/\n```\n\n**When to use**: 2+ similar elements with identical structure but different content.\n**When NOT to use**: one-off layouts, unique sections → direct `mk`.\n**Key benefit**: component definition is small (focused attention = fewer attribute omissions), instances are tiny."
     },
     {
-      "id": "design-system",
-      "title": "Design System Tokens (Palette, Typography, Spacing)",
-      "keywords": [
-        "design-system",
-        "palette",
-        "swatch",
-        "color",
-        "typography",
-        "type-scale",
-        "spacing",
-        "tokens",
-        "render",
-        "design-tokens"
-      ],
-      "whenToUse": "When creating or documenting a design system, extracting a palette from existing designs, or setting up visual tokens for a project",
-      "content": "### DESIGN SYSTEM RENDER TOKENS\n\nUse `render` with design system tokens to create visual token documentation.\nAgent provides semantic content only — the runtime handles all layout and styling.\n\n**Palette** — color swatches:\n```\nrender({command: \"render\", input: \"palette\\n  swatch: Primary #000000\\n  swatch: Secondary #475569\\n  swatch: Accent #2D8BFF\\n  swatch: Neutral #F8FAFC\"})\n```\nEach `swatch: Name #HEX` generates: color block + name label + hex value.\n\n**Typography** — font scale samples:\n```\nrender({command: \"render\", input: \"type-scale\\n  type-sample: Headline Space-Grotesk 32 SemiBold\\n  type-sample: Body Inter 16 Regular\\n  type-sample: Caption Inter 12 Regular\"})\n```\nEach `type-sample: Label FontFamily Size Weight` generates: label + rendered sample text.\n\n**Spacing** — spacing scale visualization:\n```\nrender({command: \"render\", input: \"spacing-scale\\n  spacing-step: xs 4\\n  spacing-step: sm 8\\n  spacing-step: md 16\\n  spacing-step: lg 24\"})\n```\nEach `spacing-step: Name Value` generates: label + proportional bar.\n\n### WHEN TO USE\n- User asks to \"create a design system\" or \"set up a palette\"\n- You extracted colors/fonts from existing designs and want to document them\n- User provides brand colors and wants a visual reference\n- Starting a new project and establishing visual tokens\n\n### WORKFLOW\n1. Determine colors, fonts, spacing from user input or by inspecting existing canvas (`grep`, `cat`)\n2. Render the design system sections using the tokens above\n3. Tell the user what you created and how you'll use it in subsequent designs"
-    },
-    {
       "id": "error-catalog",
       "title": "Error Catalog (Known Error Patterns)",
       "keywords": [

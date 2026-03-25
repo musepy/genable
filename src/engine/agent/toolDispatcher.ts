@@ -29,11 +29,14 @@ import { handleScratchCommand } from './scratchpad/handler';
 // ---------------------------------------------------------------------------
 
 /** Commands no longer exposed to the LLM. Use jsx/edit instead. */
-const DEPRECATED_COMMANDS = new Set(['mk']);
+const DEPRECATED_COMMANDS = new Set(['mk', 'create', 'render', 'token']);
 
 /** Helpful migration messages for each deprecated command. */
 const DEPRECATED_SUGGESTIONS: Record<string, string> = {
-  mk: 'Use jsx({markup: "..."}) for creation or edit({path, props}) for updates.',
+  mk: 'Use jsx({markup: "..."}) for creation or edit({node, props}) for updates.',
+  create: 'Use jsx({markup: "..."}) for structured tree creation.',
+  render: 'Use jsx({markup: "..."}) for creation. Render tokens are no longer available.',
+  token: 'Token system has been removed. Use jsx with explicit properties instead.',
 };
 
 // ---------------------------------------------------------------------------

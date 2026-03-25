@@ -143,6 +143,11 @@ export const DEPENDENCY_RULES: readonly DependencyRule[] = [
 export const EXECUTION_ORDER: readonly ExecutionOrderRule[] = [
   // Layout structure established before resize
   { before: 'layoutMode', after: ['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight'] },
+  // resize() resets primaryAxisSizingMode/counterAxisSizingMode to FIXED.
+  // Must call resize BEFORE setting sizing modes, otherwise HUG/FILL gets overwritten.
+  // See: figma-plugin-api-gotchas.md #1
+  { before: 'width', after: ['primaryAxisSizingMode', 'counterAxisSizingMode', 'layoutSizingHorizontal', 'layoutSizingVertical'] },
+  { before: 'height', after: ['primaryAxisSizingMode', 'counterAxisSizingMode', 'layoutSizingHorizontal', 'layoutSizingVertical'] },
   // Font must be loaded before setting characters (Figma API throws otherwise)
   { before: 'fontName', after: ['characters'] },
   { before: 'fontSize', after: ['characters'] },

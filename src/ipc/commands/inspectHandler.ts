@@ -16,6 +16,7 @@ import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 import { resolvePathToNode, buildNodeRef } from './pathResolver';
 import { exportNodeToBase64 } from './shared';
 import { logger } from '../../utils/logger';
+import { PipelineTracer } from './pipelineTracer';
 
 export async function handleInspect(parameters: any): Promise<ToolResponse> {
   const ref = parameters.node || parameters.path;
@@ -30,26 +31,37 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
     };
   }
 
+  const tracer = new PipelineTracer();
+
+  tracer.enter('handleInspect()', 'inspectHandler.ts');
   const resolved = await resolvePathToNode(ref);
   if (!resolved.ok) return resolved.response;
+  tracer.exit({ mode });
 
   let result: ToolResponse;
 
   if (mode === 'detail') {
+    tracer.enter('readHandler()', 'readHandlers.ts');
     result = buildDetailResult(resolved, depth, wantScreenshot);
     if (wantScreenshot && !resolved.isPage) {
       await attachScreenshot(result, resolved.node);
     }
+    tracer.exit();
   } else {
     // tree mode (default) — skeleton JSON
+    tracer.enter('readHandler()', 'readHandlers.ts');
     result = buildTreeResult(resolved, depth);
+    tracer.exit();
   }
 
   // Quality scoring — only when explicitly requested
   if (wantScore && !result.error) {
+    tracer.enter('scoreNodes()', 'qualityScorer.ts');
     await attachQualityScore(result, resolved);
+    tracer.exit();
   }
 
+  result._stages = tracer.collect();
   return result;
 }
 

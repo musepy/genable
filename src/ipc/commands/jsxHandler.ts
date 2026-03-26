@@ -17,6 +17,7 @@ import { parseJsx, type JsxNode } from '../../engine/jsx/jsxParser';
 import { jsxToIR } from '../../engine/jsx/jsxToIR';
 import { executeIR } from './shared';
 import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
+import { PipelineTracer } from './pipelineTracer';
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
   const { markup, parentId } = parameters;
@@ -32,8 +33,12 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     };
   }
 
+  const tracer = new PipelineTracer();
+
   // Step 1: Parse JSX markup → AST
+  tracer.enter('parseJsx()', 'jsxParser.ts');
   const { roots, errors } = parseJsx(markup);
+  tracer.exit({ roots: roots.length, errors: errors.length });
 
   if (roots.length === 0) {
     return {
@@ -43,19 +48,25 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
           ? `Parse errors: ${errors.join('; ')}`
           : 'No valid elements found in JSX markup.',
       },
+      _stages: tracer.collect(),
     };
   }
 
   // Step 2: Convert AST → typed IR (no string round-trip)
+  tracer.enter('jsxToIR()', 'jsxToIR.ts');
   const { ops: irOps, warnings: irWarnings } = jsxToIR(roots);
+  tracer.exit({ opsCount: irOps.length });
 
   // Step 3: Execute — OperationIR[] goes directly to executor
+  tracer.enter('executeIR()', 'shared.ts');
   const result = await executeIR(irOps, {
     parentId,
     onError: 'abort',
     rollbackMode: 'created_nodes',
     irWarnings,
+    tracer,
   });
+  // tracer stages continue inside executeIR (executor + receipt)
 
   // Attach parse errors as stderr warnings
   if (errors.length > 0) {
@@ -125,6 +136,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   // ── Post-creation quality scoring ──
   if (!result.error && result.data?.id) {
     try {
+      tracer.enter('scoreNodes()', 'qualityScorer.ts');
       const rootId = result.data.id;
       if (rootId) {
         const report = await scoreCreatedNodes([rootId]);
@@ -136,7 +148,10 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
         }
       }
     } catch { /* quality scoring is best-effort, don't fail the tool */ }
+    tracer.exit();
   }
 
+  // Attach final pipeline stages
+  result._stages = tracer.collect();
   return result;
 }

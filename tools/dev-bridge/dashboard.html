@@ -1218,7 +1218,7 @@ async function loadRecording(id) {
   try {
     const [eventsRes, metaRes] = await Promise.all([
       fetch(BASE + '/recordings/' + id + '/events'),
-      fetch(BASE + '/result/' + id),
+      fetch(BASE + '/recordings/' + id + '/meta'),
     ]);
     const events = await eventsRes.json();
     const meta = await metaRes.json();
@@ -1297,7 +1297,7 @@ async function sendLivePrompt() {
       try {
         const [eventsRes, metaRes] = await Promise.all([
           fetch(BASE + '/recordings/' + liveTriggerId + '/events'),
-          fetch(BASE + '/result/' + liveTriggerId),
+          fetch(BASE + '/recordings/' + liveTriggerId + '/meta'),
         ]);
         const events = await eventsRes.json();
         const meta = await metaRes.json();
@@ -1547,7 +1547,8 @@ function renderTimeline(events) {
 }
 
 // ===== Pipeline Architecture =====
-// Pipeline stages — must match actual codebase (last synced: 1372249)
+// Pipeline stages — FALLBACK for recordings without _stages.
+// New recordings auto-report stages from PipelineTracer (src/ipc/commands/pipelineTracer.ts).
 const TOOL_PIPELINES = {
   jsx: {
     color: 'jsx',
@@ -1599,6 +1600,37 @@ function toolToPipeline(name) {
   return null;
 }
 
+/** Extract _stages from tool_result events in runtimeEvents. */
+function extractStagesFromEvents(events) {
+  const stagesMap = {}; // toolResultId → _stages array
+  for (const e of events) {
+    if (e.type !== 'tool_result') continue;
+    const raw = e.toolResult?.raw;
+    if (!raw) continue;
+    // _stages can be at top level or inside data
+    const stages = raw._stages || raw.data?._stages;
+    if (stages && Array.isArray(stages)) {
+      stagesMap[e.toolResult.id] = stages;
+    }
+  }
+  return stagesMap;
+}
+
+/** Build per-pipeline stages from runtime data, falling back to hardcoded. */
+function getPipelineStages(pipeKey, toolCallStages) {
+  if (toolCallStages && toolCallStages.length > 0) {
+    return toolCallStages.map((s, i) => ({
+      id: 'runtime-' + i,
+      label: s.label,
+      file: s.file,
+      durationMs: s.durationMs,
+      meta: s.meta,
+    }));
+  }
+  // Fallback to hardcoded
+  return TOOL_PIPELINES[pipeKey]?.stages || [];
+}
+
 let pipeDetailData = null; // currently selected detail
 
 function renderPipeline(events, meta) {
@@ -1607,12 +1639,30 @@ function renderPipeline(events, meta) {
   const container = document.getElementById('pipe-container');
   container.innerHTML = '';
 
+  // Extract _stages from runtime events (keyed by tool result ID)
+  const stagesMap = extractStagesFromEvents(events);
+  // Also try to get _stages from toolCallDetails result (alternative path)
+  const toolResultEvents = events.filter(e => e.type === 'tool_result');
+
   // Gather tool call data
-  const toolCalls = (meta.toolCallDetails || []).map((tc, i) => ({
-    ...tc,
-    index: i + 1,
-    pipeline: toolToPipeline(tc.name),
-  }));
+  const toolCalls = (meta.toolCallDetails || []).map((tc, i) => {
+    // Try to find matching runtime _stages
+    const matchingEvent = toolResultEvents[i]; // position-based fallback
+    let runtimeStages = matchingEvent ? stagesMap[matchingEvent.toolResult?.id] : null;
+    // Also check if result JSON contains _stages
+    if (!runtimeStages && tc.result) {
+      try {
+        const parsed = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
+        if (parsed._stages) runtimeStages = parsed._stages;
+      } catch {}
+    }
+    return {
+      ...tc,
+      index: i + 1,
+      pipeline: toolToPipeline(tc.name),
+      runtimeStages: runtimeStages || null,
+    };
+  });
 
   // Count per pipeline
   const counts = { jsx: 0, inspect: 0, edit: 0, run: 0 };
@@ -1650,20 +1700,27 @@ function renderPipeline(events, meta) {
   for (const [key, pipe] of Object.entries(TOOL_PIPELINES)) {
     const count = counts[key];
     const isActive = count > 0;
+    // Use runtime stages from first matching call, fallback to hardcoded
+    const firstCallWithStages = toolCalls.find(tc => tc.pipeline === key && tc.runtimeStages);
+    const displayStages = firstCallWithStages
+      ? firstCallWithStages.runtimeStages.map((s, i) => ({ id: 'rt-' + i, label: s.label, file: s.file }))
+      : pipe.stages;
+    const isRuntime = !!firstCallWithStages;
+
     html += '<div class="pipe-col">';
     html += '<div class="pipe-col-head ' + key + (isActive ? '' : ' inactive') + '"' +
       (isActive ? ' onclick="pipeShowTool(\'' + key + '\')" title="Click: show ' + key + ' calls"' : '') + '>' +
-      '<div class="pipe-col-name">' + key + '</div>' +
+      '<div class="pipe-col-name">' + key + (isRuntime ? ' *' : '') + '</div>' +
       '<div class="pipe-col-count">' + count + ' call' + (count !== 1 ? 's' : '') + '</div>' +
     '</div>';
 
     // Stages
     html += '<div class="pipe-stages">';
-    for (let si = 0; si < pipe.stages.length; si++) {
-      const s = pipe.stages[si];
+    for (let si = 0; si < displayStages.length; si++) {
+      const s = displayStages[si];
       html += '<div class="pipe-stage-arrow">\u2193</div>';
-      html += '<div class="pipe-stage' + (isActive ? ' active' : '') + '" title="' + escHtml(s.file) + '">' +
-        s.label + '<span class="pipe-stage-file">' + s.file + '</span></div>';
+      html += '<div class="pipe-stage' + (isActive ? ' active' : '') + '" title="' + escHtml(s.file || '') + '">' +
+        s.label + '<span class="pipe-stage-file">' + (s.file || '') + '</span></div>';
     }
     html += '</div>'; // stages
     html += '</div>'; // col
@@ -1750,21 +1807,33 @@ function pipeShowTool(pipeKey) {
 
   for (const tc of calls) {
     const isErr = tc.status === 'error';
-    // Build stage trace
+    const hasRuntime = tc.runtimeStages && tc.runtimeStages.length > 0;
+
+    // Build stage trace — use runtime stages when available
     const stages = [];
-    stages.push({ label: 'dispatch', cls: 'stage-dispatch' });
-    for (const s of pipe.stages) {
-      stages.push({ label: s.label, cls: 'stage-handler' });
+    stages.push({ label: 'dispatch', cls: 'stage-dispatch', dur: null });
+    if (hasRuntime) {
+      for (const s of tc.runtimeStages) {
+        const cls = s.label.includes('executor') || s.label.includes('executeIR') ? 'stage-exec'
+          : s.label.includes('present') ? 'stage-present'
+          : 'stage-handler';
+        stages.push({ label: s.label, cls, dur: s.durationMs });
+      }
+    } else {
+      for (const s of pipe.stages) {
+        stages.push({ label: s.label, cls: 'stage-handler', dur: null });
+      }
     }
-    stages.push({ label: 'presentForLLM', cls: 'stage-present' });
-    if (isErr) stages.push({ label: 'ERROR', cls: 'stage-err' });
+    stages.push({ label: 'presentForLLM', cls: 'stage-present', dur: null });
+    if (isErr) stages.push({ label: 'ERROR', cls: 'stage-err', dur: null });
 
     let stagesHTML = '';
     for (let si = 0; si < stages.length; si++) {
       if (si > 0) stagesHTML += '<span class="pipe-trace-arrow">\u2192</span>';
+      const durSuffix = stages[si].dur != null ? ' ' + formatDuration(stages[si].dur) : '';
       stagesHTML += '<span class="pipe-trace-stage ' + stages[si].cls + '" ' +
-        'onclick="pipeShowCallData(' + tc.index + ', \'' + stages[si].label + '\')">' +
-        stages[si].label + '</span>';
+        'onclick="pipeShowCallData(' + tc.index + ', \'' + escHtml(stages[si].label) + '\')">' +
+        escHtml(stages[si].label) + durSuffix + '</span>';
     }
 
     html += '<div class="pipe-trace-row">' +

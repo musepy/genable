@@ -393,6 +393,45 @@ async function handleRecordingsList(res: ServerResponse) {
   }
 }
 
+/** Assemble recording metadata from available files (meta.json, tool-calls.json, logs.txt). */
+async function handleRecordingMeta(id: string, res: ServerResponse) {
+  const dir = join(RESULT_DIR, id);
+  const result: Record<string, any> = { id };
+
+  // Try meta.json first (full payload)
+  try {
+    const meta = await readFile(join(dir, 'meta.json'), 'utf-8');
+    json(res, 200, { ...JSON.parse(meta), id });
+    return;
+  } catch { /* no meta.json — assemble from parts */ }
+
+  // Assemble from individual files
+  try {
+    const tc = await readFile(join(dir, 'tool-calls.json'), 'utf-8');
+    result.toolCallDetails = JSON.parse(tc);
+    const details = result.toolCallDetails as any[];
+    result.toolCallSummary = {
+      total: details.length,
+      errors: details.filter((d: any) => d.status === 'error').length,
+    };
+  } catch { /* no tool-calls */ }
+
+  try {
+    const logs = await readFile(join(dir, 'logs.txt'), 'utf-8');
+    result.logs = logs;
+    // Try to extract prompt from logs
+    const promptMatch = logs.match(/Prompt: "(.+?)"/);
+    if (promptMatch) result.prompt = promptMatch[1];
+  } catch { /* no logs */ }
+
+  if (Object.keys(result).length <= 1) {
+    json(res, 404, { error: `No data files found for recording "${id}"` });
+    return;
+  }
+
+  json(res, 200, result);
+}
+
 async function handleRecordingEvents(id: string, res: ServerResponse) {
   const eventsPath = join(RESULT_DIR, id, 'runtime-events.json');
   try {
@@ -470,6 +509,9 @@ const server = createServer(async (req, res) => {
     } else if (path.match(/^\/recordings\/[^/]+\/events$/) && method === 'GET') {
       const id = path.split('/')[2];
       await handleRecordingEvents(id, res);
+    } else if (path.match(/^\/recordings\/[^/]+\/meta$/) && method === 'GET') {
+      const id = path.split('/')[2];
+      await handleRecordingMeta(id, res);
     } else if (path.match(/^\/recordings\/[^/]+\/screenshot$/) && method === 'GET') {
       const id = path.split('/')[2];
       const screenshotPath = join(RESULT_DIR, id, 'screenshot.png');

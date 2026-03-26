@@ -12,8 +12,22 @@ import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath,
 import { executeIR } from './shared';
 import { normalizeProps } from '../../domain/node-normalizers';
 import { TAG_TO_TYPE, coerceValue, toCamelCase, computeDependsOn } from '../../engine/utils/prop-dsl';
+import { PipelineTracer } from './pipelineTracer';
 
 // ── Shared helpers ──
+
+/** Wrap a run sub-command result with pipeline stages. */
+function wrapRunStages(subCmd: string, result: ToolResponse, startTime: number): ToolResponse {
+  const handlerStage = { label: `handle${subCmd}() → IR`, file: 'writeHandlers.ts', durationMs: Date.now() - startTime };
+  // Prepend handler stage before executor/receipt stages from executeIR
+  const existing = (result as any)._stages || [];
+  (result as any)._stages = [
+    { label: 'unwrapRunCmd()', file: 'toolDispatcher.ts', durationMs: 0 },
+    handlerStage,
+    ...existing,
+  ];
+  return result;
+}
 
 /** Parse "key:value" string tokens into a typed props object. */
 function parseTokensToProps(tokens: string[]): Record<string, any> {
@@ -478,10 +492,11 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
 }
 
 export async function handleMk(parameters: any): Promise<ToolResponse> {
+  const _t0 = Date.now();
   const { batch, path: mkPath, type: mkType, refComponent, propTokens, textContent } = parameters;
 
   if (batch) {
-    return await executeMkBatch(batch);
+    return wrapRunStages('Mk', await executeMkBatch(batch), _t0);
   }
 
   if (!mkPath) {
@@ -491,15 +506,17 @@ export async function handleMk(parameters: any): Promise<ToolResponse> {
   // Guard: detect embedded batch commands in propTokens
   if (propTokens && Array.isArray(propTokens) && propTokens.some((t: string) => /\nmk\s|^mk\s/.test(t))) {
     const reconstructed = `${mkPath}${mkType ? ' ' + mkType : ''} ${(propTokens || []).join(' ')}${textContent ? ' -- ' + textContent : ''}`;
-    return await executeMkBatch(reconstructed);
+    return wrapRunStages('Mk', await executeMkBatch(reconstructed), _t0);
   }
 
-  return await executeSingleMk(mkPath, mkType, refComponent, propTokens || [], textContent);
+  const result = await executeSingleMk(mkPath, mkType, refComponent, propTokens || [], textContent);
+  return wrapRunStages('Mk', result, _t0);
 }
 
 // ── rm ──
 
 export async function handleRm(parameters: any): Promise<ToolResponse> {
+  const _t0 = Date.now();
   const rmPath = parameters.path || '/';
 
   // Glob support
@@ -543,12 +560,13 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
     };
   }
 
-  return rmResult;
+  return wrapRunStages('Rm', rmResult, _t0);
 }
 
 // ── mv ──
 
 export async function handleMv(parameters: any): Promise<ToolResponse> {
+  const _t0 = Date.now();
   const { sourcePath: mvSourcePath, destPath: mvDestPath, at: mvAtIndex } = parameters;
 
   if (!mvSourcePath) {
@@ -617,7 +635,7 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
     mvReordered = true;
   }
 
-  return {
+  const mvResult: ToolResponse = {
     data: {
       id: mvNode.id,
       oldName: mvOldName,
@@ -629,11 +647,13 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
       index: mvReordered ? mvAtIndex : undefined,
     },
   };
+  return wrapRunStages('Mv', mvResult, _t0);
 }
 
 // ── cp ──
 
 export async function handleCp(parameters: any): Promise<ToolResponse> {
+  const _t0 = Date.now();
   const { sourcePath: cpSourcePath, destPath: cpDestPath, propsRaw: cpPropsRaw } = parameters;
 
   if (!cpSourcePath) {
@@ -685,7 +705,7 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
     normOverrides[childName] = normalizeProps(childProps, {}, () => {});
   }
 
-  return await executeIR([{
+  const cpResult = await executeIR([{
     command: 'clone',
     symbol: 'n1',
     parentRef: 'root',
@@ -694,4 +714,5 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
     dependsOn: [],
     ...(Object.keys(normOverrides).length > 0 ? { overrides: normOverrides } : {}),
   }], { parentId: cpParentId });
+  return wrapRunStages('Cp', cpResult, _t0);
 }

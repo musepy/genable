@@ -14,6 +14,7 @@ import { executeIR } from './shared';
 import { resolvePathToNode } from './pathResolver';
 import { normalizeProps } from '../../domain/node-normalizers';
 import { coerceValue } from '../../engine/utils/prop-dsl';
+import { PipelineTracer } from './pipelineTracer';
 
 interface EditEntry {
   node: string;
@@ -46,6 +47,9 @@ function buildUpdateIR(nodeId: string, props?: Record<string, any>, content?: st
 }
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
+  const tracer = new PipelineTracer();
+  tracer.enter('handleEdit() → IR', 'editHandler.ts');
+
   // ── Batch mode: nodes array ──
   if (Array.isArray(parameters.nodes)) {
     const entries = parameters.nodes as EditEntry[];
@@ -77,7 +81,8 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: { code: 'NO_CHANGES', message: errors.join('; ') } };
     }
 
-    const result = await executeIR(ops);
+    tracer.exit({ opsCount: ops.length });
+    const result = await executeIR(ops, { tracer });
     if (errors.length > 0) {
       result._stderr = result._stderr
         ? result._stderr + '\n' + errors.map(e => `[warn] ${e}`).join('\n')
@@ -111,5 +116,6 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     return { error: { code: 'NO_CHANGES', message: 'No props or content provided.' } };
   }
 
-  return executeIR([op]);
+  tracer.exit({ opsCount: 1 });
+  return executeIR([op], { tracer });
 }

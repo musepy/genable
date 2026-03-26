@@ -13,6 +13,7 @@ import { collectTreeViolations, type ValidationViolation } from '../../engine/va
 import { logger } from '../../utils/logger';
 import { buildCreateReceipt, type ReceiptViolation } from '../handlers/receiptBuilder';
 import { resolveSceneNode } from './pathResolver';
+import type { PipelineTracer } from './pipelineTracer';
 
 // ── Stderr builder — command writes its own stderr at the source ──
 
@@ -55,6 +56,8 @@ export interface ExecuteIROptions {
   irWarnings?: Array<{ line: number; message: string }>;
   /** Parse errors that couldn't produce OperationIR */
   parseErrors?: Array<{ line: number; raw: string; error: string; symbol?: string }>;
+  /** Pipeline tracer — records stage timing for dashboard visualization */
+  tracer?: PipelineTracer;
 }
 
 /**
@@ -67,10 +70,12 @@ export async function executeIR(
 ): Promise<ToolResponse> {
   const opts = options || {};
   const parentId = opts.parentId;
+  const tracer = opts.tracer;
 
   try {
     const SOFT_CREATE_LIMIT = 20;
 
+    tracer?.enter('executor.executeDesignOps()', 'executor.ts');
     const executor = new ActionExecutor();
     const result = await executor.executeDesignOps(ops, {
       onError: opts.onError || 'continue',
@@ -79,6 +84,8 @@ export async function executeIR(
       irWarnings: opts.irWarnings,
       parseErrors: opts.parseErrors,
     });
+
+    tracer?.exit({ opsCount: ops.length, created: result.stats.created, failed: result.stats.failed });
 
     if (result.diagnostics.length > 0) {
       logger.info('Design diagnostics', { diagnostics: result.diagnostics });
@@ -92,12 +99,15 @@ export async function executeIR(
       logger.warn('Post-op validator crashed (mutations already committed)', { error: e?.message });
     }
 
+    tracer?.enter('buildReceipt()', 'receiptBuilder.ts');
     const receipt = buildCreateReceipt({
       result,
       violations,
       softCreateLimit: SOFT_CREATE_LIMIT,
       createLineCount: ops.length,
     });
+
+    tracer?.exit();
 
     const stderr = buildStderr(
       result.diagnostics.slice(0, 10),
@@ -121,6 +131,9 @@ export async function executeIR(
       if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);
     }
 
+    // Attach pipeline stages for dashboard auto-visualization
+    const _stages = tracer?.collect();
+
     if (result.hasErrors) {
       const parts: string[] = [];
       if (result.stats.created) parts.push(`${result.stats.created} created`);
@@ -128,10 +141,10 @@ export async function executeIR(
       if (result.stats.deleted) parts.push(`${result.stats.deleted} deleted`);
       if (result.stats.failed) parts.push(`${result.stats.failed} failed`);
       if (result.stats.skipped) parts.push(`${result.stats.skipped} skipped`);
-      return { data: receipt, _stderr: stderr, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
+      return { data: receipt, _stderr: stderr, _stages, error: { code: 'PARTIAL_FAILURE', message: `${parts.join(', ')}. Use idMap for references.` } };
     }
 
-    return { data: receipt, _stderr: stderr };
+    return { data: receipt, _stderr: stderr, _stages };
   } catch (e: any) {
     return { error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
   }

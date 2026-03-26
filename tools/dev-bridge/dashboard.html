@@ -1547,14 +1547,15 @@ function renderTimeline(events) {
 }
 
 // ===== Pipeline Architecture =====
+// Pipeline stages — must match actual codebase (last synced: 1372249)
 const TOOL_PIPELINES = {
   jsx: {
     color: 'jsx',
     stages: [
       { id: 'parse', label: 'parseJsx()', file: 'jsxParser.ts' },
-      { id: 'flat', label: 'jsxToFlatOps()', file: 'jsxToFlatOps.ts' },
-      { id: 'compile', label: 'compileDesignOps()', file: 'flatOpsParser.ts' },
-      { id: 'exec', label: 'executor.execute()', file: 'executor.ts' },
+      { id: 'ir', label: 'jsxToIR()', file: 'jsxToIR.ts' },
+      { id: 'exec', label: 'executeIR()', file: 'shared.ts' },
+      { id: 'executor', label: 'executor.executeDesignOps()', file: 'executor.ts' },
       { id: 'receipt', label: 'buildReceipt()', file: 'receiptBuilder.ts' },
       { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
     ]
@@ -1570,9 +1571,9 @@ const TOOL_PIPELINES = {
   edit: {
     color: 'edit',
     stages: [
-      { id: 'parse', label: 'handleEdit()', file: 'editHandler.ts' },
-      { id: 'compile', label: 'compileDesignOps()', file: 'flatOpsParser.ts' },
-      { id: 'exec', label: 'executor.execute()', file: 'executor.ts' },
+      { id: 'ir', label: 'handleEdit() → IR', file: 'editHandler.ts' },
+      { id: 'exec', label: 'executeIR()', file: 'shared.ts' },
+      { id: 'executor', label: 'executor.executeDesignOps()', file: 'executor.ts' },
       { id: 'receipt', label: 'buildReceipt()', file: 'receiptBuilder.ts' },
     ]
   },
@@ -1580,8 +1581,9 @@ const TOOL_PIPELINES = {
     color: 'run',
     stages: [
       { id: 'unwrap', label: 'unwrapRunCmd()', file: 'toolDispatcher.ts' },
-      { id: 'route', label: 'route sub-cmd', file: 'handlers/*' },
-      { id: 'exec', label: 'execute', file: 'handler.ts' },
+      { id: 'route', label: 'handler → IR', file: 'writeHandlers.ts' },
+      { id: 'exec', label: 'executeIR()', file: 'shared.ts' },
+      { id: 'executor', label: 'executor.executeDesignOps()', file: 'executor.ts' },
     ]
   },
 };

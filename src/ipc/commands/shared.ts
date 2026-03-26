@@ -10,7 +10,7 @@
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { ActionExecutor } from '../../engine/actions/executor';
 import { collectTreeViolations, type ValidationViolation } from '../../engine/validation/postOpValidator';
-import { compileDesignOps } from '../../engine/flat/flatOpsParser';
+import { compileDesignOps, compileFromIR, type CompileDesignOpsResult } from '../../engine/flat/flatOpsParser';
 import { logger } from '../../utils/logger';
 import { buildCreateReceipt, type ReceiptViolation } from '../handlers/receiptBuilder';
 import { resolveSceneNode } from './pathResolver';
@@ -54,25 +54,21 @@ export interface ExecuteFlatOpsOptions {
   rollbackMode?: 'none' | 'created_nodes';
 }
 
-export async function executeFlatOps(
-  opsStr: string,
-  parentIdOrOptions?: string | ExecuteFlatOpsOptions,
+/**
+ * Execute pre-compiled design operations.
+ * Accepts CompileDesignOpsResult from compileDesignOps() or compileFromIR().
+ */
+export async function executeCompiledOps(
+  compiled: CompileDesignOpsResult,
+  opts: ExecuteFlatOpsOptions = {},
 ): Promise<ToolResponse> {
-  const opts: ExecuteFlatOpsOptions = typeof parentIdOrOptions === 'string'
-    ? { parentId: parentIdOrOptions }
-    : (parentIdOrOptions || {});
   const parentId = opts.parentId;
-  let compiled;
-  try {
-    compiled = compileDesignOps(opsStr, parentId, ActionExecutor.getRegisteredSymbols());
-    if (compiled.ops.length === 0 && compiled.errors.length > 0) {
-      return { error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
-    }
-    if (compiled.diagnostics.length > 0) {
-      logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
-    }
-  } catch (e: any) {
-    return { error: { code: 'PARSE_ERROR', message: e.message } };
+
+  if (compiled.ops.length === 0 && compiled.errors.length > 0) {
+    return { error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
+  }
+  if (compiled.diagnostics.length > 0) {
+    logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
   }
 
   try {
@@ -140,6 +136,22 @@ export async function executeFlatOps(
   } catch (e: any) {
     return { error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
   }
+}
+
+export async function executeFlatOps(
+  opsStr: string,
+  parentIdOrOptions?: string | ExecuteFlatOpsOptions,
+): Promise<ToolResponse> {
+  const opts: ExecuteFlatOpsOptions = typeof parentIdOrOptions === 'string'
+    ? { parentId: parentIdOrOptions }
+    : (parentIdOrOptions || {});
+  let compiled;
+  try {
+    compiled = compileDesignOps(opsStr, opts.parentId, ActionExecutor.getRegisteredSymbols());
+  } catch (e: any) {
+    return { error: { code: 'PARSE_ERROR', message: e.message } };
+  }
+  return executeCompiledOps(compiled, opts);
 }
 
 export async function collectViolationsForNodeIds(

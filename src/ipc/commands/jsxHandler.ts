@@ -2,9 +2,9 @@
  * @file jsxHandler.ts
  * @description Handler for the `jsx` command.
  *
- * Parses JSX-like nested markup → generates flat ops → executeFlatOps().
+ * Parses JSX markup → converts to typed IR → compiles → executes.
+ * No string intermediate — JsxNode[] goes directly to OperationIR[].
  * Uses abort + rollback: all nodes created or none (atomic).
- * Returns root node + one-level childIds (like Open-Pencil's render).
  *
  * Syntax:
  *   <frame name="Card" w={400} layout="column" p={24}>
@@ -14,8 +14,10 @@
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { parseJsx, type JsxNode } from '../../engine/jsx/jsxParser';
-import { jsxToFlatOps } from '../../engine/jsx/jsxToFlatOps';
-import { executeFlatOps } from './shared';
+import { jsxToIR } from '../../engine/jsx/jsxToIR';
+import { compileFromIR } from '../../engine/flat/flatOpsParser';
+import { ActionExecutor } from '../../engine/actions/executor';
+import { executeCompiledOps } from './shared';
 import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
@@ -32,6 +34,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     };
   }
 
+  // Step 1: Parse JSX markup → AST
   const { roots, errors } = parseJsx(markup);
 
   if (roots.length === 0) {
@@ -45,8 +48,18 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     };
   }
 
-  const flatOps = jsxToFlatOps(roots);
-  const result = await executeFlatOps(flatOps, {
+  // Step 2: Convert AST → typed IR (no string round-trip)
+  const { ops: irOps, warnings: irWarnings } = jsxToIR(roots);
+
+  // Step 3: Validate refs + compile IR → DesignOp[]
+  const compiled = compileFromIR(irOps, {
+    propWarnings: irWarnings,
+    defaultParentId: parentId,
+    knownSymbols: ActionExecutor.getRegisteredSymbols(),
+  });
+
+  // Step 4: Execute
+  const result = await executeCompiledOps(compiled, {
     parentId,
     onError: 'abort',
     rollbackMode: 'created_nodes',
@@ -66,7 +79,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   if (!result.error && result.data?.idMap) {
     const idMap = result.data.idMap as Record<string, string>;
 
-    // Build symbol → ref map (DFS order matches jsxToFlatOps)
+    // Build symbol → ref map (DFS order matches jsxToIR)
     const symbolToRef = new Map<string, string>();
     const refs = Object.values(idMap);
     let counter = 0;

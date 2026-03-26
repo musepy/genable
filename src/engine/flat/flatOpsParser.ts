@@ -434,14 +434,21 @@ export interface CompileDesignOpsResult {
 }
 
 /**
- * Parse flat ops string → validate symbol references → compile to FigmaAction[].
- * Single entry point replacing the old 3-step pipeline (parser → validator → compiler).
+ * Validate symbol references + compile OperationIR[] → DesignOp[].
+ * Accepts pre-parsed IR (from jsxToIR or parseFlatOps).
  */
-export function compileDesignOps(input: string, defaultParentId?: string, knownSymbols?: ReadonlySet<string>): CompileDesignOpsResult {
-  // Step 1: Parse
-  const { lines, errors: parseErrors, propWarnings } = parseFlatOps(input);
+export function compileFromIR(
+  lines: OperationIR[],
+  options?: {
+    parseErrors?: ParseError[];
+    propWarnings?: ParseWarning[];
+    defaultParentId?: string;
+    knownSymbols?: ReadonlySet<string>;
+  },
+): CompileDesignOpsResult {
+  const { parseErrors = [], propWarnings = [], defaultParentId, knownSymbols } = options || {};
 
-  // Step 1.5: For each variantSet, add all ops whose parent is one of the variant
+  // Step 1: For each variantSet, add all ops whose parent is one of the variant
   // components as implicit dependencies. This ensures combineAsVariants runs AFTER
   // all children (e.g. text nodes) have been appended to those components.
   for (const op of lines) {
@@ -501,6 +508,15 @@ export function compileDesignOps(input: string, defaultParentId?: string, knownS
   }
 
   return { ops, errors: opErrors, diagnostics };
+}
+
+/**
+ * Parse flat ops string → validate → compile to DesignOp[].
+ * Convenience wrapper: parseFlatOps() + compileFromIR().
+ */
+export function compileDesignOps(input: string, defaultParentId?: string, knownSymbols?: ReadonlySet<string>): CompileDesignOpsResult {
+  const { lines, errors: parseErrors, propWarnings } = parseFlatOps(input);
+  return compileFromIR(lines, { parseErrors, propWarnings, defaultParentId, knownSymbols });
 }
 
 // ── Compile a single OperationIR → DesignOp or DesignOpError ──

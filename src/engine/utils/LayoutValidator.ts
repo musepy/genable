@@ -42,10 +42,12 @@ export function normalizeSizing(
     if (v === 'HUG') v = 'FIXED';
   }
 
-  // Rule 3: FILL requires layoutMode on parent
+  // Rule 3: FILL requires layoutMode on parent.
+  // Demote to HUG if node itself has auto-layout (HUG is valid on auto-layout frames),
+  // otherwise FIXED (the only universally safe mode).
   if (!ctx.parentHasAutoLayout) {
-    if (h === 'FILL') h = ctx.isRoot ? 'FIXED' : 'HUG';
-    if (v === 'FILL') v = ctx.isRoot ? 'FIXED' : 'HUG';
+    if (h === 'FILL') h = ctx.hasAutoLayout ? 'HUG' : 'FIXED';
+    if (v === 'FILL') v = ctx.hasAutoLayout ? 'HUG' : 'FIXED';
   }
 
   // Rule 4: Double-check after FILL→HUG demotion

@@ -186,19 +186,19 @@ export class NodeSerializer {
     private static mapFigmaType(figmaType: string): any {
         const MAP: Record<string, any> = {
             'FRAME': NODE_TYPES.FRAME,
-            'GROUP': NODE_TYPES.FRAME, 
-            'SECTION': NODE_TYPES.FRAME,
-            'COMPONENT': NODE_TYPES.FRAME,
-            'COMPONENT_SET': NODE_TYPES.FRAME,
-            'INSTANCE': NODE_TYPES.FRAME,
+            'GROUP': NODE_TYPES.GROUP,
+            'SECTION': NODE_TYPES.SECTION,
+            'COMPONENT': NODE_TYPES.COMPONENT,
+            'COMPONENT_SET': NODE_TYPES.COMPONENT_SET,
+            'INSTANCE': NODE_TYPES.INSTANCE,
             'TEXT': NODE_TYPES.TEXT,
             'RECTANGLE': NODE_TYPES.RECTANGLE,
             'VECTOR': NODE_TYPES.VECTOR,
-            'LINE': NODE_TYPES.VECTOR,
-            'ELLIPSE': NODE_TYPES.VECTOR,
-            'STAR': NODE_TYPES.VECTOR,
-            'POLYGON': NODE_TYPES.VECTOR,
-            'BOOLEAN_OPERATION': NODE_TYPES.VECTOR
+            'LINE': NODE_TYPES.LINE,
+            'ELLIPSE': NODE_TYPES.ELLIPSE,
+            'STAR': NODE_TYPES.STAR,
+            'POLYGON': NODE_TYPES.POLYGON,
+            'BOOLEAN_OPERATION': NODE_TYPES.BOOLEAN_OPERATION
         };
 
         return MAP[figmaType] || NODE_TYPES.FRAME;

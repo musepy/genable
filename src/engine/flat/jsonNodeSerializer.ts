@@ -113,9 +113,15 @@ const TAG_MAP: Record<string, string> = {
   VECTOR: 'vector',
   LINE: 'line',
   ELLIPSE: 'ellipse',
-  GROUP: 'frame',
-  SECTION: 'frame',
+  GROUP: 'group',
+  SECTION: 'section',
   ICON: 'icon',
+  COMPONENT: 'component',
+  COMPONENT_SET: 'componentSet',
+  INSTANCE: 'instance',
+  STAR: 'star',
+  POLYGON: 'polygon',
+  BOOLEAN_OPERATION: 'booleanOp',
 };
 
 // ── Helpers ──
@@ -449,15 +455,6 @@ export class JsonNodeSerializer {
     // Build JSON object — type and id first, then properties flat
     const result: any = { type: tag, id: node.id };
 
-    // Component/instance detection
-    if (node.type === 'COMPONENT' as any) {
-      result.type = 'component';
-    } else if (node.type === 'INSTANCE' as any) {
-      result.type = 'instance';
-      // component and variant info would be in props if serialized
-    } else if (node.type === 'COMPONENT_SET' as any) {
-      result.type = 'componentSet';
-    }
 
     // Name always first property
     if (props.name) result.name = props.name;

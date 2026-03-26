@@ -312,6 +312,12 @@ export const NODE_TYPES = {
   GROUP: 'GROUP',
   SECTION: 'SECTION',
   ICON: 'ICON', // Virtual type supported by our renderer
+  COMPONENT: 'COMPONENT',
+  COMPONENT_SET: 'COMPONENT_SET',
+  INSTANCE: 'INSTANCE',
+  STAR: 'STAR',
+  POLYGON: 'POLYGON',
+  BOOLEAN_OPERATION: 'BOOLEAN_OPERATION',
 } as const;
 
 export const LAYOUT_MODES = {

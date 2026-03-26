@@ -182,15 +182,21 @@ export type NodeLayerProps = v.InferOutput<typeof NodeLayerPropsSchema>;
 export const NodeLayerSchema: v.GenericSchema<any> = v.lazy(() =>
     v.object({
         type: v.picklist([
-            NODE_TYPES.FRAME, 
-            NODE_TYPES.TEXT, 
-            NODE_TYPES.VECTOR, 
-            NODE_TYPES.RECTANGLE, 
-            NODE_TYPES.LINE, 
-            NODE_TYPES.ELLIPSE, 
-            NODE_TYPES.GROUP, 
-            NODE_TYPES.SECTION, 
-            NODE_TYPES.ICON
+            NODE_TYPES.FRAME,
+            NODE_TYPES.TEXT,
+            NODE_TYPES.VECTOR,
+            NODE_TYPES.RECTANGLE,
+            NODE_TYPES.LINE,
+            NODE_TYPES.ELLIPSE,
+            NODE_TYPES.GROUP,
+            NODE_TYPES.SECTION,
+            NODE_TYPES.ICON,
+            NODE_TYPES.COMPONENT,
+            NODE_TYPES.COMPONENT_SET,
+            NODE_TYPES.INSTANCE,
+            NODE_TYPES.STAR,
+            NODE_TYPES.POLYGON,
+            NODE_TYPES.BOOLEAN_OPERATION,
         ]),
         id: v.optional(v.string()), // Unique identifier for reconciliation
         props: NodeLayerPropsSchema,
@@ -215,15 +221,21 @@ export const FlatNodeSchema = v.object({
     id: v.string(), // Semantic ID, e.g., 'header-nav-logo'
     parent: v.nullable(v.string()), // ID of the parent node, or null for root
     type: v.picklist([
-        NODE_TYPES.FRAME, 
-        NODE_TYPES.TEXT, 
-        NODE_TYPES.VECTOR, 
-        NODE_TYPES.RECTANGLE, 
-        NODE_TYPES.LINE, 
-        NODE_TYPES.ELLIPSE, 
-        NODE_TYPES.GROUP, 
-        NODE_TYPES.SECTION, 
-        NODE_TYPES.ICON
+        NODE_TYPES.FRAME,
+        NODE_TYPES.TEXT,
+        NODE_TYPES.VECTOR,
+        NODE_TYPES.RECTANGLE,
+        NODE_TYPES.LINE,
+        NODE_TYPES.ELLIPSE,
+        NODE_TYPES.GROUP,
+        NODE_TYPES.SECTION,
+        NODE_TYPES.ICON,
+        NODE_TYPES.COMPONENT,
+        NODE_TYPES.COMPONENT_SET,
+        NODE_TYPES.INSTANCE,
+        NODE_TYPES.STAR,
+        NODE_TYPES.POLYGON,
+        NODE_TYPES.BOOLEAN_OPERATION,
     ]),
     props: NodeLayerPropsSchema
 });

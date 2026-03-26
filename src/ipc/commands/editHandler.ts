@@ -4,11 +4,16 @@
  *
  * Supports single node: edit({node: "Card#1:2", props: {bg: "#FFF"}})
  * Supports batch:       edit({nodes: [{node: "A#1:1", props: {w: "fill"}}, {node: "B#1:2", props: {w: "fill"}}]})
+ *
+ * Constructs OperationIR[] directly — no string round-trip through flat ops.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { executeFlatOps, mkPropToFlatOps, escapeFlatOpsStr } from './shared';
+import type { OperationIR } from '../../domain/design-ir';
+import { executeIR } from './shared';
 import { resolvePathToNode } from './pathResolver';
+import { normalizeProps } from '../../domain/node-normalizers';
+import { coerceValue } from '../../engine/utils/prop-dsl';
 
 interface EditEntry {
   node: string;
@@ -16,29 +21,28 @@ interface EditEntry {
   content?: string;
 }
 
-/** Build a single flat ops update line from a resolved nodeId + props/content. */
-function buildUpdateOp(nodeId: string, props?: Record<string, any>, content?: string): string | null {
-  const propParts: string[] = [];
+/** Build a single update OperationIR from a resolved nodeId + props/content. */
+function buildUpdateIR(nodeId: string, props?: Record<string, any>, content?: string): OperationIR | null {
+  const rawProps: Record<string, any> = {};
   if (props && typeof props === 'object') {
     for (const [key, value] of Object.entries(props)) {
       if (value === undefined || value === null) continue;
-      propParts.push(mkPropToFlatOps(`${key}:${value}`));
+      rawProps[key] = typeof value === 'string' ? coerceValue(key, value) : value;
     }
   }
-
-  const propsStr = propParts.join(', ');
 
   if (content !== undefined && content !== null) {
-    const escaped = escapeFlatOpsStr(String(content));
-    if (propsStr) {
-      return `update('${nodeId}', {${propsStr}, characters:'${escaped}'})`;
-    }
-    return `update('${nodeId}', {characters:'${escaped}'})`;
+    rawProps.characters = String(content);
   }
-  if (propsStr) {
-    return `update('${nodeId}', {${propsStr}})`;
-  }
-  return null;
+
+  if (Object.keys(rawProps).length === 0) return null;
+
+  return {
+    command: 'update',
+    targetRef: nodeId,
+    props: normalizeProps(rawProps, {}, () => {}),
+    dependsOn: [],
+  };
 }
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
@@ -49,7 +53,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: { code: 'NO_CHANGES', message: 'Empty nodes array.' } };
     }
 
-    const ops: string[] = [];
+    const ops: OperationIR[] = [];
     const errors: string[] = [];
 
     for (const entry of entries) {
@@ -64,7 +68,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       }
       if (resolved.isPage) { errors.push(`Cannot edit page root (ref: "${ref}")`); continue; }
 
-      const op = buildUpdateOp(resolved.node.id, entry.props, entry.content);
+      const op = buildUpdateIR(resolved.node.id, entry.props, entry.content);
       if (!op) { errors.push(`No props or content for "${ref}"`); continue; }
       ops.push(op);
     }
@@ -73,7 +77,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: { code: 'NO_CHANGES', message: errors.join('; ') } };
     }
 
-    const result = await executeFlatOps(ops.join('\n'));
+    const result = await executeIR(ops);
     if (errors.length > 0) {
       result._stderr = result._stderr
         ? result._stderr + '\n' + errors.map(e => `[warn] ${e}`).join('\n')
@@ -102,10 +106,10 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     return { error: { code: 'INVALID_TARGET', message: 'Cannot edit the page root. Specify a node ref.' } };
   }
 
-  const op = buildUpdateOp(resolved.node.id, props, content);
+  const op = buildUpdateIR(resolved.node.id, props, content);
   if (!op) {
     return { error: { code: 'NO_CHANGES', message: 'No props or content provided.' } };
   }
 
-  return executeFlatOps(op);
+  return executeIR([op]);
 }

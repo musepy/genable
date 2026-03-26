@@ -119,6 +119,8 @@ export interface CreateExecutionResult {
   idMap: Record<string, string>;
   /** Per-operation execution results, in order. */
   lineResults: LineResult[];
+  /** Semantic diagnostics (symbol ref warnings, property warnings). */
+  diagnostics: Array<{ code: string; severity: string; message: string; lineNumber: number; symbol?: string }>;
   /** Aggregate statistics for the execution. */
   stats: {
     total: number;

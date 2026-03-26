@@ -2,15 +2,14 @@
  * @file shared.ts
  * @description Shared utilities for IPC command handlers.
  *
- * executeFlatOps — the shared pipeline for all write operations.
+ * executeIR — the shared pipeline for all write operations (OperationIR[] → executor).
  * exportNodeToBase64 — screenshot export.
- * mk helpers — prop token conversion, layout defaults, batch parsing.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { ActionExecutor } from '../../engine/actions/executor';
+import type { OperationIR } from '../../domain/design-ir';
+import { ActionExecutor, type DesignExecOptions } from '../../engine/actions/executor';
 import { collectTreeViolations, type ValidationViolation } from '../../engine/validation/postOpValidator';
-import { compileDesignOps, compileFromIR, type CompileDesignOpsResult } from '../../engine/flat/flatOpsParser';
 import { logger } from '../../utils/logger';
 import { buildCreateReceipt, type ReceiptViolation } from '../handlers/receiptBuilder';
 import { resolveSceneNode } from './pathResolver';
@@ -46,44 +45,46 @@ function buildStderr(
   return lines.length > 0 ? lines.join('\n') : undefined;
 }
 
-// ── Flat Ops execution pipeline ──
+// ── Execution pipeline ──
 
-export interface ExecuteFlatOpsOptions {
+export interface ExecuteIROptions {
   parentId?: string;
   onError?: 'continue' | 'abort';
   rollbackMode?: 'none' | 'created_nodes';
+  /** Warnings from IR construction (jsxToIR, etc.) */
+  irWarnings?: Array<{ line: number; message: string }>;
+  /** Parse errors that couldn't produce OperationIR */
+  parseErrors?: Array<{ line: number; raw: string; error: string; symbol?: string }>;
 }
 
 /**
- * Execute pre-compiled design operations.
- * Accepts CompileDesignOpsResult from compileDesignOps() or compileFromIR().
+ * Execute OperationIR[] — the single execution entry point for all write operations.
+ * OperationIR goes directly to the executor — no intermediate compilation step.
  */
-export async function executeCompiledOps(
-  compiled: CompileDesignOpsResult,
-  opts: ExecuteFlatOpsOptions = {},
+export async function executeIR(
+  ops: OperationIR[],
+  options?: ExecuteIROptions,
 ): Promise<ToolResponse> {
+  const opts = options || {};
   const parentId = opts.parentId;
-
-  if (compiled.ops.length === 0 && compiled.errors.length > 0) {
-    return { error: { code: 'PARSE_ERROR', message: compiled.errors.map(e => `L${e.lineNumber}: ${e.error}`).join('; ') } };
-  }
-  if (compiled.diagnostics.length > 0) {
-    logger.info('Design diagnostics', { diagnostics: compiled.diagnostics });
-  }
 
   try {
     const SOFT_CREATE_LIMIT = 20;
 
     const executor = new ActionExecutor();
-    const result = await executor.executeDesignOps(compiled.ops, compiled.errors, {
+    const result = await executor.executeDesignOps(ops, {
       onError: opts.onError || 'continue',
       rollbackMode: opts.rollbackMode || 'none',
       parentId,
+      irWarnings: opts.irWarnings,
+      parseErrors: opts.parseErrors,
     });
 
+    if (result.diagnostics.length > 0) {
+      logger.info('Design diagnostics', { diagnostics: result.diagnostics });
+    }
+
     const rootId = parentId || Object.values(result.idMap)[0];
-    // Validator runs post-mutation — isolate its errors so a validator crash
-    // doesn't mask the fact that mutations already committed.
     let violations: Awaited<ReturnType<typeof collectViolationsForNodeIds>> = [];
     try {
       violations = await collectViolationsForNodeIds([rootId], 5);
@@ -95,18 +96,16 @@ export async function executeCompiledOps(
       result,
       violations,
       softCreateLimit: SOFT_CREATE_LIMIT,
-      createLineCount: compiled.ops.length,
+      createLineCount: ops.length,
     });
 
-    // Build stderr at source — command owns its diagnostics
     const stderr = buildStderr(
-      compiled.diagnostics.slice(0, 10),
+      result.diagnostics.slice(0, 10),
       receipt.violations || [],
       receipt.warnings || [],
       receipt.nodeLimitWarning,
     );
 
-    // Strip stderr fields from stdout — they've been written to _stderr
     delete receipt.violations;
     delete receipt.diagnostics;
     delete receipt.warnings;
@@ -136,22 +135,6 @@ export async function executeCompiledOps(
   } catch (e: any) {
     return { error: { code: 'EXECUTION_ERROR', message: `${e?.message ?? 'Unexpected error'}. Verify node references with ls or tree, then retry.` } };
   }
-}
-
-export async function executeFlatOps(
-  opsStr: string,
-  parentIdOrOptions?: string | ExecuteFlatOpsOptions,
-): Promise<ToolResponse> {
-  const opts: ExecuteFlatOpsOptions = typeof parentIdOrOptions === 'string'
-    ? { parentId: parentIdOrOptions }
-    : (parentIdOrOptions || {});
-  let compiled;
-  try {
-    compiled = compileDesignOps(opsStr, opts.parentId, ActionExecutor.getRegisteredSymbols());
-  } catch (e: any) {
-    return { error: { code: 'PARSE_ERROR', message: e.message } };
-  }
-  return executeCompiledOps(compiled, opts);
 }
 
 export async function collectViolationsForNodeIds(
@@ -220,66 +203,7 @@ export async function exportNodeToBase64(
   };
 }
 
-// ── mk helpers ──
-
-export function stripBraces(propsRaw: string): string {
-  let s = propsRaw.trim();
-  if (s.startsWith('{')) s = s.slice(1);
-  if (s.endsWith('}')) s = s.slice(0, -1);
-  return s.trim();
-}
-
-export function escapeFlatOpsStr(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-
-export function injectNameProp(propsInner: string, name: string): string {
-  if (/\bname\s*:/.test(propsInner)) return propsInner;
-  const escaped = escapeFlatOpsStr(name);
-  return propsInner
-    ? `name:'${escaped}', ${propsInner}`
-    : `name:'${escaped}'`;
-}
-
-export function injectLayoutDefaults(type: string | undefined, propTokens: string[]): string[] {
-  const effectiveType = type || 'frame';
-  if (effectiveType !== 'frame' && effectiveType !== 'section') return propTokens;
-
-  const hasLayout = propTokens.some(t => t.startsWith('layout:') || t.startsWith('layoutMode:'));
-  if (!hasLayout) return propTokens;
-
-  const hasExplicitH = propTokens.some(t =>
-    t.startsWith('h:') || t.startsWith('height:') || t.startsWith('sizingV:')
-  );
-  const hasExplicitW = propTokens.some(t =>
-    t.startsWith('w:') || t.startsWith('width:') || t.startsWith('sizingH:')
-  );
-
-  const result = [...propTokens];
-  if (!hasExplicitH) result.push('h:hug');
-  if (!hasExplicitW) result.push('w:hug');
-  return result;
-}
-
-export function mkPropToFlatOps(token: string): string {
-  const colonIdx = token.indexOf(':');
-  if (colonIdx < 0) return token;
-  const key = token.slice(0, colonIdx);
-  const val = token.slice(colonIdx + 1);
-  // set:ChildName:text → split on second colon
-  if (key === 'set') {
-    const secondColon = val.indexOf(':');
-    if (secondColon >= 0) {
-      const childName = val.slice(0, secondColon);
-      const text = val.slice(secondColon + 1);
-      return `set:${childName}:'${escapeFlatOpsStr(text)}'`;
-    }
-  }
-  if (/^-?\d+(\.\d+)?$/.test(val)) return `${key}:${val}`;
-  return `${key}:'${val.replace(/'/g, "\\'")}'`;
-}
-
-// ── Replace property helpers (used by grep properties + sed + legacy replace) ──
+// ── Replace property helpers (used by run grep + run sed) ──
 
 export function rgbaToHex(c: { r: number; g: number; b: number }): string {
   const r = Math.round(c.r * 255);

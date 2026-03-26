@@ -2,8 +2,8 @@
  * @file jsxHandler.ts
  * @description Handler for the `jsx` command.
  *
- * Parses JSX markup → converts to typed IR → compiles → executes.
- * No string intermediate — JsxNode[] goes directly to OperationIR[].
+ * Parses JSX markup → converts to typed IR → executes directly.
+ * No intermediate compilation step — OperationIR goes straight to executor.
  * Uses abort + rollback: all nodes created or none (atomic).
  *
  * Syntax:
@@ -15,9 +15,7 @@
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { parseJsx, type JsxNode } from '../../engine/jsx/jsxParser';
 import { jsxToIR } from '../../engine/jsx/jsxToIR';
-import { compileFromIR } from '../../engine/flat/flatOpsParser';
-import { ActionExecutor } from '../../engine/actions/executor';
-import { executeCompiledOps } from './shared';
+import { executeIR } from './shared';
 import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
@@ -51,18 +49,12 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   // Step 2: Convert AST → typed IR (no string round-trip)
   const { ops: irOps, warnings: irWarnings } = jsxToIR(roots);
 
-  // Step 3: Validate refs + compile IR → DesignOp[]
-  const compiled = compileFromIR(irOps, {
-    propWarnings: irWarnings,
-    defaultParentId: parentId,
-    knownSymbols: ActionExecutor.getRegisteredSymbols(),
-  });
-
-  // Step 4: Execute
-  const result = await executeCompiledOps(compiled, {
+  // Step 3: Execute — OperationIR[] goes directly to executor
+  const result = await executeIR(irOps, {
     parentId,
     onError: 'abort',
     rollbackMode: 'created_nodes',
+    irWarnings,
   });
 
   // Attach parse errors as stderr warnings
@@ -74,12 +66,9 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   }
 
   // ── Replace flat idMap with {id, name, type, children: [name#id]} ──
-  // Return root + one-level direct children refs (like Open-Pencil's render).
-  // Agent already knows the full tree (it wrote the JSX) — only needs IDs.
   if (!result.error && result.data?.idMap) {
     const idMap = result.data.idMap as Record<string, string>;
 
-    // Build symbol → ref map (DFS order matches jsxToIR)
     const symbolToRef = new Map<string, string>();
     const refs = Object.values(idMap);
     let counter = 0;
@@ -90,7 +79,6 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     }
     for (const root of roots) walkForSymbols(root);
 
-    // Build root + one-level children for each root
     counter = 0;
     function buildRootResult(node: JsxNode): any {
       const sym = `n${++counter}`;
@@ -103,13 +91,11 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
       const result: any = { id, name, type: node.tag };
 
-      // One-level children: only direct children refs, not recursive
       const childRefs: string[] = [];
       for (const child of node.children) {
         const childSym = `n${counter + 1}`;
         const childRef = symbolToRef.get(childSym);
         if (childRef) childRefs.push(childRef);
-        // Still advance counter through all descendants
         function skip(n: JsxNode): void { counter++; for (const c of n.children) skip(c); }
         skip(child);
       }
@@ -126,7 +112,6 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
     if (rootResults.length > 0) {
       delete result.data.idMap;
-      // Spread node fields directly into data (no `node` wrapper)
       const rootData = rootResults.length === 1 ? rootResults[0] : rootResults[0];
       if (rootData) {
         Object.assign(result.data, rootData);

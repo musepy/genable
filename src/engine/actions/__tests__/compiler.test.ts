@@ -1,22 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { compileDesignOps } from '../../flat/flatOpsParser';
+import { parseFlatOps } from '../../flat/flatOpsParser';
 
-describe('compileDesignOps — text compilation', () => {
-  it('compiles text with explicit intrinsic sizing', () => {
+describe('parseFlatOps — text compilation', () => {
+  it('parses text with explicit intrinsic sizing', () => {
     const input = `title = text(card, {name: 'Title', characters: 'Settings', fontSize: 20, fill: '#111827', textAutoResize: 'WIDTH_AND_HEIGHT'})`;
-    const { ops, errors } = compileDesignOps(input);
+    const { lines, errors } = parseFlatOps(input);
 
     expect(errors).toEqual([]);
-    expect(ops).toHaveLength(1);
-    expect(ops[0].action.action).toBe('createText');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].command).toBe('create');
+    expect(lines[0].nodeType).toBe('TEXT');
   });
 
-  it('compiles text without textAutoResize', () => {
+  it('parses text without textAutoResize', () => {
     const input = `title = text(card, {name: 'Title', characters: 'Settings', fontSize: 20, fill: '#111827'})`;
-    const { ops, errors } = compileDesignOps(input);
+    const { lines, errors } = parseFlatOps(input);
 
     expect(errors).toEqual([]);
-    expect(ops).toHaveLength(1);
-    expect(ops[0].action.action).toBe('createText');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].command).toBe('create');
+    expect(lines[0].nodeType).toBe('TEXT');
   });
 });

@@ -3,14 +3,206 @@
  * @description mk, rm, mv, cp command handlers — write operations on the Figma scene graph.
  *
  * Each handler is self-contained: validates args, executes, formats output.
+ * Constructs OperationIR[] directly — no string round-trip through flat ops.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
+import type { OperationIR } from '../../domain/design-ir';
 import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath, deduplicateName, isSessionNode } from './pathResolver';
-import {
-  executeFlatOps, escapeFlatOpsStr, injectNameProp, injectLayoutDefaults,
-  mkPropToFlatOps, stripBraces,
-} from './shared';
+import { executeIR } from './shared';
+import { normalizeProps } from '../../domain/node-normalizers';
+import { TAG_TO_TYPE, coerceValue, toCamelCase, computeDependsOn } from '../../engine/utils/prop-dsl';
+
+// ── Shared helpers ──
+
+/** Parse "key:value" string tokens into a typed props object. */
+function parseTokensToProps(tokens: string[]): Record<string, any> {
+  const props: Record<string, any> = {};
+  for (const token of tokens) {
+    const colonIdx = token.indexOf(':');
+    if (colonIdx < 0) continue;
+    const key = token.slice(0, colonIdx);
+    const val = token.slice(colonIdx + 1);
+    props[key] = coerceValue(key, val);
+  }
+  return props;
+}
+
+/**
+ * Extract set: overrides and variant selector from prop tokens.
+ * Returns separated props, overrides, and variantSelector.
+ */
+function extractOverridesFromTokens(tokens: string[]): {
+  props: Record<string, any>;
+  overrides: Record<string, Record<string, any>>;
+  variantSelector?: string;
+} {
+  const props: Record<string, any> = {};
+  const overrides: Record<string, Record<string, any>> = {};
+  let variantSelector: string | undefined;
+
+  for (const token of tokens) {
+    const colonIdx = token.indexOf(':');
+    if (colonIdx < 0) continue;
+    const key = token.slice(0, colonIdx);
+    const val = token.slice(colonIdx + 1);
+
+    if (key === 'variant') {
+      variantSelector = val;
+      continue;
+    }
+    if (key === 'set') {
+      const secondColon = val.indexOf(':');
+      if (secondColon >= 0) {
+        const childName = val.slice(0, secondColon);
+        const text = val.slice(secondColon + 1);
+        overrides[childName] = { characters: text };
+      }
+      continue;
+    }
+    props[key] = coerceValue(key, val);
+  }
+
+  return { props, overrides, variantSelector };
+}
+
+/** Apply layout defaults: frames with layout default to hug if no explicit size. */
+function applyLayoutDefaults(type: string | undefined, rawProps: Record<string, any>): void {
+  const effectiveType = type || 'frame';
+  if (effectiveType !== 'frame' && effectiveType !== 'section' && effectiveType !== 'component') return;
+  const hasLayout = rawProps.layout !== undefined || rawProps.layoutMode !== undefined;
+  if (!hasLayout) return;
+  if (rawProps.h === undefined && rawProps.height === undefined && rawProps.sizingV === undefined) rawProps.h = 'hug';
+  if (rawProps.w === undefined && rawProps.width === undefined && rawProps.sizingH === undefined) rawProps.w = 'hug';
+}
+
+/** Parse a raw props string like "{bg:#FFF, w:200}" into typed props. */
+function parsePropString(raw: string): Record<string, any> {
+  let s = raw.trim();
+  if (s.startsWith('{')) s = s.slice(1);
+  if (s.endsWith('}')) s = s.slice(0, -1);
+  s = s.trim();
+  if (!s) return {};
+
+  const result: Record<string, any> = {};
+  // Split on commas, respecting quotes
+  let cur = '';
+  let inQ = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inQ) {
+      if (c === '\\' && i + 1 < s.length) { cur += c + s[++i]; continue; }
+      if (c === "'") { inQ = false; cur += c; continue; }
+      cur += c;
+      continue;
+    }
+    if (c === "'") { inQ = true; cur += c; continue; }
+    if (c === ',') {
+      processEntry(cur.trim(), result);
+      cur = '';
+      continue;
+    }
+    cur += c;
+  }
+  if (cur.trim()) processEntry(cur.trim(), result);
+  return result;
+}
+
+function processEntry(entry: string, result: Record<string, any>): void {
+  if (!entry) return;
+  const colonIdx = entry.indexOf(':');
+  if (colonIdx < 0) return;
+  const key = entry.slice(0, colonIdx).trim();
+  let val = entry.slice(colonIdx + 1).trim();
+  // Strip surrounding quotes
+  if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
+    val = val.slice(1, -1).replace(/\\(.)/g, (_, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c);
+  }
+  result[key] = coerceValue(key, val);
+}
+
+/** Build a create OperationIR for a given type, props, and parent. */
+function buildCreateIR(
+  symbol: string,
+  parentRef: string,
+  type: string | undefined,
+  rawProps: Record<string, any>,
+  textContent?: string,
+  refComponent?: string,
+): OperationIR {
+  const tag = type || 'frame';
+  const figmaType = TAG_TO_TYPE[tag] || 'FRAME';
+  const deps = computeDependsOn(parentRef);
+
+  // Instance (ref component)
+  if (refComponent) {
+    const compRef = refComponent.includes(' ') ? toCamelCase(refComponent) : refComponent;
+    const { overrides, variantSelector, ...cleanProps } = rawProps as any;
+    const compDeps = [...deps];
+    if (compRef && !compRef.includes(':')) compDeps.push(compRef);
+    return {
+      command: 'instance',
+      symbol,
+      parentRef,
+      componentRef: compRef,
+      props: normalizeProps(cleanProps, {}, () => {}),
+      dependsOn: compDeps,
+      ...(overrides && Object.keys(overrides).length > 0 ? { overrides } : {}),
+      ...(variantSelector ? { variantSelector } : {}),
+    };
+  }
+
+  // VariantSet
+  if (tag === 'variantset') {
+    const fromStr = (rawProps.from as string) || '';
+    const componentSymbols = fromStr.split(',').map(s => s.trim()).filter(Boolean);
+    const { from: _, ...restProps } = rawProps;
+    return {
+      command: 'variantSet',
+      symbol,
+      parentRef,
+      props: normalizeProps(restProps, { nodeType: 'FRAME', isCreate: true }, () => {}),
+      dependsOn: [...deps, ...componentSymbols],
+      variantComponents: componentSymbols,
+    };
+  }
+
+  // Icon
+  if (tag === 'icon') {
+    if (rawProps.size !== undefined) {
+      const s = typeof rawProps.size === 'string' ? coerceValue('width', rawProps.size) : rawProps.size;
+      rawProps.width = s;
+      rawProps.height = s;
+      delete rawProps.size;
+    }
+    if (rawProps.icon) {
+      rawProps.iconName = rawProps.icon;
+      delete rawProps.icon;
+    }
+    return {
+      command: 'icon',
+      symbol,
+      parentRef,
+      props: normalizeProps(rawProps, {}, () => {}),
+      dependsOn: deps,
+    };
+  }
+
+  // Text / Container / Shape / Image
+  if (textContent && figmaType === 'TEXT') rawProps.characters = textContent;
+  const isImage = tag === 'image';
+  const isComponent = tag === 'component';
+
+  return {
+    command: isImage ? 'image' : 'create',
+    nodeType: figmaType,
+    symbol,
+    parentRef,
+    props: normalizeProps(rawProps, { nodeType: figmaType, isCreate: true }, () => {}),
+    dependsOn: deps,
+    ...(isComponent ? { reusable: true } : {}),
+  };
+}
 
 // ── mk ──
 
@@ -30,15 +222,17 @@ async function executeSingleMk(
   if (/^\d+:\d+$/.test(nodeName)) {
     const node = await figma.getNodeByIdAsync(nodeName);
     if (node && 'visible' in node) {
-      const nodeId = node.id;
-      const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
-      if (!propsBlock && !textContent) {
-        return { data: { message: `Node "${node.name}" (${nodeId}) — no properties to update.`, idMap: {} } };
+      const rawProps = parseTokensToProps(propTokens);
+      if (textContent) rawProps.characters = textContent;
+      if (Object.keys(rawProps).length === 0) {
+        return { data: { message: `Node "${node.name}" (${node.id}) — no properties to update.`, idMap: {} } };
       }
-      let ops = textContent
-        ? `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escapeFlatOpsStr(textContent)}'})`
-        : `update('${nodeId}', {${propsBlock}})`;
-      return await executeFlatOps(ops);
+      return executeIR([{
+        command: 'update',
+        targetRef: node.id,
+        props: normalizeProps(rawProps, {}, () => {}),
+        dependsOn: [],
+      }]);
     }
     return { error: { code: 'NODE_NOT_FOUND', message: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` } };
   }
@@ -48,16 +242,19 @@ async function executeSingleMk(
   if (existing.ok && !existing.isPage) {
     // Path resolves to an existing node — UPDATE (upsert)
     const nodeId = existing.node.id;
-    const propsBlock = propTokens.map(mkPropToFlatOps).join(', ');
-    if (!propsBlock && !textContent) {
+    const rawProps = parseTokensToProps(propTokens);
+    if (textContent) {
+      rawProps.characters = textContent;
+    }
+    if (Object.keys(rawProps).length === 0) {
       return { data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
     }
-    let ops = `update('${nodeId}', {${propsBlock}})`;
-    if (textContent) {
-      const escaped = escapeFlatOpsStr(textContent);
-      ops = `update('${nodeId}', {${propsBlock ? propsBlock + ', ' : ''}characters:'${escaped}'})`;
-    }
-    const result = await executeFlatOps(ops);
+    const result = await executeIR([{
+      command: 'update',
+      targetRef: nodeId,
+      props: normalizeProps(rawProps, {}, () => {}),
+      dependsOn: [],
+    }]);
     // Include the edited node ID so callers can reference it (updates produce empty idMap)
     if (!result.error && result.data) {
       result.data.idMap = { ...result.data.idMap, [nodeName]: nodeId };
@@ -81,26 +278,31 @@ async function executeSingleMk(
   let finalName = deduplicateName(siblings, nodeName);
 
   const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
-  const adjustedTokens = injectLayoutDefaults(type, propTokens);
-  const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
-  const propsWithName = injectNameProp(propsInner, finalName);
 
-  let ops: string;
-  if (type === 'variantset') {
-    ops = `n1 = variantSet(root, {${propsWithName}})`;
-  } else if (refComponent) {
-    const escapedComp = escapeFlatOpsStr(refComponent);
-    ops = `n1 = ref('${escapedComp}', root, {${propsWithName}})`;
-  } else if (type === 'text' || textContent) {
-    const nodeType = type || 'text';
-    const textArg = textContent ? `, '${escapeFlatOpsStr(textContent)}'` : '';
-    ops = `n1 = ${nodeType}(root, {${propsWithName}}${textArg})`;
+  // Build props from tokens
+  let rawProps: Record<string, any>;
+  let overrides: Record<string, Record<string, any>> | undefined;
+  let variantSelector: string | undefined;
+
+  if (refComponent) {
+    const extracted = extractOverridesFromTokens(propTokens);
+    rawProps = extracted.props;
+    overrides = Object.keys(extracted.overrides).length > 0 ? extracted.overrides : undefined;
+    variantSelector = extracted.variantSelector;
   } else {
-    const nodeType = type || 'frame';
-    ops = `n1 = ${nodeType}(root, {${propsWithName}})`;
+    rawProps = parseTokensToProps(propTokens);
   }
 
-  const response = await executeFlatOps(ops, parentId);
+  rawProps.name = finalName;
+  applyLayoutDefaults(type, rawProps);
+
+  // Attach overrides/variant to props for buildCreateIR to extract
+  if (overrides) (rawProps as any).overrides = overrides;
+  if (variantSelector) (rawProps as any).variantSelector = variantSelector;
+
+  const op = buildCreateIR('n1', 'root', type, rawProps, textContent, refComponent);
+
+  const response = await executeIR([op], { parentId });
   if (finalName !== nodeName && !response.error) {
     response.data = { ...response.data, renamed: { [nodeName]: finalName } };
   }
@@ -196,11 +398,6 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   }
 
   // ── Sequential symbol resolution ──
-  // Key invariant: each line ALWAYS creates a new node with a unique symbol.
-  // Parent lookup uses the LATEST symbol for that path (sequential association).
-  // This ensures duplicate sibling names (e.g., multiple /Parent/Item) each get
-  // their own symbol, and children reference the correct (most recent) parent.
-
   const latestSymbolForPath = new Map<string, string>();
   let symbolCounter = 0;
 
@@ -224,8 +421,8 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return names;
   }
 
-  // Generate flat ops sequentially
-  const opsLines: string[] = [];
+  // Generate OperationIR[] directly
+  const ops: OperationIR[] = [];
 
   for (const line of parsed) {
     // Resolve parent: batch-internal symbol first, then Figma tree
@@ -257,30 +454,27 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     }
     usedNames.add(displayName);
 
-    const adjustedTokens = injectLayoutDefaults(line.type, line.propTokens);
-    const propsInner = adjustedTokens.map(mkPropToFlatOps).join(', ');
-    const propsWithName = injectNameProp(propsInner, displayName);
-
-    if (line.type === 'variantset') {
-      opsLines.push(`${sym} = variantSet(${parentRef}, {${propsWithName}})`);
-    } else if (line.refComponent) {
-      const escaped = escapeFlatOpsStr(line.refComponent);
-      opsLines.push(`${sym} = ref('${escaped}', ${parentRef}, {${propsWithName}})`);
-    } else if (line.type === 'text' || line.textContent) {
-      const nodeType = line.type || 'text';
-      const textArg = line.textContent ? `, '${escapeFlatOpsStr(line.textContent)}'` : '';
-      opsLines.push(`${sym} = ${nodeType}(${parentRef}, {${propsWithName}}${textArg})`);
+    // Build props
+    let rawProps: Record<string, any>;
+    if (line.refComponent) {
+      const extracted = extractOverridesFromTokens(line.propTokens);
+      rawProps = extracted.props;
+      if (Object.keys(extracted.overrides).length > 0) (rawProps as any).overrides = extracted.overrides;
+      if (extracted.variantSelector) (rawProps as any).variantSelector = extracted.variantSelector;
     } else {
-      const nodeType = line.type || 'frame';
-      opsLines.push(`${sym} = ${nodeType}(${parentRef}, {${propsWithName}})`);
+      rawProps = parseTokensToProps(line.propTokens);
     }
+    rawProps.name = displayName;
+    applyLayoutDefaults(line.type, rawProps);
+
+    ops.push(buildCreateIR(sym, parentRef, line.type, rawProps, line.textContent, line.refComponent));
   }
 
-  if (opsLines.length === 0) {
+  if (ops.length === 0) {
     return { data: { message: 'All nodes already exist. No changes needed.' } };
   }
 
-  return await executeFlatOps(opsLines.join('\n'));
+  return await executeIR(ops);
 }
 
 export async function handleMk(parameters: any): Promise<ToolResponse> {
@@ -314,8 +508,13 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
     if (globNodes.length === 0) {
       return { error: { code: 'NO_MATCH', message: `No nodes matched pattern "${rmPath}". Use ls to check available children.` } };
     }
-    const rmOps = globNodes.map(n => `delete('${n.id}')`).join('\n');
-    return await executeFlatOps(rmOps);
+    const ops: OperationIR[] = globNodes.map(n => ({
+      command: 'delete' as const,
+      targetRef: n.id,
+      props: {},
+      dependsOn: [],
+    }));
+    return await executeIR(ops);
   }
 
   const rmResolved = await resolvePathToNode(rmPath);
@@ -329,7 +528,12 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   const rmNodeId = rmResolved.node.id;
   const rmIsSessionNode = isSessionNode(rmNodeId) || rmResolved.node.getPluginData('_agent') === 'created';
 
-  const rmResult = await executeFlatOps(`delete('${rmNodeId}')`);
+  const rmResult = await executeIR([{
+    command: 'delete',
+    targetRef: rmNodeId,
+    props: {},
+    dependsOn: [],
+  }]);
 
   // Warn if deleting a node not created by this session
   if (!rmResult.error && !rmIsSessionNode) {
@@ -455,8 +659,39 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
   if (!cpParentResolved.ok) return cpParentResolved.response;
 
   const cpParentId = cpParentResolved.isPage ? undefined : cpParentResolved.node.id;
-  const cpPropsInner = stripBraces(cpPropsRaw || '');
-  const cpPropsWithName = injectNameProp(cpPropsInner, cpCloneName);
 
-  return await executeFlatOps(`n1 = clone('${cpSourceId}', root, {${cpPropsWithName}})`, cpParentId);
+  // Parse raw props string (from CLI: "{bg:#FFF, w:200}")
+  const rawProps = parsePropString(cpPropsRaw || '');
+  rawProps.name = cpCloneName;
+
+  // Separate dot-notation keys (child overrides) from root props
+  const rootProps: Record<string, any> = {};
+  const overrides: Record<string, Record<string, any>> = {};
+  for (const [k, v] of Object.entries(rawProps)) {
+    const dotIdx = k.indexOf('.');
+    if (dotIdx > 0) {
+      const childName = k.substring(0, dotIdx);
+      const childProp = k.substring(dotIdx + 1);
+      if (!overrides[childName]) overrides[childName] = {};
+      overrides[childName][childProp] = v;
+    } else {
+      rootProps[k] = v;
+    }
+  }
+
+  // Normalize child overrides
+  const normOverrides: Record<string, Record<string, any>> = {};
+  for (const [childName, childProps] of Object.entries(overrides)) {
+    normOverrides[childName] = normalizeProps(childProps, {}, () => {});
+  }
+
+  return await executeIR([{
+    command: 'clone',
+    symbol: 'n1',
+    parentRef: 'root',
+    sourceRef: cpSourceId,
+    props: normalizeProps(rootProps, { nodeType: 'FRAME', isCreate: true }, () => {}),
+    dependsOn: [],
+    ...(Object.keys(normOverrides).length > 0 ? { overrides: normOverrides } : {}),
+  }], { parentId: cpParentId });
 }

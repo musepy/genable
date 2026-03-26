@@ -5,8 +5,9 @@
  * and dependency validation.
  */
 
-import { FigmaAction, ExecutionResult, ActionResult } from './types';
-import { DesignOp, DesignOpError, LineResult, CreateExecutionResult } from './createTypes';
+import { FigmaAction, ActionResult } from './types';
+import { LineResult, CreateExecutionResult } from './createTypes';
+import type { OperationIR } from '../../domain/design-ir';
 import { ActionValidator } from './validator';
 import { fontBus } from '../figma-adapter/resources/FontBus';
 import { fetchIconSvg, prefetchIcons } from '../figma-adapter/assets/iconify';
@@ -19,7 +20,6 @@ import { parseRichText } from '../text/richTextParser';
 import { toCamelCase } from '../utils/prop-dsl';
 import { sortByPropertyOrder, validateDependencies, SELF_GATE_PROPERTIES, PARENT_GATE_PROPERTIES } from './propertyDependencies';
 import { expandShorthands } from './expandShorthands';
-import { expandMacros } from './macroExpander';
 
 // ---------------------------------------------------------------------------
 // Progress event (moved from IncrementalExecutor)
@@ -35,13 +35,28 @@ export interface DesignExecOptions {
   rollbackMode: 'none' | 'created_nodes';
   parentId?: string;
   onProgress?: (event: DesignProgressEvent) => void;
+  /** Warnings from IR construction (jsxToIR, etc.) — included in result diagnostics. */
+  irWarnings?: Array<{ line: number; message: string }>;
+  /** Parse errors that couldn't produce OperationIR — pre-seeded as failures. */
+  parseErrors?: Array<{ line: number; raw: string; error: string; symbol?: string }>;
 }
 
-/** Map FigmaAction.action → canonical command name for receipt stats. */
-function actionToCommand(action: string): string {
-  if (action === 'updateProps') return 'update';
-  if (action === 'delete') return 'delete';
+/** Map OperationIR.command → canonical command name for receipt stats. */
+function irToCommand(command: string): string {
+  if (command === 'update') return 'update';
+  if (command === 'delete') return 'delete';
   return 'create';
+}
+
+const SHAPE_TYPES = new Set(['RECTANGLE', 'ELLIPSE', 'LINE', 'VECTOR']);
+
+function classifyWarning(msg: string): string {
+  if (msg.includes('not a recognized property')) return 'UNKNOWN_PROPERTY';
+  if (msg.includes('not a supported property')) return 'UNKNOWN_PROPERTY';
+  if (msg.includes('not a valid Figma value')) return 'INVALID_ENUM_VALUE';
+  if (msg.includes('requires layout')) return 'MISSING_LAYOUT';
+  if (msg.includes('text-only property')) return 'WRONG_NODE_TYPE';
+  return 'PROPERTY_WARNING';
 }
 
 /**
@@ -81,28 +96,57 @@ export class ActionExecutor {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Execute compiled design operations with cross-line symbol resolution,
-   * dependency tracking, progress events, degraded fallback, and rollback.
-   *
-   * Replaces the old IncrementalExecutor → ActionExecutor 1:1 wrapper pattern.
+   * Execute OperationIR[] directly — validates, compiles to FigmaAction inline, executes.
+   * No external compilation step needed.
    */
   async executeDesignOps(
-    ops: DesignOp[],
-    errors: DesignOpError[],
+    ops: OperationIR[],
     options: DesignExecOptions,
   ): Promise<CreateExecutionResult> {
     const symbolMap = new Map<string, string>();
     const statusMap = new Map<string, 'ok' | 'failed' | 'skipped'>();
     const lineResults: LineResult[] = [];
     const createdNodes: Array<{ symbol: string; nodeId: string }> = [];
-    const total = ops.length + errors.length;
+    const parseErrors = options.parseErrors || [];
+    const total = ops.length + parseErrors.length;
     let completed = 0;
     let aborted = false;
 
-    // 1. Seed lineResults with parse/compile errors
-    for (const e of errors) {
+    // 0. Pre-processing: variantSet implicit dependency injection
+    for (const op of ops) {
+      if (op.command === 'variantSet' && op.variantComponents && op.variantComponents.length > 0) {
+        const componentSet = new Set(op.variantComponents);
+        for (const other of ops) {
+          if (other === op) continue;
+          if (other.symbol && other.parentRef && componentSet.has(other.parentRef)) {
+            if (!op.dependsOn.includes(other.symbol)) op.dependsOn.push(other.symbol);
+          }
+        }
+      }
+    }
+
+    // 0b. Symbol reference validation → diagnostics
+    const knownSymbols = ActionExecutor.getRegisteredSymbols();
+    const allSymbols = new Set(ops.filter(o => o.symbol).map(o => o.symbol!));
+    const diagnostics: CreateExecutionResult['diagnostics'] = (options.irWarnings || []).map(w => ({
+      code: classifyWarning(w.message), severity: 'warning' as const, message: w.message, lineNumber: w.line,
+    }));
+    for (const op of ops) {
+      for (const dep of op.dependsOn) {
+        if (!allSymbols.has(dep) && !dep.includes(':') && dep !== 'root' && !knownSymbols.has(dep)) {
+          diagnostics.push({
+            code: 'REF_NOT_FOUND', severity: 'warning',
+            message: `Symbol "${dep}" referenced by "${op.symbol ?? 'unnamed'}" not found in this batch.`,
+            lineNumber: op.lineNumber ?? 0, symbol: op.symbol,
+          });
+        }
+      }
+    }
+
+    // 1. Seed lineResults with parse errors
+    for (const e of parseErrors) {
       const lr: LineResult = {
-        line: e.lineNumber, raw: e.raw, status: 'failed',
+        line: e.line, raw: e.raw, status: 'failed',
         symbol: e.symbol, error: e.error,
       };
       if (e.symbol) statusMap.set(e.symbol, 'failed');
@@ -113,19 +157,19 @@ export class ActionExecutor {
 
     // 2. Prefetch icons in parallel before serial execution
     const iconNames = ops
-      .filter(o => o.action.action === 'createIcon' && o.action.props?.iconName)
-      .map(o => (o.action as any).props.iconName as string);
+      .filter(o => o.command === 'icon' && o.props?.iconName)
+      .map(o => o.props.iconName as string);
     if (iconNames.length > 0) {
       await prefetchIcons(iconNames);
     }
 
     // 3. Execute operations sequentially
     for (const op of ops) {
-      const command = actionToCommand(op.action.action);
+      const command = irToCommand(op.command);
 
       // 3a. Abort check
       if (aborted) {
-        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'skipped', command, symbol: op.symbol, skipReason: 'ABORTED' };
+        const lr: LineResult = { line: op.lineNumber ?? 0, raw: op.raw ?? '', status: 'skipped', command, symbol: op.symbol, skipReason: 'ABORTED' };
         if (op.symbol) statusMap.set(op.symbol, 'skipped');
         lineResults.push(lr);
         completed++;
@@ -139,7 +183,7 @@ export class ActionExecutor {
         return s === 'failed' || s === 'skipped';
       });
       if (failedDep) {
-        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'skipped', command, symbol: op.symbol, skipReason: 'DEPENDENCY_FAILED' };
+        const lr: LineResult = { line: op.lineNumber ?? 0, raw: op.raw ?? '', status: 'skipped', command, symbol: op.symbol, skipReason: 'DEPENDENCY_FAILED' };
         if (op.symbol) statusMap.set(op.symbol, 'skipped');
         lineResults.push(lr);
         completed++;
@@ -147,12 +191,10 @@ export class ActionExecutor {
         continue;
       }
 
-      // 3c. Resolve symbol references → real Figma IDs
-      const { action: resolvedAction, warnings: resolveWarnings, error: resolveError } = this.resolveSymbolRefs(op.action, symbolMap);
-
-      // 3c-fail: Unresolved reference → fail this action immediately
-      if (resolveError) {
-        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'failed', command, symbol: op.symbol, error: resolveError, warnings: resolveWarnings.length > 0 ? resolveWarnings : undefined };
+      // 3c. Compile OperationIR → FigmaAction
+      const compiled = this.compileOp(op, options.parentId);
+      if ('error' in compiled) {
+        const lr: LineResult = { line: op.lineNumber ?? 0, raw: op.raw ?? '', status: 'failed', command, symbol: op.symbol, error: compiled.error };
         if (op.symbol) statusMap.set(op.symbol, 'failed');
         lineResults.push(lr);
         completed++;
@@ -161,12 +203,25 @@ export class ActionExecutor {
         continue;
       }
 
-      // 3d. Execute
+      // 3d. Resolve symbol references → real Figma IDs
+      const { action: resolvedAction, warnings: resolveWarnings, error: resolveError } = this.resolveSymbolRefs(compiled, symbolMap);
+
+      if (resolveError) {
+        const lr: LineResult = { line: op.lineNumber ?? 0, raw: op.raw ?? '', status: 'failed', command, symbol: op.symbol, error: resolveError, warnings: resolveWarnings.length > 0 ? resolveWarnings : undefined };
+        if (op.symbol) statusMap.set(op.symbol, 'failed');
+        lineResults.push(lr);
+        completed++;
+        options.onProgress?.({ lineResult: lr, stats: { completed, total } });
+        if (options.onError === 'abort') aborted = true;
+        continue;
+      }
+
+      // 3e. Execute
       let result: Omit<ActionResult, 'action'>;
       try {
         result = await this.executeOneWithRetry(resolvedAction);
       } catch (e: any) {
-        const lr: LineResult = { line: op.lineNumber, raw: op.raw, status: 'failed', command, symbol: op.symbol, error: e?.message ?? 'Unexpected executor error' };
+        const lr: LineResult = { line: op.lineNumber ?? 0, raw: op.raw ?? '', status: 'failed', command, symbol: op.symbol, error: e?.message ?? 'Unexpected executor error' };
         if (op.symbol) statusMap.set(op.symbol, 'failed');
         lineResults.push(lr);
         completed++;
@@ -178,15 +233,13 @@ export class ActionExecutor {
       let succeeded = result.success ?? false;
       const allWarnings = [
         ...resolveWarnings,
-        ...(op.warnings ?? []),
         ...(result.warnings?.map(w => ({ code: w.code, message: w.message })) ?? []),
       ];
 
-      // Extract human-readable name from the action's props (all create actions carry props.name)
-      const opName = ('props' in resolvedAction && (resolvedAction as any).props?.name as string | undefined) || undefined;
+      const opName = (op.props?.name as string | undefined) || undefined;
 
       const lr: LineResult = {
-        line: op.lineNumber, raw: op.raw,
+        line: op.lineNumber ?? 0, raw: op.raw ?? '',
         status: succeeded ? 'ok' : 'failed',
         command, symbol: op.symbol, name: opName,
         nodeId: succeeded ? result.nodeId : undefined,
@@ -196,7 +249,7 @@ export class ActionExecutor {
 
       if (succeeded && lr.warnings && lr.warnings.length > 0) lr.status = 'warning';
 
-      // 3e. Degraded fallback for failed frames
+      // 3f. Degraded fallback for failed frames
       if (!succeeded && op.symbol && resolvedAction.action === 'createFrame') {
         const fallbackId = await this.tryDegradedFallback(resolvedAction);
         if (fallbackId) {
@@ -209,7 +262,7 @@ export class ActionExecutor {
         }
       }
 
-      // 3f. Update maps
+      // 3g. Update maps
       if (succeeded && op.symbol) {
         const nodeId = lr.nodeId;
         if (nodeId) {
@@ -269,8 +322,75 @@ export class ActionExecutor {
       hasErrors,
       idMap,
       lineResults,
+      diagnostics,
       stats: { total: lineResults.length, created: createdCount, edited: editedCount, deleted: deletedCount, failed: failedCount, skipped: skippedCount, warnings: warningCount },
     };
+  }
+
+  /**
+   * Compile a single OperationIR → FigmaAction (internal representation for executeOne).
+   */
+  private compileOp(op: OperationIR, defaultParentId?: string): FigmaAction | { error: string } {
+    const parentId = (defaultParentId && op.parentRef === 'root')
+      ? defaultParentId
+      : (op.parentRef || defaultParentId);
+    const props: Record<string, any> = op.props ?? {};
+
+    switch (op.command) {
+      case 'create': {
+        if (op.reusable) {
+          return { action: 'createComponent', tempId: op.symbol, parentId, props };
+        }
+        const nodeType = (op.nodeType ?? 'FRAME').toUpperCase();
+        if (nodeType === 'TEXT') {
+          return { action: 'createText', tempId: op.symbol, parentId, props: { characters: '', ...props } };
+        }
+        if (SHAPE_TYPES.has(nodeType)) {
+          return { action: 'createShape', shapeType: nodeType as any, tempId: op.symbol, parentId, props };
+        }
+        return { action: 'createFrame', tempId: op.symbol, parentId, props };
+      }
+      case 'update': {
+        if (!op.targetRef) return { error: "update command missing 'targetRef'" };
+        if (Object.keys(props).length === 0) return { error: "update command has no properties to apply" };
+        return { action: 'updateProps', nodeId: op.targetRef, props };
+      }
+      case 'delete': {
+        if (!op.targetRef) return { error: "delete command missing 'targetRef'" };
+        return { action: 'delete', nodeId: op.targetRef };
+      }
+      case 'icon': {
+        const { iconName, ...rest } = props;
+        return { action: 'createIcon', tempId: op.symbol, parentId, props: { iconName, ...rest } };
+      }
+      case 'image': {
+        const { placeholder, width, height, ...rest } = props;
+        const dimProps: Record<string, any> = {};
+        if (width !== undefined) dimProps.width = width;
+        if (height !== undefined) dimProps.height = height;
+        return { action: 'createFrame', tempId: op.symbol, parentId, props: { name: placeholder ?? 'Image Placeholder', fills: ['#E0E0E0'], ...dimProps, ...rest } };
+      }
+      case 'variantSet': {
+        if (!op.variantComponents || op.variantComponents.length === 0) return { error: "variantSet requires component symbols" };
+        return { action: 'createComponentSet', tempId: op.symbol, parentId, componentIds: op.variantComponents, props };
+      }
+      case 'instance': {
+        if (!op.componentRef) return { error: "instance command missing 'componentRef'" };
+        return { action: 'createInstance', tempId: op.symbol, parentId, source: { nodeId: op.componentRef, ...(op.variantSelector ? { variant: op.variantSelector } : {}) }, props: Object.keys(props).length > 0 ? props : undefined, overrides: op.overrides };
+      }
+      case 'clone': {
+        if (!op.sourceRef) return { error: "clone command missing source symbol" };
+        return { action: 'cloneNode', tempId: op.symbol, parentId, sourceId: op.sourceRef, props: Object.keys(props).length > 0 ? props : undefined, overrides: op.overrides };
+      }
+      case 'componentProperty': {
+        if (!op.targetRef) return { error: "setProperty missing target component" };
+        const { propertyName, propertyType, targetNodeRef, defaultValue } = props;
+        if (!propertyName || !propertyType) return { error: "setProperty requires 'name' and 'type'" };
+        return { action: 'componentProperty', nodeId: op.targetRef, propertyName, propertyType, defaultValue, targetNodeId: targetNodeRef };
+      }
+      default:
+        return { error: `Unknown command '${op.command}'` };
+    }
   }
 
   /**
@@ -360,172 +480,6 @@ export class ActionExecutor {
       if (result.success && result.nodeId) return result.nodeId;
     } catch { /* fallback failed too */ }
     return null;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Legacy execute() — kept for direct ActionExecutor usage (e.g. update path)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Main execution entry point.
-   * Topologically sorts actions based on dependsOn, then executes.
-   */
-  async execute(actions: FigmaAction[]): Promise<ExecutionResult> {
-    this.tempIdMap.clear();
-    this.opStatus.clear();
-    this.rollbackStack = [];
-    
-    const results: ActionResult[] = [];
-    const globalOnError = this.options.onError || 'skip-dependents';
-    let aborted = false;
-
-    // 0. Macro expansion: 1 action → N actions (grid, outline-offset, etc.)
-    const expandedActions = expandMacros(actions);
-
-    // 1. Collect all tempIds within this batch
-    const currentBatchTempIds = new Set<string>();
-    for (const action of expandedActions) {
-      if (action.tempId) currentBatchTempIds.add(action.tempId);
-    }
-
-    // 2. Sort actions topologically based on dependsOn to ensure dependencies run first
-    const sortedActions = this.topologicalSort(expandedActions);
-
-    // 2. Execute sequentially
-    for (const action of sortedActions) {
-      if (aborted) {
-         results.push({ action, success: false, error: 'Aborted due to prior failure', skipped: true });
-         continue;
-      }
-
-      // Check dependencies
-      if (action.dependsOn && action.dependsOn.length > 0) {
-        let missingDep: string | undefined;
-        for (const dep of action.dependsOn) {
-          if (currentBatchTempIds.has(dep)) {
-            const status = this.opStatus.get(dep);
-            if (!status || !status.success) {
-              missingDep = dep;
-              break;
-            }
-          } else {
-            // It might be a real pre-existing Figma node ID. Validate it.
-            try {
-              const realNode = await figma.getNodeByIdAsync(dep);
-              if (!realNode) {
-                missingDep = dep;
-                break;
-              }
-            } catch (e) {
-              missingDep = dep;
-              break;
-            }
-          }
-        }
-
-        if (missingDep) {
-          const actionOnError = action.onError || globalOnError;
-          results.push({ action, success: false, error: `Dependency '${missingDep}' failed or was not executed.`, skipped: actionOnError === 'skip-dependents' });
-          this.opStatus.set(action.tempId || action.action, { success: false });
-          if (actionOnError === 'abort') {
-            aborted = true;
-          }
-          continue;
-        }
-      }
-
-      // Execute action
-      let result = await this.executeOne(action);
-      let retryCount = 0;
-      let retryTried = false;
-      let subCategory = ActionErrorSubCategory.UNKNOWN;
-      const retryWarnings: Array<{ code: string; severity: 'warning'; message: string }> = [];
-
-      while (!result.success && retryCount < 2) {
-        const rawError = result.error || 'Unknown error';
-        subCategory = parseActionError(rawError);
-        
-        if (subCategory !== ActionErrorSubCategory.UNKNOWN && action.action !== 'delete') {
-          retryTried = true;
-          retryCount++;
-          console.warn(`[ActionExecutor] Auto-fixing and retrying action ${action.action} (attempt ${retryCount}) due to ${subCategory}`);
-          
-          const props = (action as any).props;
-          if (props) {
-            if (subCategory === ActionErrorSubCategory.NODE_TYPE_CONSTRAINT) {
-              // Cannot auto-fix node type mismatch — break to avoid infinite retry
-              break;
-            } else if (subCategory === ActionErrorSubCategory.FONT_UNLOADED) {
-              props.fontFamily = 'Inter';
-              props.fontWeight = 'Regular';
-            } else if (subCategory === ActionErrorSubCategory.PAINT_INVALID) {
-              delete props.fills;
-              delete props.strokes;
-            } else if (subCategory === ActionErrorSubCategory.EFFECT_INVALID) {
-              delete props.effects;
-            } else if (subCategory === ActionErrorSubCategory.PROPERTY_INVALID) {
-              // Remove NaN/undefined values that commonly trigger this
-              for (const [k, v] of Object.entries(props)) {
-                if (v === undefined || (typeof v === 'number' && isNaN(v))) {
-                  delete props[k];
-                }
-              }
-            }
-          }
-          result = await this.executeOne(action);
-        } else {
-          break; // Unrecoverable or unknown error
-        }
-      }
-
-      if (retryWarnings.length > 0) {
-        result.warnings = [...(result.warnings || []), ...retryWarnings];
-      }
-
-      if (!result.success) {
-        // Attach extra context for logging/reporting
-        (result as ActionResult).errorContext = {
-          subCategory: subCategory !== ActionErrorSubCategory.UNKNOWN ? subCategory : parseActionError(result.error || ''),
-          rawMessage: result.error || 'Unknown error',
-          failedNodeId: (action as any).nodeId || action.tempId || action.action,
-          retryTried,
-          canRetryLocally: false
-        };
-      }
-
-      results.push({ action, ...result });
-
-      if (action.tempId) {
-         this.opStatus.set(action.tempId, { success: result.success, error: result.error });
-         if (result.success && result.nodeId) {
-            this.tempIdMap.set(action.tempId, result.nodeId);
-            if (action.action !== 'delete') {
-              this.rollbackStack.push({ tempId: action.tempId, nodeId: result.nodeId });
-            }
-         }
-      }
-
-      // Handle failure policy
-      if (!result.success) {
-        const actionOnError = action.onError || globalOnError;
-        if (actionOnError === 'abort') {
-          aborted = true;
-        }
-      }
-    }
-
-    // 4. Rollback on failure if anything failed and we shouldn't keep partials
-    // Only trigger global rollback if globalOnError === 'abort'.
-    // For 'skip-dependents', we keep other successfully executed nodes.
-    const hasFailures = results.some(r => !r.success && !r.skipped);
-    const rollbackSummary = await this.rollbackIfNeeded(hasFailures, globalOnError);
-
-    return {
-      success: !hasFailures,
-      results,
-      idMap: Object.fromEntries(this.tempIdMap),
-      rollback: rollbackSummary
-    };
   }
 
   private async executeOne(action: FigmaAction): Promise<Omit<ActionResult, 'action'>> {
@@ -1415,88 +1369,4 @@ export class ActionExecutor {
     }
   }
 
-  // --- Transactions ---
-
-  private async rollbackIfNeeded(hasFailures: boolean, globalOnError: string) {
-    const summary = {
-      attempted: 0,
-      removed: 0,
-      failed: [] as Array<{ opId: string; nodeId: string; reason: string }>
-    };
-
-    if (!hasFailures || globalOnError !== 'abort') {
-      return summary;
-    }
-
-    summary.attempted = this.rollbackStack.length;
-
-    for (const ref of [...this.rollbackStack].reverse()) {
-      try {
-        const node = await figma.getNodeByIdAsync(ref.nodeId) as SceneNode | null;
-        if (node && !node.removed) {
-          node.remove();
-          summary.removed++;
-        }
-      } catch (e: any) {
-        summary.failed.push({
-          opId: ref.tempId,
-          nodeId: ref.nodeId,
-          reason: e?.message || 'Unknown rollback error'
-        });
-      }
-    }
-
-    return summary;
-  }
-
-  private topologicalSort(actions: FigmaAction[]): FigmaAction[] {
-    // Actions without tempId (e.g. updateProps) have no dependency graph —
-    // topological sort is meaningless for them. Pass through in order.
-    const hasDeps = actions.some(a => a.tempId);
-    if (!hasDeps) return actions;
-
-    const sorted: FigmaAction[] = [];
-    const visited = new Set<string>();
-    const processing = new Set<string>();
-
-    const actionMap = new Map<string, FigmaAction>();
-    for (const action of actions) {
-      if (action.tempId) {
-        actionMap.set(action.tempId, action);
-      }
-    }
-
-    const visit = (action: FigmaAction) => {
-      const id = action.tempId;
-      if (!id) {
-        // No tempId = no dependency tracking. Just push in encounter order.
-        sorted.push(action);
-        return;
-      }
-      if (visited.has(id)) return;
-      if (processing.has(id)) {
-        console.warn('Circular dependency detected in batch operations');
-        return;
-      }
-
-      processing.add(id);
-
-      if (action.dependsOn) {
-        for (const dep of action.dependsOn) {
-          const depAction = actionMap.get(dep);
-          if (depAction) visit(depAction);
-        }
-      }
-
-      processing.delete(id);
-      visited.add(id);
-      sorted.push(action);
-    };
-
-    for (const action of actions) {
-      visit(action);
-    }
-
-    return sorted;
-  }
 }

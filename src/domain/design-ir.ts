@@ -89,38 +89,3 @@ export interface CanonicalProps {
   // Examples: fontSize, cornerRadius, opacity, layoutMode, name, characters, etc.
   [key: string]: any;
 }
-
-// ── OperationIR (replaces ParsedLine at the semantic layer) ──
-
-export interface OperationIR {
-  /** The operation to perform */
-  command: 'create' | 'update' | 'delete' | 'icon' | 'image' | 'instance' | 'variantSet' | 'clone' | 'componentProperty';
-  /** For create: the Figma node type (FRAME, TEXT, RECTANGLE, etc.) */
-  nodeType?: string;
-  /** Parent node reference (symbol or Figma ID) */
-  parentRef?: string;
-  /** For update/delete: the target node reference */
-  targetRef?: string;
-  /** Binding symbol for this node */
-  symbol?: string;
-  /** Symbol references this operation depends on */
-  dependsOn: string[];
-  /** Canonical properties */
-  props: CanonicalProps;
-  /** For instance: the component reference */
-  componentRef?: string;
-  /** For instance: child overrides */
-  overrides?: Record<string, CanonicalProps>;
-  /** If true, creates a ComponentNode instead of a FrameNode */
-  reusable?: boolean;
-  /** For variantSet: list of component symbols to combine */
-  variantComponents?: string[];
-  /** For instance: variant selector string (e.g. 'Size=Large') */
-  variantSelector?: string;
-  /** For clone: the source node symbol or ID to deep-copy */
-  sourceRef?: string;
-  /** 1-based operation index (diagnostic) */
-  lineNumber?: number;
-  /** JSON summary of the original operation (diagnostic) */
-  raw?: string;
-}

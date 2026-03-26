@@ -21,7 +21,7 @@ import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { clearIconCache } from '../figma-adapter/assets/iconify';
 import { scratchClear } from '../agent/scratchpad/store';
 import { clearSessionNodes } from '../../ipc/commands/pathResolver';
-import { ActionExecutor } from '../actions/executor';
+import { clearComponentRegistry } from '../actions/nodeFactory';
 import { LLMProvider } from '../llm-client/providers/types';
 import { GeminiError, GeminiErrorType } from '../llm-client/providers/gemini/geminiErrorHandler';
 import { classifyError, AgentErrorCategory } from '../agent/retryPolicy';
@@ -107,7 +107,7 @@ export class AgentOrchestrator {
     this.ipcBridge = null;
     clearIconCache();
     clearSessionNodes();
-    ActionExecutor.clearComponentRegistry();
+    clearComponentRegistry();
     scratchClear();
   }
 

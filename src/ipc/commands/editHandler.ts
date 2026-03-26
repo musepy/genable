@@ -5,15 +5,14 @@
  * Supports single node: edit({node: "Card#1:2", props: {bg: "#FFF"}})
  * Supports batch:       edit({nodes: [{node: "A#1:1", props: {w: "fill"}}, {node: "B#1:2", props: {w: "fill"}}]})
  *
- * Constructs OperationIR[] directly — no string round-trip through flat ops.
+ * Calls nodeFactory directly — no IR, no executor.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import type { OperationIR } from '../../domain/design-ir';
-import { executeIR } from './shared';
 import { resolvePathToNode } from './pathResolver';
 import { normalizeProps } from '../../domain/node-normalizers';
 import { coerceValue } from '../../engine/utils/prop-dsl';
+import { updateNode, normalizeSizingInProps } from '../../engine/actions/nodeFactory';
 import { PipelineTracer } from './pipelineTracer';
 
 interface EditEntry {
@@ -22,8 +21,8 @@ interface EditEntry {
   content?: string;
 }
 
-/** Build a single update OperationIR from a resolved nodeId + props/content. */
-function buildUpdateIR(nodeId: string, props?: Record<string, any>, content?: string): OperationIR | null {
+/** Build normalized props from raw input. */
+function buildNormalizedProps(props?: Record<string, any>, content?: string): Record<string, any> | null {
   const rawProps: Record<string, any> = {};
   if (props && typeof props === 'object') {
     for (const [key, value] of Object.entries(props)) {
@@ -38,17 +37,28 @@ function buildUpdateIR(nodeId: string, props?: Record<string, any>, content?: st
 
   if (Object.keys(rawProps).length === 0) return null;
 
+  return normalizeProps(rawProps, {}, () => {});
+}
+
+/** Apply an edit to a single resolved node. */
+async function applyEdit(
+  node: SceneNode,
+  props: Record<string, any>,
+): Promise<{ warnings: string[] }> {
+  // Pre-normalize sizing based on parent context
+  const parentNode = node.parent as SceneNode | null;
+  const isText = node.type === 'TEXT';
+  normalizeSizingInProps(props, node, parentNode, isText);
+
+  const result = await updateNode(node, props);
   return {
-    command: 'update',
-    targetRef: nodeId,
-    props: normalizeProps(rawProps, {}, () => {}),
-    dependsOn: [],
+    warnings: result.warnings.map(w => w.message || String(w)),
   };
 }
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
   const tracer = new PipelineTracer();
-  tracer.enter('handleEdit() → IR', 'editHandler.ts');
+  tracer.enter('handleEdit()', 'editHandler.ts');
 
   // ── Batch mode: nodes array ──
   if (Array.isArray(parameters.nodes)) {
@@ -57,8 +67,9 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: { code: 'NO_CHANGES', message: 'Empty nodes array.' } };
     }
 
-    const ops: OperationIR[] = [];
+    const results: Array<{ nodeId: string; name: string; updated: boolean }> = [];
     const errors: string[] = [];
+    const allWarnings: string[] = [];
 
     for (const entry of entries) {
       const ref = entry.node;
@@ -66,29 +77,35 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
       const resolved = await resolvePathToNode(ref);
       if (!resolved.ok) {
-        const errMsg = resolved.response.error?.message || `Cannot resolve "${ref}"`;
-        errors.push(errMsg);
+        errors.push(resolved.response.error?.message || `Cannot resolve "${ref}"`);
         continue;
       }
       if (resolved.isPage) { errors.push(`Cannot edit page root (ref: "${ref}")`); continue; }
 
-      const op = buildUpdateIR(resolved.node.id, entry.props, entry.content);
-      if (!op) { errors.push(`No props or content for "${ref}"`); continue; }
-      ops.push(op);
+      const normalized = buildNormalizedProps(entry.props, entry.content);
+      if (!normalized) { errors.push(`No props or content for "${ref}"`); continue; }
+
+      const { warnings } = await applyEdit(resolved.node, normalized);
+      allWarnings.push(...warnings);
+      results.push({ nodeId: resolved.node.id, name: resolved.node.name, updated: true });
     }
 
-    if (ops.length === 0) {
+    tracer.exit({ count: results.length });
+
+    if (results.length === 0) {
       return { error: { code: 'NO_CHANGES', message: errors.join('; ') } };
     }
 
-    tracer.exit({ opsCount: ops.length });
-    const result = await executeIR(ops, { tracer });
-    if (errors.length > 0) {
-      result._stderr = result._stderr
-        ? result._stderr + '\n' + errors.map(e => `[warn] ${e}`).join('\n')
-        : errors.map(e => `[warn] ${e}`).join('\n');
-    }
-    return result;
+    const stderrLines = [
+      ...errors.map(e => `[warn] ${e}`),
+      ...allWarnings.map(w => `[warn] ${w}`),
+    ];
+
+    return {
+      data: { updated: results.length, results },
+      _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
+      _stages: tracer.collect(),
+    };
   }
 
   // ── Single mode: node + props/content ──
@@ -111,11 +128,21 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     return { error: { code: 'INVALID_TARGET', message: 'Cannot edit the page root. Specify a node ref.' } };
   }
 
-  const op = buildUpdateIR(resolved.node.id, props, content);
-  if (!op) {
+  const normalized = buildNormalizedProps(props, content);
+  if (!normalized) {
     return { error: { code: 'NO_CHANGES', message: 'No props or content provided.' } };
   }
 
-  tracer.exit({ opsCount: 1 });
-  return executeIR([op], { tracer });
+  tracer.exit({ count: 1 });
+
+  const { warnings } = await applyEdit(resolved.node, normalized);
+  const _stderr = warnings.length > 0
+    ? warnings.map(w => `[warn] ${w}`).join('\n')
+    : undefined;
+
+  return {
+    data: { nodeId: resolved.node.id, name: resolved.node.name, updated: true },
+    _stderr,
+    _stages: tracer.collect(),
+  };
 }

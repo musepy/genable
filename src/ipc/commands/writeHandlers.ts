@@ -3,23 +3,28 @@
  * @description mk, rm, mv, cp command handlers — write operations on the Figma scene graph.
  *
  * Each handler is self-contained: validates args, executes, formats output.
- * Constructs OperationIR[] directly — no string round-trip through flat ops.
+ * Calls nodeFactory directly — no intermediate IR.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import type { OperationIR } from '../../domain/design-ir';
 import { resolvePathToNode, hasGlob, resolveGlobPaths, splitPath, normalizePath, deduplicateName, isSessionNode } from './pathResolver';
-import { executeIR } from './shared';
 import { normalizeProps } from '../../domain/node-normalizers';
-import { TAG_TO_TYPE, coerceValue, toCamelCase, computeDependsOn } from '../../engine/utils/prop-dsl';
+import { TAG_TO_TYPE, coerceValue, toCamelCase } from '../../engine/utils/prop-dsl';
+import {
+  createFrame, createText, createShape, createIcon,
+  createComponent, createInstance, createComponentSet,
+  cloneNode, updateNode, deleteNode, tagAsAgentCreated,
+  normalizeSizingInProps, centerNodeInViewport,
+  prefetchIcons, resolveParent,
+  type NodeResult,
+} from '../../engine/actions/nodeFactory';
 import { PipelineTracer } from './pipelineTracer';
 
 // ── Shared helpers ──
 
 /** Wrap a run sub-command result with pipeline stages. */
 function wrapRunStages(subCmd: string, result: ToolResponse, startTime: number): ToolResponse {
-  const handlerStage = { label: `handle${subCmd}() → IR`, file: 'writeHandlers.ts', durationMs: Date.now() - startTime };
-  // Prepend handler stage before executor/receipt stages from executeIR
+  const handlerStage = { label: `handle${subCmd}()`, file: 'writeHandlers.ts', durationMs: Date.now() - startTime };
   const existing = (result as any)._stages || [];
   (result as any)._stages = [
     { label: 'unwrapRunCmd()', file: 'toolDispatcher.ts', durationMs: 0 },
@@ -44,7 +49,6 @@ function parseTokensToProps(tokens: string[]): Record<string, any> {
 
 /**
  * Extract set: overrides and variant selector from prop tokens.
- * Returns separated props, overrides, and variantSelector.
  */
 function extractOverridesFromTokens(tokens: string[]): {
   props: Record<string, any>;
@@ -61,10 +65,7 @@ function extractOverridesFromTokens(tokens: string[]): {
     const key = token.slice(0, colonIdx);
     const val = token.slice(colonIdx + 1);
 
-    if (key === 'variant') {
-      variantSelector = val;
-      continue;
-    }
+    if (key === 'variant') { variantSelector = val; continue; }
     if (key === 'set') {
       const secondColon = val.indexOf(':');
       if (secondColon >= 0) {
@@ -99,7 +100,6 @@ function parsePropString(raw: string): Record<string, any> {
   if (!s) return {};
 
   const result: Record<string, any> = {};
-  // Split on commas, respecting quotes
   let cur = '';
   let inQ = false;
   for (let i = 0; i < s.length; i++) {
@@ -128,42 +128,44 @@ function processEntry(entry: string, result: Record<string, any>): void {
   if (colonIdx < 0) return;
   const key = entry.slice(0, colonIdx).trim();
   let val = entry.slice(colonIdx + 1).trim();
-  // Strip surrounding quotes
   if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
     val = val.slice(1, -1).replace(/\\(.)/g, (_, c) => c === 'n' ? '\n' : c === 't' ? '\t' : c);
   }
   result[key] = coerceValue(key, val);
 }
 
-/** Build a create OperationIR for a given type, props, and parent. */
-function buildCreateIR(
-  symbol: string,
-  parentRef: string,
+const SHAPE_TYPES = new Set(['RECTANGLE', 'ELLIPSE', 'LINE', 'VECTOR']);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Direct node creation — replaces buildCreateIR + executeIR
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Create a single node directly via nodeFactory.
+ * Routes to the correct create* function based on type/ref.
+ */
+async function createNodeDirect(
   type: string | undefined,
+  parentNode: SceneNode | null,
   rawProps: Record<string, any>,
   textContent?: string,
   refComponent?: string,
-): OperationIR {
+  symbolMap?: Map<string, string>,
+): Promise<NodeResult & { name: string }> {
   const tag = type || 'frame';
   const figmaType = TAG_TO_TYPE[tag] || 'FRAME';
-  const deps = computeDependsOn(parentRef);
+  const name = rawProps.name || tag;
 
   // Instance (ref component)
   if (refComponent) {
     const compRef = refComponent.includes(' ') ? toCamelCase(refComponent) : refComponent;
     const { overrides, variantSelector, ...cleanProps } = rawProps as any;
-    const compDeps = [...deps];
-    if (compRef && !compRef.includes(':')) compDeps.push(compRef);
-    return {
-      command: 'instance',
-      symbol,
-      parentRef,
-      componentRef: compRef,
-      props: normalizeProps(cleanProps, {}, () => {}),
-      dependsOn: compDeps,
-      ...(overrides && Object.keys(overrides).length > 0 ? { overrides } : {}),
-      ...(variantSelector ? { variantSelector } : {}),
-    };
+    const normalized = normalizeProps(cleanProps, {}, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, false);
+    const result = await createInstance(compRef, parentNode, normalized,
+      overrides && Object.keys(overrides).length > 0 ? overrides : undefined,
+      symbolMap, variantSelector);
+    return { ...result, name };
   }
 
   // VariantSet
@@ -171,14 +173,10 @@ function buildCreateIR(
     const fromStr = (rawProps.from as string) || '';
     const componentSymbols = fromStr.split(',').map(s => s.trim()).filter(Boolean);
     const { from: _, ...restProps } = rawProps;
-    return {
-      command: 'variantSet',
-      symbol,
-      parentRef,
-      props: normalizeProps(restProps, { nodeType: 'FRAME', isCreate: true }, () => {}),
-      dependsOn: [...deps, ...componentSymbols],
-      variantComponents: componentSymbols,
-    };
+    const normalized = normalizeProps(restProps, { nodeType: 'FRAME', isCreate: true }, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, false);
+    const result = await createComponentSet(componentSymbols, parentNode, normalized, undefined, symbolMap);
+    return { ...result, name };
   }
 
   // Icon
@@ -189,36 +187,59 @@ function buildCreateIR(
       rawProps.height = s;
       delete rawProps.size;
     }
-    if (rawProps.icon) {
-      rawProps.iconName = rawProps.icon;
-      delete rawProps.icon;
-    }
-    return {
-      command: 'icon',
-      symbol,
-      parentRef,
-      props: normalizeProps(rawProps, {}, () => {}),
-      dependsOn: deps,
-    };
+    if (rawProps.icon) { rawProps.iconName = rawProps.icon; delete rawProps.icon; }
+    const normalized = normalizeProps(rawProps, {}, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, false);
+    const result = await createIcon(parentNode, normalized);
+    return { ...result, name };
   }
 
-  // Text / Container / Shape / Image
-  if (textContent && figmaType === 'TEXT') rawProps.characters = textContent;
-  const isImage = tag === 'image';
-  const isComponent = tag === 'component';
+  // Text
+  if (figmaType === 'TEXT') {
+    if (textContent) rawProps.characters = textContent;
+    const normalized = normalizeProps(rawProps, { nodeType: 'TEXT', isCreate: true }, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, true);
+    const result = await createText(parentNode, normalized);
+    return { ...result, name };
+  }
 
-  return {
-    command: isImage ? 'image' : 'create',
-    nodeType: figmaType,
-    symbol,
-    parentRef,
-    props: normalizeProps(rawProps, { nodeType: figmaType, isCreate: true }, () => {}),
-    dependsOn: deps,
-    ...(isComponent ? { reusable: true } : {}),
-  };
+  // Image placeholder
+  if (tag === 'image') {
+    const placeholder = rawProps.placeholder || rawProps.name || 'Image Placeholder';
+    rawProps.fills = rawProps.fills || ['#E0E0E0'];
+    rawProps.name = placeholder;
+    const normalized = normalizeProps(rawProps, { nodeType: 'FRAME', isCreate: true }, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, false);
+    const result = await createFrame(parentNode, normalized);
+    return { ...result, name };
+  }
+
+  // Component
+  if (tag === 'component') {
+    const normalized = normalizeProps(rawProps, { nodeType: 'FRAME', isCreate: true }, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, false);
+    const result = await createComponent(parentNode, normalized);
+    return { ...result, name };
+  }
+
+  // Shape (rect, ellipse, line, vector)
+  if (SHAPE_TYPES.has(figmaType)) {
+    const normalized = normalizeProps(rawProps, { nodeType: figmaType, isCreate: true }, () => {});
+    normalizeSizingInProps(normalized, null, parentNode, false);
+    const result = await createShape(figmaType, parentNode, normalized);
+    return { ...result, name };
+  }
+
+  // Frame (default)
+  const normalized = normalizeProps(rawProps, { nodeType: figmaType, isCreate: true }, () => {});
+  normalizeSizingInProps(normalized, null, parentNode, false);
+  const result = await createFrame(parentNode, normalized);
+  return { ...result, name };
 }
 
-// ── mk ──
+// ═══════════════════════════════════════════════════════════════════════════
+// mk
+// ═══════════════════════════════════════════════════════════════════════════
 
 async function executeSingleMk(
   path: string,
@@ -241,12 +262,11 @@ async function executeSingleMk(
       if (Object.keys(rawProps).length === 0) {
         return { data: { message: `Node "${node.name}" (${node.id}) — no properties to update.`, idMap: {} } };
       }
-      return executeIR([{
-        command: 'update',
-        targetRef: node.id,
-        props: normalizeProps(rawProps, {}, () => {}),
-        dependsOn: [],
-      }]);
+      const normalized = normalizeProps(rawProps, {}, () => {});
+      normalizeSizingInProps(normalized, node as SceneNode, (node as SceneNode).parent as SceneNode | null, node.type === 'TEXT');
+      const result = await updateNode(node as SceneNode, normalized);
+      const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
+      return { data: { idMap: { [node.name]: node.id } }, _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined };
     }
     return { error: { code: 'NODE_NOT_FOUND', message: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` } };
   }
@@ -254,55 +274,40 @@ async function executeSingleMk(
   // Try to resolve the full path to check if node exists (for upsert)
   const existing = await resolvePathToNode(path);
   if (existing.ok && !existing.isPage) {
-    // Path resolves to an existing node — UPDATE (upsert)
     const nodeId = existing.node.id;
     const rawProps = parseTokensToProps(propTokens);
-    if (textContent) {
-      rawProps.characters = textContent;
-    }
+    if (textContent) rawProps.characters = textContent;
     if (Object.keys(rawProps).length === 0) {
       return { data: { message: `Node "${nodeName}" already exists (${nodeId}). No properties to update.`, idMap: { [nodeName]: nodeId } } };
     }
-    const result = await executeIR([{
-      command: 'update',
-      targetRef: nodeId,
-      props: normalizeProps(rawProps, {}, () => {}),
-      dependsOn: [],
-    }]);
-    // Include the edited node ID so callers can reference it (updates produce empty idMap)
-    if (!result.error && result.data) {
-      result.data.idMap = { ...result.data.idMap, [nodeName]: nodeId };
-    }
-    return result;
+    const normalized = normalizeProps(rawProps, {}, () => {});
+    normalizeSizingInProps(normalized, existing.node, existing.node.parent as SceneNode | null, existing.node.type === 'TEXT');
+    const result = await updateNode(existing.node, normalized);
+    const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
+    return { data: { idMap: { [nodeName]: nodeId } }, _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined };
   }
 
-  // Node doesn't exist (or page-level collision) → create mode
+  // Node doesn't exist → create mode
   const parentResolved = await resolvePathToNode(parentPath);
   if (!parentResolved.ok) return parentResolved.response;
 
-  // Guard: parent must be a container (frame/group/component/page), not text/rect/etc.
   if (!parentResolved.isPage && !('children' in parentResolved.node)) {
     return { error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
   }
 
-  // Deduplicate name among siblings — like Unix, names are unique within a directory
   const siblings = parentResolved.isPage
     ? figma.currentPage.children
     : (parentResolved.node as FrameNode).children;
-  let finalName = deduplicateName(siblings, nodeName);
-
-  const parentId = parentResolved.isPage ? undefined : parentResolved.node.id;
+  const finalName = deduplicateName(siblings, nodeName);
+  const parentNode = parentResolved.isPage ? null : parentResolved.node;
 
   // Build props from tokens
   let rawProps: Record<string, any>;
-  let overrides: Record<string, Record<string, any>> | undefined;
-  let variantSelector: string | undefined;
-
   if (refComponent) {
     const extracted = extractOverridesFromTokens(propTokens);
     rawProps = extracted.props;
-    overrides = Object.keys(extracted.overrides).length > 0 ? extracted.overrides : undefined;
-    variantSelector = extracted.variantSelector;
+    if (Object.keys(extracted.overrides).length > 0) (rawProps as any).overrides = extracted.overrides;
+    if (extracted.variantSelector) (rawProps as any).variantSelector = extracted.variantSelector;
   } else {
     rawProps = parseTokensToProps(propTokens);
   }
@@ -310,14 +315,30 @@ async function executeSingleMk(
   rawProps.name = finalName;
   applyLayoutDefaults(type, rawProps);
 
-  // Attach overrides/variant to props for buildCreateIR to extract
-  if (overrides) (rawProps as any).overrides = overrides;
-  if (variantSelector) (rawProps as any).variantSelector = variantSelector;
+  // Center root-level nodes in viewport
+  if (!parentNode) {
+    const isText = (type || 'frame') === 'text';
+    const centered = centerNodeInViewport(rawProps, isText);
+    Object.assign(rawProps, centered);
+  }
 
-  const op = buildCreateIR('n1', 'root', type, rawProps, textContent, refComponent);
+  const result = await createNodeDirect(type, parentNode, rawProps, textContent, refComponent);
+  if (!result.nodeId) {
+    return { error: { code: 'CREATE_FAILED', message: result.warnings[0]?.message || 'Failed to create node' } };
+  }
 
-  const response = await executeIR([op], { parentId });
-  if (finalName !== nodeName && !response.error) {
+  // Tag as agent-created
+  try {
+    const n = await figma.getNodeByIdAsync(result.nodeId) as SceneNode;
+    if (n) tagAsAgentCreated(n);
+  } catch { /* best-effort */ }
+
+  const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
+  const response: ToolResponse = {
+    data: { idMap: { [finalName]: result.nodeId } },
+    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
+  };
+  if (finalName !== nodeName) {
     response.data = { ...response.data, renamed: { [nodeName]: finalName } };
   }
   return response;
@@ -365,8 +386,6 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
 
     if (tokens.length === 0) continue;
 
-    // Reconstruct path from initial tokens (handles spaces in names like "/Pricing Table/")
-    // Path starts with '/' and continues until we hit a type keyword, property (:), '--', or ref
     let path = tokens[0];
     let pathEnd = 1;
     if (path.startsWith('/')) {
@@ -411,55 +430,66 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { error: { code: 'PARSE_ERROR', message: 'No valid mk commands parsed from batch input.' } };
   }
 
-  // ── Sequential symbol resolution ──
-  const latestSymbolForPath = new Map<string, string>();
+  // ── Sequential execution with symbol resolution ──
+  const symbolMap = new Map<string, string>();    // symbol → real Figma ID
+  const pathToSymbol = new Map<string, string>(); // path → latest symbol
+  const idMap: Record<string, string> = {};
+  const warnings: string[] = [];
+  const createdNodeIds: string[] = [];
   let symbolCounter = 0;
 
-  // Track used names per parent for batch-internal dedup (Unix: unique names within dir)
+  // Track used names per parent for batch-internal dedup
   const usedNamesPerParent = new Map<string, Set<string>>();
 
-  /** Get or initialize the used-names set for a parent, seeding from existing Figma children. */
-  async function getUsedNames(parentRef: string): Promise<Set<string>> {
-    if (usedNamesPerParent.has(parentRef)) return usedNamesPerParent.get(parentRef)!;
+  async function getUsedNames(parentKey: string): Promise<Set<string>> {
+    if (usedNamesPerParent.has(parentKey)) return usedNamesPerParent.get(parentKey)!;
     const names = new Set<string>();
-    if (parentRef === 'root') {
+    if (parentKey === '__page__') {
       for (const child of figma.currentPage.children) names.add(child.name);
-    } else if (parentRef.startsWith("'")) {
-      const node = await figma.getNodeByIdAsync(parentRef.replace(/'/g, ''));
+    } else {
+      const node = await figma.getNodeByIdAsync(parentKey);
       if (node && 'children' in node) {
         for (const child of (node as any).children) names.add(child.name);
       }
     }
-    // Batch-internal parents (symbols like n1) start empty — no existing Figma children
-    usedNamesPerParent.set(parentRef, names);
+    usedNamesPerParent.set(parentKey, names);
     return names;
   }
 
-  // Generate OperationIR[] directly
-  const ops: OperationIR[] = [];
+  // Prefetch icons
+  const iconNames = parsed.filter(l => l.type === 'icon').map(l => l.nodeName);
+  if (iconNames.length > 0) await prefetchIcons(iconNames);
 
   for (const line of parsed) {
+    const sym = `n${++symbolCounter}`;
+
     // Resolve parent: batch-internal symbol first, then Figma tree
-    let parentRef: string;
-    if (latestSymbolForPath.has(line.parentPath)) {
-      parentRef = latestSymbolForPath.get(line.parentPath)!;
+    let parentNode: SceneNode | null = null;
+    let parentKey: string;
+
+    const batchParentSym = pathToSymbol.get(line.parentPath);
+    if (batchParentSym && symbolMap.has(batchParentSym)) {
+      const parentId = symbolMap.get(batchParentSym)!;
+      parentNode = await figma.getNodeByIdAsync(parentId) as SceneNode | null;
+      parentKey = parentId;
     } else if (line.parentPath === '/' || line.parentPath === '') {
-      parentRef = 'root';
+      parentNode = null;
+      parentKey = '__page__';
     } else {
       const parentResolved = await resolvePathToNode(line.parentPath);
       if (parentResolved.ok) {
-        parentRef = parentResolved.isPage ? 'root' : `'${parentResolved.node.id}'`;
+        parentNode = parentResolved.isPage ? null : parentResolved.node;
+        parentKey = parentResolved.isPage ? '__page__' : parentResolved.node.id;
       } else {
-        parentRef = 'root';
+        parentNode = null;
+        parentKey = '__page__';
       }
     }
 
-    // Always create a new symbol (never reuse — each line = new node)
-    const sym = `n${++symbolCounter}`;
-    latestSymbolForPath.set(line.path, sym); // Overwrite: children use latest parent
+    pathToSymbol.set(line.path, sym);
 
-    // Deduplicate name among siblings — Unix-style unique names within parent
-    const usedNames = await getUsedNames(parentRef);
+    // Deduplicate name
+    const usedNames = await getUsedNames(parentKey);
     let displayName = line.nodeName;
     if (usedNames.has(displayName)) {
       let i = 2;
@@ -481,14 +511,42 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     rawProps.name = displayName;
     applyLayoutDefaults(line.type, rawProps);
 
-    ops.push(buildCreateIR(sym, parentRef, line.type, rawProps, line.textContent, line.refComponent));
+    // Center root-level nodes
+    if (!parentNode) {
+      const isText = (line.type || 'frame') === 'text';
+      Object.assign(rawProps, centerNodeInViewport(rawProps, isText));
+    }
+
+    try {
+      const result = await createNodeDirect(line.type, parentNode, rawProps, line.textContent, line.refComponent, symbolMap);
+      if (result.nodeId) {
+        symbolMap.set(sym, result.nodeId);
+        idMap[displayName] = result.nodeId;
+        createdNodeIds.push(result.nodeId);
+        for (const w of result.warnings) warnings.push(w.message || String(w));
+
+        // Tag as agent-created
+        try {
+          const n = await figma.getNodeByIdAsync(result.nodeId) as SceneNode;
+          if (n) tagAsAgentCreated(n);
+        } catch { /* best-effort */ }
+      } else {
+        for (const w of result.warnings) warnings.push(w.message || String(w));
+      }
+    } catch (e: any) {
+      warnings.push(`Failed to create "${displayName}": ${e?.message}`);
+    }
   }
 
-  if (ops.length === 0) {
-    return { data: { message: 'All nodes already exist. No changes needed.' } };
+  if (createdNodeIds.length === 0) {
+    return { error: { code: 'CREATE_FAILED', message: warnings.join('; ') || 'No nodes created.' } };
   }
 
-  return await executeIR(ops);
+  const stderrLines = warnings.map(w => `[warn] ${w}`);
+  return {
+    data: { idMap, created: createdNodeIds.length },
+    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
+  };
 }
 
 export async function handleMk(parameters: any): Promise<ToolResponse> {
@@ -513,7 +571,9 @@ export async function handleMk(parameters: any): Promise<ToolResponse> {
   return wrapRunStages('Mk', result, _t0);
 }
 
-// ── rm ──
+// ═══════════════════════════════════════════════════════════════════════════
+// rm
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function handleRm(parameters: any): Promise<ToolResponse> {
   const _t0 = Date.now();
@@ -525,13 +585,18 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
     if (globNodes.length === 0) {
       return { error: { code: 'NO_MATCH', message: `No nodes matched pattern "${rmPath}". Use ls to check available children.` } };
     }
-    const ops: OperationIR[] = globNodes.map(n => ({
-      command: 'delete' as const,
-      targetRef: n.id,
-      props: {},
-      dependsOn: [],
-    }));
-    return await executeIR(ops);
+    const warnings: string[] = [];
+    let deleted = 0;
+    for (const n of globNodes) {
+      const result = deleteNode(n);
+      for (const w of result.warnings) warnings.push(w.message);
+      deleted++;
+    }
+    const stderrLines = warnings.map(w => `[warn] ${w}`);
+    return wrapRunStages('Rm', {
+      data: { deleted },
+      _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
+    }, _t0);
   }
 
   const rmResolved = await resolvePathToNode(rmPath);
@@ -540,30 +605,28 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
     return { error: { code: 'INVALID_TARGET', message: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' } };
   }
 
-  // Capture metadata before deletion (node becomes inaccessible after remove)
   const rmNodeName = rmResolved.node.name;
   const rmNodeId = rmResolved.node.id;
   const rmIsSessionNode = isSessionNode(rmNodeId) || rmResolved.node.getPluginData('_agent') === 'created';
 
-  const rmResult = await executeIR([{
-    command: 'delete',
-    targetRef: rmNodeId,
-    props: {},
-    dependsOn: [],
-  }]);
+  const rmResult = deleteNode(rmResolved.node);
+  const stderrLines = rmResult.warnings.map(w => `[warn] ${w.message}`);
 
-  // Warn if deleting a node not created by this session
-  if (!rmResult.error && !rmIsSessionNode) {
-    rmResult.data = {
-      ...rmResult.data,
-      warning: `⚠ "${rmNodeName}" was not created by you in this session.`,
-    };
+  const response: ToolResponse = {
+    data: { deleted: rmNodeName, id: rmNodeId },
+    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
+  };
+
+  if (!rmIsSessionNode) {
+    response.data = { ...response.data, warning: `⚠ "${rmNodeName}" was not created by you in this session.` };
   }
 
-  return wrapRunStages('Rm', rmResult, _t0);
+  return wrapRunStages('Rm', response, _t0);
 }
 
-// ── mv ──
+// ═══════════════════════════════════════════════════════════════════════════
+// mv (already direct Figma API — no changes needed)
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function handleMv(parameters: any): Promise<ToolResponse> {
   const _t0 = Date.now();
@@ -619,7 +682,6 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   let mvReordered = false;
 
   if (mvMoved) {
-    // Moving to a different parent
     if (mvAtIndex != null) {
       const idx = mvAtIndex < 0 ? (mvNewParent as any).children.length : mvAtIndex;
       (mvNewParent as any).insertChild(idx, mvNode);
@@ -627,7 +689,6 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
       (mvNewParent as any).appendChild(mvNode);
     }
   } else if (mvAtIndex != null && mvNewParent != null) {
-    // Same parent — reorder using insertChild
     const parent = mvNewParent as any;
     const childCount = parent.children.length;
     const idx = mvAtIndex < 0 ? childCount - 1 : Math.min(mvAtIndex, childCount - 1);
@@ -650,7 +711,9 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   return wrapRunStages('Mv', mvResult, _t0);
 }
 
-// ── cp ──
+// ═══════════════════════════════════════════════════════════════════════════
+// cp
+// ═══════════════════════════════════════════════════════════════════════════
 
 export async function handleCp(parameters: any): Promise<ToolResponse> {
   const _t0 = Date.now();
@@ -678,9 +741,9 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
   const cpParentResolved = await resolvePathToNode(cpParentPath);
   if (!cpParentResolved.ok) return cpParentResolved.response;
 
-  const cpParentId = cpParentResolved.isPage ? undefined : cpParentResolved.node.id;
+  const cpParentNode = cpParentResolved.isPage ? null : cpParentResolved.node;
 
-  // Parse raw props string (from CLI: "{bg:#FFF, w:200}")
+  // Parse raw props string
   const rawProps = parsePropString(cpPropsRaw || '');
   rawProps.name = cpCloneName;
 
@@ -699,20 +762,34 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
     }
   }
 
-  // Normalize child overrides
+  // Normalize overrides
   const normOverrides: Record<string, Record<string, any>> = {};
   for (const [childName, childProps] of Object.entries(overrides)) {
     normOverrides[childName] = normalizeProps(childProps, {}, () => {});
   }
 
-  const cpResult = await executeIR([{
-    command: 'clone',
-    symbol: 'n1',
-    parentRef: 'root',
-    sourceRef: cpSourceId,
-    props: normalizeProps(rootProps, { nodeType: 'FRAME', isCreate: true }, () => {}),
-    dependsOn: [],
-    ...(Object.keys(normOverrides).length > 0 ? { overrides: normOverrides } : {}),
-  }], { parentId: cpParentId });
+  const normalizedRoot = normalizeProps(rootProps, { nodeType: 'FRAME', isCreate: true }, () => {});
+  const result = await cloneNode(
+    cpSourceId,
+    cpParentNode,
+    normalizedRoot,
+    Object.keys(normOverrides).length > 0 ? normOverrides : undefined,
+  );
+
+  if (!result.nodeId) {
+    return { error: { code: 'CLONE_FAILED', message: result.warnings[0]?.message || 'Clone failed' } };
+  }
+
+  // Tag as agent-created
+  try {
+    const n = await figma.getNodeByIdAsync(result.nodeId) as SceneNode;
+    if (n) tagAsAgentCreated(n);
+  } catch { /* best-effort */ }
+
+  const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
+  const cpResult: ToolResponse = {
+    data: { idMap: { [cpCloneName]: result.nodeId } },
+    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
+  };
   return wrapRunStages('Cp', cpResult, _t0);
 }

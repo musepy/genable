@@ -3,7 +3,30 @@
  * @description Barrel export for the actions module.
  */
 
-export { ActionExecutor } from './executor';
-export type { DesignProgressEvent, DesignExecOptions } from './executor';
-export type { FigmaAction, ActionResult } from './types';
-export type { CreateParams, CreateExecutionResult, LineResult, ParsedLine } from './createTypes';
+export {
+  clearComponentRegistry,
+  getRegisteredSymbols,
+  registerComponent,
+  applyProps,
+  applyTextProps,
+  createFrame,
+  createText,
+  createShape,
+  createIcon,
+  createComponent,
+  createInstance,
+  createComponentSet,
+  cloneNode,
+  updateNode,
+  deleteNode,
+  tagAsAgentCreated,
+  normalizeSizingInProps,
+  centerNodeInViewport,
+  resolveComponent,
+  resolveParent,
+  prefetchIcons,
+  findExistingChild,
+  isAgentOwned,
+} from './nodeFactory';
+
+export type { NodeResult, PropResult } from './nodeFactory';

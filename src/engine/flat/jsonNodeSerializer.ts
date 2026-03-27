@@ -14,7 +14,7 @@
  */
 
 import type { NodeLayer } from '../../schema/layerSchema';
-import { paintSpec, effectSpec, constraintsSpec } from '../../domain/property-specs';
+import { effectSpec, constraintsSpec, parsePaintToFigma, formatPaintForLLM } from '../../domain/property-specs';
 
 // ── Constants ──
 
@@ -148,30 +148,20 @@ function parseHexForSpec(hex: string): { r: number; g: number; b: number } {
 function formatFillsJson(fills: any[]): { key: string; value: any } | null {
   if (!fills || !Array.isArray(fills) || fills.length === 0) return null;
 
-  const normalized = fills.map((f: any) => {
-    if (typeof f === 'string') {
-      return { type: 'SOLID', color: parseHexForSpec(f), opacity: 1 };
-    }
-    if (f && typeof f === 'object' && f.stops && !f.gradientStops) {
-      return { ...f, gradientStops: f.stops.map((s: any) => ({
-        color: typeof s.color === 'string' ? parseHexForSpec(s.color) : (s.color || { r: 0, g: 0, b: 0, a: 1 }),
-        position: s.position ?? 0,
-      }))};
-    }
-    return f;
-  });
+  // Normalize to Figma Paint objects, filter invisible
+  const visible = fills
+    .map((f: any) => typeof f === 'string' ? parsePaintToFigma(f) : f)
+    .filter((f: any) => f && f.visible !== false);
+  if (visible.length === 0) return null;
 
-  const irPaints = paintSpec.fromFigma(normalized);
-  if (irPaints.length === 0) return null;
+  // Format for LLM display — strip defaults
+  const formatted = visible.map(formatPaintForLLM);
 
-  const formatted = paintSpec.formatXml(irPaints);
-  if (formatted === 'transparent') return null;
-
-  // Single solid → string, multiple → array
-  if (irPaints.length === 1 && irPaints[0].kind === 'solid') {
-    return { key: 'fill', value: formatted };
+  // Single solid string → singular key
+  if (formatted.length === 1 && typeof formatted[0] === 'string') {
+    return { key: 'fill', value: formatted[0] };
   }
-  return { key: 'fills', value: formatted.split(',').map(s => s.trim()) };
+  return { key: 'fills', value: formatted };
 }
 
 function formatEffectsJson(effects: any[]): string | null {

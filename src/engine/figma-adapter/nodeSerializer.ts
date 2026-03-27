@@ -89,8 +89,7 @@ export class NodeSerializer {
                 let value: any;
                 if (figmaKey === 'fills' || figmaKey === 'strokes') {
                     if (rawValue) {
-                        readPaints(rawValue); // side-effect: normalize
-                        value = rawValue;
+                        value = readPaints(rawValue); // filter invisible, keep Figma format
                     }
                 } else if (figmaKey === 'effects') {
                     value = rawValue;
@@ -105,11 +104,17 @@ export class NodeSerializer {
                 }
 
                 if (value !== undefined) {
-                    if (pruneDefaults && meta?.defaultValue !== undefined) {
-                        if (PropertyTransformer.isEqual(nodeData, dslKey, meta.defaultValue)) continue;
+                    // fills/strokes: skip PropertyTransformer.isEqual — it only handles SOLID
+                    // paints and returns [] for gradients, causing false prune. Just check length.
+                    if (figmaKey === 'fills' || figmaKey === 'strokes') {
+                        if (Array.isArray(value) && value.length > 0) props[dslKey] = value;
+                    } else {
+                        if (pruneDefaults && meta?.defaultValue !== undefined) {
+                            if (PropertyTransformer.isEqual(nodeData, dslKey, meta.defaultValue)) continue;
+                        }
+                        if (Array.isArray(value) && value.length === 0) continue;
+                        props[dslKey] = value;
                     }
-                    if (Array.isArray(value) && value.length === 0) continue;
-                    props[dslKey] = value;
                 }
             } else if (meta) {
                 // Known property — rich handling via PropertyTransformer

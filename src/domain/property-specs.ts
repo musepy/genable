@@ -17,13 +17,11 @@
  */
 
 import type {
-  PaintValue,
   EffectValue,
   UnitValue,
   ConstraintValue,
   FontNameValue,
   RGBA,
-  ColorStop,
   GradientType,
   ConstraintType,
   Vector,
@@ -86,189 +84,170 @@ export function rgbaToHex(rgba: RGBA): string {
 }
 
 // ═══════════════════════════════════════════════
-// Paint Spec
+// Paint — Direct Figma Paint format (no IR layer)
+//
+// Write: string/"object" → Figma Paint (fill defaults)
+// Read:  Figma Paint → strip defaults → string/object
 // ═══════════════════════════════════════════════
 
 /**
- * Parses XML paint value. Formats:
- *   Solid:    "#FF0000"
- *   Gradient: "GRADIENT_LINEAR(#FF0000@0,#0000FF@1)"
- *   Multiple: "#FF0000,#00FF00" (comma-separated solids)
+ * Parse a single paint input directly to a Figma Paint object.
+ * Accepts:
+ *   - "#FF0000"            → {type:'SOLID', color:{r:1,g:0,b:0}, opacity:1}
+ *   - "linear-gradient(…)" → {type:'GRADIENT_LINEAR', gradientStops:[…], gradientTransform:[…]}
+ *   - {color:"#FF0000", blendMode:"MULTIPLY", opacity:0.5} → merged into Figma Paint
  */
-function parseSinglePaintXml(value: string): PaintValue {
-  const trimmed = value.trim();
+export function parsePaintToFigma(input: string | Record<string, any>): any {
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
 
-  // CSS gradient: linear-gradient(...), radial-gradient(...), etc.
-  if (isGradientString(trimmed)) {
-    const parsed = parseGradient(trimmed);
-    if (parsed) {
-      return { kind: 'gradient', type: parsed.type, stops: parsed.stops, angle: parsed.angleDeg };
+    // CSS gradient
+    if (isGradientString(trimmed)) {
+      const parsed = parseGradient(trimmed);
+      if (parsed) {
+        return {
+          type: parsed.type,
+          gradientStops: parsed.stops.map(s => ({ color: s.color, position: s.position })),
+          gradientTransform: getGradientTransform(parsed.type, parsed.angleDeg),
+        };
+      }
     }
-  }
 
-  // Legacy IR gradient: GRADIENT_LINEAR(#color@pos,#color@pos)
-  const gradientMatch = trimmed.match(/^(GRADIENT_\w+)\((.+)\)$/);
-  if (gradientMatch) {
-    const type = gradientMatch[1] as GradientType;
-    const stopsStr = gradientMatch[2];
-    const stops: ColorStop[] = stopsStr.split(',').map(s => {
-      const parts = s.trim().split('@');
-      const colorStr = parts[0];
-      const position = parts[1] !== undefined ? parseFloat(parts[1]) : 0;
-      return { color: parseHexToRGBA(colorStr), position };
-    });
-    return { kind: 'gradient', type, stops };
-  }
-
-  // Solid hex color
-  return { kind: 'solid', color: trimmed };
-}
-
-function formatSinglePaintXml(paint: PaintValue): string {
-  switch (paint.kind) {
-    case 'solid':
-      return paint.color;
-    case 'gradient': {
-      const stops = paint.stops
-        .map(s => `${rgbaToHex(s.color)}@${s.position}`)
-        .join(',');
-      return `${paint.type}(${stops})`;
-    }
-    case 'image':
-      return `IMAGE(${paint.imageHash})`;
-  }
-}
-
-function paintFromFigma(figmaPaint: any): PaintValue {
-  if (!figmaPaint || typeof figmaPaint !== 'object') {
-    return { kind: 'solid', color: '#000000' };
-  }
-
-  if (figmaPaint.type === 'SOLID') {
-    const { r, g, b } = figmaPaint.color;
-    const hex = rgbaToHex({ r, g, b, a: figmaPaint.opacity ?? 1 });
-    return { kind: 'solid', color: hex };
-  }
-
-  if (typeof figmaPaint.type === 'string' && figmaPaint.type.startsWith('GRADIENT')) {
-    const stops: ColorStop[] = (figmaPaint.gradientStops || []).map((s: any) => ({
-      color: {
-        r: s.color?.r ?? 0,
-        g: s.color?.g ?? 0,
-        b: s.color?.b ?? 0,
-        a: s.color?.a ?? 1,
-      },
-      position: s.position ?? 0,
-    }));
-    return {
-      kind: 'gradient',
-      type: figmaPaint.type as GradientType,
-      stops,
-    };
-  }
-
-  if (figmaPaint.type === 'IMAGE') {
-    return {
-      kind: 'image',
-      imageHash: figmaPaint.imageHash ?? '',
-      scaleMode: figmaPaint.scaleMode ?? 'FILL',
-    };
-  }
-
-  // Fallback: treat as solid black
-  return { kind: 'solid', color: '#000000' };
-}
-
-function paintToFigma(paint: PaintValue): any {
-  switch (paint.kind) {
-    case 'solid': {
-      const rgba = parseHexToRGBA(paint.color);
+    // Legacy gradient: GRADIENT_LINEAR(#color@pos,…)
+    const gm = trimmed.match(/^(GRADIENT_\w+)\((.+)\)$/);
+    if (gm) {
+      const stops = gm[2].split(',').map(s => {
+        const [colorStr, posStr] = s.trim().split('@');
+        return { color: parseHexToRGBA(colorStr), position: parseFloat(posStr) || 0 };
+      });
       return {
-        type: 'SOLID',
-        color: { r: rgba.r, g: rgba.g, b: rgba.b },
-        opacity: rgba.a,
+        type: gm[1],
+        gradientStops: stops,
+        gradientTransform: getGradientTransform(gm[1] as GradientType, 180),
       };
     }
-    case 'gradient': {
-      return {
-        type: paint.type,
-        gradientStops: paint.stops.map(s => ({
-          color: s.color,
-          position: s.position,
-        })),
-        gradientTransform: getGradientTransform(paint.type, paint.angle ?? 180),
-      };
-    }
-    case 'image': {
-      return {
-        type: 'IMAGE',
-        imageHash: paint.imageHash,
-        scaleMode: paint.scaleMode,
-      };
-    }
+
+    // Solid hex
+    const rgba = parseHexToRGBA(trimmed);
+    return { type: 'SOLID', color: { r: rgba.r, g: rgba.g, b: rgba.b }, opacity: rgba.a };
   }
+
+  // Object: {color:"#FF0000", blendMode:"MULTIPLY", opacity:0.5}
+  if (typeof input === 'object' && input !== null && input.color) {
+    const rgba = parseHexToRGBA(input.color);
+    const paint: any = { type: 'SOLID', color: { r: rgba.r, g: rgba.g, b: rgba.b }, opacity: rgba.a };
+    if (input.opacity !== undefined) paint.opacity = input.opacity;
+    if (input.blendMode) paint.blendMode = input.blendMode;
+    if (input.visible !== undefined) paint.visible = input.visible;
+    return paint;
+  }
+
+  // Fallback
+  return { type: 'SOLID', color: { r: 0, g: 0, b: 0 }, opacity: 1 };
 }
 
-function paintsEqual(a: PaintValue, b: PaintValue): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'solid' && b.kind === 'solid') {
-    return a.color.toUpperCase() === b.color.toUpperCase();
+/**
+ * Format a single Figma Paint for LLM display — strip defaults.
+ *   All defaults → "#FF0000"
+ *   Non-defaults → {color:"#FF0000", opacity:0.5, blendMode:"MULTIPLY"}
+ */
+export function formatPaintForLLM(paint: any): string | Record<string, any> {
+  if (!paint || typeof paint !== 'object') return '#000000';
+
+  if (paint.type === 'SOLID') {
+    const { r, g, b } = paint.color || { r: 0, g: 0, b: 0 };
+    const opacity = paint.opacity ?? 1;
+    const hex = rgbaToHex({ r, g, b, a: opacity });
+
+    const hasNonDefaults =
+      (paint.blendMode && paint.blendMode !== 'NORMAL') ||
+      (paint.visible === false);
+    if (!hasNonDefaults) return hex;
+
+    const result: Record<string, any> = { color: hex };
+    if (paint.blendMode && paint.blendMode !== 'NORMAL') result.blendMode = paint.blendMode;
+    if (paint.visible === false) result.visible = false;
+    return result;
   }
-  if (a.kind === 'gradient' && b.kind === 'gradient') {
-    if (a.type !== b.type) return false;
-    if (a.stops.length !== b.stops.length) return false;
-    return a.stops.every((s, i) => {
-      const other = b.stops[i];
-      return s.position === other.position &&
-        Math.abs(s.color.r - other.color.r) < 0.01 &&
-        Math.abs(s.color.g - other.color.g) < 0.01 &&
-        Math.abs(s.color.b - other.color.b) < 0.01 &&
-        Math.abs(s.color.a - other.color.a) < 0.01;
+
+  if (typeof paint.type === 'string' && paint.type.startsWith('GRADIENT')) {
+    const stops = (paint.gradientStops || [])
+      .map((s: any) => `${rgbaToHex(s.color)}@${s.position}`)
+      .join(',');
+    return `${paint.type}(${stops})`;
+  }
+
+  if (paint.type === 'IMAGE') {
+    return `IMAGE(${paint.imageHash || ''})`;
+  }
+
+  return '#000000';
+}
+
+function figmaPaintsEqual(a: any, b: any): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === 'SOLID') {
+    return Math.abs((a.color?.r ?? 0) - (b.color?.r ?? 0)) < 0.01 &&
+      Math.abs((a.color?.g ?? 0) - (b.color?.g ?? 0)) < 0.01 &&
+      Math.abs((a.color?.b ?? 0) - (b.color?.b ?? 0)) < 0.01 &&
+      Math.abs((a.opacity ?? 1) - (b.opacity ?? 1)) < 0.01;
+  }
+  if (a.type?.startsWith('GRADIENT')) {
+    const aStops = a.gradientStops || [];
+    const bStops = b.gradientStops || [];
+    if (aStops.length !== bStops.length) return false;
+    return aStops.every((s: any, i: number) => {
+      const os = bStops[i];
+      return Math.abs(s.position - os.position) < 0.01 &&
+        Math.abs(s.color.r - os.color.r) < 0.01 &&
+        Math.abs(s.color.g - os.color.g) < 0.01 &&
+        Math.abs(s.color.b - os.color.b) < 0.01 &&
+        Math.abs((s.color.a ?? 1) - (os.color.a ?? 1)) < 0.01;
     });
   }
-  if (a.kind === 'image' && b.kind === 'image') {
-    return a.imageHash === b.imageHash;
-  }
+  if (a.type === 'IMAGE') return a.imageHash === b.imageHash;
   return false;
 }
 
 export const paintSpec = {
   xmlAttrs: ['fill', 'fills', 'stroke', 'strokes', 'background', 'bg'],
 
-  parseXml(value: string): PaintValue[] {
+  /** Parse paint string(s) directly to Figma Paint[]. */
+  parseXml(value: string): any[] {
     if (value === 'transparent' || value === 'none') return [];
-    // Split by comma, but respect parentheses (for gradient notation)
-    const parts = splitRespectingParens(value);
-    return parts.map(parseSinglePaintXml);
+    return splitRespectingParens(value).map(s => parsePaintToFigma(s));
   },
 
-  formatXml(value: PaintValue[]): string {
-    if (value.length === 0) return 'transparent';
-    return value.map(formatSinglePaintXml).join(',');
+  /** Format Figma Paint[] to string. */
+  formatXml(paints: any[]): string {
+    if (!paints || paints.length === 0) return 'transparent';
+    return paints.map(p => {
+      const f = formatPaintForLLM(p);
+      return typeof f === 'string' ? f : JSON.stringify(f);
+    }).join(',');
   },
 
-  fromFigma(figmaValue: any): PaintValue[] {
+  /** Filter invisible paints. No IR conversion — paints stay as Figma format. */
+  fromFigma(figmaValue: any): any[] {
     if (!Array.isArray(figmaValue)) return [];
-    return figmaValue
-      .filter((p: any) => p.visible !== false)
-      .map(paintFromFigma);
+    return figmaValue.filter((p: any) => p.visible !== false);
   },
 
-  toFigma(value: PaintValue[]): any[] {
-    return value.map(paintToFigma);
+  /** Identity — values are already Figma Paint format. */
+  toFigma(value: any[]): any[] {
+    return value;
   },
 
-  isEqual(a: PaintValue[], b: PaintValue[]): boolean {
+  isEqual(a: any[], b: any[]): boolean {
     if (a.length !== b.length) return false;
-    return a.every((v, i) => paintsEqual(v, b[i]));
+    return a.every((v, i) => figmaPaintsEqual(v, b[i]));
   },
 
-  /** Returns warning strings for any unrecognized paint parts (before parsing). */
   validate(value: string): string[] {
     if (value === 'transparent' || value === 'none') return [];
     return splitRespectingParens(value)
       .filter(p => !p.startsWith('#') && !p.startsWith('GRADIENT_') && !p.startsWith('IMAGE(') && !isGradientString(p))
-      .map(p => `Invalid paint format "${p}". Use "#RRGGBB[AA]" for solid, "GRADIENT_LINEAR(#color@pos,...)" or "linear-gradient(135deg, #color, #color)" for gradients. Rendered as black.`);
+      .map(p => `Invalid paint format "${p}". Use "#RRGGBB[AA]", "GRADIENT_LINEAR(#color@pos,...)", or "linear-gradient(...)".`);
   },
 
   defaultValue: [],

@@ -1,57 +1,32 @@
 /**
  * @file figma-lowering.ts
- * @description Converts Canonical IR property values to Figma API-ready values.
+ * @description Converts property values to Figma API-ready format.
  *
- * Centralizes all IR → Figma conversion in one place, replacing the scattered
- * normalization logic in executor.ts (normalizePaints, normalizeEffects, etc.).
- *
- * Used by executor.ts's applyProps to convert IR values before Figma API assignment.
+ * Paint values use direct Figma format — no IR layer. Accepts strings,
+ * LLM object syntax ({color, blendMode, opacity}), and raw Figma Paints.
  */
 
-import type { PaintValue, EffectValue, UnitValue } from '../../domain/design-ir';
-import { paintSpec, effectSpec, unitValueSpec } from '../../domain/property-specs';
+import type { EffectValue, UnitValue } from '../../domain/design-ir';
+import { effectSpec, unitValueSpec, parsePaintToFigma } from '../../domain/property-specs';
 import { parseHexToRGBA } from '../../domain/property-specs';
-import { isGradientString, parseGradient, getGradientTransform } from '../../domain/gradient-parser';
 
 /**
- * Convert an array of paint values to Figma Paint[] format.
+ * Convert an array of paint inputs to Figma Paint[] format.
  *
- * Accepts both:
- *   - PaintValue[] (canonical IR from xml-interpreter)
- *   - string[] | mixed[] (legacy format from xmlDesignParser — hex strings or raw Paint objects)
- *
- * This dual-format support enables gradual migration without breaking existing pipeline.
+ * Accepts:
+ *   - "#FF0000"                    → solid paint
+ *   - "linear-gradient(…)"         → gradient paint
+ *   - {color:"#F00", opacity:0.5}  → solid paint with explicit props
+ *   - {type:'SOLID', …}            → already Figma Paint, pass through
  */
 export function lowerPaints(paints: any[]): any[] {
   return paints.map(item => {
-    // Canonical IR PaintValue (has 'kind' discriminant)
-    if (typeof item === 'object' && item !== null && 'kind' in item) {
-      return paintSpec.toFigma([item as PaintValue])[0];
-    }
-    // CSS gradient string → gradient paint
-    if (typeof item === 'string' && isGradientString(item)) {
-      const parsed = parseGradient(item);
-      if (parsed) {
-        return {
-          type: parsed.type,
-          gradientStops: parsed.stops.map(s => ({ color: s.color, position: s.position })),
-          gradientTransform: getGradientTransform(parsed.type, parsed.angleDeg),
-        };
-      }
-    }
-    // Legacy: hex string → solid paint via figma.util.solidPaint (Figma runtime only)
-    if (typeof item === 'string') {
-      // If figma.util.solidPaint is available (runtime), use it for correctness
-      if (typeof figma !== 'undefined' && figma.util?.solidPaint) {
-        return figma.util.solidPaint(item);
-      }
-      // Fallback: manual conversion
-      const rgba = parseHexToRGBA(item);
-      return { type: 'SOLID', color: { r: rgba.r, g: rgba.g, b: rgba.b }, opacity: rgba.a };
-    }
-    // Legacy: raw Paint object — pass through
+    if (typeof item === 'string') return parsePaintToFigma(item);
     if (typeof item === 'object' && item !== null) {
-      return item;
+      // Already a Figma Paint (has 'type' field)
+      if ('type' in item) return item;
+      // LLM object syntax: {color, blendMode, opacity}
+      return parsePaintToFigma(item);
     }
     throw new Error(`Invalid paint format: ${JSON.stringify(item)}`);
   });

@@ -1,14 +1,14 @@
 /**
  * @file design-ir.ts
- * @description Canonical Intermediate Representation for design properties.
+ * @description Canonical types for design properties.
  *
- * All layers (XML parser, interpreter, executor, serializer) operate through
- * these types. Each property has a single canonical form defined here.
+ * Paint values (fills/strokes) use Figma Paint format directly — no intermediate
+ * representation. Other complex types (effect, unitValue, constraints, fontName)
+ * keep dedicated value types.
  *
  * Simple scalar properties (fontSize, cornerRadius, opacity, etc.) are NOT
  * wrapped — they pass through as raw number/string/boolean values via the
- * index signature on CanonicalProps. Only complex types (paint, effect,
- * unitValue, constraints, fontName) get dedicated value types.
+ * index signature on CanonicalProps.
  */
 
 // ── RGBA color (Figma 0-1 range) ──
@@ -33,13 +33,6 @@ export interface ColorStop {
   color: RGBA;
   position: number;
 }
-
-// ── Paint value (discriminated union) ──
-
-export type PaintValue =
-  | { kind: 'solid'; color: string }
-  | { kind: 'gradient'; type: GradientType; stops: ColorStop[]; angle?: number }
-  | { kind: 'image'; imageHash: string; scaleMode: string };
 
 // ── Effect value (discriminated union) ──
 
@@ -76,9 +69,9 @@ export interface FontNameValue {
 // ── CanonicalProps ──
 
 export interface CanonicalProps {
-  // Complex typed properties
-  fills?: PaintValue[];
-  strokes?: PaintValue[];
+  // Paints: Figma Paint[] directly (no IR wrapper)
+  fills?: any[];
+  strokes?: any[];
   effects?: EffectValue[];
   lineHeight?: UnitValue;
   letterSpacing?: UnitValue;

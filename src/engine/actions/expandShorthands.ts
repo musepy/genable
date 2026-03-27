@@ -174,7 +174,8 @@ const EXPANDERS: Record<string, Expander> = {
     if (v === 'transparent' || v === 'none') return { fills: [] };
     if (typeof v === 'string') return { fills: [v] };
     if (Array.isArray(v)) return { fills: v };
-    return { fills: v };
+    // Object: {color:"#FF0000", blendMode:"MULTIPLY"} → wrap in array
+    return { fills: [v] };
   },
 
   background: (v) => EXPANDERS.fill(v, {}),

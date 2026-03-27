@@ -1,20 +1,20 @@
 /**
  * @file figma-reader.ts
- * @description Converts Figma node property values to Canonical IR values using PropertySpecs.
+ * @description Reads Figma node property values, filtering invisible items.
  *
- * Replaces PropertyTransformer.serialize() for complex types (paint, effect, unitValue).
- * Simple scalars continue to pass through directly.
+ * Paint values stay as Figma Paint format — no IR conversion.
+ * Effects and other complex types use PropertySpec conversion.
  */
 
-import type { PaintValue, EffectValue, UnitValue, FontNameValue } from '../../domain/design-ir';
-import { paintSpec, effectSpec, unitValueSpec, fontNameSpec } from '../../domain/property-specs';
+import type { EffectValue, UnitValue, FontNameValue } from '../../domain/design-ir';
+import { effectSpec, unitValueSpec, fontNameSpec } from '../../domain/property-specs';
 
 /**
- * Read fills/strokes from a Figma Paint[] into canonical PaintValue[].
- * Never returns null — returns empty array for no fills.
+ * Read fills/strokes — filter invisible, keep Figma Paint format.
  */
-export function readPaints(figmaPaints: any): PaintValue[] {
-  return paintSpec.fromFigma(figmaPaints);
+export function readPaints(figmaPaints: any): any[] {
+  if (!Array.isArray(figmaPaints)) return [];
+  return figmaPaints.filter((p: any) => p.visible !== false);
 }
 
 /**

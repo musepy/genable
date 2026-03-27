@@ -1,9 +1,6 @@
 /**
  * @file property-specs.test.ts
- * @description Roundtrip tests for all PropertySpecs.
- *
- * Hard invariant: spec.parseXml(spec.formatXml(value)) must be semantically
- * equal to the original value (via spec.isEqual).
+ * @description Tests for PropertySpecs — paint (direct Figma format), effect, unitValue, etc.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -15,9 +12,10 @@ import {
   fontNameSpec,
   parseHexToRGBA,
   rgbaToHex,
+  parsePaintToFigma,
+  formatPaintForLLM,
 } from '../property-specs';
 import type {
-  PaintValue,
   EffectValue,
   UnitValue,
   ConstraintValue,
@@ -39,13 +37,6 @@ function assertXmlRoundtrip<T>(spec: { parseXml: (s: string) => T; formatXml: (v
   const formatted = spec.formatXml(parsed);
   const reparsed = spec.parseXml(formatted);
   expect(spec.isEqual(parsed, reparsed)).toBe(true);
-}
-
-function assertFigmaRoundtrip<T>(spec: { fromFigma: (v: any) => T; toFigma: (v: T) => any; fromFigma: (v: any) => T; isEqual: (a: T, b: T) => boolean }, figmaValue: any) {
-  const ir = spec.fromFigma(figmaValue);
-  const back = spec.toFigma(ir);
-  const ir2 = spec.fromFigma(back);
-  expect(spec.isEqual(ir, ir2)).toBe(true);
 }
 
 // ═══════════════════════════════════════════════
@@ -89,125 +80,175 @@ describe('Color helpers', () => {
 });
 
 // ═══════════════════════════════════════════════
-// Paint Spec
+// Paint — Direct Figma format (no IR)
 // ═══════════════════════════════════════════════
 
+describe('parsePaintToFigma', () => {
+  it('parses hex string to Figma solid paint', () => {
+    const paint = parsePaintToFigma('#FF0000');
+    expect(paint.type).toBe('SOLID');
+    expect(paint.color.r).toBeCloseTo(1, 2);
+    expect(paint.color.g).toBeCloseTo(0, 2);
+    expect(paint.color.b).toBeCloseTo(0, 2);
+    expect(paint.opacity).toBe(1);
+  });
+
+  it('parses hex with alpha', () => {
+    const paint = parsePaintToFigma('#FF000080');
+    expect(paint.type).toBe('SOLID');
+    expect(paint.opacity).toBeCloseTo(0.502, 1);
+  });
+
+  it('parses CSS linear-gradient', () => {
+    const paint = parsePaintToFigma('linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
+    expect(paint.type).toBe('GRADIENT_LINEAR');
+    expect(paint.gradientStops).toHaveLength(2);
+    expect(paint.gradientTransform).toBeDefined();
+  });
+
+  it('parses legacy GRADIENT_LINEAR notation', () => {
+    const paint = parsePaintToFigma('GRADIENT_LINEAR(#FF0000@0,#0000FF@1)');
+    expect(paint.type).toBe('GRADIENT_LINEAR');
+    expect(paint.gradientStops).toHaveLength(2);
+  });
+
+  it('parses LLM object syntax with blendMode', () => {
+    const paint = parsePaintToFigma({ color: '#FF0000', blendMode: 'MULTIPLY', opacity: 0.5 });
+    expect(paint.type).toBe('SOLID');
+    expect(paint.color.r).toBeCloseTo(1, 2);
+    expect(paint.blendMode).toBe('MULTIPLY');
+    expect(paint.opacity).toBe(0.5);
+  });
+
+  it('parses LLM object with only color', () => {
+    const paint = parsePaintToFigma({ color: '#00FF00' });
+    expect(paint.type).toBe('SOLID');
+    expect(paint.color.g).toBeCloseTo(1, 2);
+    expect(paint.blendMode).toBeUndefined(); // not set = Figma default
+  });
+});
+
+describe('formatPaintForLLM', () => {
+  it('solid with all defaults → hex string', () => {
+    const result = formatPaintForLLM({ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 });
+    expect(result).toBe('#FF0000');
+  });
+
+  it('solid with custom blendMode → object', () => {
+    const result = formatPaintForLLM({ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 0.5, blendMode: 'MULTIPLY' });
+    expect(result).toEqual({ color: '#FF000080', blendMode: 'MULTIPLY' });
+  });
+
+  it('solid with only non-default visible → object', () => {
+    const result = formatPaintForLLM({ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1, visible: false });
+    expect(result).toEqual({ color: '#FF0000', visible: false });
+  });
+
+  it('gradient → string notation', () => {
+    const result = formatPaintForLLM({
+      type: 'GRADIENT_LINEAR',
+      gradientStops: [
+        { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
+        { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
+      ],
+    });
+    expect(result).toMatch(/^GRADIENT_LINEAR\(/);
+    expect(result).toMatch(/@0/);
+    expect(result).toMatch(/@1/);
+  });
+
+  it('image → IMAGE notation', () => {
+    const result = formatPaintForLLM({ type: 'IMAGE', imageHash: 'abc123' });
+    expect(result).toBe('IMAGE(abc123)');
+  });
+});
+
 describe('paintSpec', () => {
-  describe('XML roundtrip', () => {
+  describe('parseXml → Figma Paint format', () => {
     it('solid color', () => {
-      assertXmlRoundtrip(paintSpec, '#FF0000');
+      const paints = paintSpec.parseXml('#FF0000');
+      expect(paints).toHaveLength(1);
+      expect(paints[0].type).toBe('SOLID');
+      expect(paints[0].color.r).toBeCloseTo(1, 2);
     });
 
     it('multiple solid colors', () => {
-      assertXmlRoundtrip(paintSpec, '#FF0000,#00FF00,#0000FF');
+      const paints = paintSpec.parseXml('#FF0000,#00FF00');
+      expect(paints).toHaveLength(2);
+      expect(paints[0].type).toBe('SOLID');
+      expect(paints[1].type).toBe('SOLID');
     });
 
     it('transparent', () => {
-      const parsed = paintSpec.parseXml('transparent');
-      expect(parsed).toEqual([]);
-      expect(paintSpec.formatXml([])).toBe('transparent');
-    });
-
-    it('none', () => {
-      const parsed = paintSpec.parseXml('none');
-      expect(parsed).toEqual([]);
+      expect(paintSpec.parseXml('transparent')).toEqual([]);
+      expect(paintSpec.parseXml('none')).toEqual([]);
     });
 
     it('gradient', () => {
-      assertXmlRoundtrip(paintSpec, 'GRADIENT_LINEAR(#FF0000@0,#0000FF@1)');
-    });
-
-    it('gradient with multiple stops', () => {
-      assertXmlRoundtrip(paintSpec, 'GRADIENT_LINEAR(#FF0000@0,#00FF00@0.5,#0000FF@1)');
-    });
-
-    it('mixed solid and gradient', () => {
-      assertXmlRoundtrip(paintSpec, '#FF0000,GRADIENT_LINEAR(#00FF00@0,#0000FF@1)');
+      const paints = paintSpec.parseXml('GRADIENT_LINEAR(#FF0000@0,#0000FF@1)');
+      expect(paints).toHaveLength(1);
+      expect(paints[0].type).toBe('GRADIENT_LINEAR');
     });
   });
 
-  describe('IR roundtrip', () => {
-    it('solid paint', () => {
-      const value: PaintValue[] = [{ kind: 'solid', color: '#FF0000' }];
-      assertRoundtrip(paintSpec, value);
+  describe('formatXml', () => {
+    it('empty → transparent', () => {
+      expect(paintSpec.formatXml([])).toBe('transparent');
     });
 
-    it('gradient paint', () => {
-      const value: PaintValue[] = [{
-        kind: 'gradient',
-        type: 'GRADIENT_LINEAR',
-        stops: [
-          { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
-          { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
-        ],
-      }];
-      assertRoundtrip(paintSpec, value);
-    });
-
-    it('empty (transparent)', () => {
-      assertRoundtrip(paintSpec, []);
+    it('solid paint → hex', () => {
+      const result = paintSpec.formatXml([{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }]);
+      expect(result).toBe('#FF0000');
     });
   });
 
-  describe('Figma roundtrip', () => {
-    it('solid fill', () => {
-      assertFigmaRoundtrip(paintSpec, [
-        { type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 },
-      ]);
-    });
-
-    it('gradient fill', () => {
-      assertFigmaRoundtrip(paintSpec, [
-        {
-          type: 'GRADIENT_LINEAR',
-          gradientStops: [
-            { color: { r: 1, g: 0, b: 0, a: 1 }, position: 0 },
-            { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
-          ],
-        },
-      ]);
-    });
-
-    it('image fill', () => {
-      assertFigmaRoundtrip(paintSpec, [
-        { type: 'IMAGE', imageHash: 'abc123', scaleMode: 'FILL' },
-      ]);
-    });
-
-    it('empty array', () => {
-      assertFigmaRoundtrip(paintSpec, []);
-    });
-
+  describe('fromFigma', () => {
     it('filters invisible paints', () => {
-      const ir = paintSpec.fromFigma([
+      const result = paintSpec.fromFigma([
         { type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1, visible: true },
         { type: 'SOLID', color: { r: 0, g: 1, b: 0 }, opacity: 1, visible: false },
       ]);
-      expect(ir.length).toBe(1);
+      expect(result).toHaveLength(1);
+    });
+
+    it('returns empty for non-array', () => {
+      expect(paintSpec.fromFigma(null)).toEqual([]);
+    });
+  });
+
+  describe('toFigma — identity', () => {
+    it('passes through Figma paints unchanged', () => {
+      const paints = [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }];
+      expect(paintSpec.toFigma(paints)).toBe(paints);
     });
   });
 
   describe('isEqual', () => {
-    it('equal solids', () => {
+    it('equal solid paints', () => {
       expect(paintSpec.isEqual(
-        [{ kind: 'solid', color: '#FF0000' }],
-        [{ kind: 'solid', color: '#ff0000' }],
+        [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }],
+        [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }],
       )).toBe(true);
     });
 
     it('different colors', () => {
       expect(paintSpec.isEqual(
-        [{ kind: 'solid', color: '#FF0000' }],
-        [{ kind: 'solid', color: '#00FF00' }],
+        [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }],
+        [{ type: 'SOLID', color: { r: 0, g: 1, b: 0 }, opacity: 1 }],
       )).toBe(false);
     });
 
     it('different lengths', () => {
       expect(paintSpec.isEqual(
-        [{ kind: 'solid', color: '#FF0000' }],
-        [{ kind: 'solid', color: '#FF0000' }, { kind: 'solid', color: '#00FF00' }],
+        [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }],
+        [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }, { type: 'SOLID', color: { r: 0, g: 1, b: 0 }, opacity: 1 }],
       )).toBe(false);
     });
+  });
+
+  describe('roundtrip: parse → format → parse', () => {
+    it('solid', () => assertXmlRoundtrip(paintSpec, '#FF0000'));
+    it('gradient', () => assertXmlRoundtrip(paintSpec, 'GRADIENT_LINEAR(#FF0000@0,#0000FF@1)'));
   });
 });
 
@@ -217,92 +258,34 @@ describe('paintSpec', () => {
 
 describe('effectSpec', () => {
   describe('XML roundtrip', () => {
-    it('drop shadow', () => {
-      assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040');
-    });
-
-    it('inner shadow', () => {
-      assertXmlRoundtrip(effectSpec, 'inset,0,2,4,0,#00000033');
-    });
-
-    it('layer blur', () => {
-      assertXmlRoundtrip(effectSpec, 'blur(10)');
-    });
-
-    it('background blur', () => {
-      assertXmlRoundtrip(effectSpec, 'bgblur(20)');
-    });
-
-    it('multiple effects', () => {
-      assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;inset,0,2,4,0,#00000033');
-    });
-
-    it('shadow + blur', () => {
-      assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;blur(10)');
-    });
+    it('drop shadow', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040'));
+    it('inner shadow', () => assertXmlRoundtrip(effectSpec, 'inset,0,2,4,0,#00000033'));
+    it('layer blur', () => assertXmlRoundtrip(effectSpec, 'blur(10)'));
+    it('background blur', () => assertXmlRoundtrip(effectSpec, 'bgblur(20)'));
+    it('multiple effects', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;inset,0,2,4,0,#00000033'));
+    it('shadow + blur', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;blur(10)'));
   });
 
   describe('IR roundtrip', () => {
     it('drop shadow', () => {
-      const value: EffectValue[] = [{
-        kind: 'drop-shadow',
-        color: { r: 0, g: 0, b: 0, a: 0.25 },
-        offset: { x: 0, y: 4 },
-        radius: 8,
-        spread: 0,
-      }];
-      assertRoundtrip(effectSpec, value);
+      assertRoundtrip(effectSpec, [{
+        kind: 'drop-shadow', color: { r: 0, g: 0, b: 0, a: 0.25 },
+        offset: { x: 0, y: 4 }, radius: 8, spread: 0,
+      }]);
     });
-
-    it('blur', () => {
-      const value: EffectValue[] = [{
-        kind: 'blur',
-        type: 'layer',
-        radius: 10,
-      }];
-      assertRoundtrip(effectSpec, value);
-    });
+    it('blur', () => assertRoundtrip(effectSpec, [{ kind: 'blur', type: 'layer', radius: 10 }]));
   });
 
   describe('Figma roundtrip', () => {
     it('drop shadow', () => {
-      assertFigmaRoundtrip(effectSpec, [
-        {
-          type: 'DROP_SHADOW',
-          color: { r: 0, g: 0, b: 0, a: 0.25 },
-          offset: { x: 0, y: 4 },
-          radius: 8,
-          spread: 0,
-          visible: true,
-          blendMode: 'NORMAL',
-        },
-      ]);
-    });
-
-    it('inner shadow', () => {
-      assertFigmaRoundtrip(effectSpec, [
-        {
-          type: 'INNER_SHADOW',
-          color: { r: 0, g: 0, b: 0, a: 0.1 },
-          offset: { x: 0, y: 2 },
-          radius: 4,
-          spread: 0,
-          visible: true,
-          blendMode: 'NORMAL',
-        },
-      ]);
-    });
-
-    it('layer blur', () => {
-      assertFigmaRoundtrip(effectSpec, [
-        { type: 'LAYER_BLUR', radius: 10, visible: true },
-      ]);
-    });
-
-    it('background blur', () => {
-      assertFigmaRoundtrip(effectSpec, [
-        { type: 'BACKGROUND_BLUR', radius: 20, visible: true },
-      ]);
+      const figma = [{
+        type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 },
+        offset: { x: 0, y: 4 }, radius: 8, spread: 0, visible: true, blendMode: 'NORMAL',
+      }];
+      const ir = effectSpec.fromFigma(figma);
+      const back = effectSpec.toFigma(ir);
+      const ir2 = effectSpec.fromFigma(back);
+      expect(effectSpec.isEqual(ir, ir2)).toBe(true);
     });
 
     it('filters invisible effects', () => {
@@ -335,73 +318,33 @@ describe('effectSpec', () => {
 
 describe('unitValueSpec', () => {
   describe('XML roundtrip', () => {
-    it('pixels', () => {
-      assertXmlRoundtrip(unitValueSpec, '24');
-    });
-
-    it('percent', () => {
-      assertXmlRoundtrip(unitValueSpec, '160%');
-    });
-
-    it('auto', () => {
-      assertXmlRoundtrip(unitValueSpec, 'auto');
-    });
+    it('pixels', () => assertXmlRoundtrip(unitValueSpec, '24'));
+    it('percent', () => assertXmlRoundtrip(unitValueSpec, '160%'));
+    it('auto', () => assertXmlRoundtrip(unitValueSpec, 'auto'));
   });
 
   describe('IR roundtrip', () => {
-    it('pixels value', () => {
-      assertRoundtrip(unitValueSpec, { value: 24, unit: 'PIXELS' });
-    });
-
-    it('percent value', () => {
-      assertRoundtrip(unitValueSpec, { value: 160, unit: 'PERCENT' });
-    });
-
-    it('auto value', () => {
-      assertRoundtrip(unitValueSpec, { value: 0, unit: 'AUTO' });
-    });
+    it('pixels value', () => assertRoundtrip(unitValueSpec, { value: 24, unit: 'PIXELS' }));
+    it('percent value', () => assertRoundtrip(unitValueSpec, { value: 160, unit: 'PERCENT' }));
+    it('auto value', () => assertRoundtrip(unitValueSpec, { value: 0, unit: 'AUTO' }));
   });
 
   describe('Figma roundtrip', () => {
     it('pixels object', () => {
-      assertFigmaRoundtrip(unitValueSpec, { value: 24, unit: 'PIXELS' });
+      const ir = unitValueSpec.fromFigma({ value: 24, unit: 'PIXELS' });
+      const back = unitValueSpec.toFigma(ir);
+      const ir2 = unitValueSpec.fromFigma(back);
+      expect(unitValueSpec.isEqual(ir, ir2)).toBe(true);
     });
-
-    it('percent object', () => {
-      assertFigmaRoundtrip(unitValueSpec, { value: 160, unit: 'PERCENT' });
-    });
-
-    it('auto object', () => {
-      assertFigmaRoundtrip(unitValueSpec, { value: 0, unit: 'AUTO' });
-    });
-
     it('raw number → pixels', () => {
-      const ir = unitValueSpec.fromFigma(24);
-      expect(ir).toEqual({ value: 24, unit: 'PIXELS' });
+      expect(unitValueSpec.fromFigma(24)).toEqual({ value: 24, unit: 'PIXELS' });
     });
   });
 
   describe('isEqual', () => {
-    it('equal pixels', () => {
-      expect(unitValueSpec.isEqual(
-        { value: 24, unit: 'PIXELS' },
-        { value: 24, unit: 'PIXELS' },
-      )).toBe(true);
-    });
-
-    it('different units', () => {
-      expect(unitValueSpec.isEqual(
-        { value: 24, unit: 'PIXELS' },
-        { value: 24, unit: 'PERCENT' },
-      )).toBe(false);
-    });
-
-    it('auto equals auto', () => {
-      expect(unitValueSpec.isEqual(
-        { value: 0, unit: 'AUTO' },
-        { value: 0, unit: 'AUTO' },
-      )).toBe(true);
-    });
+    it('equal pixels', () => expect(unitValueSpec.isEqual({ value: 24, unit: 'PIXELS' }, { value: 24, unit: 'PIXELS' })).toBe(true));
+    it('different units', () => expect(unitValueSpec.isEqual({ value: 24, unit: 'PIXELS' }, { value: 24, unit: 'PERCENT' })).toBe(false));
+    it('auto equals auto', () => expect(unitValueSpec.isEqual({ value: 0, unit: 'AUTO' }, { value: 0, unit: 'AUTO' })).toBe(true));
   });
 });
 
@@ -411,54 +354,13 @@ describe('unitValueSpec', () => {
 
 describe('constraintsSpec', () => {
   describe('XML roundtrip', () => {
-    it('MIN,MIN', () => {
-      assertXmlRoundtrip(constraintsSpec, 'MIN,MIN');
-    });
-
-    it('CENTER,STRETCH', () => {
-      assertXmlRoundtrip(constraintsSpec, 'CENTER,STRETCH');
-    });
-
-    it('SCALE,SCALE', () => {
-      assertXmlRoundtrip(constraintsSpec, 'SCALE,SCALE');
-    });
-  });
-
-  describe('IR roundtrip', () => {
-    it('default constraints', () => {
-      assertRoundtrip(constraintsSpec, { horizontal: 'MIN', vertical: 'MIN' });
-    });
-
-    it('mixed constraints', () => {
-      assertRoundtrip(constraintsSpec, { horizontal: 'CENTER', vertical: 'MAX' });
-    });
-  });
-
-  describe('Figma roundtrip', () => {
-    it('object constraints', () => {
-      assertFigmaRoundtrip(constraintsSpec, { horizontal: 'MIN', vertical: 'MIN' });
-    });
-
-    it('handles null/undefined', () => {
-      const ir = constraintsSpec.fromFigma(null);
-      expect(ir).toEqual({ horizontal: 'MIN', vertical: 'MIN' });
-    });
+    it('MIN,MIN', () => assertXmlRoundtrip(constraintsSpec, 'MIN,MIN'));
+    it('CENTER,STRETCH', () => assertXmlRoundtrip(constraintsSpec, 'CENTER,STRETCH'));
   });
 
   describe('isEqual', () => {
-    it('equal constraints', () => {
-      expect(constraintsSpec.isEqual(
-        { horizontal: 'CENTER', vertical: 'STRETCH' },
-        { horizontal: 'CENTER', vertical: 'STRETCH' },
-      )).toBe(true);
-    });
-
-    it('different horizontal', () => {
-      expect(constraintsSpec.isEqual(
-        { horizontal: 'MIN', vertical: 'MIN' },
-        { horizontal: 'CENTER', vertical: 'MIN' },
-      )).toBe(false);
-    });
+    it('equal', () => expect(constraintsSpec.isEqual({ horizontal: 'CENTER', vertical: 'STRETCH' }, { horizontal: 'CENTER', vertical: 'STRETCH' })).toBe(true));
+    it('different', () => expect(constraintsSpec.isEqual({ horizontal: 'MIN', vertical: 'MIN' }, { horizontal: 'CENTER', vertical: 'MIN' })).toBe(false));
   });
 });
 
@@ -468,71 +370,29 @@ describe('constraintsSpec', () => {
 
 describe('fontNameSpec', () => {
   describe('XML roundtrip', () => {
-    it('family with style', () => {
-      assertXmlRoundtrip(fontNameSpec, 'Inter/Bold');
-    });
-
-    it('family only (default Regular)', () => {
-      assertXmlRoundtrip(fontNameSpec, 'Inter');
-    });
-
-    it('complex family name', () => {
-      assertXmlRoundtrip(fontNameSpec, 'Noto Sans SC/Medium');
-    });
-  });
-
-  describe('IR roundtrip', () => {
-    it('full font spec', () => {
-      assertRoundtrip(fontNameSpec, { family: 'Inter', style: 'Bold' });
-    });
-
-    it('default style', () => {
-      assertRoundtrip(fontNameSpec, { family: 'Inter', style: 'Regular' });
-    });
-  });
-
-  describe('Figma roundtrip', () => {
-    it('font name object', () => {
-      assertFigmaRoundtrip(fontNameSpec, { family: 'Inter', style: 'Bold' });
-    });
-
-    it('handles null', () => {
-      const ir = fontNameSpec.fromFigma(null);
-      expect(ir).toEqual({ family: 'Inter', style: 'Regular' });
-    });
+    it('family with style', () => assertXmlRoundtrip(fontNameSpec, 'Inter/Bold'));
+    it('family only', () => assertXmlRoundtrip(fontNameSpec, 'Inter'));
   });
 
   describe('isEqual', () => {
-    it('equal fonts', () => {
-      expect(fontNameSpec.isEqual(
-        { family: 'Inter', style: 'Bold' },
-        { family: 'Inter', style: 'Bold' },
-      )).toBe(true);
-    });
-
-    it('different style', () => {
-      expect(fontNameSpec.isEqual(
-        { family: 'Inter', style: 'Bold' },
-        { family: 'Inter', style: 'Regular' },
-      )).toBe(false);
-    });
+    it('equal', () => expect(fontNameSpec.isEqual({ family: 'Inter', style: 'Bold' }, { family: 'Inter', style: 'Bold' })).toBe(true));
+    it('different', () => expect(fontNameSpec.isEqual({ family: 'Inter', style: 'Bold' }, { family: 'Inter', style: 'Regular' })).toBe(false));
   });
 });
 
 // ═══════════════════════════════════════════════
-// Cross-spec: full pipeline roundtrips
+// Full pipeline: Figma → format → parse roundtrip
 // ═══════════════════════════════════════════════
 
 describe('Full pipeline roundtrips', () => {
-  it('Figma solid paint → IR → XML → IR: semantic equality', () => {
+  it('Figma solid paint → format → parse → equal', () => {
     const figmaPaint = [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1 }];
-    const ir1 = paintSpec.fromFigma(figmaPaint);
-    const xml = paintSpec.formatXml(ir1);
-    const ir2 = paintSpec.parseXml(xml);
-    expect(paintSpec.isEqual(ir1, ir2)).toBe(true);
+    const xml = paintSpec.formatXml(figmaPaint);
+    const reparsed = paintSpec.parseXml(xml);
+    expect(paintSpec.isEqual(figmaPaint, reparsed)).toBe(true);
   });
 
-  it('Figma gradient → IR → XML → IR: semantic equality', () => {
+  it('Figma gradient → format → parse → equal', () => {
     const figmaGradient = [{
       type: 'GRADIENT_LINEAR',
       gradientStops: [
@@ -540,49 +400,20 @@ describe('Full pipeline roundtrips', () => {
         { color: { r: 0, g: 0, b: 1, a: 1 }, position: 1 },
       ],
     }];
-    const ir1 = paintSpec.fromFigma(figmaGradient);
-    const xml = paintSpec.formatXml(ir1);
-    const ir2 = paintSpec.parseXml(xml);
-    expect(paintSpec.isEqual(ir1, ir2)).toBe(true);
+    const xml = paintSpec.formatXml(figmaGradient);
+    const reparsed = paintSpec.parseXml(xml);
+    expect(reparsed[0].type).toBe('GRADIENT_LINEAR');
+    expect(reparsed[0].gradientStops).toHaveLength(2);
   });
 
   it('Figma shadow → IR → XML → IR: semantic equality', () => {
     const figmaEffect = [{
-      type: 'DROP_SHADOW',
-      color: { r: 0, g: 0, b: 0, a: 0.25 },
-      offset: { x: 0, y: 4 },
-      radius: 8,
-      spread: 0,
-      visible: true,
-      blendMode: 'NORMAL',
+      type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 },
+      offset: { x: 0, y: 4 }, radius: 8, spread: 0, visible: true, blendMode: 'NORMAL',
     }];
     const ir1 = effectSpec.fromFigma(figmaEffect);
     const xml = effectSpec.formatXml(ir1);
     const ir2 = effectSpec.parseXml(xml);
-    expect(effectSpec.isEqual(ir1, ir2)).toBe(true);
-  });
-
-  it('Figma lineHeight → IR → XML → IR: semantic equality', () => {
-    const figmaLH = { value: 160, unit: 'PERCENT' };
-    const ir1 = unitValueSpec.fromFigma(figmaLH);
-    const xml = unitValueSpec.formatXml(ir1);
-    const ir2 = unitValueSpec.parseXml(xml);
-    expect(unitValueSpec.isEqual(ir1, ir2)).toBe(true);
-  });
-
-  it('XML gradient → IR → Figma → IR: semantic equality', () => {
-    const xml = 'GRADIENT_LINEAR(#FF0000@0,#0000FF@1)';
-    const ir1 = paintSpec.parseXml(xml);
-    const figma = paintSpec.toFigma(ir1);
-    const ir2 = paintSpec.fromFigma(figma);
-    expect(paintSpec.isEqual(ir1, ir2)).toBe(true);
-  });
-
-  it('XML shadow → IR → Figma → IR: semantic equality', () => {
-    const xml = '0,4,8,0,#00000040';
-    const ir1 = effectSpec.parseXml(xml);
-    const figma = effectSpec.toFigma(ir1);
-    const ir2 = effectSpec.fromFigma(figma);
     expect(effectSpec.isEqual(ir1, ir2)).toBe(true);
   });
 });

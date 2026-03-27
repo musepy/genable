@@ -117,8 +117,8 @@ export const PROPS = {
 // ── Re-exports from figma-property-registry (canonical location) ──
 // PROP_METADATA is a backward-compat alias. New code should import
 // PROPERTY_META directly from figma-property-registry.
-import { PROPERTY_META, PROPERTY_REGISTRY, BLACKLIST, VISUAL_ROLES, type PropMeta, type SizingConstraint, getEnumInputs, getCanonicalValues } from './figma-property-registry';
-export { PROPERTY_META, PROPERTY_REGISTRY, BLACKLIST, VISUAL_ROLES, type PropMeta, type SizingConstraint, getEnumInputs, getCanonicalValues };
+import { PROPERTY_META, PROPERTY_REGISTRY, VISUAL_ROLES, type PropMeta, type SizingConstraint, getEnumInputs, getCanonicalValues } from './figma-property-registry';
+export { PROPERTY_META, PROPERTY_REGISTRY, VISUAL_ROLES, type PropMeta, type SizingConstraint, getEnumInputs, getCanonicalValues };
 
 /** @deprecated Use PROPERTY_META from figma-property-registry. */
 export type PropDefinition = PropMeta & { readonly figmaKey: string };

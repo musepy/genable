@@ -1069,13 +1069,6 @@ export const PROPERTY_REGISTRY: Record<string, PropertyDef[]> = {
 /** Roles that represent design-visible properties (always serialized). */
 export const VISUAL_ROLES = new Set(['layout', 'fill', 'stroke', 'effect', 'appearance', 'typography']);
 
-/** Derive a BLACKLIST-equivalent set from roles for backward compat. */
-export const BLACKLIST = new Set(
-  Object.values(PROPERTY_REGISTRY)
-    .flat()
-    .filter(p => !VISUAL_ROLES.has(p.role))
-    .map(p => p.key)
-);
 
 // ═══════════════════════════════════════════════════════════════
 // Section 3: Property enrichment metadata (hand-maintained)

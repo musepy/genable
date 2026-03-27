@@ -6,7 +6,7 @@
  * our logic from the lived Figma API objects.
  */
 
-import { PROPERTY_REGISTRY, BLACKLIST } from '../../constants/figma-property-registry';
+import { PROPERTY_REGISTRY, VISUAL_ROLES } from '../../constants/figma-property-registry';
 
 export interface FigmaNodeData {
     id: string;
@@ -19,7 +19,7 @@ export interface FigmaNodeData {
  * Extract raw properties from a Figma SceneNode into a plain object.
  *
  * Uses the auto-generated PROPERTY_REGISTRY to discover all properties
- * for the node's type, filtered by BLACKLIST.
+ * for the node's type, filtered by role (only 'visual' properties extracted).
  *
  * @param node - The Figma node to extract from
  * @param keys - Optional explicit key list (legacy call-sites). When omitted, uses registry.
@@ -50,7 +50,7 @@ export function extractFigmaNodeData(node: SceneNode, keys?: string[]): FigmaNod
         const registry = PROPERTY_REGISTRY[node.type];
         if (registry) {
             for (const prop of registry) {
-                if (BLACKLIST.has(prop.key)) continue;
+                if (!VISUAL_ROLES.has(prop.role)) continue;
                 if (!(prop.key in node)) continue;
                 try {
                     const val = (node as any)[prop.key];

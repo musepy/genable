@@ -1,5 +1,5 @@
 import { NodeLayer } from '../../types';
-import { NODE_TYPES, PROPS } from '../../constants/figma-api';
+import { NODE_TYPES } from '../../constants/figma-api';
 import { TokenResolver } from './TokenResolver';
 
 /**
@@ -18,7 +18,7 @@ export class DomCapture {
     
     // 2. Extract Props
     const props: any = {};
-    props[PROPS.name] = element.getAttribute('data-name') || element.tagName.toLowerCase();
+    props['name'] = element.getAttribute('data-name') || element.tagName.toLowerCase();
     
     // 3. Layout Props
     this.extractLayoutProps(element, style, props);
@@ -49,53 +49,53 @@ export class DomCapture {
 
   private static extractLayoutProps(el: HTMLElement, style: CSSStyleDeclaration, props: any) {
     const rect = el.getBoundingClientRect();
-    props[PROPS.width] = rect.width;
-    props[PROPS.height] = rect.height;
+    props['width'] = rect.width;
+    props['height'] = rect.height;
 
     // Auto Layout Mapping
     if (style.display === 'flex') {
-      props[PROPS.layoutMode] = style.flexDirection === 'column' ? 'VERTICAL' : 'HORIZONTAL';
-      props[PROPS.gap] = parseInt(style.columnGap) || 0;
-      
+      props['layoutMode'] = style.flexDirection === 'column' ? 'VERTICAL' : 'HORIZONTAL';
+      props['gap'] = parseInt(style.columnGap) || 0;
+
       // Alignment
-      props[PROPS.primaryAxisAlignItems] = this.mapFlexAlign(style.justifyContent);
-      props[PROPS.counterAxisAlignItems] = this.mapFlexAlign(style.alignItems);
+      props['primaryAxisAlignItems'] = this.mapFlexAlign(style.justifyContent);
+      props['counterAxisAlignItems'] = this.mapFlexAlign(style.alignItems);
     }
 
     // Paddings
-    props[PROPS.paddingTop] = parseInt(style.paddingTop);
-    props[PROPS.paddingRight] = parseInt(style.paddingRight);
-    props[PROPS.paddingBottom] = parseInt(style.paddingBottom);
-    props[PROPS.paddingLeft] = parseInt(style.paddingLeft);
+    props['paddingTop'] = parseInt(style.paddingTop);
+    props['paddingRight'] = parseInt(style.paddingRight);
+    props['paddingBottom'] = parseInt(style.paddingBottom);
+    props['paddingLeft'] = parseInt(style.paddingLeft);
   }
 
   private static extractVisualProps(el: HTMLElement, style: CSSStyleDeclaration, props: any) {
     // Fills
     if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent') {
       const resolvedColor = TokenResolver.resolveColor(style.backgroundColor);
-      props[PROPS.fills] = [resolvedColor];
+      props['fills'] = [resolvedColor];
     }
 
     // Borders
     const borderWidth = parseInt(style.borderWidth);
     if (borderWidth > 0) {
-      props[PROPS.strokeWeight] = borderWidth;
+      props['strokeWeight'] = borderWidth;
       const resolvedBorderColor = TokenResolver.resolveColor(style.borderColor);
-      props[PROPS.strokes] = [resolvedBorderColor];
+      props['strokes'] = [resolvedBorderColor];
     }
 
     // Corner Radius
     const radius = parseInt(style.borderRadius);
     if (radius > 0) {
-      props[PROPS.cornerRadius] = radius;
+      props['cornerRadius'] = radius;
     }
 
     // Text Props
     if (el.childNodes.length === 1 && el.childNodes[0].nodeType === Node.TEXT_NODE) {
-      props[PROPS.characters] = (el.textContent || '').trim();
-      props[PROPS.fontSize] = parseInt(style.fontSize);
-      props[PROPS.fontWeight] = style.fontWeight;
-      props[PROPS.fontFamily] = style.fontFamily.split(',')[0].replace(/"/g, '');
+      props['characters'] = (el.textContent || '').trim();
+      props['fontSize'] = parseInt(style.fontSize);
+      props['fontWeight'] = style.fontWeight;
+      props['fontFamily'] = style.fontFamily.split(',')[0].replace(/"/g, '');
     }
   }
 

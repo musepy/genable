@@ -15,105 +15,6 @@
  * - Renderer: Reads properties using these keys
  */
 
-export const PROPS = {
-  // ==========================
-  // Core Identity
-  // ==========================
-  name: 'name',
-  visible: 'visible',
-  opacity: 'opacity',
-
-  // ==========================
-  // Layout (Auto Layout)
-  // ==========================
-  layoutMode: 'layoutMode',                // Replaces legacy "layout"
-  layoutSizingHorizontal: 'layoutSizingHorizontal',
-  layoutSizingVertical: 'layoutSizingVertical',
-  primaryAxisAlignItems: 'primaryAxisAlignItems',
-  counterAxisAlignItems: 'counterAxisAlignItems',
-  padding: 'padding',
-  paddingTop: 'paddingTop',
-  paddingRight: 'paddingRight',
-  paddingBottom: 'paddingBottom',
-  paddingLeft: 'paddingLeft',
-  gap: 'gap',
-  counterAxisSpacing: 'counterAxisSpacing',
-  layoutGrow: 'layoutGrow',
-  layoutAlign: 'layoutAlign',
-  layoutPositioning: 'layoutPositioning',  // AUTO | ABSOLUTE (child of auto-layout parent)
-  constraints: 'constraints',              // { horizontal, vertical } pin/scale behavior
-  x: 'x',                                  // Absolute/local X position
-  y: 'y',                                  // Absolute/local Y position
-  width: 'width',                         // For fixed size
-  height: 'height',                       // For fixed size
-
-  // ==========================
-  // Styling (Appearance)
-  // ==========================
-  fills: 'fills',                         // Replaces legacy "color" for Text
-  strokes: 'strokes',
-  strokeWeight: 'strokeWeight',
-  strokeAlign: 'strokeAlign',
-  strokeJoin: 'strokeJoin',                // enum: MITER | BEVEL | ROUND
-  strokeCap: 'strokeCap',                  // enum: NONE | ROUND | SQUARE | ARROW_LINES | ARROW_EQUILATERAL
-  dashPattern: 'dashPattern',              // number[]: e.g. [10,5] for dashed
-  strokeTopWeight: 'strokeTopWeight',      // number: per-side stroke weight
-  strokeRightWeight: 'strokeRightWeight',
-  strokeBottomWeight: 'strokeBottomWeight',
-  strokeLeftWeight: 'strokeLeftWeight',
-  cornerRadius: 'cornerRadius',
-  topLeftRadius: 'topLeftRadius',
-  topRightRadius: 'topRightRadius',
-  bottomLeftRadius: 'bottomLeftRadius',
-  bottomRightRadius: 'bottomRightRadius',
-  cornerSmoothing: 'cornerSmoothing',
-  effects: 'effects',
-  blendMode: 'blendMode',                  // enum: NORMAL | MULTIPLY | SCREEN | etc.
-
-  // ==========================
-  // Text Properties
-  // ==========================
-  characters: 'characters',               // Replaces legacy "content"
-  fontName: 'fontName',
-  fontSize: 'fontSize',
-  fontWeight: 'fontWeight',               // Virtual: maps to fontName.style
-  fontFamily: 'fontFamily',               // Virtual: maps to fontName.family
-  textAlign: 'textAlignHorizontal',       // Alias for cleaner code / backward compat
-  textAlignHorizontal: 'textAlignHorizontal',
-  textAlignVertical: 'textAlignVertical',
-  textAutoResize: 'textAutoResize',
-  lineHeight: 'lineHeight',
-  letterSpacing: 'letterSpacing',
-  textCase: 'textCase',
-  textDecoration: 'textDecoration',
-  textTruncation: 'textTruncation',       // 'DISABLED' | 'ENDING'
-  maxLines: 'maxLines',                    // number | null
-  paragraphSpacing: 'paragraphSpacing',
-  paragraphIndent: 'paragraphIndent',
-
-  // ==========================
-  // Component / Meta
-  // ==========================
-  iconName: 'iconName',                   // Virtual: Icon lookup key
-  semantic: 'semantic',                   // Virtual: Design System component role
-  variant: 'variant',                     // Virtual: Design System variant
-  svgContent: 'svgContent',               // Virtual: Embedded SVG data
-  rotation: 'rotation',                   // New: Rotation in degrees
-
-  // ==========================
-  // Frame Clipping & Wrap
-  // ==========================
-  clipsContent: 'clipsContent',            // boolean: clip children at frame boundary
-  layoutWrap: 'layoutWrap',                // enum: WRAP | NO_WRAP (flex-wrap for auto-layout)
-  strokesIncludedInLayout: 'strokesIncludedInLayout', // boolean: include strokes in layout size calculation
-  itemReverseZIndex: 'itemReverseZIndex',  // boolean: reverse stacking order (first on top)
-  minWidth: 'minWidth',                    // number | null: min width constraint
-  maxWidth: 'maxWidth',                    // number | null: max width constraint
-  minHeight: 'minHeight',                  // number | null: min height constraint
-  maxHeight: 'maxHeight',                  // number | null: max height constraint
-  constrainProportions: 'constrainProportions', // boolean: lock aspect ratio
-} as const;
-
 // ── Re-exports from figma-property-registry (canonical location) ──
 // PROP_METADATA is a backward-compat alias. New code should import
 // PROPERTY_META directly from figma-property-registry.
@@ -136,10 +37,10 @@ export const PROP_METADATA: Record<string, PropDefinition> = Object.fromEntries(
 
 /** Properties exclusive to TEXT nodes — invalid on frames/shapes/vectors */
 export const TEXT_ONLY_PROPS: ReadonlySet<string> = new Set([
-  PROPS.characters, PROPS.fontName, PROPS.fontSize, PROPS.fontWeight, PROPS.fontFamily,
-  PROPS.textAlignHorizontal, PROPS.textAlignVertical, PROPS.textAutoResize,
-  PROPS.lineHeight, PROPS.letterSpacing, PROPS.textCase, PROPS.textDecoration,
-  PROPS.textTruncation, PROPS.maxLines, PROPS.paragraphSpacing, PROPS.paragraphIndent,
+  'characters', 'fontName', 'fontSize', 'fontWeight', 'fontFamily',
+  'textAlignHorizontal', 'textAlignVertical', 'textAutoResize',
+  'lineHeight', 'letterSpacing', 'textCase', 'textDecoration',
+  'textTruncation', 'maxLines', 'paragraphSpacing', 'paragraphIndent',
 ]);
 
 /** All property keys accepted by the system (canonical + virtuals + registry-discovered).
@@ -149,7 +50,6 @@ export const KNOWN_PROP_KEYS: ReadonlySet<string> = buildKnownPropKeys();
 function buildKnownPropKeys(): ReadonlySet<string> {
   const keys = new Set([
     ...Object.keys(PROP_METADATA),
-    ...Object.values(PROPS),
     ...Object.values(PROP_METADATA).map(m => m.figmaKey),
     // Style reference properties — handled by styleRefHandler
     'textStyle', 'fillStyle', 'strokeStyle', 'effectStyle',
@@ -165,9 +65,6 @@ function buildKnownPropKeys(): ReadonlySet<string> {
   }
   return keys;
 }
-
-// Derived Types
-export type FigmaProp = typeof PROPS[keyof typeof PROPS];
 
 export const NODE_TYPES = {
   FRAME: 'FRAME',

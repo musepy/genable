@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
-import { PROPS, NODE_TYPES } from '../../constants/figma-api';
+import { NODE_TYPES } from '../../constants/figma-api';
 
 describe('NodeSerializer - Compression', () => {
 

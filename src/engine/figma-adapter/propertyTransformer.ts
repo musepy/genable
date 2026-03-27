@@ -6,7 +6,7 @@
  * Ensures consistency between extraction (serialization) and rendering (deserialization).
  */
 
-import { PROP_METADATA, PROPS } from '../../constants/figma-api';
+import { PROP_METADATA } from '../../constants/figma-api';
 import { rgbToHex } from '../../utils/colorUtils';
 import { FigmaNodeData } from './figmaNodeData';
 
@@ -88,11 +88,11 @@ export class PropertyTransformer {
      */
     private static extractVirtualProperty(nodeData: FigmaNodeData, dslKey: string): any {
         switch (dslKey) {
-            case PROPS.fontFamily:
+            case 'fontFamily':
                 return nodeData.fontName ? (nodeData.fontName as FontName).family : null;
-            case PROPS.fontWeight:
+            case 'fontWeight':
                 return nodeData.fontName ? (nodeData.fontName as FontName).style : null;
-            case PROPS.semantic:
+            case 'semantic':
                 // [PURE TRUST] Removed naming-based inference. Trusted to LLM/props only.
                 return undefined;
             default:
@@ -104,7 +104,7 @@ export class PropertyTransformer {
      * Internal: Serialize arrays of objects (e.g. effects)
      */
     private static serializeArray(figmaValue: any, dslKey: string): any {
-        if (dslKey === PROPS.effects && Array.isArray(figmaValue)) {
+        if (dslKey === 'effects' && Array.isArray(figmaValue)) {
             return figmaValue.map((eff: Effect) => {
                 const base = { type: eff.type };
                 if (eff.type === 'DROP_SHADOW' || eff.type === 'INNER_SHADOW') {

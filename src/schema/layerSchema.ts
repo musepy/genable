@@ -10,7 +10,7 @@
  */
 
 import * as v from 'valibot';
-import { PROPS, NODE_TYPES, getEnumInputs } from '../constants/figma-api';
+import { NODE_TYPES, getEnumInputs } from '../constants/figma-api';
 
 // ==========================================
 // PRIMITIVE SCHEMAS
@@ -20,16 +20,16 @@ import { PROPS, NODE_TYPES, getEnumInputs } from '../constants/figma-api';
 const enumPicklist = (prop: string) =>
   v.picklist(getEnumInputs(prop) as [string, ...string[]]);
 
-export const LayoutSizingSchema = enumPicklist(PROPS.layoutSizingHorizontal);
+export const LayoutSizingSchema = enumPicklist('layoutSizingHorizontal');
 export type LayoutSizing = v.InferOutput<typeof LayoutSizingSchema>;
 
-export const LayoutModeSchema = enumPicklist(PROPS.layoutMode);
+export const LayoutModeSchema = enumPicklist('layoutMode');
 export type LayoutMode = v.InferOutput<typeof LayoutModeSchema>;
 
-export const PrimaryAxisAlignSchema = enumPicklist(PROPS.primaryAxisAlignItems);
-export const CounterAxisAlignSchema = enumPicklist(PROPS.counterAxisAlignItems);
+export const PrimaryAxisAlignSchema = enumPicklist('primaryAxisAlignItems');
+export const CounterAxisAlignSchema = enumPicklist('counterAxisAlignItems');
 
-export const LayoutPositioningSchema = enumPicklist(PROPS.layoutPositioning);
+export const LayoutPositioningSchema = enumPicklist('layoutPositioning');
 
 /**
  * Constraint axes (allow canonical and common alias labels from design tools)
@@ -38,7 +38,7 @@ export const LayoutPositioningSchema = enumPicklist(PROPS.layoutPositioning);
 export const HorizontalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT']);
 export const VerticalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM']);
 
-export const StrokeAlignSchema = enumPicklist(PROPS.strokeAlign);
+export const StrokeAlignSchema = enumPicklist('strokeAlign');
 
 export const SemanticTypeSchema = v.optional(v.string());
 
@@ -118,60 +118,60 @@ export const EffectSchema = v.object({
  */
 export const NodeLayerPropsSchema = v.looseObject({
     // Common
-    [PROPS.name]: v.optional(v.string()),
-    [PROPS.semantic]: SemanticTypeSchema,
-    [PROPS.width]: v.optional(v.number()),
-    [PROPS.height]: v.optional(v.number()),
+    name: v.optional(v.string()),
+    semantic: SemanticTypeSchema,
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
 
     // Layout sizing
-    [PROPS.layoutSizingHorizontal]: v.optional(LayoutSizingSchema),
-    [PROPS.layoutSizingVertical]: v.optional(LayoutSizingSchema),
-    [PROPS.layoutPositioning]: v.optional(LayoutPositioningSchema),
-    [PROPS.layoutGrow]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.layoutAlign]: v.optional(enumPicklist(PROPS.layoutAlign)),
-    [PROPS.constraints]: v.optional(v.object({
+    layoutSizingHorizontal: v.optional(LayoutSizingSchema),
+    layoutSizingVertical: v.optional(LayoutSizingSchema),
+    layoutPositioning: v.optional(LayoutPositioningSchema),
+    layoutGrow: v.optional(v.union([v.number(), v.string()])),
+    layoutAlign: v.optional(enumPicklist('layoutAlign')),
+    constraints: v.optional(v.object({
         horizontal: v.optional(HorizontalConstraintSchema),
         vertical: v.optional(VerticalConstraintSchema)
     })),
-    [PROPS.x]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.y]: v.optional(v.union([v.number(), v.string()])),
+    x: v.optional(v.union([v.number(), v.string()])),
+    y: v.optional(v.union([v.number(), v.string()])),
 
     // Frame-specific: AutoLayout
-    [PROPS.layoutMode]: v.optional(LayoutModeSchema),
-    [PROPS.gap]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.padding]: v.optional(PaddingSchema),
-    [PROPS.paddingTop]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.paddingRight]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.paddingBottom]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.paddingLeft]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.primaryAxisAlignItems]: v.optional(PrimaryAxisAlignSchema),
-    [PROPS.counterAxisAlignItems]: v.optional(CounterAxisAlignSchema),
-    
+    layoutMode: v.optional(LayoutModeSchema),
+    gap: v.optional(v.union([v.number(), v.string()])),
+    padding: v.optional(PaddingSchema),
+    paddingTop: v.optional(v.union([v.number(), v.string()])),
+    paddingRight: v.optional(v.union([v.number(), v.string()])),
+    paddingBottom: v.optional(v.union([v.number(), v.string()])),
+    paddingLeft: v.optional(v.union([v.number(), v.string()])),
+    primaryAxisAlignItems: v.optional(PrimaryAxisAlignSchema),
+    counterAxisAlignItems: v.optional(CounterAxisAlignSchema),
+
     // Appearance
-    [PROPS.fills]: v.optional(v.array(FillItemSchema)),
-    [PROPS.strokes]: v.optional(v.array(v.string())),
-    [PROPS.strokeWeight]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.strokeAlign]: v.optional(StrokeAlignSchema),
-    [PROPS.cornerRadius]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.cornerSmoothing]: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
-    [PROPS.effects]: v.optional(v.array(EffectSchema)),
+    fills: v.optional(v.array(FillItemSchema)),
+    strokes: v.optional(v.array(v.string())),
+    strokeWeight: v.optional(v.union([v.number(), v.string()])),
+    strokeAlign: v.optional(StrokeAlignSchema),
+    cornerRadius: v.optional(v.union([v.number(), v.string()])),
+    cornerSmoothing: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
+    effects: v.optional(v.array(EffectSchema)),
 
     // Text-specific
-    [PROPS.characters]: v.optional(v.string()),
-    [PROPS.fontFamily]: v.optional(v.string()),
-    [PROPS.fontWeight]: v.optional(v.string()),
-    [PROPS.fontSize]: v.optional(v.number()),
-    [PROPS.lineHeight]: v.optional(LineHeightSchema),
+    characters: v.optional(v.string()),
+    fontFamily: v.optional(v.string()),
+    fontWeight: v.optional(v.string()),
+    fontSize: v.optional(v.number()),
+    lineHeight: v.optional(LineHeightSchema),
 
     // Icon-specific (for Iconify integration)
-    [PROPS.iconName]: v.optional(v.string()),  // Format: "prefix:name" e.g. "mdi:home"
-    [PROPS.svgContent]: v.optional(v.string()), // Embedded SVG (after prefetch). INTERNAL, not from LLM.
-    
+    iconName: v.optional(v.string()),  // Format: "prefix:name" e.g. "mdi:home"
+    svgContent: v.optional(v.string()), // Embedded SVG (after prefetch). INTERNAL, not from LLM.
+
     // V4: State & Interactive
     state: v.optional(v.picklist(['default', 'hover', 'active', 'disabled'])),
 
     // V5: Token Slot System (DTSS Strategy B)
-    [PROPS.variant]: v.optional(v.string())
+    variant: v.optional(v.string())
 });
 
 export type NodeLayerProps = v.InferOutput<typeof NodeLayerPropsSchema>;

@@ -4,19 +4,13 @@
  */
 
 import Handlebars from 'handlebars';
-import { NODE_TYPES, PROPS } from '../../../constants/figma-api';
+import { NODE_TYPES } from '../../../constants/figma-api';
 
 // Pre-register common helpers and partials
 const hbs = Handlebars.create();
 
 // Register constants as helpers for easy access in templates
 hbs.registerHelper('NODE_TYPES', () => NODE_TYPES);
-hbs.registerHelper('PROPS', () => PROPS);
-
-// Register individual prop helpers for inline use
-Object.entries(PROPS).forEach(([key, value]) => {
-    hbs.registerHelper(`PROPS_${key}`, () => value);
-});
 
 Object.entries(NODE_TYPES).forEach(([key, value]) => {
     hbs.registerHelper(`NODE_${key}`, () => value);

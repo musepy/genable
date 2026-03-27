@@ -7,7 +7,7 @@ import { RADIX_SCALES } from '../../constants/radixColors';
 import { parseColor } from '../../utils/colorUtils';
 import { TokenMode, TokenParser } from './tokenParser';
 import { FigmaSync } from './figmaSync';
-import { EXTRA_RADIUS_TOKENS, EXTRA_SCALING_TOKENS } from '../../constants/extraTokens'; // Kept for reference but unused in sync
+
 
 interface SnapshotMetadata {
   version: string;

@@ -37,15 +37,10 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   sed:     ['replaced', 'details'],
   // Info
   man:     null,                        // pass through
-  // First-class tools — inspect keeps node data, strips metadata
-  inspect: ['page', 'count', 'children', 'tree',
-            'type', 'id', 'name', 'role', 'size', 'visual', 'layout', 'summary',
-            'content', 'width', 'height', 'fill', 'fills', 'stroke', 'shadow',
-            'padding', 'gap', 'radius', 'fontSize', 'fontWeight', 'fontFamily',
-            'opacity', 'sizingH', 'sizingV', 'alignMain', 'alignCross', 'childCount',
-            '__image'],
+  // First-class tools — pass through (properties are now registry-driven, not a fixed set)
+  inspect: null,
   jsx:     null,                        // node fields spread to top level — pass through
-  edit:    ['edited', 'failed', 'errors', 'changeSummary'],
+  edit:    ['id', 'name', 'type', 'updated', 'results'],
 };
 
 /** Overflow hints per command — contextual help for the LLM. */

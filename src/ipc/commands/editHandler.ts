@@ -13,6 +13,8 @@ import { resolvePathToNode } from './pathResolver';
 import { normalizeProps } from '../../domain/node-normalizers';
 import { coerceValue } from '../../engine/utils/prop-dsl';
 import { updateNode, normalizeSizingInProps } from '../../engine/actions/nodeFactory';
+import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
+import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { PipelineTracer } from './pipelineTracer';
 
 interface EditEntry {
@@ -87,7 +89,9 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
       const { warnings } = await applyEdit(resolved.node, normalized);
       allWarnings.push(...warnings);
-      results.push({ nodeId: resolved.node.id, name: resolved.node.name, updated: true });
+      const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
+      const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
+      results.push({ ...minJson, updated: true });
     }
 
     tracer.exit({ count: results.length });
@@ -140,8 +144,11 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     ? warnings.map(w => `[warn] ${w}`).join('\n')
     : undefined;
 
+  const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
+  const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
+
   return {
-    data: { nodeId: resolved.node.id, name: resolved.node.name, updated: true },
+    data: { ...minJson, updated: true },
     _stderr,
     _stages: tracer.collect(),
   };

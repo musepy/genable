@@ -23,6 +23,8 @@ import {
   centerNodeInViewport, normalizeSizingInProps,
   type NodeResult,
 } from '../../engine/actions/nodeFactory';
+import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
+import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 import { PipelineTracer } from './pipelineTracer';
 
@@ -394,20 +396,33 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     };
   }
 
-  // Build structured response: {id, name, type, children: ["Name#id", ...]}
-  const rootData = rootResults[0];
-  const data: Record<string, any> = {
-    id: rootData.nodeId,
-    name: rootData.name,
-    type: rootData.tag,
-  };
-  if (rootData.childRefs.length > 0) data.children = rootData.childRefs;
+  // Build structured response via serializeMinimal pipeline
+  const rootNodeId = rootResults[0].nodeId;
+  const rootNode = await figma.getNodeByIdAsync(rootNodeId) as SceneNode | null;
+  let data: Record<string, any>;
+  if (rootNode) {
+    const minimal = NodeSerializer.serializeMinimal(rootNode, true);
+    data = JsonNodeSerializer.serialize(minimal, { minimal: true });
+  } else {
+    // Fallback if node lookup fails
+    const rootData = rootResults[0];
+    data = { id: rootData.nodeId, name: rootData.name, type: rootData.tag };
+    if (rootData.childRefs.length > 0) data.children = rootData.childRefs;
+  }
   if (rootResults.length > 1) {
-    data.roots = rootResults.map(r => {
-      const d: any = { id: r.nodeId, name: r.name, type: r.tag };
-      if (r.childRefs.length > 0) d.children = r.childRefs;
-      return d;
-    });
+    const roots: any[] = [];
+    for (const r of rootResults) {
+      const n = await figma.getNodeByIdAsync(r.nodeId) as SceneNode | null;
+      if (n) {
+        const m = NodeSerializer.serializeMinimal(n, true);
+        roots.push(JsonNodeSerializer.serialize(m, { minimal: true }));
+      } else {
+        const d: any = { id: r.nodeId, name: r.name, type: r.tag };
+        if (r.childRefs.length > 0) d.children = r.childRefs;
+        roots.push(d);
+      }
+    }
+    data.roots = roots;
   }
 
   // Build stderr from warnings
@@ -431,10 +446,10 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   }
 
   // Quality scoring (best-effort)
-  if (rootData.nodeId) {
+  if (rootNodeId) {
     try {
       tracer.enter('scoreNodes()', 'qualityScorer.ts');
-      const report = await scoreCreatedNodes([rootData.nodeId]);
+      const report = await scoreCreatedNodes([rootNodeId]);
       const qualityStr = formatQualityReport(report);
       if (qualityStr) {
         _stderr = _stderr ? _stderr + '\n' + qualityStr : qualityStr;

@@ -378,6 +378,8 @@ export interface JsonSerializeOptions {
   structural?: boolean;
   /** Skeleton mode: only id, name, children — pure hierarchy, no properties. */
   skeleton?: boolean;
+  /** Minimal mode: id, name, type, children as "Name#id" refs. For handler responses. */
+  minimal?: boolean;
 }
 
 export class JsonNodeSerializer {
@@ -386,10 +388,36 @@ export class JsonNodeSerializer {
     const maxChildren = options?.maxChildren ?? MAX_CHILDREN;
     const structural = options?.structural ?? false;
     const skeleton = options?.skeleton ?? false;
+    const minimal = options?.minimal ?? false;
+    if (minimal) {
+      return this.serializeMinimalNode(node);
+    }
     if (skeleton) {
       return this.serializeSkeletonNode(node, 0, maxDepth, maxChildren);
     }
     return this.serializeNode(node, 0, maxDepth, maxChildren, structural);
+  }
+
+  /**
+   * Minimal mode: {id, name, type, children: ["Name#id", ...]}.
+   * Used for handler responses (jsx, edit, inspect page detail).
+   */
+  private static serializeMinimalNode(node: NodeLayer): any {
+    const tag = TAG_MAP[node.type] || 'frame';
+    const props = (node.props || {}) as Record<string, any>;
+    const result: any = { id: node.id, name: props.name, type: tag };
+
+    // Dimensions (useful for page-level detail)
+    if (props.width) result.width = Math.round(props.width);
+    if (props.height) result.height = Math.round(props.height);
+
+    if (node.children && node.children.length > 0) {
+      result.children = node.children.map((child: NodeLayer) => {
+        const cName = (child.props as any)?.name || TAG_MAP[child.type] || 'node';
+        return `${cName}#${child.id}`;
+      });
+    }
+    return result;
   }
 
   /**
@@ -527,8 +555,12 @@ export class JsonNodeSerializer {
     const strokeResult = strokesMixed ? null : formatFillsJson(props.strokes);
     const effectStr = effectsMixed ? null : formatEffectsJson(props.effects);
 
+    // Track which keys have been explicitly emitted so we can catch-all the rest
+    const emitted = new Set<string>();
+
     // Helper: emit a single property with middle-name mapping, enum mapping, default filtering
     const emit = (key: string) => {
+      emitted.add(key);
       const value = props[key];
       if (value === undefined || value === null) return;
       if (value === MIXED) { result[MIDDLE_NAMES[key] || key] = 'mixed'; return; }
@@ -551,10 +583,10 @@ export class JsonNodeSerializer {
       const cssMap = ENUM_TO_CSS[key];
       result[outKey] = cssMap ? (cssMap[String(value)] ?? value) : value;
     };
-    const emitFills = () => { if (fillsMixed) result.fill = 'mixed'; else if (fillResult) result[fillResult.key] = fillResult.value; };
-    const emitStrokes = () => { if (strokesMixed) result.stroke = 'mixed'; else if (strokeResult) result.stroke = strokeResult.value; };
-    const emitEffects = () => { if (effectsMixed) result.shadow = 'mixed'; else if (effectStr) result.shadow = effectStr; };
-    const emitPadding = () => { if (paddingValue !== null) result.padding = paddingValue; };
+    const emitFills = () => { emitted.add('fills'); if (fillsMixed) result.fill = 'mixed'; else if (fillResult) result[fillResult.key] = fillResult.value; };
+    const emitStrokes = () => { emitted.add('strokes'); if (strokesMixed) result.stroke = 'mixed'; else if (strokeResult) result.stroke = strokeResult.value; };
+    const emitEffects = () => { emitted.add('effects'); if (effectsMixed) result.shadow = 'mixed'; else if (effectStr) result.shadow = effectStr; };
+    const emitPadding = () => { emitted.add('paddingTop'); emitted.add('paddingRight'); emitted.add('paddingBottom'); emitted.add('paddingLeft'); if (paddingValue !== null) result.padding = paddingValue; };
 
     // ── Semantic ordering by node type ──
     if (tag === 'text') {
@@ -589,6 +621,18 @@ export class JsonNodeSerializer {
       emit('minWidth'); emit('maxWidth'); emit('minHeight'); emit('maxHeight');
       emit('constrainProportions'); emit('constraints');
       emit('iconName');
+    }
+
+    // Catch-all: emit any remaining props not explicitly handled above (discovered via registry)
+    // Suppress per-corner radius when uniform cornerRadius is already emitted
+    const uniformRadius = typeof props.cornerRadius === 'number' ? props.cornerRadius : undefined;
+    const PER_CORNER = new Set(['topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius']);
+
+    for (const key of Object.keys(props)) {
+      if (key === 'name' || emitted.has(key)) continue;
+      // Skip per-corner values that equal the uniform cornerRadius (redundant)
+      if (uniformRadius !== undefined && PER_CORNER.has(key) && props[key] === uniformRadius) continue;
+      emit(key);
     }
   }
 }

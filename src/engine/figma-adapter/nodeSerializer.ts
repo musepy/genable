@@ -1,13 +1,16 @@
 /**
  * @file nodeSerializer.ts
  * @description Node Serializer - Orchestrates the conversion of Figma SceneNodes to DSL.
- * 
- * Uses PropertyTransformer for attribute alignment. 
- * This ensures the LLM receives data in the EXACT same format it is expected to output.
+ *
+ * Architecture: blacklist-based discovery (not whitelist).
+ * All properties from PROPERTY_REGISTRY flow through, classified as:
+ *   - Known (in PROP_METADATA) → rich handling (enum mapping, default pruning)
+ *   - Unknown (not in PROP_METADATA) → raw value with basic default pruning
  */
 
 import type { NodeLayer } from '../../schema/layerSchema';
-import { PROPS, NODE_TYPES, PROP_METADATA } from '../../constants/figma-api';
+import { NODE_TYPES } from '../../constants/figma-api';
+import { PROPERTY_META, FIGMA_TO_DSL } from '../../constants/figma-property-registry';
 import { PropertyTransformer } from './propertyTransformer';
 import { extractFigmaNodeData } from './figmaNodeData';
 import { readPaints, readEffects, readUnitValue, readFontName } from '../figma/figma-reader';
@@ -28,6 +31,12 @@ interface SerializationState {
     truncated: boolean;
 }
 
+/** Keys handled separately — id/type go on NodeLayer directly, not in props. */
+const IDENTITY_KEYS = new Set(['id', 'type']);
+
+/** Properties that need special serialization (fills/strokes/effects/unit values). */
+const SPECIAL_KEYS = new Set(['fills', 'strokes', 'effects', 'lineHeight', 'letterSpacing']);
+
 export class NodeSerializer {
     /**
      * Convert a Figma node and its visible children into a NodeLayer tree.
@@ -39,21 +48,15 @@ export class NodeSerializer {
 
     /**
      * Compressed version of serialization for Agentic Context.
-     * 
+     *
      * Supports output budget controls:
      * - maxDepth: vertical depth limit (default: Infinity)
      * - maxChildrenPerLevel: horizontal children cap per node (default: Infinity)
      * - maxTotalNodes: global node count limit (default: Infinity)
-     * 
-     * @param node - The Figma node to serialize
-     * @param options - Compression options
-     * @param currentDepth - Internal depth tracker
-     * @param state - Internal mutable state for node counting (do not pass externally)
-     * @returns A serialized NodeLayer object
      */
     static serializeWithCompression(
-        node: SceneNode, 
-        options: SerializationOptions = {}, 
+        node: SceneNode,
+        options: SerializationOptions = {},
         currentDepth: number = 0,
         state?: SerializationState
     ): NodeLayer {
@@ -69,54 +72,64 @@ export class NodeSerializer {
 
         // 1. Map Figma Type to DSL Type
         const type = this.mapFigmaType(node.type);
-        
-        // 2. Extract Properties
+
+        // 2. Extract Properties — registry-based (blacklist filtering in extractFigmaNodeData)
         const props: Record<string, any> = {};
-        const nodeData = extractFigmaNodeData(node, Object.values(PROP_METADATA).map(m => m.figmaKey));
+        const nodeData = extractFigmaNodeData(node);
 
-        Object.values(PROPS).forEach(dslKey => {
-            // Use specs for complex types, PropertyTransformer for the rest
-            let value: any;
-            const meta = PROP_METADATA[dslKey];
-            if (dslKey === 'fills' || dslKey === 'strokes') {
-                const figmaVal = nodeData[meta?.figmaKey ?? dslKey];
-                if (figmaVal) {
-                    const irPaints = readPaints(figmaVal);
-                    // Store raw Figma Paint[] for serializer (it calls paintSpec.fromFigma internally)
-                    value = figmaVal;
-                } else {
-                    value = undefined;
-                }
-            } else if (dslKey === 'effects') {
-                value = nodeData[meta?.figmaKey ?? dslKey];
-            } else if (dslKey === 'lineHeight' || dslKey === 'letterSpacing') {
-                const figmaVal = nodeData[meta?.figmaKey ?? dslKey];
-                if (figmaVal && typeof figmaVal === 'object' && figmaVal.unit === 'AUTO') {
-                    value = undefined; // AUTO = default, skip
-                } else if (figmaVal && typeof figmaVal === 'object' && 'value' in figmaVal) {
-                    value = figmaVal.value;
-                } else {
-                    value = PropertyTransformer.serialize(nodeData, dslKey);
-                }
-            } else {
-                value = PropertyTransformer.serialize(nodeData, dslKey);
-            }
+        for (const [figmaKey, rawValue] of Object.entries(nodeData)) {
+            if (IDENTITY_KEYS.has(figmaKey)) continue;
 
-            if (value !== undefined) {
-                // Skip default values if pruning is enabled
-                if (pruneDefaults) {
-                    if (meta && meta.defaultValue !== undefined) {
-                        const isDefault = PropertyTransformer.isEqual(nodeData, dslKey, meta.defaultValue);
-                        if (isDefault) return;
+            // Translate Figma API name → DSL name (e.g. itemSpacing → gap)
+            const dslKey = FIGMA_TO_DSL[figmaKey] || figmaKey;
+            const meta = PROPERTY_META[dslKey];
+
+            if (SPECIAL_KEYS.has(figmaKey)) {
+                // Special handling for complex types
+                let value: any;
+                if (figmaKey === 'fills' || figmaKey === 'strokes') {
+                    if (rawValue) {
+                        readPaints(rawValue); // side-effect: normalize
+                        value = rawValue;
+                    }
+                } else if (figmaKey === 'effects') {
+                    value = rawValue;
+                } else if (figmaKey === 'lineHeight' || figmaKey === 'letterSpacing') {
+                    if (rawValue && typeof rawValue === 'object' && rawValue.unit === 'AUTO') {
+                        value = undefined; // AUTO = default, skip
+                    } else if (rawValue && typeof rawValue === 'object' && 'value' in rawValue) {
+                        value = rawValue.value;
+                    } else {
+                        value = meta ? PropertyTransformer.serialize(nodeData, dslKey) : rawValue;
                     }
                 }
 
-                // Skip empty arrays
-                if (Array.isArray(value) && value.length === 0) return;
-
-                props[dslKey] = value;
+                if (value !== undefined) {
+                    if (pruneDefaults && meta?.defaultValue !== undefined) {
+                        if (PropertyTransformer.isEqual(nodeData, dslKey, meta.defaultValue)) continue;
+                    }
+                    if (Array.isArray(value) && value.length === 0) continue;
+                    props[dslKey] = value;
+                }
+            } else if (meta) {
+                // Known property — rich handling via PropertyTransformer
+                const value = PropertyTransformer.serialize(nodeData, dslKey);
+                if (value !== undefined) {
+                    if (pruneDefaults && meta.defaultValue !== undefined) {
+                        if (PropertyTransformer.isEqual(nodeData, dslKey, meta.defaultValue)) continue;
+                    }
+                    if (Array.isArray(value) && value.length === 0) continue;
+                    props[dslKey] = value;
+                }
+            } else {
+                // Unknown property — raw value with basic default pruning
+                if (rawValue === undefined || rawValue === null) continue;
+                if (rawValue === 0 || rawValue === false || rawValue === '' || rawValue === 'NONE' || rawValue === 'AUTO') continue;
+                if (Array.isArray(rawValue) && rawValue.length === 0) continue;
+                if (typeof rawValue === 'object' && !Array.isArray(rawValue)) continue; // skip complex objects
+                props[dslKey] = rawValue;
             }
-        });
+        }
 
         const layer: NodeLayer = {
             id: node.id,
@@ -127,7 +140,7 @@ export class NodeSerializer {
         // 3. Recursive Serialization with Depth + Budget Control
         if (currentDepth < maxDepth && 'children' in node && node.children.length > 0) {
             const visibleChildren = node.children.filter(c => c.visible);
-            
+
             if (visibleChildren.length > 0) {
                 // Check global node budget before recursing
                 if (state.nodeCount >= state.maxTotalNodes) {
@@ -138,7 +151,7 @@ export class NodeSerializer {
                     const fullChildren = visibleChildren.slice(0, maxChildrenPerLevel);
                     const skeletonChildren = visibleChildren.slice(maxChildrenPerLevel);
 
-                    layer.children = fullChildren.map(child => 
+                    layer.children = fullChildren.map(child =>
                         // Stop recursing if global budget exhausted
                         state!.nodeCount >= state!.maxTotalNodes
                             ? this.createSkeleton(child)
@@ -165,6 +178,24 @@ export class NodeSerializer {
     }
 
     /**
+     * Minimal serialization: id + type + name, optionally with one level of children.
+     * Used by handlers that need lightweight node references (jsx response, edit response, page detail).
+     */
+    static serializeMinimal(node: SceneNode, includeChildren = false): NodeLayer {
+        const layer: NodeLayer = {
+            id: node.id,
+            type: this.mapFigmaType(node.type),
+            props: { name: node.name } as any,
+        };
+        if (includeChildren && 'children' in node) {
+            layer.children = (node as any).children
+                .filter((c: SceneNode) => c.visible)
+                .map((c: SceneNode) => this.serializeMinimal(c, false));
+        }
+        return layer;
+    }
+
+    /**
      * Create a minimal skeleton for a node (id + type + name only).
      * Used for children beyond the per-level cap or when total budget is exhausted.
      */
@@ -183,7 +214,7 @@ export class NodeSerializer {
     /**
      * Map Figma API types to our Internal DSL types
      */
-    private static mapFigmaType(figmaType: string): any {
+    static mapFigmaType(figmaType: string): any {
         const MAP: Record<string, any> = {
             'FRAME': NODE_TYPES.FRAME,
             'GROUP': NODE_TYPES.GROUP,

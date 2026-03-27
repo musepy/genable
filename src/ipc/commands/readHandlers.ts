@@ -128,10 +128,10 @@ export async function handleCat(parameters: any): Promise<ToolResponse> {
 
   if (resolved.isPage) {
     const page = resolved.page;
-    const topLevel = page.children.map(n => ({
-      type: n.type.toLowerCase(), id: n.id, name: n.name,
-      width: Math.round(n.width), height: Math.round(n.height),
-    }));
+    const topLevel = page.children.map(n => {
+      const minimal = NodeSerializer.serializeMinimal(n, false);
+      return JsonNodeSerializer.serialize(minimal, { minimal: true });
+    });
     return {
       data: {
         page: { name: page.name, childCount: page.children.length },

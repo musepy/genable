@@ -114,168 +114,23 @@ export const PROPS = {
   constrainProportions: 'constrainProportions', // boolean: lock aspect ratio
 } as const;
 
-/**
- * Property Metadata for Unified Mapping (Figma <-> DSL)
- * This centralizes how each property is extracted and rendered.
- */
-export interface SizingConstraint {
-  readonly requiresAutoLayout: 'self' | 'parent';
-  readonly fallback: string;
-}
+// ── Re-exports from figma-property-registry (canonical location) ──
+// PROP_METADATA is a backward-compat alias. New code should import
+// PROPERTY_META directly from figma-property-registry.
+import { PROPERTY_META, PROPERTY_REGISTRY, BLACKLIST, type PropMeta, type SizingConstraint, getEnumInputs, getCanonicalValues } from './figma-property-registry';
+export { PROPERTY_META, PROPERTY_REGISTRY, BLACKLIST, type PropMeta, type SizingConstraint, getEnumInputs, getCanonicalValues };
 
-export interface PropDefinition {
-  readonly figmaKey: string;
-  readonly type: 'scalar' | 'color' | 'enum' | 'object' | 'virtual' | 'array' | 'string';
-  readonly enumMap?: Record<string, string>;
-  readonly defaultValue?: any; // [PURE TRUST] Centralized default for data-driven transformation
-  // NEW: Normalization rules
-  readonly min?: number;        // scalar clamp lower bound
-  readonly max?: number;        // scalar clamp upper bound
-  readonly valueConstraints?: Record<string, SizingConstraint>;
-}
+/** @deprecated Use PROPERTY_META from figma-property-registry. */
+export type PropDefinition = PropMeta & { readonly figmaKey: string };
 
-export const PROP_METADATA: Record<string, PropDefinition> = {
-  [PROPS.name]: { figmaKey: 'name', type: 'string' },
-  [PROPS.visible]: { figmaKey: 'visible', type: 'scalar', defaultValue: true },
-  [PROPS.opacity]: { figmaKey: 'opacity', type: 'scalar', defaultValue: 1, min: 0, max: 1 },
-  
-  // Layout
-  [PROPS.layoutMode]: { 
-    figmaKey: 'layoutMode', 
-    type: 'enum', 
-    enumMap: { 'VERTICAL': 'VERTICAL', 'HORIZONTAL': 'HORIZONTAL', 'NONE': 'NONE' },
-    defaultValue: 'NONE'
-  },
-  [PROPS.layoutSizingHorizontal]: {
-    figmaKey: 'layoutSizingHorizontal', type: 'enum',
-    enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
-    defaultValue: 'FIXED',
-    valueConstraints: {
-      HUG:  { requiresAutoLayout: 'self',   fallback: 'FIXED' },
-      FILL: { requiresAutoLayout: 'parent', fallback: 'HUG' },
-    },
-  },
-  [PROPS.layoutSizingVertical]: {
-    figmaKey: 'layoutSizingVertical', type: 'enum',
-    enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
-    defaultValue: 'FIXED',
-    valueConstraints: {
-      HUG:  { requiresAutoLayout: 'self',   fallback: 'FIXED' },
-      FILL: { requiresAutoLayout: 'parent', fallback: 'HUG' },
-    },
-  },
-  [PROPS.primaryAxisAlignItems]: {
-    figmaKey: 'primaryAxisAlignItems', type: 'enum',
-    enumMap: { MIN: 'MIN', CENTER: 'CENTER', MAX: 'MAX', SPACE_BETWEEN: 'SPACE_BETWEEN' },
-    defaultValue: 'MIN'
-  },
-  [PROPS.counterAxisAlignItems]: {
-    figmaKey: 'counterAxisAlignItems', type: 'enum',
-    enumMap: { MIN: 'MIN', CENTER: 'CENTER', MAX: 'MAX', BASELINE: 'BASELINE' },
-    defaultValue: 'MIN'
-  },
-  [PROPS.gap]: { figmaKey: 'itemSpacing', type: 'scalar', defaultValue: 0, min: 0, max: 1000 }, // Note: itemSpacing in Figma API
-  [PROPS.counterAxisSpacing]: { figmaKey: 'counterAxisSpacing', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
-  [PROPS.paddingTop]: { figmaKey: 'paddingTop', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
-  [PROPS.paddingRight]: { figmaKey: 'paddingRight', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
-  [PROPS.paddingBottom]: { figmaKey: 'paddingBottom', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
-  [PROPS.paddingLeft]: { figmaKey: 'paddingLeft', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
-  [PROPS.layoutGrow]: { figmaKey: 'layoutGrow', type: 'scalar', defaultValue: 0, min: 0, max: 1 },
-  [PROPS.layoutAlign]: {
-    figmaKey: 'layoutAlign',
-    type: 'enum',
-    enumMap: {
-      'MIN': 'MIN',
-      'CENTER': 'CENTER',
-      'MAX': 'MAX',
-      'STRETCH': 'STRETCH',
-      'INHERIT': 'INHERIT'
-    },
-    defaultValue: 'INHERIT'
-  },
-  [PROPS.layoutPositioning]: {
-    figmaKey: 'layoutPositioning',
-    type: 'enum',
-    enumMap: {
-      'AUTO': 'AUTO',
-      'RELATIVE': 'AUTO',
-      'ABSOLUTE': 'ABSOLUTE'
-    },
-    defaultValue: 'AUTO'
-  },
-  [PROPS.constraints]: {
-    figmaKey: 'constraints',
-    type: 'object',
-    defaultValue: { horizontal: 'MIN', vertical: 'MIN' }
-  },
-  [PROPS.x]: { figmaKey: 'x', type: 'scalar', defaultValue: 0 },
-  [PROPS.y]: { figmaKey: 'y', type: 'scalar', defaultValue: 0 },
-  [PROPS.width]: { figmaKey: 'width', type: 'scalar', min: 0.01, max: 10000 },
-  [PROPS.height]: { figmaKey: 'height', type: 'scalar', min: 0.01, max: 10000 },
+/** @deprecated Use PROPERTY_META from figma-property-registry. Derived shim. */
+export const PROP_METADATA: Record<string, PropDefinition> = Object.fromEntries(
+  Object.entries(PROPERTY_META).map(([dslKey, meta]) => [
+    dslKey,
+    { ...meta, figmaKey: meta.figmaKey || dslKey } as PropDefinition,
+  ])
+);
 
-  // Styling
-  [PROPS.fills]: { figmaKey: 'fills', type: 'color', defaultValue: [] },
-  [PROPS.strokes]: { figmaKey: 'strokes', type: 'color', defaultValue: [] },
-  [PROPS.strokeWeight]: { figmaKey: 'strokeWeight', type: 'scalar', defaultValue: 0, min: 0, max: 100 },
-  [PROPS.cornerRadius]: { figmaKey: 'cornerRadius', type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
-  [PROPS.topLeftRadius]: { figmaKey: 'topLeftRadius', type: 'scalar', min: 0, max: 1000 },
-  [PROPS.topRightRadius]: { figmaKey: 'topRightRadius', type: 'scalar', min: 0, max: 1000 },
-  [PROPS.bottomLeftRadius]: { figmaKey: 'bottomLeftRadius', type: 'scalar', min: 0, max: 1000 },
-  [PROPS.bottomRightRadius]: { figmaKey: 'bottomRightRadius', type: 'scalar', min: 0, max: 1000 },
-  [PROPS.effects]: { figmaKey: 'effects', type: 'array', defaultValue: [] },
-
-  // Text
-  [PROPS.characters]: { figmaKey: 'characters', type: 'string' },
-  [PROPS.fontSize]: { figmaKey: 'fontSize', type: 'scalar', min: 1, max: 1000 },
-  [PROPS.fontWeight]: { figmaKey: 'fontWeight', type: 'virtual' }, // Maps to fontName.style
-  [PROPS.fontFamily]: { figmaKey: 'fontFamily', type: 'virtual' }, // Maps to fontName.family
-  [PROPS.textAlignHorizontal]: { figmaKey: 'textAlignHorizontal', type: 'enum', enumMap: { LEFT: 'LEFT', CENTER: 'CENTER', RIGHT: 'RIGHT', JUSTIFIED: 'JUSTIFIED' } },
-  [PROPS.textAlignVertical]: { figmaKey: 'textAlignVertical', type: 'enum', enumMap: { TOP: 'TOP', CENTER: 'CENTER', BOTTOM: 'BOTTOM' } },
-  [PROPS.textAutoResize]: { figmaKey: 'textAutoResize', type: 'enum', enumMap: { NONE: 'NONE', WIDTH_AND_HEIGHT: 'WIDTH_AND_HEIGHT', HEIGHT: 'HEIGHT', TRUNCATE: 'TRUNCATE' } },
-  [PROPS.lineHeight]: { figmaKey: 'lineHeight', type: 'scalar', min: 0, max: 1000 },
-  [PROPS.letterSpacing]: { figmaKey: 'letterSpacing', type: 'scalar', min: -100, max: 1000 },
-  [PROPS.textCase]: { figmaKey: 'textCase', type: 'enum', enumMap: { ORIGINAL: 'ORIGINAL', UPPER: 'UPPER', LOWER: 'LOWER', TITLE: 'TITLE', SMALL_CAPS: 'SMALL_CAPS', SMALL_CAPS_FORCED: 'SMALL_CAPS_FORCED' } },
-  [PROPS.textDecoration]: { figmaKey: 'textDecoration', type: 'enum', enumMap: { NONE: 'NONE', UNDERLINE: 'UNDERLINE', STRIKETHROUGH: 'STRIKETHROUGH' } },
-  [PROPS.textTruncation]: { figmaKey: 'textTruncation', type: 'enum', enumMap: { DISABLED: 'DISABLED', ENDING: 'ENDING' }, defaultValue: 'DISABLED' },
-  [PROPS.maxLines]: { figmaKey: 'maxLines', type: 'scalar', min: 1, max: 1000 },
-  [PROPS.paragraphSpacing]: { figmaKey: 'paragraphSpacing', type: 'scalar', min: 0, max: 1000 },
-  [PROPS.paragraphIndent]: { figmaKey: 'paragraphIndent', type: 'scalar', min: 0, max: 1000 },
-
-  // Previously missing metadata (PROPS defined but PROP_METADATA was absent → serialization broken)
-  [PROPS.rotation]: { figmaKey: 'rotation', type: 'scalar', defaultValue: 0, min: -360, max: 360 },
-  [PROPS.strokeAlign]: { figmaKey: 'strokeAlign', type: 'enum', enumMap: { INSIDE: 'INSIDE', OUTSIDE: 'OUTSIDE', CENTER: 'CENTER' }, defaultValue: 'INSIDE' },
-  [PROPS.strokeJoin]: { figmaKey: 'strokeJoin', type: 'enum', enumMap: { MITER: 'MITER', BEVEL: 'BEVEL', ROUND: 'ROUND' }, defaultValue: 'MITER' },
-  [PROPS.strokeCap]: { figmaKey: 'strokeCap', type: 'enum', enumMap: { NONE: 'NONE', ROUND: 'ROUND', SQUARE: 'SQUARE', ARROW_LINES: 'ARROW_LINES', ARROW_EQUILATERAL: 'ARROW_EQUILATERAL' }, defaultValue: 'NONE' },
-  [PROPS.dashPattern]: { figmaKey: 'dashPattern', type: 'array', defaultValue: [] },
-  [PROPS.strokeTopWeight]: { figmaKey: 'strokeTopWeight', type: 'scalar', min: 0, max: 100 },
-  [PROPS.strokeRightWeight]: { figmaKey: 'strokeRightWeight', type: 'scalar', min: 0, max: 100 },
-  [PROPS.strokeBottomWeight]: { figmaKey: 'strokeBottomWeight', type: 'scalar', min: 0, max: 100 },
-  [PROPS.strokeLeftWeight]: { figmaKey: 'strokeLeftWeight', type: 'scalar', min: 0, max: 100 },
-  [PROPS.blendMode]: { figmaKey: 'blendMode', type: 'enum', enumMap: {
-    PASS_THROUGH: 'PASS_THROUGH', NORMAL: 'NORMAL', DARKEN: 'DARKEN', MULTIPLY: 'MULTIPLY',
-    LINEAR_BURN: 'LINEAR_BURN', COLOR_BURN: 'COLOR_BURN', LIGHTEN: 'LIGHTEN', SCREEN: 'SCREEN',
-    LINEAR_DODGE: 'LINEAR_DODGE', COLOR_DODGE: 'COLOR_DODGE', OVERLAY: 'OVERLAY',
-    SOFT_LIGHT: 'SOFT_LIGHT', HARD_LIGHT: 'HARD_LIGHT', DIFFERENCE: 'DIFFERENCE',
-    EXCLUSION: 'EXCLUSION', HUE: 'HUE', SATURATION: 'SATURATION', COLOR: 'COLOR', LUMINOSITY: 'LUMINOSITY',
-  }, defaultValue: 'PASS_THROUGH' },
-  [PROPS.cornerSmoothing]: { figmaKey: 'cornerSmoothing', type: 'scalar', defaultValue: 0, min: 0, max: 1 },
-
-  // Frame Clipping & Wrap
-  [PROPS.clipsContent]: { figmaKey: 'clipsContent', type: 'enum', enumMap: { 'true': 'true', 'false': 'false' }, defaultValue: false },
-  [PROPS.layoutWrap]: { figmaKey: 'layoutWrap', type: 'enum', enumMap: { WRAP: 'WRAP', NO_WRAP: 'NO_WRAP' }, defaultValue: 'NO_WRAP' },
-  [PROPS.strokesIncludedInLayout]: { figmaKey: 'strokesIncludedInLayout', type: 'scalar', defaultValue: false },
-  [PROPS.itemReverseZIndex]: { figmaKey: 'itemReverseZIndex', type: 'scalar', defaultValue: false },
-  [PROPS.minWidth]: { figmaKey: 'minWidth', type: 'scalar', min: 0, max: 10000 },
-  [PROPS.maxWidth]: { figmaKey: 'maxWidth', type: 'scalar', min: 0, max: 10000 },
-  [PROPS.minHeight]: { figmaKey: 'minHeight', type: 'scalar', min: 0, max: 10000 },
-  [PROPS.maxHeight]: { figmaKey: 'maxHeight', type: 'scalar', min: 0, max: 10000 },
-  [PROPS.constrainProportions]: { figmaKey: 'constrainProportions', type: 'scalar', defaultValue: false },
-
-  // Virtual
-  [PROPS.semantic]: { figmaKey: 'semantic', type: 'virtual' },
-  [PROPS.variant]: { figmaKey: 'variant', type: 'virtual' },
-  [PROPS.iconName]: { figmaKey: 'iconName', type: 'virtual' },
-};
 
 // ── Property scope: node-type whitelist ──
 
@@ -287,17 +142,29 @@ export const TEXT_ONLY_PROPS: ReadonlySet<string> = new Set([
   PROPS.textTruncation, PROPS.maxLines, PROPS.paragraphSpacing, PROPS.paragraphIndent,
 ]);
 
-/** All property keys accepted by the system (canonical + virtuals).
+/** All property keys accepted by the system (canonical + virtuals + registry-discovered).
  *  Anything not in this set is unknown/unsupported and should be dropped. */
-export const KNOWN_PROP_KEYS: ReadonlySet<string> = new Set([
-  ...Object.keys(PROP_METADATA),
-  ...Object.values(PROPS),
-  ...Object.values(PROP_METADATA).map(m => m.figmaKey),
-  // Style reference properties — handled by styleRefHandler
-  'textStyle', 'fillStyle', 'strokeStyle', 'effectStyle',
-  // Hyperlink — handled by hyperlinkHandler
-  'hyperlink',
-]);
+export const KNOWN_PROP_KEYS: ReadonlySet<string> = buildKnownPropKeys();
+
+function buildKnownPropKeys(): ReadonlySet<string> {
+  const keys = new Set([
+    ...Object.keys(PROP_METADATA),
+    ...Object.values(PROPS),
+    ...Object.values(PROP_METADATA).map(m => m.figmaKey),
+    // Style reference properties — handled by styleRefHandler
+    'textStyle', 'fillStyle', 'strokeStyle', 'effectStyle',
+    // Hyperlink — handled by hyperlinkHandler
+    'hyperlink',
+  ]);
+
+  // Add all properties discovered from plugin-api.d.ts registry
+  for (const props of Object.values(PROPERTY_REGISTRY)) {
+    for (const p of props) {
+      if (!BLACKLIST.has(p.key)) keys.add(p.key);
+    }
+  }
+  return keys;
+}
 
 // Derived Types
 export type FigmaProp = typeof PROPS[keyof typeof PROPS];
@@ -342,25 +209,7 @@ export const STROKE_ALIGNS = {
  * Shared JSON Schema fragment for text/typography properties.
  * Import and spread into tool definition `props.properties` to keep schemas DRY.
  */
-/**
- * Get all accepted input keys for an enum property (including aliases).
- * Use for Valibot picklists ("宽进": accept aliases like AUTO/STRETCH).
- */
-export function getEnumInputs(prop: string): string[] {
-  const meta = PROP_METADATA[prop];
-  if (!meta?.enumMap) return [];
-  return Object.keys(meta.enumMap);
-}
-
-/**
- * Get unique canonical output values for an enum property.
- * Use for strict output validation.
- */
-export function getCanonicalValues(prop: string): string[] {
-  const meta = PROP_METADATA[prop];
-  if (!meta?.enumMap) return [];
-  return [...new Set(Object.values(meta.enumMap))];
-}
+// getEnumInputs and getCanonicalValues are re-exported from figma-property-registry above
 
 export const TEXT_PROPS_SCHEMA = {
   characters: { type: 'string', description: 'Text content (TEXT nodes only)' },

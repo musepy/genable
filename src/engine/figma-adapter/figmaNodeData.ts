@@ -1,10 +1,12 @@
 /**
  * @file figmaNodeData.ts
  * @description Plain Data Representation of a Figma SceneNode.
- * 
- * This acts as the Intermediate Representation (IR) to decouple 
+ *
+ * This acts as the Intermediate Representation (IR) to decouple
  * our logic from the lived Figma API objects.
  */
+
+import { PROPERTY_REGISTRY, BLACKLIST } from '../../constants/figma-property-registry';
 
 export interface FigmaNodeData {
     id: string;
@@ -15,9 +17,14 @@ export interface FigmaNodeData {
 
 /**
  * Extract raw properties from a Figma SceneNode into a plain object.
- * This handles the "lived object" getters problem.
+ *
+ * Uses the auto-generated PROPERTY_REGISTRY to discover all properties
+ * for the node's type, filtered by BLACKLIST.
+ *
+ * @param node - The Figma node to extract from
+ * @param keys - Optional explicit key list (legacy call-sites). When omitted, uses registry.
  */
-export function extractFigmaNodeData(node: SceneNode, keys: string[]): FigmaNodeData {
+export function extractFigmaNodeData(node: SceneNode, keys?: string[]): FigmaNodeData {
     const data: FigmaNodeData = {
         id: node.id,
         type: node.type,
@@ -30,12 +37,30 @@ export function extractFigmaNodeData(node: SceneNode, keys: string[]): FigmaNode
     const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
     const isMixed = (v: any) => figmaMixed !== undefined && v === figmaMixed;
 
-    keys.forEach(key => {
-        if (key in node) {
-            const val = (node as any)[key];
-            data[key] = isMixed(val) ? 'mixed' : val;
+    if (keys) {
+        // Legacy path: explicit key list
+        keys.forEach(key => {
+            if (key in node) {
+                const val = (node as any)[key];
+                data[key] = isMixed(val) ? 'mixed' : val;
+            }
+        });
+    } else {
+        // Registry path: discover all properties for this node type
+        const registry = PROPERTY_REGISTRY[node.type];
+        if (registry) {
+            for (const prop of registry) {
+                if (BLACKLIST.has(prop.key)) continue;
+                if (!(prop.key in node)) continue;
+                try {
+                    const val = (node as any)[prop.key];
+                    data[prop.key] = isMixed(val) ? 'mixed' : val;
+                } catch {
+                    // Some properties throw when accessed in certain contexts
+                }
+            }
         }
-    });
+    }
 
     // Explicit overrides for properties that have special handling
     if ('fontName' in node) {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { lowerPaints, lowerEffects, lowerUnitValue } from '../figma-lowering';
-import type { EffectValue, UnitValue } from '../../../domain/design-ir';
+import type { UnitValue } from '../../../domain/design-ir';
 
 describe('lowerPaints', () => {
   it('converts hex string to Figma solid paint', () => {
@@ -46,33 +46,26 @@ describe('lowerPaints', () => {
 });
 
 describe('lowerEffects', () => {
-  it('converts canonical drop-shadow to Figma format', () => {
-    const ir: EffectValue[] = [{
-      kind: 'drop-shadow',
-      color: { r: 0, g: 0, b: 0, a: 0.25 },
-      offset: { x: 0, y: 4 },
-      radius: 8,
-      spread: 0,
-    }];
-    const result = lowerEffects(ir);
+  it('passes through Figma Effect with defaults filled', () => {
+    const result = lowerEffects([{
+      type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 },
+      offset: { x: 0, y: 4 }, radius: 8, spread: 0,
+    }]);
     expect(result[0].type).toBe('DROP_SHADOW');
-    expect(result[0].radius).toBe(8);
     expect(result[0].visible).toBe(true);
     expect(result[0].blendMode).toBe('NORMAL');
   });
 
-  it('converts canonical blur to Figma format', () => {
-    const ir: EffectValue[] = [{ kind: 'blur', type: 'layer', radius: 10 }];
-    const result = lowerEffects(ir);
-    expect(result[0].type).toBe('LAYER_BLUR');
-    expect(result[0].radius).toBe(10);
-  });
-
-  it('handles legacy format with blur field', () => {
-    const legacy = [{ type: 'DROP_SHADOW', offset: { x: 0, y: 4 }, blur: 8, spread: 0, color: '#000000' }];
-    const result = lowerEffects(legacy);
+  it('normalizes legacy blur field', () => {
+    const result = lowerEffects([{ type: 'DROP_SHADOW', offset: { x: 0, y: 4 }, blur: 8, spread: 0, color: '#000000' }]);
     expect(result[0].radius).toBe(8);
     expect(result[0].color).toMatchObject({ r: 0, g: 0, b: 0 });
+  });
+
+  it('converts string to Figma Effect', () => {
+    const result = lowerEffects(['blur(10)' as any]);
+    expect(result[0].type).toBe('LAYER_BLUR');
+    expect(result[0].radius).toBe(10);
   });
 
   it('throws on invalid format', () => {

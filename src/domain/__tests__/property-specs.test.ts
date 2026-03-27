@@ -14,9 +14,10 @@ import {
   rgbaToHex,
   parsePaintToFigma,
   formatPaintForLLM,
+  parseEffectToFigma,
+  formatEffectForLLM,
 } from '../property-specs';
 import type {
-  EffectValue,
   UnitValue,
   ConstraintValue,
   FontNameValue,
@@ -253,60 +254,98 @@ describe('paintSpec', () => {
 });
 
 // ═══════════════════════════════════════════════
-// Effect Spec
+// Effect — Direct Figma format (no IR)
 // ═══════════════════════════════════════════════
 
+describe('parseEffectToFigma', () => {
+  it('parses drop shadow string', () => {
+    const e = parseEffectToFigma('0,4,8,0,#00000040');
+    expect(e.type).toBe('DROP_SHADOW');
+    expect(e.offset).toEqual({ x: 0, y: 4 });
+    expect(e.radius).toBe(8);
+    expect(e.blendMode).toBe('NORMAL');
+  });
+
+  it('parses inner shadow string', () => {
+    const e = parseEffectToFigma('inset,0,2,4,0,#00000033');
+    expect(e.type).toBe('INNER_SHADOW');
+    expect(e.blendMode).toBe('NORMAL');
+  });
+
+  it('parses blur', () => {
+    const e = parseEffectToFigma('blur(10)');
+    expect(e.type).toBe('LAYER_BLUR');
+    expect(e.radius).toBe(10);
+  });
+
+  it('parses bgblur', () => {
+    const e = parseEffectToFigma('bgblur(20)');
+    expect(e.type).toBe('BACKGROUND_BLUR');
+    expect(e.radius).toBe(20);
+  });
+});
+
+describe('formatEffectForLLM', () => {
+  it('drop shadow → string', () => {
+    const result = formatEffectForLLM({
+      type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 },
+      offset: { x: 0, y: 4 }, radius: 8, spread: 0,
+    });
+    expect(result).toContain('0,4,8,0,');
+  });
+
+  it('blur → blur(N)', () => {
+    expect(formatEffectForLLM({ type: 'LAYER_BLUR', radius: 10 })).toBe('blur(10)');
+  });
+
+  it('bgblur → bgblur(N)', () => {
+    expect(formatEffectForLLM({ type: 'BACKGROUND_BLUR', radius: 20 })).toBe('bgblur(20)');
+  });
+});
+
 describe('effectSpec', () => {
-  describe('XML roundtrip', () => {
-    it('drop shadow', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040'));
+  describe('parseXml → Figma Effect format', () => {
+    it('shadow', () => {
+      const effects = effectSpec.parseXml('0,4,8,0,#00000040');
+      expect(effects).toHaveLength(1);
+      expect(effects[0].type).toBe('DROP_SHADOW');
+    });
+
+    it('multiple', () => {
+      const effects = effectSpec.parseXml('0,4,8,0,#00000040;blur(10)');
+      expect(effects).toHaveLength(2);
+      expect(effects[0].type).toBe('DROP_SHADOW');
+      expect(effects[1].type).toBe('LAYER_BLUR');
+    });
+  });
+
+  describe('roundtrip: parse → format → parse', () => {
+    it('shadow', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040'));
     it('inner shadow', () => assertXmlRoundtrip(effectSpec, 'inset,0,2,4,0,#00000033'));
-    it('layer blur', () => assertXmlRoundtrip(effectSpec, 'blur(10)'));
-    it('background blur', () => assertXmlRoundtrip(effectSpec, 'bgblur(20)'));
-    it('multiple effects', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;inset,0,2,4,0,#00000033'));
-    it('shadow + blur', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;blur(10)'));
+    it('blur', () => assertXmlRoundtrip(effectSpec, 'blur(10)'));
+    it('bgblur', () => assertXmlRoundtrip(effectSpec, 'bgblur(20)'));
+    it('multiple', () => assertXmlRoundtrip(effectSpec, '0,4,8,0,#00000040;blur(10)'));
   });
 
-  describe('IR roundtrip', () => {
-    it('drop shadow', () => {
-      assertRoundtrip(effectSpec, [{
-        kind: 'drop-shadow', color: { r: 0, g: 0, b: 0, a: 0.25 },
-        offset: { x: 0, y: 4 }, radius: 8, spread: 0,
-      }]);
-    });
-    it('blur', () => assertRoundtrip(effectSpec, [{ kind: 'blur', type: 'layer', radius: 10 }]));
-  });
-
-  describe('Figma roundtrip', () => {
-    it('drop shadow', () => {
-      const figma = [{
-        type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 },
-        offset: { x: 0, y: 4 }, radius: 8, spread: 0, visible: true, blendMode: 'NORMAL',
-      }];
-      const ir = effectSpec.fromFigma(figma);
-      const back = effectSpec.toFigma(ir);
-      const ir2 = effectSpec.fromFigma(back);
-      expect(effectSpec.isEqual(ir, ir2)).toBe(true);
-    });
-
-    it('filters invisible effects', () => {
-      const ir = effectSpec.fromFigma([
-        { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0, visible: true },
+  describe('fromFigma — filter invisible', () => {
+    it('keeps visible, drops invisible', () => {
+      const result = effectSpec.fromFigma([
+        { type: 'DROP_SHADOW', visible: true },
         { type: 'LAYER_BLUR', radius: 5, visible: false },
       ]);
-      expect(ir.length).toBe(1);
+      expect(result).toHaveLength(1);
     });
   });
 
   describe('isEqual', () => {
-    it('equal drop shadows', () => {
-      const a: EffectValue = { kind: 'drop-shadow', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
-      const b: EffectValue = { kind: 'drop-shadow', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
-      expect(effectSpec.isEqual([a], [b])).toBe(true);
+    it('equal shadows', () => {
+      const a = { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
+      expect(effectSpec.isEqual([a], [{ ...a }])).toBe(true);
     });
 
-    it('different shadow kinds', () => {
-      const a: EffectValue = { kind: 'drop-shadow', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
-      const b: EffectValue = { kind: 'inner-shadow', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
+    it('different types', () => {
+      const a = { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
+      const b = { type: 'INNER_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0 };
       expect(effectSpec.isEqual([a], [b])).toBe(false);
     });
   });

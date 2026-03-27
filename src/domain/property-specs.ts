@@ -17,7 +17,6 @@
  */
 
 import type {
-  EffectValue,
   UnitValue,
   ConstraintValue,
   FontNameValue,
@@ -254,165 +253,101 @@ export const paintSpec = {
 };
 
 // ═══════════════════════════════════════════════
-// Effect Spec
+// Effect — Direct Figma Effect format (no IR layer)
+//
+// Write: string → Figma Effect (fill defaults)
+// Read:  Figma Effect → strip defaults → string
 // ═══════════════════════════════════════════════
 
 /**
- * Parses XML effect value. Formats:
- *   Shadow:      "ox,oy,blur,spread,color"
- *   InnerShadow: "inset,ox,oy,blur,spread,color"
- *   Blur:        "blur(radius)"
- *   BgBlur:      "bgblur(radius)"
- *   Multiple:    separated by ";"
+ * Parse a single effect string directly to a Figma Effect object.
  */
-function parseSingleEffectXml(value: string): EffectValue {
-  const trimmed = value.trim();
+export function parseEffectToFigma(input: string): any {
+  const trimmed = input.trim();
 
-  // blur(radius)
   const blurMatch = trimmed.match(/^blur\((\d+(?:\.\d+)?)\)$/);
-  if (blurMatch) {
-    return { kind: 'blur', type: 'layer', radius: parseFloat(blurMatch[1]) };
-  }
+  if (blurMatch) return { type: 'LAYER_BLUR', radius: parseFloat(blurMatch[1]), visible: true };
 
-  // bgblur(radius)
   const bgBlurMatch = trimmed.match(/^bgblur\((\d+(?:\.\d+)?)\)$/);
-  if (bgBlurMatch) {
-    return { kind: 'blur', type: 'background', radius: parseFloat(bgBlurMatch[1]) };
-  }
+  if (bgBlurMatch) return { type: 'BACKGROUND_BLUR', radius: parseFloat(bgBlurMatch[1]), visible: true };
 
   // Shadow: [inset,]ox,oy,blur,spread,color
   const isInner = trimmed.toLowerCase().startsWith('inset,');
   const params = isInner ? trimmed.substring(6) : trimmed;
   const [oxStr, oyStr, blurStr, spreadStr, colorStr] = params.split(',').map(s => s.trim());
 
-  const color = parseHexToRGBA(colorStr || '#0000001A');
-  const offset: Vector = { x: parseFloat(oxStr) || 0, y: parseFloat(oyStr) || 0 };
-
   return {
-    kind: isInner ? 'inner-shadow' : 'drop-shadow',
-    color,
-    offset,
+    type: isInner ? 'INNER_SHADOW' : 'DROP_SHADOW',
+    color: parseHexToRGBA(colorStr || '#0000001A'),
+    offset: { x: parseFloat(oxStr) || 0, y: parseFloat(oyStr) || 0 },
     radius: parseFloat(blurStr) || 0,
     spread: parseFloat(spreadStr) || 0,
+    visible: true,
+    blendMode: 'NORMAL',
   };
 }
 
-function formatSingleEffectXml(effect: EffectValue): string {
-  switch (effect.kind) {
-    case 'blur':
-      return effect.type === 'background'
-        ? `bgblur(${effect.radius})`
-        : `blur(${effect.radius})`;
-    case 'drop-shadow':
-    case 'inner-shadow': {
-      const prefix = effect.kind === 'inner-shadow' ? 'inset,' : '';
-      const colorHex = rgbaToHex(effect.color);
-      return `${prefix}${effect.offset.x},${effect.offset.y},${effect.radius},${effect.spread},${colorHex}`;
-    }
+/**
+ * Format a single Figma Effect for LLM display — strip defaults.
+ */
+export function formatEffectForLLM(effect: any): string {
+  if (!effect || typeof effect !== 'object') return 'blur(0)';
+
+  if (effect.type === 'LAYER_BLUR') return `blur(${effect.radius ?? 0})`;
+  if (effect.type === 'BACKGROUND_BLUR') return `bgblur(${effect.radius ?? 0})`;
+
+  if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
+    const prefix = effect.type === 'INNER_SHADOW' ? 'inset,' : '';
+    const color = effect.color || { r: 0, g: 0, b: 0, a: 0.1 };
+    const offset = effect.offset || { x: 0, y: 0 };
+    return `${prefix}${offset.x},${offset.y},${effect.radius ?? 0},${effect.spread ?? 0},${rgbaToHex(color)}`;
   }
+
+  return 'blur(0)';
 }
 
-function effectFromFigma(figmaEffect: any): EffectValue {
-  if (figmaEffect.type === 'DROP_SHADOW' || figmaEffect.type === 'INNER_SHADOW') {
-    const color: RGBA = figmaEffect.color
-      ? { r: figmaEffect.color.r, g: figmaEffect.color.g, b: figmaEffect.color.b, a: figmaEffect.color.a ?? 1 }
-      : { r: 0, g: 0, b: 0, a: 0.1 };
-    return {
-      kind: figmaEffect.type === 'INNER_SHADOW' ? 'inner-shadow' : 'drop-shadow',
-      color,
-      offset: figmaEffect.offset || { x: 0, y: 0 },
-      radius: figmaEffect.radius ?? 0,
-      spread: figmaEffect.spread ?? 0,
-    };
+function figmaEffectsEqual(a: any, b: any): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === 'LAYER_BLUR' || a.type === 'BACKGROUND_BLUR') {
+    return a.radius === b.radius;
   }
-  if (figmaEffect.type === 'LAYER_BLUR' || figmaEffect.type === 'BACKGROUND_BLUR') {
-    return {
-      kind: 'blur',
-      type: figmaEffect.type === 'BACKGROUND_BLUR' ? 'background' : 'layer',
-      radius: figmaEffect.radius ?? 0,
-    };
-  }
-  // Fallback
-  return { kind: 'blur', type: 'layer', radius: 0 };
-}
-
-function effectToFigma(effect: EffectValue): any {
-  switch (effect.kind) {
-    case 'drop-shadow':
-      return {
-        type: 'DROP_SHADOW',
-        color: effect.color,
-        offset: effect.offset,
-        radius: effect.radius,
-        spread: effect.spread,
-        visible: true,
-        blendMode: 'NORMAL',
-      };
-    case 'inner-shadow':
-      return {
-        type: 'INNER_SHADOW',
-        color: effect.color,
-        offset: effect.offset,
-        radius: effect.radius,
-        spread: effect.spread,
-        visible: true,
-        blendMode: 'NORMAL',
-      };
-    case 'blur':
-      return {
-        type: effect.type === 'background' ? 'BACKGROUND_BLUR' : 'LAYER_BLUR',
-        radius: effect.radius,
-        visible: true,
-      };
-  }
-}
-
-function effectsEqual(a: EffectValue, b: EffectValue): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'blur' && b.kind === 'blur') {
-    return a.type === b.type && a.radius === b.radius;
-  }
-  if ((a.kind === 'drop-shadow' || a.kind === 'inner-shadow') &&
-      (b.kind === 'drop-shadow' || b.kind === 'inner-shadow')) {
-    return (
-      a.offset.x === b.offset.x &&
-      a.offset.y === b.offset.y &&
-      a.radius === b.radius &&
-      a.spread === b.spread &&
-      Math.abs(a.color.r - b.color.r) < 0.01 &&
-      Math.abs(a.color.g - b.color.g) < 0.01 &&
-      Math.abs(a.color.b - b.color.b) < 0.01 &&
-      Math.abs(a.color.a - b.color.a) < 0.01
-    );
+  if (a.type === 'DROP_SHADOW' || a.type === 'INNER_SHADOW') {
+    const ac = a.color || { r: 0, g: 0, b: 0, a: 0 };
+    const bc = b.color || { r: 0, g: 0, b: 0, a: 0 };
+    return (a.offset?.x ?? 0) === (b.offset?.x ?? 0) &&
+      (a.offset?.y ?? 0) === (b.offset?.y ?? 0) &&
+      (a.radius ?? 0) === (b.radius ?? 0) &&
+      (a.spread ?? 0) === (b.spread ?? 0) &&
+      Math.abs(ac.r - bc.r) < 0.01 && Math.abs(ac.g - bc.g) < 0.01 &&
+      Math.abs(ac.b - bc.b) < 0.01 && Math.abs((ac.a ?? 1) - (bc.a ?? 1)) < 0.01;
   }
   return false;
 }
 
-export const effectSpec: PropertySpec<EffectValue[]> = {
+export const effectSpec = {
   xmlAttrs: ['shadow', 'effects'],
 
-  parseXml(value: string): EffectValue[] {
-    return value.split(';').map(s => s.trim()).filter(Boolean).map(parseSingleEffectXml);
+  parseXml(value: string): any[] {
+    return value.split(';').map(s => s.trim()).filter(Boolean).map(parseEffectToFigma);
   },
 
-  formatXml(value: EffectValue[]): string {
-    return value.map(formatSingleEffectXml).join(';');
+  formatXml(effects: any[]): string {
+    if (!effects || effects.length === 0) return '';
+    return effects.map(formatEffectForLLM).join(';');
   },
 
-  fromFigma(figmaValue: any): EffectValue[] {
+  fromFigma(figmaValue: any): any[] {
     if (!Array.isArray(figmaValue)) return [];
-    return figmaValue
-      .filter((e: any) => e.visible !== false)
-      .map(effectFromFigma);
+    return figmaValue.filter((e: any) => e.visible !== false);
   },
 
-  toFigma(value: EffectValue[]): any[] {
-    return value.map(effectToFigma);
+  toFigma(value: any[]): any[] {
+    return value;
   },
 
-  isEqual(a: EffectValue[], b: EffectValue[]): boolean {
+  isEqual(a: any[], b: any[]): boolean {
     if (a.length !== b.length) return false;
-    return a.every((v, i) => effectsEqual(v, b[i]));
+    return a.every((v, i) => figmaEffectsEqual(v, b[i]));
   },
 
   defaultValue: [],

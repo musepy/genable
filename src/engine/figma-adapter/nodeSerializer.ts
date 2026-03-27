@@ -92,7 +92,9 @@ export class NodeSerializer {
                         value = readPaints(rawValue); // filter invisible, keep Figma format
                     }
                 } else if (figmaKey === 'effects') {
-                    value = rawValue;
+                    if (rawValue) {
+                        value = readEffects(rawValue); // filter invisible, keep Figma format
+                    }
                 } else if (figmaKey === 'lineHeight' || figmaKey === 'letterSpacing') {
                     if (rawValue && typeof rawValue === 'object' && rawValue.unit === 'AUTO') {
                         value = undefined; // AUTO = default, skip
@@ -104,9 +106,9 @@ export class NodeSerializer {
                 }
 
                 if (value !== undefined) {
-                    // fills/strokes: skip PropertyTransformer.isEqual — it only handles SOLID
-                    // paints and returns [] for gradients, causing false prune. Just check length.
-                    if (figmaKey === 'fills' || figmaKey === 'strokes') {
+                    // fills/strokes/effects: skip PropertyTransformer.isEqual — it loses
+                    // non-SOLID paints and non-standard effects, causing false prune.
+                    if (figmaKey === 'fills' || figmaKey === 'strokes' || figmaKey === 'effects') {
                         if (Array.isArray(value) && value.length > 0) props[dslKey] = value;
                     } else {
                         if (pruneDefaults && meta?.defaultValue !== undefined) {

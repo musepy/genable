@@ -12,7 +12,7 @@
  */
 
 import type { NodeLayer } from '../../schema/layerSchema';
-import { paintSpec, effectSpec, constraintsSpec } from '../../domain/property-specs';
+import { paintSpec, constraintsSpec, formatEffectForLLM } from '../../domain/property-specs';
 
 // ── Constants ──
 
@@ -212,22 +212,9 @@ function parseHexForSpec(hex: string): { r: number; g: number; b: number } {
 
 function formatEffects(effects: any[]): string | null {
   if (!effects || !Array.isArray(effects) || effects.length === 0) return null;
-
-  const normalized = effects.map((e: any) => {
-    const n = { ...e };
-    if ('blur' in n && !('radius' in n)) n.radius = n.blur;
-    if (typeof n.color === 'string') {
-      const parsed = parseHexForSpec(n.color);
-      const hex = n.color.replace('#', '');
-      const a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1;
-      n.color = { ...parsed, a };
-    }
-    return n;
-  });
-
-  const irEffects = effectSpec.fromFigma(normalized);
-  if (irEffects.length === 0) return null;
-  return effectSpec.formatXml(irEffects);
+  const visible = effects.filter((e: any) => e && e.visible !== false);
+  if (visible.length === 0) return null;
+  return visible.map(formatEffectForLLM).join(';');
 }
 
 function compactPadding(props: Record<string, any>): [string, string] | null {

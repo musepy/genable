@@ -205,8 +205,8 @@ const EXPANDERS: Record<string, Expander> = {
     return {};
   },
 
-  blur: (v) => ({ effects: [{ kind: 'blur' as const, type: 'layer', radius: Number(v) }] }),
-  bgblur: (v) => ({ effects: [{ kind: 'blur' as const, type: 'background', radius: Number(v) }] }),
+  blur: (v) => ({ effects: [{ type: 'LAYER_BLUR', radius: Number(v), visible: true }] }),
+  bgblur: (v) => ({ effects: [{ type: 'BACKGROUND_BLUR', radius: Number(v), visible: true }] }),
 
   // ── Shape ──────────────────────────────────────────────────────────────
   radius: (v) => {

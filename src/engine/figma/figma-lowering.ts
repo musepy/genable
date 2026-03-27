@@ -6,8 +6,8 @@
  * LLM object syntax ({color, blendMode, opacity}), and raw Figma Paints.
  */
 
-import type { EffectValue, UnitValue } from '../../domain/design-ir';
-import { effectSpec, unitValueSpec, parsePaintToFigma } from '../../domain/property-specs';
+import type { UnitValue } from '../../domain/design-ir';
+import { unitValueSpec, parsePaintToFigma, parseEffectToFigma } from '../../domain/property-specs';
 import { parseHexToRGBA } from '../../domain/property-specs';
 
 /**
@@ -33,40 +33,27 @@ export function lowerPaints(paints: any[]): any[] {
 }
 
 /**
- * Convert an array of effect values to Figma Effect[] format.
+ * Convert an array of effect inputs to Figma Effect[] format.
  *
- * Accepts both:
- *   - EffectValue[] (canonical IR from xml-interpreter)
- *   - raw Effect objects (legacy format from xmlDesignParser)
+ * Accepts:
+ *   - "0,4,8,0,#00000040"      → drop shadow
+ *   - "blur(10)"               → layer blur
+ *   - {type:'DROP_SHADOW', …}  → already Figma Effect, normalize
  */
 export function lowerEffects(effects: any[]): any[] {
   return effects.map(item => {
-    // Canonical IR EffectValue (has 'kind' discriminant)
-    if (typeof item === 'object' && item !== null && 'kind' in item) {
-      return effectSpec.toFigma([item as EffectValue])[0];
-    }
-    // Legacy: raw Effect object — normalize
+    if (typeof item === 'string') return parseEffectToFigma(item);
     if (typeof item !== 'object' || item === null || !item.type) {
       throw new Error(`Invalid effect format: ${JSON.stringify(item)}`);
     }
-    const normalized: any = { ...item };
-    // Convert legacy "blur" to "radius"
-    if ('blur' in normalized && !('radius' in normalized)) {
-      normalized.radius = normalized.blur;
-      delete normalized.blur;
-    }
-    // Convert hex color string to RGBA object
-    if (typeof normalized.color === 'string') {
-      const rgba = parseHexToRGBA(normalized.color);
-      normalized.color = rgba;
-    }
-    // Defaults
-    if (!normalized.blendMode) normalized.blendMode = 'NORMAL';
-    if (normalized.visible === undefined) normalized.visible = true;
-    if ((normalized.type === 'DROP_SHADOW' || normalized.type === 'INNER_SHADOW') && !normalized.offset) {
-      normalized.offset = { x: 0, y: 0 };
-    }
-    return normalized;
+    // Figma Effect object — fill defaults
+    const e: any = { ...item };
+    if ('blur' in e && !('radius' in e)) { e.radius = e.blur; delete e.blur; }
+    if (typeof e.color === 'string') e.color = parseHexToRGBA(e.color);
+    if (!e.blendMode && (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW')) e.blendMode = 'NORMAL';
+    if (e.visible === undefined) e.visible = true;
+    if ((e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') && !e.offset) e.offset = { x: 0, y: 0 };
+    return e;
   });
 }
 

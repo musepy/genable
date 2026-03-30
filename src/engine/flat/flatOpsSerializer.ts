@@ -12,6 +12,7 @@
  */
 
 import type { NodeLayer } from '../../schema/layerSchema';
+import { parseHexToRGBA } from '../../utils/colorUtils';
 import { paintSpec, constraintsSpec, formatEffectForLLM } from '../../domain/property-specs';
 
 // ── Constants ──
@@ -170,11 +171,11 @@ function formatFills(fills: any[]): { attr: string; value: string } | null {
 
   const normalized = fills.map((f: any) => {
     if (typeof f === 'string') {
-      return { type: 'SOLID', color: parseHexForSpec(f), opacity: 1 };
+      return { type: 'SOLID', color: parseHexToRGBA(f), opacity: 1 };
     }
     if (f && typeof f === 'object' && f.stops && !f.gradientStops) {
       return { ...f, gradientStops: f.stops.map((s: any) => ({
-        color: typeof s.color === 'string' ? parseHexForSpec(s.color) : (s.color || { r: 0, g: 0, b: 0, a: 1 }),
+        color: typeof s.color === 'string' ? parseHexToRGBA(s.color) : (s.color || { r: 0, g: 0, b: 0, a: 1 }),
         position: s.position ?? 0,
       }))};
     }
@@ -189,25 +190,6 @@ function formatFills(fills: any[]): { attr: string; value: string } | null {
 
   if (irPaints.length === 1) return { attr: 'fill', value: formatted };
   return { attr: 'fills', value: formatted };
-}
-
-function parseHexForSpec(hex: string): { r: number; g: number; b: number } {
-  const clean = hex.replace('#', '');
-  if (clean.length >= 6) {
-    return {
-      r: parseInt(clean.slice(0, 2), 16) / 255,
-      g: parseInt(clean.slice(2, 4), 16) / 255,
-      b: parseInt(clean.slice(4, 6), 16) / 255,
-    };
-  }
-  if (clean.length === 3) {
-    return {
-      r: parseInt(clean[0] + clean[0], 16) / 255,
-      g: parseInt(clean[1] + clean[1], 16) / 255,
-      b: parseInt(clean[2] + clean[2], 16) / 255,
-    };
-  }
-  return { r: 0, g: 0, b: 0 };
 }
 
 function formatEffects(effects: any[]): string | null {

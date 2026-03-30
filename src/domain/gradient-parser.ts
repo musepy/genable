@@ -17,8 +17,17 @@
  *   - Opacity: N% after color (optional, encoded in color.a)
  */
 
-import type { GradientType, ColorStop, RGBA } from './design-ir';
-import { parseHexToRGBA } from './property-specs';
+import { parseHexToRGBA } from '../utils/colorUtils';
+import type { RGBA } from '../utils/colorUtils';
+
+// ─── Gradient domain types ──────────────────────────────────────────────────
+
+export type GradientType = 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND';
+
+export interface ColorStop {
+  color: RGBA;
+  position: number;
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

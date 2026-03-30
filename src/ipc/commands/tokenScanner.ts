@@ -6,6 +6,7 @@
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
+import { rgbaToHex } from '../../utils/colorUtils';
 
 export interface TokenSnapshot {
   colors: Record<string, string>;
@@ -71,7 +72,7 @@ async function buildTokenSnapshot(): Promise<TokenSnapshot> {
     const value = v.valuesByMode[defaultModeId];
     if (value && typeof value === 'object' && 'r' in value) {
       const rgb = value as { r: number; g: number; b: number; a?: number };
-      colors[v.name] = rgbToHex(rgb.r, rgb.g, rgb.b);
+      colors[v.name] = rgbaToHex(rgb);
     }
   }
 
@@ -100,7 +101,7 @@ async function buildTokenSnapshot(): Promise<TokenSnapshot> {
     for (const style of paintStyles.slice(0, 50)) {
       if (style.paints.length > 0 && style.paints[0].type === 'SOLID') {
         const paint = style.paints[0] as SolidPaint;
-        colors[style.name] = rgbToHex(paint.color.r, paint.color.g, paint.color.b);
+        colors[style.name] = rgbaToHex(paint.color);
       }
     }
   }
@@ -113,7 +114,3 @@ async function buildTokenSnapshot(): Promise<TokenSnapshot> {
   };
 }
 
-function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
-}

@@ -16,16 +16,23 @@
  * specs — they pass through as-is via coerceValue().
  */
 
-import type {
-  UnitValue,
-  ConstraintValue,
-  FontNameValue,
-  RGBA,
-  GradientType,
-  ConstraintType,
-  Vector,
-} from './design-ir';
+import { parseHexToRGBA, rgbaToHex } from '../utils/colorUtils';
+export { parseHexToRGBA, rgbaToHex };
+import type { RGBA } from '../utils/colorUtils';
+import type { GradientType } from './gradient-parser';
 import { isGradientString, parseGradient, getGradientTransform } from './gradient-parser';
+
+// ═══════════════════════════════════════════════
+// Domain types (identical to Figma API shapes)
+// ═══════════════════════════════════════════════
+
+export type UnitType = 'PIXELS' | 'PERCENT' | 'AUTO';
+export interface UnitValue { value: number; unit: UnitType; }
+
+export type ConstraintType = 'MIN' | 'CENTER' | 'MAX' | 'STRETCH' | 'SCALE';
+export interface ConstraintValue { horizontal: ConstraintType; vertical: ConstraintType; }
+
+export interface FontNameValue { family: string; style: string; }
 
 // ═══════════════════════════════════════════════
 // PropertySpec Interface
@@ -48,39 +55,6 @@ export interface PropertySpec<T> {
   defaultValue?: T;
 }
 
-// ═══════════════════════════════════════════════
-// Color helpers (shared across specs)
-// ═══════════════════════════════════════════════
-
-export function parseHexToRGBA(hex: string): RGBA {
-  const clean = hex.replace('#', '');
-  if (clean.length === 3) {
-    const r = parseInt(clean[0] + clean[0], 16) / 255;
-    const g = parseInt(clean[1] + clean[1], 16) / 255;
-    const b = parseInt(clean[2] + clean[2], 16) / 255;
-    return { r, g, b, a: 1 };
-  }
-  if (clean.length === 6 || clean.length === 8) {
-    const r = parseInt(clean.slice(0, 2), 16) / 255;
-    const g = parseInt(clean.slice(2, 4), 16) / 255;
-    const b = parseInt(clean.slice(4, 6), 16) / 255;
-    const a = clean.length === 8 ? parseInt(clean.slice(6, 8), 16) / 255 : 1;
-    if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a)) {
-      return { r: 0, g: 0, b: 0, a: 1 };
-    }
-    return { r, g, b, a };
-  }
-  return { r: 0, g: 0, b: 0, a: 1 };
-}
-
-export function rgbaToHex(rgba: RGBA): string {
-  const toHex = (c: number) => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0');
-  const hex = `#${toHex(rgba.r)}${toHex(rgba.g)}${toHex(rgba.b)}`.toUpperCase();
-  if (rgba.a !== undefined && rgba.a < 1) {
-    return `${hex}${toHex(rgba.a)}`.toUpperCase();
-  }
-  return hex;
-}
 
 // ═══════════════════════════════════════════════
 // Paint — Direct Figma Paint format (no IR layer)

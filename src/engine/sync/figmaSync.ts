@@ -4,7 +4,8 @@
  */
 
 import { TokenMode } from './tokenParser';
-import { parseColor, rgbToHex, rgbaToHex, RGBA } from '../../utils/colorUtils';
+import { parseHexToRGBA, rgbaToHex } from '../../utils/colorUtils';
+import type { RGBA } from '../../utils/colorUtils';
 
 export class FigmaSync {
   /**
@@ -248,7 +249,7 @@ export class FigmaSync {
 
   private static parseValueForFigma(value: string, type: VariableResolvedDataType): any {
     if (type === 'COLOR') {
-       return parseColor(value);
+       return parseHexToRGBA(value);
     }
     if (type === 'FLOAT') {
       return parseFloat(value.replace('px', ''));
@@ -269,7 +270,7 @@ export class FigmaSync {
     if (type === 'COLOR') {
       const rgba = val as RGBA;
       if (!rgba) return '#000000';
-      return rgba.a === 1 ? rgbToHex(rgba.r, rgba.g, rgba.b) : rgbaToHex(rgba.r, rgba.g, rgba.b, rgba.a);
+      return rgbaToHex(rgba);
     }
     if (type === 'FLOAT') {
        return `${val}px`;

@@ -45,22 +45,9 @@ export async function exportNodeToBase64(
 
 // ── Replace property helpers (used by run grep + run sed) ──
 
-export function rgbaToHex(c: { r: number; g: number; b: number }): string {
-  const r = Math.round(c.r * 255);
-  const g = Math.round(c.g * 255);
-  const b = Math.round(c.b * 255);
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
-}
-
-export function hexToRgba(hex: string): { r: number; g: number; b: number } {
-  const h = hex.replace('#', '');
-  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
-  return {
-    r: parseInt(full.substring(0, 2), 16) / 255,
-    g: parseInt(full.substring(2, 4), 16) / 255,
-    b: parseInt(full.substring(4, 6), 16) / 255,
-  };
-}
+import { rgbaToHex as _rgbaToHex, parseHexToRGBA as _hexToRgba } from '../../utils/colorUtils';
+export const rgbaToHex = _rgbaToHex;
+export const hexToRgba = _hexToRgba;
 
 export function extractAllReplacePropertyValues(node: SceneNode, prop: string): (string | number)[] {
   switch (prop) {

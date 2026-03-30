@@ -21,7 +21,7 @@ import type {
   UnitValue,
   ConstraintValue,
   FontNameValue,
-} from '../design-ir';
+} from '../property-specs';
 
 // ═══════════════════════════════════════════════
 // Helper: assert roundtrip

@@ -126,25 +126,6 @@ const TAG_MAP: Record<string, string> = {
 
 // ── Helpers ──
 
-function parseHexForSpec(hex: string): { r: number; g: number; b: number } {
-  const clean = hex.replace('#', '');
-  if (clean.length >= 6) {
-    return {
-      r: parseInt(clean.slice(0, 2), 16) / 255,
-      g: parseInt(clean.slice(2, 4), 16) / 255,
-      b: parseInt(clean.slice(4, 6), 16) / 255,
-    };
-  }
-  if (clean.length === 3) {
-    return {
-      r: parseInt(clean[0] + clean[0], 16) / 255,
-      g: parseInt(clean[1] + clean[1], 16) / 255,
-      b: parseInt(clean[2] + clean[2], 16) / 255,
-    };
-  }
-  return { r: 0, g: 0, b: 0 };
-}
-
 function formatFillsJson(fills: any[]): { key: string; value: any } | null {
   if (!fills || !Array.isArray(fills) || fills.length === 0) return null;
 

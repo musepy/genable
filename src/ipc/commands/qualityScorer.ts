@@ -15,6 +15,8 @@
  *   6. layoutCoverage — frames with children should use auto-layout
  */
 
+import { rgbaToHex } from '../../utils/colorUtils';
+
 interface QualityIssue {
   nodeId: string;
   nodeName: string;
@@ -275,7 +277,7 @@ function scoreContrast(data: TreeData, issues: QualityIssue[]): number {
     } else {
       issues.push({
         nodeId: text.id, nodeName: text.name, dimension: 'contrast',
-        message: `contrast ${ratio.toFixed(1)}:1 < ${required}:1 AA (${fs}px on ${rgbToHex(bgColor)})`,
+        message: `contrast ${ratio.toFixed(1)}:1 < ${required}:1 AA (${fs}px on ${rgbaToHex(bgColor)})`,
         fix: `edit({node: "${text.name}#${text.id}", props: {fill: "#000000"}})`,
       });
     }
@@ -331,9 +333,6 @@ function contrastRatio(fg: RGB, bg: RGB): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function rgbToHex(c: RGB): string {
-  return '#' + [c.r, c.g, c.b].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
-}
 
 // ─── Dimension 6: Layout Coverage ────────────────────────────────
 

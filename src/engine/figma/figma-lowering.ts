@@ -6,9 +6,9 @@
  * LLM object syntax ({color, blendMode, opacity}), and raw Figma Paints.
  */
 
-import type { UnitValue } from '../../domain/design-ir';
+import { parseHexToRGBA } from '../../utils/colorUtils';
 import { unitValueSpec, parsePaintToFigma, parseEffectToFigma } from '../../domain/property-specs';
-import { parseHexToRGBA } from '../../domain/property-specs';
+import type { UnitValue } from '../../domain/property-specs';
 
 /**
  * Convert an array of paint inputs to Figma Paint[] format.

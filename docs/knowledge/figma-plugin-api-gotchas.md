@@ -26,19 +26,36 @@ frame.primaryAxisSizingMode = 'AUTO'   // 高度 hug — 这次能生效
 
 **规则**: 永远不要在 resize() 里给打算 HUG 的轴传垃圾值（0 或 1）。先 resize 再设 sizing mode。
 
-## 2. FILL 必须在 appendChild 之后
+## 2. FILL 必须在 appendChild 之后，且父级必须有 auto-layout
+
+FILL 只在 auto-layout 子节点上合法。不满足条件时 **Figma 直接 throw error**，不是静默回退。
 
 ```js
 // WRONG — 没有 auto-layout 父节点时设 FILL
 const child = figma.createFrame()
-child.layoutSizingVertical = 'FILL'  // ERROR
+child.layoutSizingVertical = 'FILL'  // ERROR: throws!
 parent.appendChild(child)
+
+// WRONG — 根节点（Page 子节点）设 FILL
+const root = figma.createFrame()
+root.layoutMode = 'VERTICAL'
+root.layoutSizingHorizontal = 'FILL'  // ERROR: Page 没有 auto-layout!
 
 // CORRECT — 先 appendChild，再设 FILL
 const child = figma.createFrame()
 parent.appendChild(child)            // parent 必须已有 layoutMode
 child.layoutSizingVertical = 'FILL'  // OK
+
+// CORRECT — 根节点用 HUG（自身有 auto-layout 即可）
+const root = figma.createFrame()
+root.layoutMode = 'VERTICAL'
+root.layoutSizingHorizontal = 'HUG'  // OK — HUG 只要求 self 有 auto-layout
 ```
+
+**FILL vs HUG 的前提条件不同**：
+- `FILL`: 需要 **parent** 有 auto-layout → 根节点不能用
+- `HUG`: 需要 **self** 有 auto-layout → 根节点可以用（只要自己设了 layoutMode）
+- `FIXED`: 无限制 → 任何地方都能用
 
 ## 3. HUG 父容器会压缩 FILL 子节点
 
@@ -367,3 +384,32 @@ const parent = stableFrame.findOne(n => n.name === 'ParentName')
 coll.renameMode(coll.modes[0].modeId, 'Light')
 // 单 mode collection 用 'Default'
 ```
+
+## clipsContent 默认裁剪导致视觉缺失
+
+`clipsContent` 默认 `true`——Frame 会裁剪所有超出边界的内容。
+
+**被裁掉的常见情况**：
+- 子节点的**阴影/发光效果**超出 Frame 边界 → 看不见
+- **文字不换行**（长文本/单行）超出 Frame 宽度 → 被截断
+- 子节点 **FILL 尺寸**溢出 → 超出部分被裁
+
+```js
+// 卡片有阴影 → clipsContent 必须关
+const card = figma.createFrame()
+card.clipsContent = false  // 阴影才能露出来
+card.effects = [{ type: 'DROP_SHADOW', ... }]
+
+// 图片/头像容器 → clipsContent 保持开（裁成形状）
+const avatar = figma.createFrame()
+avatar.clipsContent = true  // 裁成圆形
+avatar.cornerRadius = 50
+```
+
+**判断规则**：
+- 有阴影/发光效果 → `clipsContent = false`
+- 卡片、弹窗、下拉菜单 → `false`（效果要露出来）
+- 图片容器、头像、遮罩 → `true`（故意裁剪成形状）
+- 内容可能溢出但不想截断 → `false`
+
+**LLM 影响**：LLM 几乎不会主动设 `clipsContent: false`，导致阴影被默默裁掉——属于属性遗漏问题。

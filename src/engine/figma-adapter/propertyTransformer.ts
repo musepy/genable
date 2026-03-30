@@ -7,7 +7,7 @@
  */
 
 import { PROP_METADATA } from '../../constants/figma-api';
-import { rgbToHex } from '../../utils/colorUtils';
+import { rgbaToHex } from '../../utils/colorUtils';
 import { FigmaNodeData } from './figmaNodeData';
 
 export class PropertyTransformer {
@@ -55,7 +55,7 @@ export class PropertyTransformer {
                     return figmaValue
                         .map(paint => {
                             if (paint.type === 'SOLID') {
-                                return rgbToHex(paint.color.r, paint.color.g, paint.color.b);
+                                return rgbaToHex(paint.color);
                             }
                             // Legacy/Future: Gradient/Image handling can be added here
                             return null;
@@ -111,7 +111,7 @@ export class PropertyTransformer {
                     const shadow = eff as DropShadowEffect | InnerShadowEffect;
                     return {
                         ...base,
-                        color: rgbToHex(shadow.color.r, shadow.color.g, shadow.color.b), // Simple hex for now
+                        color: rgbaToHex(shadow.color), // Simple hex for now
                         offset: shadow.offset,
                         blur: shadow.radius, // Map radius to blur in DSL
                         spread: shadow.spread

@@ -6,8 +6,7 @@
  * Effects and other complex types use PropertySpec conversion.
  */
 
-import type { EffectValue, UnitValue, FontNameValue } from '../../domain/design-ir';
-import { effectSpec, unitValueSpec, fontNameSpec } from '../../domain/property-specs';
+import { effectSpec } from '../../domain/property-specs';
 
 /**
  * Read fills/strokes — filter invisible, keep Figma Paint format.
@@ -18,22 +17,8 @@ export function readPaints(figmaPaints: any): any[] {
 }
 
 /**
- * Read effects from a Figma Effect[] into canonical EffectValue[].
+ * Read effects — filter invisible, keep Figma Effect format.
  */
-export function readEffects(figmaEffects: any): EffectValue[] {
+export function readEffects(figmaEffects: any): any[] {
   return effectSpec.fromFigma(figmaEffects);
-}
-
-/**
- * Read lineHeight/letterSpacing from Figma {value, unit} into canonical UnitValue.
- */
-export function readUnitValue(figmaValue: any): UnitValue {
-  return unitValueSpec.fromFigma(figmaValue);
-}
-
-/**
- * Read fontName from Figma FontName into canonical FontNameValue.
- */
-export function readFontName(figmaFontName: any): FontNameValue {
-  return fontNameSpec.fromFigma(figmaFontName);
 }

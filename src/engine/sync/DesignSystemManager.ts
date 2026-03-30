@@ -4,7 +4,7 @@
  */
 
 import { RADIX_SCALES } from '../../constants/radixColors';
-import { parseColor } from '../../utils/colorUtils';
+import { parseHexToRGBA } from '../../utils/colorUtils';
 import { TokenMode, TokenParser } from './tokenParser';
 import { FigmaSync } from './figmaSync';
 
@@ -144,7 +144,7 @@ export class DesignSystemManager {
           variable = figma.variables.createVariable(varName, collection!, 'COLOR');
           existingVars.push(variable);
         }
-        const color = parseColor(hex);
+        const color = parseHexToRGBA(hex);
         if (color) variable.setValueForMode(modeId, color);
       });
     };

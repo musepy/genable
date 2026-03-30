@@ -51,6 +51,9 @@ const figmaSandboxSanitizer = {
 module.exports = function (buildOptions) {
   return {
     ...buildOptions,
+    // platform: 'neutral' ignores main/module by default — configure explicitly
+    // so packages like sucrase (which only expose main/module, not exports) resolve correctly
+    mainFields: ['module', 'main'],
     plugins: [
       {
         name: 'csv-text-loader',

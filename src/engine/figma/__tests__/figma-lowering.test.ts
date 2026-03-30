@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { lowerPaints, lowerEffects, lowerUnitValue } from '../figma-lowering';
-import type { UnitValue } from '../../../domain/design-ir';
+import type { UnitValue } from '../../../domain/property-specs';
 
 describe('lowerPaints', () => {
   it('converts hex string to Figma solid paint', () => {

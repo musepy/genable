@@ -6,7 +6,7 @@
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
-import { parseColor, rgbToHex, rgbaToHex } from '../../utils/colorUtils';
+import { parseHexToRGBA, rgbaToHex } from '../../utils/colorUtils';
 import { invalidateVariableCache } from '../../engine/actions/handlers/variableBindingHandler';
 import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
 
@@ -421,7 +421,7 @@ function guessType(value: string, name: string): string {
 }
 
 function parseValueForFigma(value: string, type: VariableResolvedDataType): any {
-  if (type === 'COLOR') return parseColor(value);
+  if (type === 'COLOR') return parseHexToRGBA(value);
   if (type === 'FLOAT') return parseFloat(value.replace('px', ''));
   if (type === 'BOOLEAN') return value.toLowerCase() === 'true';
   return value; // STRING
@@ -435,9 +435,7 @@ function formatVarValue(val: any, type: VariableResolvedDataType, allVars: Varia
   if (type === 'COLOR') {
     const rgba = val as { r: number; g: number; b: number; a?: number };
     if (!rgba || typeof rgba.r !== 'number') return '#???';
-    return rgba.a !== undefined && rgba.a < 1
-      ? rgbaToHex(rgba.r, rgba.g, rgba.b, rgba.a)
-      : rgbToHex(rgba.r, rgba.g, rgba.b);
+    return rgbaToHex(rgba);
   }
   if (type === 'FLOAT') return `${val}`;
   return String(val);

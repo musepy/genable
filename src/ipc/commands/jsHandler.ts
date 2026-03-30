@@ -14,15 +14,8 @@
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
+import { getFnCtor } from '../../utils/sandboxEval';
 
-// Preserve Function constructor through esbuild.
-// Figma sandbox blocks eval() but allows new Function().
-// esbuild: renames `Function` identifiers AND constant-folds string concat.
-// Solution: array join at runtime — esbuild can't fold ['Func','tion'].join('').
-function getFnCtor(): typeof Function {
-  const parts = ['Func', 'tion'];
-  return (globalThis as any)[parts.join('')];
-}
 const FunctionConstructor = getFnCtor();
 
 // ── Error Memory ──

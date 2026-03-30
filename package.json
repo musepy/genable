@@ -11,6 +11,7 @@
     "lucide-preact": "^0.562.0",
     "minisearch": "^7.2.0",
     "preact": ">=10",
+    "sucrase": "^3.35.1",
     "valibot": "^1.2.0",
     "ws": "^8.18.3"
   },

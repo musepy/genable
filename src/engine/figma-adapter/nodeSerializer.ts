@@ -13,7 +13,7 @@ import { NODE_TYPES } from '../../constants/figma-api';
 import { PROPERTY_META, FIGMA_TO_DSL } from '../../constants/figma-property-registry';
 import { PropertyTransformer } from './propertyTransformer';
 import { extractFigmaNodeData } from './figmaNodeData';
-import { readPaints, readEffects, readUnitValue, readFontName } from '../figma/figma-reader';
+import { readPaints, readEffects } from '../figma/figma-reader';
 
 export interface SerializationOptions {
     maxDepth?: number;

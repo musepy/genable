@@ -4,11 +4,10 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolCall, Part, LLMToolResult, getToolSystemInstructionDefault } from './types';
+import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, Part, LLMToolResult, getToolSystemInstructionDefault } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
-import { isGemini3Model } from '../modelFilter';
-import { GEMINI_CONFIG } from '../config';
 import { GeminiErrorHandler } from './gemini/geminiErrorHandler';
+import { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload } from './gemini/geminiFormat';
 import { GeminiLogger } from './gemini/geminiLogger';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
@@ -47,7 +46,7 @@ export class GeminiProvider implements LLMProvider {
     GeminiLogger.info(`generate() called, tools=${tools?.length || 0}, toolConfig=${JSON.stringify(toolConfig)}`);
 
     const config = this.buildConfig({ messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig });
-    const contents = messages.filter(m => m.role !== 'system').map(m => this.mapToGenAIContent(m));
+    const contents = messages.filter(m => m.role !== 'system').map(m => mapLLMMessageToGeminiContent(m));
 
     if (onProgress || onThinking) {
       return this.generateStreaming(contents, config, onProgress, onThinking, abortSignal);
@@ -110,32 +109,15 @@ export class GeminiProvider implements LLMProvider {
     toolConfig?: LLMGenerateOptions['toolConfig'];
   }): any {
     const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig } = opts;
-    const isGemini3 = isGemini3Model(this.modelName);
 
     const config: any = {
-      temperature: temperature ?? 0.4,
-      maxOutputTokens: maxTokens || GEMINI_CONFIG.MAX_OUTPUT_TOKENS,
+      ...buildGeminiGenerationConfig({
+        modelName: this.modelName, temperature, maxTokens, thinkingLevel, responseSchema,
+        hasTools: !!(tools && tools.length > 0),
+      }),
     };
 
-    // Thinking config
-    if (thinkingLevel) {
-      if (isGemini3) {
-        let apiLevel = thinkingLevel.toUpperCase();
-        if (apiLevel === 'MINIMAL') apiLevel = 'LOW';
-        config.thinkingConfig = { thinkingLevel: apiLevel };
-      } else {
-        const budgetMap: Record<string, number> = { minimal: 1024, low: 4096, medium: 10240, high: 16384 };
-        config.thinkingConfig = { includeThoughts: true, thinkingBudget: budgetMap[thinkingLevel] ?? 4096 };
-      }
-    }
-
-    // Response schema
-    if (responseSchema && !tools) {
-      config.responseMimeType = 'application/json';
-      config.responseSchema = responseSchema;
-    }
-
-    // System instruction — concatenate all system messages
+    // System instruction — SDK requires string format
     const systemMessages = messages.filter(m => m.role === 'system');
     if (systemMessages.length > 0) {
       config.systemInstruction = systemMessages
@@ -144,26 +126,10 @@ export class GeminiProvider implements LLMProvider {
     }
 
     // Tools + tool config
-    if (tools && tools.length > 0) {
-      config.tools = [{ functionDeclarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
-
-      let mode = toolConfig?.mode || 'AUTO';
-      const ANY_MODE_TOOL_LIMIT = 12;
-      if (mode === 'ANY' && tools.length > ANY_MODE_TOOL_LIMIT) {
-        console.warn(`[GeminiProvider] Downgrading toolConfig mode from ANY to AUTO: ${tools.length} tools exceeds limit ~${ANY_MODE_TOOL_LIMIT}`);
-        mode = 'AUTO';
-      }
-
-      const allowed = toolConfig?.allowedTools;
-      const declarationNames = tools.map(t => t.name);
-      const safeAllowed = allowed?.filter(name => declarationNames.includes(name));
-
-      config.toolConfig = {
-        functionCallingConfig: {
-          mode,
-          allowedFunctionNames: (safeAllowed && safeAllowed.length > 0) ? safeAllowed : undefined,
-        },
-      };
+    const toolsResult = buildGeminiToolsPayload(tools, toolConfig);
+    if (toolsResult) {
+      config.tools = toolsResult.tools;
+      config.toolConfig = toolsResult.toolConfig;
     }
 
     return config;
@@ -222,101 +188,8 @@ export class GeminiProvider implements LLMProvider {
 
   mapToLLMResponse(response: any): LLMResponse {
     GeminiErrorHandler.handleResponseError(response);
-
     const parts = response.candidates?.[0]?.content?.parts || [];
-    let text = '';
-    let thoughts = '';
-    const toolCalls: LLMToolCall[] = [];
-    const fullParts: Part[] = [];
-
-    const sharedSignature = parts.find((p: any) => p.thoughtSignature || p.thought_signature)
-      ? ((parts.find((p: any) => p.thoughtSignature || p.thought_signature) as any).thoughtSignature ||
-         (parts.find((p: any) => p.thoughtSignature || p.thought_signature) as any).thought_signature)
-      : undefined;
-
-    for (const part of parts) {
-      const partSig = (part as any).thoughtSignature || (part as any).thought_signature;
-      const sig = partSig || sharedSignature;
-
-      if ('functionCall' in part && part.functionCall) {
-        const toolCall: LLMToolCall = {
-          id: (part.functionCall as any).id || 'call_' + Math.random().toString(36).substring(7),
-          name: part.functionCall.name,
-          args: part.functionCall.args,
-          metadata: sig ? { thought_signature: sig } : undefined,
-          thought_signature: sig,
-        };
-        toolCalls.push(toolCall);
-        fullParts.push({ ...part, functionCall: { ...part.functionCall, id: toolCall.id }, thought_signature: sig });
-      } else if ('thought' in part && part.thought) {
-        const thoughtText = typeof part.thought === 'string' ? part.thought : (part as any).text || '';
-        if (thoughtText) thoughts += thoughtText;
-        fullParts.push({ ...part, thought_signature: sig } as any);
-      } else if ('text' in part && part.text) {
-        text += part.text;
-        fullParts.push({ ...part, thought_signature: sig } as any);
-      }
-    }
-
-    return {
-      text,
-      thoughts: thoughts || undefined,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      fullParts: fullParts.length > 0 ? fullParts : undefined,
-      usage: response.usageMetadata ? {
-        promptTokens: response.usageMetadata.promptTokenCount || 0,
-        completionTokens: response.usageMetadata.candidatesTokenCount || 0,
-        totalTokens: response.usageMetadata.totalTokenCount || 0,
-        cachedTokens: response.usageMetadata.cachedContentTokenCount || undefined,
-      } : undefined,
-    };
+    return mapGeminiPartsToLLMResponse(parts, response.usageMetadata);
   }
 
-  // ── Content Mapping (LLMMessage → GenAI format) ──────────────────────────────
-
-  private mapToGenAIContent(msg: LLMMessage): any {
-    const role = msg.role === 'model' ? 'model' : 'user';
-
-    return {
-      role,
-      parts: typeof msg.content === 'string'
-        ? [{ text: msg.content }]
-        : (msg.content as any[]).map((p) => {
-          const rawSig = p.thought_signature || p.thoughtSignature;
-          const sig = rawSig ? ensureBase64(rawSig) : undefined;
-
-          if (p.thought) {
-            if (p.thought === true && p.text) return { text: p.text, thought: true, ...(sig && { thoughtSignature: sig }) };
-            return { thought: p.thought, ...(sig && { thoughtSignature: sig }) };
-          }
-          if (p.functionCall) {
-            return { functionCall: { name: p.functionCall.name, args: p.functionCall.args }, ...(sig && { thoughtSignature: sig }) };
-          }
-          if (p.functionResponse) {
-            return { functionResponse: { name: p.functionResponse.name, response: p.functionResponse.response }, ...(sig && { thoughtSignature: sig }) };
-          }
-          if (p.inlineData) {
-            return { inlineData: { mimeType: p.inlineData.mimeType, data: p.inlineData.data } };
-          }
-          if (p.text) return { text: p.text };
-          return { text: '' };
-        }).filter((p: any) => {
-          if (p.text === '' && Object.keys(p).length === 1) return false;
-          return (p.text !== undefined || p.thought !== undefined || p.functionCall !== undefined || p.functionResponse !== undefined || p.inlineData !== undefined);
-        }),
-    };
-  }
-}
-
-// ── Utility ──────────────────────────────────────────────────────────────────
-
-function ensureBase64(str: string): string {
-  if (!str) return '';
-  const base64Regex = /^[A-Za-z0-9+/_-]+=*$/;
-  if (base64Regex.test(str)) return str;
-  try {
-    return Buffer.from(str).toString('base64');
-  } catch {
-    return str;
-  }
 }

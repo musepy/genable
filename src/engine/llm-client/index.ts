@@ -32,6 +32,9 @@ export { DashScopeProvider } from './providers/dashscope';
 export { ProxyProvider } from './providers/proxy';
 export { OPENROUTER_CONFIG, DASHSCOPE_CONFIG } from './config';
 
+// Gemini format utilities (shared by GeminiProvider + ProxyProvider)
+export { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload, ensureBase64 } from './providers/gemini/geminiFormat';
+
 
 
 

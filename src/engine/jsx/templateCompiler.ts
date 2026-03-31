@@ -111,6 +111,8 @@ export function preprocessJsx(jsx: string): string {
   processed = processed.replace(tagPattern, (_, slash, tag) => {
     return `<${slash}${TAG_CAPITALIZE[tag] || tag}`;
   });
+  // Strip HTML comments (LLM copies from guidelines that use <!-- --> annotations)
+  processed = processed.replace(/<!--[\s\S]*?-->/g, '');
   // Convert set:attrName to __set_attrName for sucrase compatibility
   processed = processed.replace(/\bset:(\w+)/g, '__set_$1');
   return processed;

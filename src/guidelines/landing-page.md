@@ -40,22 +40,22 @@
 ```xml
 <frame name='Landing Page' layout='column' alignItems='center' w='1440' height='hug' bg='#FFFFFF'>
   <frame name='Navbar' layout='row' justifyContent='space-between' alignItems='center' p='16 80' width='fill' height='hug' bg='#FFFFFF'>
-    <!-- Logo, nav links, CTA -->
+    {/* Logo, nav links, CTA */}
   </frame>
   <frame name='Hero' layout='column' gap='24' alignItems='center' p='80 120' width='fill' height='hug' bg='#F9FAFB'>
-    <!-- Headline, subheadline, CTA buttons -->
+    {/* Headline, subheadline, CTA buttons */}
   </frame>
   <frame name='Features' layout='column' gap='48' alignItems='center' p='80 120' width='fill' height='hug' bg='#FFFFFF'>
-    <!-- Section title + feature grid -->
+    {/* Section title + feature grid */}
   </frame>
   <frame name='Testimonials' layout='column' gap='48' alignItems='center' p='80 120' width='fill' height='hug' bg='#F9FAFB'>
-    <!-- Testimonial cards -->
+    {/* Testimonial cards */}
   </frame>
   <frame name='CTA Section' layout='column' gap='24' alignItems='center' p='80 120' width='fill' height='hug' bg='#4F46E5'>
-    <!-- Final call to action -->
+    {/* Final call to action */}
   </frame>
   <frame name='Footer' layout='row' justifyContent='space-between' p='40 80' width='fill' height='hug' bg='#111827'>
-    <!-- Footer content -->
+    {/* Footer content */}
   </frame>
 </frame>
 ```
@@ -119,7 +119,7 @@
       <text name='Title' size='18' weight='Bold' fill='#111827'>Lightning Fast</text>
       <text name='Description' size='14' fill='#6B7280' lineHeight='160%' width='fill'>Deploy in seconds with our optimized infrastructure and global CDN.</text>
     </frame>
-    <!-- Feature 2 and 3 follow the same pattern -->
+    {/* Feature 2 and 3 follow the same pattern */}
   </frame>
 </frame>
 ```

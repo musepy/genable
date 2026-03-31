@@ -45,10 +45,10 @@
     <icon name='More' icon='lucide:more-horizontal' size='24' fill='#000000'/>
   </frame>
   <frame name='Content' layout='column' gap='16' p='16' width='fill' height='fill' bg='transparent'>
-    <!-- Screen content goes here -->
+    {/* Screen content goes here */}
   </frame>
   <frame name='Bottom Nav' layout='row' justifyContent='space-around' alignItems='center' p='8 0 34 0' width='fill' h='83' bg='#FFFFFF' shadow='0,-1,0,0,#0000001A'>
-    <!-- Tab items -->
+    {/* Tab items */}
   </frame>
 </frame>
 ```
@@ -131,7 +131,7 @@
 <frame name='Section' layout='column' gap='0' width='fill' height='hug' bg='transparent'>
   <text name='Section Header' size='13' fill='#6D6D72' p='16 16 8 16'>GENERAL</text>
   <frame name='Group' layout='column' gap='0' width='fill' height='hug' bg='#FFFFFF' corner='10' p='0 16'>
-    <!-- List items here, separated by 1px rects -->
+    {/* List items here, separated by 1px rects */}
   </frame>
 </frame>
 ```

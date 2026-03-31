@@ -33,7 +33,7 @@
       <text name='App Name' size='18' weight='Bold' fill='#FFFFFF'>AppName</text>
     </frame>
     <frame name='Nav Section' layout='column' gap='4' width='fill' height='fill' bg='transparent' p='0 0 16 0'>
-      <!-- Nav items go here -->
+      {/* Nav items go here */}
     </frame>
     <frame name='User Section' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='transparent' p='12 0 0 0'>
       <frame name='Avatar' w='32' h='32' corner='16' bg='#334155'/>
@@ -41,7 +41,7 @@
     </frame>
   </frame>
   <frame name='Main Content' layout='column' gap='24' width='fill' height='fill' bg='transparent' p='24'>
-    <!-- Top bar, metric cards, charts, tables go here -->
+    {/* Top bar, metric cards, charts, tables go here */}
   </frame>
 </frame>
 ```
@@ -82,7 +82,7 @@
 
 ```xml
 <frame name='Metrics Row' layout='row' gap='16' width='fill' height='hug' bg='transparent'>
-  <!-- 3-4 Metric Cards with width='fill' each -->
+  {/* 3-4 Metric Cards with width='fill' each */}
 </frame>
 ```
 
@@ -121,7 +121,7 @@
     </frame>
   </frame>
   <frame name='Chart Canvas' layout='row' width='fill' h='240' bg='transparent'>
-    <!-- Bar/line chart placeholder content -->
+    {/* Bar/line chart placeholder content */}
   </frame>
 </frame>
 ```

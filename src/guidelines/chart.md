@@ -29,14 +29,14 @@
   <frame name='Header' layout='row' justifyContent='space-between' alignItems='center' width='fill' height='hug' bg='transparent'>
     <text name='Title' size='16' weight='Bold' fill='#111827'>Revenue Overview</text>
     <frame name='Legend' layout='row' gap='16' width='hug' height='hug' bg='transparent'>
-      <!-- Legend items -->
+      {/* Legend items */}
     </frame>
   </frame>
   <frame name='Chart Canvas' layout='row' gap='8' width='fill' h='240' bg='transparent'>
-    <!-- Y-axis + data area + optional right axis -->
+    {/* Y-axis + data area + optional right axis */}
   </frame>
   <frame name='X Labels' layout='row' justifyContent='space-between' p='0 40 0 40' width='fill' height='hug' bg='transparent'>
-    <!-- X-axis labels -->
+    {/* X-axis labels */}
   </frame>
 </frame>
 ```

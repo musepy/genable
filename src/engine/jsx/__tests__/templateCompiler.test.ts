@@ -64,6 +64,17 @@ describe('preprocessJsx', () => {
     expect(preprocessJsx(input)).toBe('<Frame><Text>Hi</Text></Frame>');
   });
 
+  it('strips HTML comments', () => {
+    expect(preprocessJsx('<Frame><!-- Navbar --></Frame>')).toBe(
+      '<Frame></Frame>',
+    );
+  });
+
+  it('strips multi-line HTML comments', () => {
+    const input = '<Frame>\n  <!-- Logo,\n  nav links -->\n</Frame>';
+    expect(preprocessJsx(input)).toBe('<Frame>\n  \n</Frame>');
+  });
+
   it('converts all known lowercase tags', () => {
     expect(preprocessJsx('<rect/>')).toBe('<Rect/>');
     expect(preprocessJsx('<ellipse/>')).toBe('<Ellipse/>');

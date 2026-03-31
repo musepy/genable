@@ -42,10 +42,10 @@
     <text name='Subtitle' size='14' fill='#6B7280'>Welcome back to your account</text>
   </frame>
   <frame name='Fields' layout='column' gap='16' width='fill' height='hug' bg='transparent'>
-    <!-- Input fields go here -->
+    {/* Input fields go here */}
   </frame>
   <frame name='Actions' layout='column' gap='12' width='fill' height='hug' bg='transparent'>
-    <!-- Buttons go here -->
+    {/* Buttons go here */}
   </frame>
 </frame>
 ```

@@ -36,7 +36,7 @@
       <text name='Action' size='14' weight='Medium' fill='#4F46E5'>Read more</text>
     </frame>
   </frame>
-  <!-- More cards follow the same structure -->
+  {/* More cards follow the same structure */}
 </frame>
 ```
 

@@ -32,17 +32,17 @@
   <frame name='Table Header' layout='row' justifyContent='space-between' alignItems='center' p='16 20' width='fill' height='hug' bg='transparent'>
     <text name='Title' size='16' weight='Bold' fill='#111827'>Users</text>
     <frame name='Actions' layout='row' gap='12' alignItems='center' width='hug' height='hug' bg='transparent'>
-      <!-- Search, filter, add buttons -->
+      {/* Search, filter, add buttons */}
     </frame>
   </frame>
   <frame name='Column Headers' layout='row' gap='0' p='12 20' width='fill' height='hug' bg='#F9FAFB'>
-    <!-- Column header texts -->
+    {/* Column header texts */}
   </frame>
   <frame name='Table Body' layout='column' gap='0' width='fill' height='hug' bg='transparent'>
-    <!-- Data rows -->
+    {/* Data rows */}
   </frame>
   <frame name='Pagination' layout='row' justifyContent='space-between' alignItems='center' p='12 20' width='fill' height='hug' bg='transparent' stroke='#F3F4F6' strokeW='1'>
-    <!-- Pagination controls -->
+    {/* Pagination controls */}
   </frame>
 </frame>
 ```

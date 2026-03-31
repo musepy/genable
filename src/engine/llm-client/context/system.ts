@@ -127,7 +127,7 @@ These rules address the most common design quality failures. Violating them prod
         const toolsBody = hasCategories
             ? serializeToolsByPhase(tools)
             : serializeTools(tools);
-        parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, validate designs, or perform rendering actions:\n\n' + toolsBody);
+        parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, create designs, inspect results, and modify properties:\n\n' + toolsBody);
     } else {
         parts.push('## AVAILABLE TOOLS\nNo specific tools are available for this session.');
     }

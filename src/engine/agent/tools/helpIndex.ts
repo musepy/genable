@@ -10,6 +10,35 @@ import MiniSearch from 'minisearch';
 import catalog from '../../../generated/help-catalog.json';
 
 // ==========================================
+// Legacy tool name sanitizer
+// ==========================================
+
+/**
+ * Replace deprecated CLI tool names in help content with current tool names.
+ * Prevents help articles from teaching the LLM to call tools that no longer exist.
+ */
+function sanitizeLegacyHelp(text: string): string {
+  if (!text) return text;
+  return text
+    // CLI commands → structured tool equivalents (in prose/examples)
+    .replace(/\bmk\s+\//g, '⚠️[use jsx] /')
+    .replace(/\bcat\s+\//g, '⚠️[use inspect] /')
+    .replace(/\bcat\(/g, '⚠️[use inspect](')
+    .replace(/\btree\s+\//g, '⚠️[use inspect] /')
+    .replace(/\btree\(/g, '⚠️[use inspect](')
+    .replace(/\bls\s+\//g, '⚠️[use inspect] /')
+    .replace(/\bls\(/g, '⚠️[use inspect](')
+    .replace(/`mk`/g, '`jsx`')
+    .replace(/`ls`/g, '`inspect`')
+    .replace(/`tree`/g, '`inspect`')
+    .replace(/`cat`/g, '`inspect`')
+    .replace(/`man`/g, '`knowledge`')
+    .replace(/`grep`/g, '`search`')
+    .replace(/`sed`/g, '`search (replace mode)`')
+    .replace(/\brender\b(?!ing|ed|s)/gi, 'jsx');
+}
+
+// ==========================================
 // Types
 // ==========================================
 
@@ -35,7 +64,11 @@ class HelpIndex {
 
   constructor() {
     const data = catalog as HelpCatalog;
-    this.articles = data.articles;
+    // Sanitize legacy tool references in help content at load time
+    this.articles = data.articles.map(a => ({
+      ...a,
+      content: sanitizeLegacyHelp(a.content),
+    }));
 
     this.index = new MiniSearch<HelpArticle>({
       fields: ['id', 'title', 'keywords', 'whenToUse'],

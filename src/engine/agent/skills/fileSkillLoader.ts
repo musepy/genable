@@ -66,7 +66,22 @@ interface SkillFrontmatter {
  */
 function sanitizeLegacyToolReferences(text: string): string {
   if (!text) return text;
-  return text;
+  return text
+    // CLI run() wrapper → direct tool calls
+    .replace(/run\(\{command:\s*"man\s+/g, 'knowledge({topic: "')
+    .replace(/run\(\{command:\s*"grep\s+/g, 'search({query: "')
+    .replace(/run\(\{command:\s*"sed\s+/g, 'search({node: "')
+    .replace(/run\(\{command:\s*"rm\s+/g, 'structure({action: "delete", node: "')
+    .replace(/run\(\{command:\s*"mv\s+/g, 'structure({action: "move", node: "')
+    .replace(/run\(\{command:\s*"cp\s+/g, 'structure({action: "clone", node: "')
+    // Standalone CLI command names in code blocks/examples
+    .replace(/\bmk\s+\//g, 'jsx  /')
+    .replace(/\bcat\s+\//g, 'inspect /')
+    .replace(/\btree\s+\//g, 'inspect /')
+    .replace(/\bls\s+\//g, 'inspect /')
+    .replace(/\bman\s+(\w)/g, 'knowledge({topic: "$1')
+    // Render is fully removed
+    .replace(/\brender\b/gi, 'jsx');
 }
 
 /**

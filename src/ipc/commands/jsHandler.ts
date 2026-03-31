@@ -21,6 +21,9 @@ const FunctionConstructor = getFnCtor();
 // ── Error Memory ──
 
 const JS_MEMORY_KEY = 'js_api_lessons';
+const JS_MEMORY_VERSION_KEY = 'js_api_lessons_version';
+/** Bump this to clear stale lessons after major tool refactors. */
+const JS_MEMORY_VERSION = 2;
 const MAX_LESSONS = 20;
 
 interface JsLesson {
@@ -32,6 +35,13 @@ interface JsLesson {
 
 async function loadLessons(): Promise<JsLesson[]> {
   try {
+    // Clear stale lessons from old tool versions
+    const version = await figma.clientStorage.getAsync(JS_MEMORY_VERSION_KEY);
+    if (version !== JS_MEMORY_VERSION) {
+      await figma.clientStorage.setAsync(JS_MEMORY_KEY, []);
+      await figma.clientStorage.setAsync(JS_MEMORY_VERSION_KEY, JS_MEMORY_VERSION);
+      return [];
+    }
     const raw = await figma.clientStorage.getAsync(JS_MEMORY_KEY);
     if (raw && Array.isArray(raw)) return raw as JsLesson[];
   } catch { /* ignore */ }

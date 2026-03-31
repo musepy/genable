@@ -29,8 +29,6 @@ export interface CorrectionLog {
 export interface ToolCallRecord {
     id: string;
     name: string;
-    displayName?: string;
-    group?: string;
     parameters: any;
     status: 'pending' | 'running' | 'success' | 'error';
     startTime: number;

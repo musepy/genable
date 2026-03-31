@@ -8,8 +8,6 @@ import { ToolDefinition } from '../types';
 
 export const subtaskDefinition: ToolDefinition = {
   name: 'subtask',
-  category: 'control',
-  display: { displayName: 'Subtask', group: 'control' },
   executionStrategy: 'sequential',
   description: 'Delegate a focused sub-task to a child agent. Usage: subtask <prompt>. The child agent shares your tools and canvas but has its own iteration budget. Use for independent pieces of complex designs (e.g., sidebar, header, form section).',
   parameters: {

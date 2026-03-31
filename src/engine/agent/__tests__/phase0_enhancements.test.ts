@@ -161,11 +161,10 @@ describe('ToolLogEntry emission', () => {
     expect(entry.callId).toBe('call_1');
     expect(entry.toolName).toBe('echo');
     expect(entry.args).toEqual({ msg: 'hello' });
-    expect(entry.success).toBe(true);
+    expect(entry.error).toBeUndefined();
     expect(entry.isDuplicate).toBe(false);
     expect(entry.isNoop).toBe(false);
     expect(entry.durationMs).toBeGreaterThanOrEqual(0);
-    expect(entry.error).toBeUndefined();
   });
 });
 

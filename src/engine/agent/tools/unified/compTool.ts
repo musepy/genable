@@ -9,8 +9,6 @@ import { ToolDefinition } from '../types';
 
 export const compToolDefinition: ToolDefinition = {
   name: 'comp',
-  category: 'create',
-  display: { displayName: 'Components', group: 'design-system' },
   executionStrategy: 'sequential',
   mutates: true,
   description: `Manage Figma components and variants — create, combine, add props, list, instantiate.
@@ -67,12 +65,5 @@ Property types: TEXT, BOOLEAN, INSTANCE_SWAP.`,
       },
     },
     required: ['action'],
-  },
-  errors: {
-    NOT_A_FRAME: 'Node is not a frame and cannot be converted.',
-    NOT_A_COMPONENT: 'Node is not a component.',
-    COMBINE_REQUIRES_2: 'Combine requires at least 2 components.',
-    PROP_FAILED: 'Failed to add component property.',
-    MISSING_ARG: 'Missing required argument.',
   },
 };

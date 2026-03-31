@@ -155,8 +155,6 @@ export function useChat({
         const newToolCall: ToolCallRecord = {
           id: event.toolCall.id,
           name: event.toolCall.name,
-          displayName: event.toolCall.displayName,
-          group: event.toolCall.group,
           parameters: event.toolCall.args,
           status: 'running',
           startTime: event.timestamp,
@@ -174,7 +172,7 @@ export function useChat({
             if (tc.id !== event.toolResult.id) return tc
             return {
               ...tc,
-              status: event.toolResult.success ? 'success' : 'error',
+              status: event.toolResult.error ? 'error' : 'success',
               endTime: tc.startTime + event.toolResult.durationMs,
               error: event.toolResult.error,
               result: event.toolResult.raw,
@@ -388,8 +386,7 @@ export function useChat({
             const topic = (params.query || '').toLowerCase().trim()
             const content = (guidelinesCatalog as Record<string, string>)[topic]
             if (!content) {
-              return { success: false, error: { code: 'UNKNOWN_TOPIC',
-                message: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` } }
+              return { success: false, error: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` }
             }
             return { success: true, data: { topic, content } }
           }
@@ -401,8 +398,7 @@ export function useChat({
             const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
             const match = matchStyleGuide(queryTags, guides)
             if (!match) {
-              return { success: false, error: { code: 'NO_STYLE_MATCH',
-                message: `No style guide matched tags "${queryTags.join(', ')}". Use query(source="style-tags") to see available tags.` } }
+              return { success: false, error: `No style guide matched tags "${queryTags.join(', ')}". Use query(source="style-tags") to see available tags.` }
             }
             return {
               success: true,
@@ -446,8 +442,7 @@ export function useChat({
             const topic = topicOrQuery.toLowerCase().trim()
             const content = (guidelinesCatalog as Record<string, string>)[topic]
             if (!content) {
-              return { success: false, error: { code: 'UNKNOWN_TOPIC',
-                message: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` } }
+              return { success: false, error: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` }
             }
             return { success: true, data: { topic, content } }
           }
@@ -459,8 +454,7 @@ export function useChat({
             const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
             const match = matchStyleGuide(queryTags, guides)
             if (!match) {
-              return { success: false, error: { code: 'NO_STYLE_MATCH',
-                message: `No style guide matched tags "${queryTags.join(', ')}". Use knowledge({source: "style-tags"}) to see available tags.` } }
+              return { success: false, error: `No style guide matched tags "${queryTags.join(', ')}". Use knowledge({source: "style-tags"}) to see available tags.` }
             }
             return {
               success: true,

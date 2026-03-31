@@ -9,8 +9,6 @@ import { ToolDefinition } from '../types';
 
 export const structureDefinition: ToolDefinition = {
   name: 'structure',
-  category: 'modify',
-  display: { displayName: 'Structure', group: 'design' },
   executionStrategy: 'sequential',
   mutates: true,
   description: `Modify the design tree structure — move, delete, or clone nodes.
@@ -60,12 +58,5 @@ Node addressing: use Name#id refs from jsx/inspect results. "/" = page root. Glo
       },
     },
     required: ['action', 'node'],
-  },
-  errors: {
-    PATH_NOT_FOUND: 'No node found at the given path.',
-    MISSING_DEST: 'Move/clone requires a destination.',
-    INVALID_SOURCE: 'Cannot move/delete page root.',
-    INVALID_DEST: 'Destination is not a valid container.',
-    EXECUTION_ERROR: 'An error occurred during the operation.',
   },
 };

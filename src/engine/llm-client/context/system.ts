@@ -12,7 +12,7 @@
 
 import { ToolDefinition } from '../../agent/tools/types';
 import { CORE } from '../../prompt/promptRegistry';
-import { serializeTools, serializeToolsByPhase } from './toolSerializer';
+import { serializeTools } from './toolSerializer';
 
 /**
  * Build the static system prompt that is set once and never changes.
@@ -121,13 +121,9 @@ These rules address the most common design quality failures. Violating them prod
    - Also: sibling cards with different content lengths should ALL use h="fill" (sizingV:fill / stretch) so they share the same height. The CTA button stays at the bottom when using layout:column + space-between or by placing it last with the feature list taking w="fill".`
     );
 
-    // 5. Tool definitions (serialized, with category grouping)
+    // 5. Tool definitions
     if (tools.length > 0) {
-        const hasCategories = tools.some(t => t.category);
-        const toolsBody = hasCategories
-            ? serializeToolsByPhase(tools)
-            : serializeTools(tools);
-        parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, create designs, inspect results, and modify properties:\n\n' + toolsBody);
+        parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, create designs, inspect results, and modify properties:\n\n' + serializeTools(tools));
     } else {
         parts.push('## AVAILABLE TOOLS\nNo specific tools are available for this session.');
     }

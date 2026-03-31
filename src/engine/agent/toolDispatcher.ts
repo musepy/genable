@@ -7,12 +7,10 @@
  */
 
 import { LLMToolCall, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
-import { classifyError, categoryToErrorCode } from './retryPolicy';
 import { getOverflow } from './overflowStore';
 
 import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
-import { toolDisplayMap } from './tools';
 import { findClosestTool } from './tools/unified';
 import { presentForLLM } from './tools/unified/presentation';
 import { handleScratchCommand } from './scratchpad/handler';
@@ -36,11 +34,11 @@ export interface ToolLogEntry {
   args: any;
   startedAt: number;
   durationMs: number;
-  success: boolean;
   /** True if this exact call (name + args) was seen before in this run. */
   isDuplicate: boolean;
   /** True if the tool executed but produced no observable change. */
   isNoop: boolean;
+  /** Present = failure (ToolResponse convention). Absent = success. */
   error?: string;
 }
 
@@ -122,11 +120,11 @@ export class ToolDispatcher {
     this.toolExecutors['more'] = async (args: any) => {
       const id = Number(args?.id);
       if (!id || isNaN(id)) {
-        return { error: { code: 'MISSING_ARG', message: 'Usage: more <id>. The id comes from a truncated output message (overflow/N).' } };
+        return { error: 'Usage: more <id>. The id comes from a truncated output message (overflow/N).' };
       }
       const content = getOverflow(id);
       if (!content) {
-        return { error: { code: 'NOT_FOUND', message: `Overflow ${id} not found or expired. Only the last 5 truncated outputs are kept.` } };
+        return { error: `Overflow ${id} not found or expired. Only the last 5 truncated outputs are kept.` };
       }
       return { data: { listing: content } };
     };
@@ -167,13 +165,12 @@ export class ToolDispatcher {
 
       const toolName = tc.name;
 
-      // ── Dispatch tool (events/display) ──
-      const displayMeta = toolDisplayMap[toolName];
+      // ── Dispatch tool event ──
       this.config.emitRuntimeEvent({
         type: 'tool_call',
         iteration: iteration + 1,
         phase: 'execution',
-        toolCall: { id: tc.id, name: toolName, displayName: displayMeta?.displayName, group: displayMeta?.group, args: tc.args },
+        toolCall: { id: tc.id, name: toolName, args: tc.args },
       });
       this.config.onToolCall?.(tc);
 
@@ -191,7 +188,7 @@ export class ToolDispatcher {
             name: toolName,
             id: tc.id,
             response: {
-              error: { code: 'HOOK_SKIPPED', message: intercept.reason || `Tool "${toolName}" was blocked.` },
+              error: intercept.reason || `Tool "${toolName}" was blocked.`,
             },
             thought_signature: tc.thought_signature,
           });
@@ -211,8 +208,6 @@ export class ToolDispatcher {
         }
       }
 
-      const resultSuccess = result?.error == null;
-
       // ── Noop detection ──
       const isNoop = ToolDispatcher.isNoopResult(toolName, result);
 
@@ -220,7 +215,7 @@ export class ToolDispatcher {
       this.extractLastNodeId(result);
 
       this.config.onToolResult?.(tc, result);
-      const errorMessage = resultSuccess ? undefined : (result?.error?.message || result?.error?.code || 'Tool execution failed');
+      const errorMessage = result?.error ? (result.error || 'Tool execution failed') : undefined;
 
       // ── Emit ToolLogEntry ──
       const logEntry: ToolLogEntry = {
@@ -229,7 +224,6 @@ export class ToolDispatcher {
         args: tc.args,
         startedAt,
         durationMs,
-        success: resultSuccess,
         isDuplicate,
         isNoop,
         error: errorMessage,
@@ -247,9 +241,6 @@ export class ToolDispatcher {
         toolResult: {
           id: tc.id,
           name: toolName,
-          displayName: displayMeta?.displayName,
-          group: displayMeta?.group,
-          success: resultSuccess,
           durationMs,
           error: errorMessage,
           isDuplicate,
@@ -299,10 +290,7 @@ export class ToolDispatcher {
       }
       console.error(`[ToolDispatcher] Tool execution failed: ${tc.name}`, e);
       return {
-        error: {
-          code: categoryToErrorCode(classifyError(e)),
-          message: e.message,
-        },
+        error: e.message,
       };
     });
   }
@@ -318,7 +306,7 @@ export class ToolDispatcher {
     if (!this.allowedToolNames.has(tc.name)) {
       const suggestion = findClosestTool(tc.name);
       const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
-      return { error: { code: 'UNKNOWN_TOOL', message: `Unknown tool "${tc.name}".${hint}` } };
+      return { error: `Unknown tool "${tc.name}".${hint}` };
     }
 
     // ── Execute via local executor or IPC ──
@@ -332,12 +320,12 @@ export class ToolDispatcher {
         result = await this.ipcBridge.callTool(tc.name, tc.args);
       }
       if (result == null) {
-        return { error: { code: 'NO_TOOL_EXECUTOR', message: `Tool "${tc.name}" not available.` } };
+        return { error: `Tool "${tc.name}" not available.` };
       }
       return result;
     } catch (e: any) {
       return {
-        error: { code: 'TOOL_EXEC_EXCEPTION', message: `${tc.name}: ${e.message}` },
+        error: `${tc.name}: ${e.message}`,
       };
     }
   }

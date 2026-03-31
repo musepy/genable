@@ -10,8 +10,6 @@ import { ToolDefinition } from '../types';
 
 export const jsToolDefinition: ToolDefinition = {
   name: 'js',
-  category: 'control',
-  display: { displayName: 'JavaScript', group: 'system' },
   executionStrategy: 'sequential',
   mutates: true,
   description: `Execute JavaScript in the Figma plugin runtime — full figma.* API access.
@@ -38,11 +36,5 @@ Rules:
       },
     },
     required: ['code'],
-  },
-  errors: {
-    EMPTY_CODE: 'No code provided.',
-    EXECUTION_ERROR: 'JavaScript execution failed.',
-    BLOCKED_OPERATION: 'Operation blocked for safety.',
-    FIGMA_API_ERROR: 'Figma API validation error.',
   },
 };

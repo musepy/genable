@@ -10,8 +10,6 @@ import { ToolDefinition } from '../types';
 
 export const knowledgeDefinition: ToolDefinition = {
   name: 'knowledge',
-  category: 'knowledge',
-  display: { displayName: 'Knowledge', group: 'inspect' },
   executionStrategy: 'parallel',
   description: `Query design guidelines, style guides, and help documentation.
 
@@ -47,9 +45,5 @@ Guidelines topics: dashboard, form, landing-page, card-layout, navigation, mobil
         description: 'Comma-separated style tags (style source only)',
       },
     },
-  },
-  errors: {
-    UNKNOWN_TOPIC: 'Unknown topic.',
-    NO_STYLE_MATCH: 'No style guide matched the given tags.',
   },
 };

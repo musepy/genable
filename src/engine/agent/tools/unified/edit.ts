@@ -10,9 +10,8 @@ import type { ToolDefinition } from '../types';
 
 export const editDefinition: ToolDefinition = {
   name: 'edit',
-  category: 'modify',
   executionStrategy: 'sequential',
-  display: { displayName: 'Edit', group: 'design' },
+  mutates: true,
   description: `Update properties or text content of existing nodes. Supports single and batch.
 
 Single:

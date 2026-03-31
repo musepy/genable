@@ -10,8 +10,6 @@ import { ToolDefinition } from '../types';
 
 export const searchDefinition: ToolDefinition = {
   name: 'search',
-  category: 'read',
-  display: { displayName: 'Search', group: 'inspect' },
   executionStrategy: 'parallel',
   description: `Search nodes and properties, or batch-replace values.
 
@@ -53,11 +51,5 @@ Searchable properties: fillColor, textColor, strokeColor, strokeWeight, opacity,
         description: 'Replacement rules string: "prop:from/to [prop:from/to ...]". Triggers replace mode.',
       },
     },
-  },
-  errors: {
-    PATH_NOT_FOUND: 'No node found at the given path.',
-    SEARCH_ERROR: 'An error occurred while searching.',
-    NO_RESULTS: 'No matching results found.',
-    MISSING_REPLACEMENTS: 'Replace mode requires replacement rules.',
   },
 };

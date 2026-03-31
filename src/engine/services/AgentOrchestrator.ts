@@ -433,9 +433,8 @@ export class AgentOrchestrator {
             digestLines.push(`#${toolIdx} [${part.functionCall.name}] args: ${JSON.stringify(part.functionCall.args ?? {}).slice(0, 120)}`);
           }
           if (part.functionResponse) {
-            const ok = part.functionResponse.response?.success !== false;
             const err = part.functionResponse.response?.error;
-            digestLines.push(`  → ${ok ? 'OK' : 'ERR'}${err ? `: ${JSON.stringify(err).slice(0, 100)}` : ''}`);
+            digestLines.push(`  → ${err ? 'ERR' : 'OK'}${err ? `: ${JSON.stringify(err).slice(0, 100)}` : ''}`);
           }
         }
       }

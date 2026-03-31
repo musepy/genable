@@ -37,8 +37,6 @@ export interface AgentRuntimeToolCallEvent extends AgentRuntimeBaseEvent {
   toolCall: {
     id: string;
     name: string;
-    displayName?: string;
-    group?: string;
     args: any;
   };
 }
@@ -51,10 +49,8 @@ export interface AgentRuntimeToolResultEvent extends AgentRuntimeBaseEvent {
   toolResult: {
     id: string;
     name: string;
-    displayName?: string;
-    group?: string;
-    success: boolean;
     durationMs: number;
+    /** Present = failure (ToolResponse convention). Absent = success. */
     error?: string;
     raw: any;
   };

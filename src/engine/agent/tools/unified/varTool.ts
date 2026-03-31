@@ -9,8 +9,6 @@ import { ToolDefinition } from '../types';
 
 export const varToolDefinition: ToolDefinition = {
   name: 'var',
-  category: 'create',
-  display: { displayName: 'Variables', group: 'design-system' },
   executionStrategy: 'sequential',
   mutates: true,
   description: `Manage Figma variables (design tokens) — list, create, bind, alias.
@@ -80,13 +78,5 @@ Variable types: COLOR, FLOAT, BOOLEAN, STRING.`,
       },
     },
     required: ['action'],
-  },
-  errors: {
-    COLLECTION_NOT_FOUND: 'Collection not found.',
-    VARIABLE_NOT_FOUND: 'Variable not found.',
-    INVALID_TYPE: 'Invalid variable type.',
-    BIND_FAILED: 'Failed to bind variable.',
-    MODE_NOT_FOUND: 'Mode not found in collection.',
-    MISSING_ARG: 'Missing required argument.',
   },
 };

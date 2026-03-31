@@ -10,9 +10,8 @@ import type { ToolDefinition } from '../types';
 
 export const jsxDefinition: ToolDefinition = {
   name: 'jsx',
-  category: 'create',
   executionStrategy: 'sequential',
-  display: { displayName: 'JSX', group: 'create' },
+  mutates: true,
   description: `Create design trees with nested JSX markup — nesting IS the hierarchy.
 
 Example:

@@ -28,17 +28,22 @@ interface ToolExecutionPanelProps {
   onErrorAction?: (action: ErrorActionType) => void
 }
 
-/** Fallback formatter when displayName is not available */
-function formatToolName(name: string): string {
-  return name
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+/** UI-side tool display mapping — keeps display concerns out of ToolDefinition. */
+const TOOL_DISPLAY: Record<string, string> = {
+  jsx: 'JSX',
+  inspect: 'Inspect',
+  edit: 'Edit',
+  search: 'Search',
+  structure: 'Structure',
+  knowledge: 'Knowledge',
+  var: 'Variables',
+  comp: 'Components',
+  js: 'JavaScript',
+  subtask: 'Subtask',
 }
 
 function getDisplayName(c: ToolCallRecord): string {
-  return c.displayName || formatToolName(c.name)
+  return TOOL_DISPLAY[c.name] || c.name
 }
 
 /** Collapse tool calls into unique display names with counts */

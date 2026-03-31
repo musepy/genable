@@ -11,9 +11,7 @@ import type { ToolDefinition } from '../types';
 
 export const inspectDefinition: ToolDefinition = {
   name: 'inspect',
-  category: 'read',
   executionStrategy: 'parallel',
-  display: { displayName: 'Inspect', group: 'read' },
   description: `Inspect the design tree — view structure or read full properties.
 
 Parameters:

@@ -236,7 +236,8 @@ describe('createBuiltinHooksWithState', () => {
     const { hooks, reset } = createBuiltinHooksWithState();
     // 2 original (emptyResponse, loopDetection) + 5 guard hooks
     // (emptyArgsCounter, emptyArgsSkip, consecutiveFailure, partialFailure, budget)
-    expect(hooks).toHaveLength(7);
+    // + 1 stepWarning hook
+    expect(hooks).toHaveLength(8);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();

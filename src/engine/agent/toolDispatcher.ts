@@ -48,6 +48,24 @@ interface RuntimeEventPayload {
   [key: string]: any;
 }
 
+// ---------------------------------------------------------------------------
+// ToolLogEntry — structured observability for each tool execution
+// ---------------------------------------------------------------------------
+
+export interface ToolLogEntry {
+  callId: string;
+  toolName: string;
+  args: any;
+  startedAt: number;
+  durationMs: number;
+  success: boolean;
+  /** True if this exact call (name + args) was seen before in this run. */
+  isDuplicate: boolean;
+  /** True if the tool executed but produced no observable change. */
+  isNoop: boolean;
+  error?: string;
+}
+
 export interface ToolDispatchResult {
   type: 'continue';
   /** Formatted tool results message to add to context. */
@@ -106,6 +124,45 @@ export class ToolDispatcher {
   private lastNodeId: string | undefined;
   /** Last created/modified node name — used with lastNodeId for $LAST expansion. */
   private lastNodeName: string | undefined;
+
+  // ─── Duplicate call tracking (Phase 0.3) ──────────────────
+  private callSignatureMap = new Map<string, number>();
+
+  /** Reset call tracking state. Called at the start of each run(). */
+  public resetCallTracking(): void {
+    this.callSignatureMap.clear();
+  }
+
+  private isDuplicateCall(tc: LLMToolCall): boolean {
+    const sig = `${tc.name}:${JSON.stringify(tc.args)}`;
+    const count = (this.callSignatureMap.get(sig) || 0) + 1;
+    this.callSignatureMap.set(sig, count);
+    return count > 1;
+  }
+
+  // ─── Noop detection (Phase 0.4) ───────────────────────────
+
+  /**
+   * Detect noop from tool return values.
+   * A noop = tool executed successfully but made no observable change.
+   * Based on return-value heuristics (no IPC snapshot needed).
+   */
+  private static isNoopResult(toolName: string, result: any): boolean {
+    if (!result || result.error != null) return false;
+    const data = result.data;
+    if (!data) return false;
+
+    // edit tool: edited: 0 means nothing changed
+    if (toolName === 'edit' && data.edited === 0) return true;
+
+    // jsx tool: created: 0 or empty children
+    if (toolName === 'jsx' && data.created === 0) return true;
+
+    // run commands: various zero-change indicators
+    if (data.moved === 0 || data.deleted === 0 || data.copied === 0) return true;
+
+    return false;
+  }
 
   constructor(
     private toolExecutors: Record<string, ToolExecutor>,
@@ -244,6 +301,9 @@ export class ToolDispatcher {
       });
       this.config.onToolCall?.(unwrapped);
 
+      // ── Duplicate call detection (Phase 0.3) ──
+      const isDuplicate = this.isDuplicateCall(unwrapped);
+
       // ── beforeToolExec hook interceptor ──
       if (this.config.beforeToolExec) {
         const intercept = await this.config.beforeToolExec(unwrapped);
@@ -278,11 +338,33 @@ export class ToolDispatcher {
 
       const resultSuccess = result?.error == null;
 
+      // ── Noop detection (Phase 0.4) ──
+      const isNoop = ToolDispatcher.isNoopResult(commandName, result);
+
       // ── Track $LAST — extract last created/modified node ID ──
       this.extractLastNodeId(result);
 
       this.config.onToolResult?.(unwrapped, result);
       const errorMessage = resultSuccess ? undefined : (result?.error?.message || result?.error?.code || 'Tool execution failed');
+
+      // ── Emit ToolLogEntry (Phase 0.2) ──
+      const logEntry: ToolLogEntry = {
+        callId: tc.id,
+        toolName: commandName,
+        args: unwrapped.args,
+        startedAt,
+        durationMs,
+        success: resultSuccess,
+        isDuplicate,
+        isNoop,
+        error: errorMessage,
+      };
+      this.config.emitRuntimeEvent({
+        type: 'tool_log',
+        iteration: iteration + 1,
+        logEntry,
+      });
+
       this.config.emitRuntimeEvent({
         type: 'tool_result',
         iteration: iteration + 1,
@@ -296,6 +378,8 @@ export class ToolDispatcher {
           success: resultSuccess,
           durationMs,
           error: errorMessage,
+          isDuplicate,
+          isNoop,
           raw: result,
         },
       });

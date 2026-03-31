@@ -22,6 +22,7 @@ import { createEmptyArgsGuard } from './emptyArgsGuard';
 import { createConsecutiveFailureGuard } from './consecutiveFailureGuard';
 import { createPartialFailureGuard } from './partialFailureGuard';
 import { createBudgetGuard } from './budgetGuard';
+import { createStepWarningHook } from './stepWarningHook';
 
 // ---------------------------------------------------------------------------
 // Shared state across hook invocations (scoped per createBuiltinHooks call)
@@ -158,6 +159,7 @@ export function createBuiltinHooksWithState(): {
   const consecutiveFailureGuard = createConsecutiveFailureGuard();
   const partialFailureGuard = createPartialFailureGuard();
   const budgetGuard = createBudgetGuard();
+  const stepWarning = createStepWarningHook();
 
   const hooks = [
     createEmptyResponseHook(state),
@@ -166,6 +168,7 @@ export function createBuiltinHooksWithState(): {
     ...consecutiveFailureGuard.hooks,
     ...partialFailureGuard.hooks,
     ...budgetGuard.hooks,
+    ...stepWarning.hooks,
   ];
 
   return {
@@ -177,6 +180,7 @@ export function createBuiltinHooksWithState(): {
       consecutiveFailureGuard.reset();
       partialFailureGuard.reset();
       budgetGuard.reset();
+      stepWarning.reset();
     },
   };
 }

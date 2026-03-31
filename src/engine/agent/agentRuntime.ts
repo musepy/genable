@@ -604,6 +604,7 @@ export class AgentRuntime {
     let truncationCount = 0;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
+    this.toolDispatcher.resetCallTracking();
     clearOverflows();
     this.idCounter = 0;
     this.runStats = {
@@ -957,7 +958,7 @@ export class AgentRuntime {
               content: 'Your previous response was truncated. Continue where you left off.',
               synthetic: true,
             });
-            iteration++;
+            // Don't increment iteration — truncation continuation is the same logical step
             continue;
           }
           console.warn(`[AgentRuntime] Truncation limit reached (3). Forcing turn end.`);

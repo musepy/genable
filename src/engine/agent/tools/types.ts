@@ -47,6 +47,12 @@ export interface ToolDefinition {
    * runId:toolCallId and replay them on duplicate calls.
    */
   idempotent?: boolean;
+
+  /**
+   * Whether this tool mutates Figma state (creates/modifies/deletes nodes).
+   * Used by noop detection to decide whether to check for no-change results.
+   */
+  mutates?: boolean;
 }
 
 export interface ToolDisplayMeta {

@@ -1,22 +1,19 @@
 /**
  * @file pathResolver.ts
- * @description VFS path resolution — maps filesystem-style paths to Figma nodes.
+ * @description Node resolution — maps IDs and refs to Figma nodes.
  *
- * "/" = current page, "/NodeName/" = named child, "/Parent/Child/" = nested path.
- * Segments containing ":" are treated as Figma node IDs.
+ * Primary addressing: bare Figma ID (e.g. "1:2").
+ * "/" = current page. "name#id" accepted for backward compat (name stripped).
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 
 // ── Session-scoped node preference ──
-// Tracks node IDs created/referenced by the agent in the current session.
-// When multiple siblings share the same name, the resolver prefers session nodes.
 
 const sessionNodeIds = new Set<string>();
 
 export function registerSessionNodes(ids: string[]) {
   for (const rawId of ids) {
-    // Strip name# prefix if present (e.g. "Card#1:2" → "1:2")
     const m = rawId.match(/^.+#(\d+:\d+)$/);
     sessionNodeIds.add(m ? m[1] : rawId);
   }
@@ -44,57 +41,50 @@ export type PathResolved =
 export async function resolveSceneNode(nodeId: string): Promise<NodeResolved> {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
-    return { ok: false, response: { error: { code: 'NODE_NOT_FOUND', message: `Node "${nodeId}" not found. Use ls("/") to discover available nodes.` } } };
+    return { ok: false, response: { error: `Node "${nodeId}" not found. Use inspect({node: "/"}) to discover available nodes.` } };
   }
   if (!('visible' in node)) {
-    return { ok: false, response: { error: { code: 'INVALID_NODE_TYPE', message: `"${nodeId}" is a ${node.type}, not a design node. Use ls("/") to find design nodes.` } } };
+    return { ok: false, response: { error: `"${nodeId}" is a ${node.type}, not a design node.` } };
   }
   return { ok: true, node: node as SceneNode };
 }
 
-// ── VFS path resolution ──
+// ── Primary resolution: "/" or ID (with name#id backward compat) ──
 
-export async function resolvePathToNode(path: string): Promise<PathResolved> {
+export async function resolvePathToNode(ref: string): Promise<PathResolved> {
   // "/" → current page
-  if (path === '/' || path === '') {
+  if (ref === '/' || ref === '') {
     return { ok: true, isPage: true, page: figma.currentPage };
   }
 
-  // name#id format: "Card#1:2" → resolve by Figma ID
-  const nameIdMatch = path.match(/^(.+)#(\d+:\d+)$/);
-  if (nameIdMatch) {
-    const nodeId = nameIdMatch[2];
-    const node = await figma.getNodeByIdAsync(nodeId);
-    if (!node) {
-      return {
-        ok: false,
-        response: {
-          error: {
-            code: 'NODE_NOT_FOUND',
-            message: `Node "${path}" not found. Use inspect({node: "/"}) to discover available nodes.`,
-          },
-        },
-      };
-    }
-    if (!('visible' in node)) {
-      return {
-        ok: false,
-        response: {
-          error: {
-            code: 'INVALID_NODE_TYPE',
-            message: `"${node.name}" (${node.type}) is not a design node.`,
-          },
-        },
-      };
-    }
-    return { ok: true, isPage: false, node: node as SceneNode };
-  }
+  // Extract bare ID: strip "name#" prefix if present (backward compat)
+  const id = extractId(ref);
 
-  // Legacy path format — delegate to legacy resolver for backward compatibility (writeHandlers etc.)
-  return resolvePathToNodeLegacy(path);
+  const node = await figma.getNodeByIdAsync(id);
+  if (!node) {
+    // Fallback: try legacy path walk for writeHandlers (rm/mv/cp still use paths)
+    if (ref.includes('/')) {
+      return resolvePathToNodeLegacy(ref);
+    }
+    return {
+      ok: false,
+      response: { error: `Node "${ref}" not found. Use inspect({node: "/"}) to discover available nodes.` },
+    };
+  }
+  if (!('visible' in node)) {
+    return { ok: false, response: { error: `"${node.name}" (${node.type}) is not a design node.` } };
+  }
+  return { ok: true, isPage: false, node: node as SceneNode };
 }
 
-/** Legacy path resolution for writeHandlers/compHandlers that still use path segments. */
+/** Extract bare Figma ID from a ref. "Card#1:2" → "1:2", "1:2" → "1:2" */
+function extractId(ref: string): string {
+  const m = ref.match(/^.+#(\d+:\d+)$/);
+  return m ? m[1] : ref;
+}
+
+// ── Legacy path resolution (for writeHandlers rm/mv/cp that still use paths) ──
+
 async function resolvePathToNodeLegacy(path: string): Promise<PathResolved> {
   const segments = path.split('/').filter(s => s.length > 0);
   if (segments.length === 0) {
@@ -111,18 +101,19 @@ async function resolvePathToNodeLegacy(path: string): Promise<PathResolved> {
     }
     if (segment === '.') continue;
 
+    // name#id within path segment
     const segNameId = segment.match(/^(.+)#(\d+:\d+)$/);
     if (segNameId) {
       const node = await figma.getNodeByIdAsync(segNameId[2]);
       if (!node) {
-        return { ok: false, response: { error: { code: 'PATH_NOT_FOUND', message: `Node ID "${segNameId[2]}" not found.` } } };
+        return { ok: false, response: { error: `Node ID "${segNameId[2]}" not found.` } };
       }
       current = node;
       continue;
     }
 
     if (!('children' in current)) {
-      return { ok: false, response: { error: { code: 'NOT_A_CONTAINER', message: `"${current.name}" has no children.` } } };
+      return { ok: false, response: { error: `"${current.name}" has no children.` } };
     }
     const children = (current as any).children as readonly BaseNode[];
     const candidates = children.filter(c => c.name === segment);
@@ -131,45 +122,22 @@ async function resolvePathToNodeLegacy(path: string): Promise<PathResolved> {
       : candidates[0];
     if (!match) {
       const available = children.slice(0, 15).map(c => c.name);
-      return { ok: false, response: { error: { code: 'PATH_NOT_FOUND', message: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}` } } };
+      return { ok: false, response: { error: `"${segment}" not found in "${current.name}". Available: ${available.join(', ')}` } };
     }
     current = match;
   }
 
   if (!('visible' in current)) {
-    return { ok: false, response: { error: { code: 'INVALID_NODE_TYPE', message: `"${current.name}" (${current.type}) is not a design node.` } } };
+    return { ok: false, response: { error: `"${current.name}" (${current.type}) is not a design node.` } };
   }
   return { ok: true, isPage: false, node: current as SceneNode };
 }
 
-// ── Name deduplication ──
+// ── Ref helpers ──
 
-/**
- * Returns a unique name among siblings. If `name` already exists,
- * appends " 2", " 3", etc. until unique.
- */
-export function deduplicateName(siblings: readonly BaseNode[], name: string): string {
-  const existing = new Set(siblings.map(c => c.name));
-  if (!existing.has(name)) return name;
-  let i = 2;
-  while (existing.has(`${name}_${i}`)) i++;
-  return `${name}_${i}`;
-}
-
-// ── Path helpers ──
-
-export function buildNodePath(node: BaseNode): string {
-  const parts: string[] = [];
-  let current: BaseNode | null = node;
-  while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
-    parts.unshift(current.name);
-    current = current.parent;
-  }
-  return '/' + parts.join('/');
-}
-
+/** Returns bare Figma ID. Use this for all tool output. */
 export function buildNodeRef(node: BaseNode): string {
-  return `${node.name}#${node.id}`;
+  return node.id;
 }
 
 export function parseRef(ref: string): { name?: string; id: string } {
@@ -179,10 +147,17 @@ export function parseRef(ref: string): { name?: string; id: string } {
   return { id: ref };
 }
 
-export function normalizePath(path: string): string {
-  if (path === '/' || path === '') return '/';
-  return path.endsWith('/') ? path.slice(0, -1) : path;
+// ── Name deduplication ──
+
+export function deduplicateName(siblings: readonly BaseNode[], name: string): string {
+  const existing = new Set(siblings.map(c => c.name));
+  if (!existing.has(name)) return name;
+  let i = 2;
+  while (existing.has(`${name}_${i}`)) i++;
+  return `${name}_${i}`;
 }
+
+// ── Legacy path helpers (still used by writeHandlers for rm/mv/cp) ──
 
 export function splitPath(path: string): { parentPath: string; nodeName: string } {
   const segments = path.split('/').filter(s => s.length > 0);
@@ -191,7 +166,10 @@ export function splitPath(path: string): { parentPath: string; nodeName: string 
   return { parentPath, nodeName };
 }
 
-// ── Glob support ──
+export function normalizePath(path: string): string {
+  if (path === '/' || path === '') return '/';
+  return path.endsWith('/') ? path.slice(0, -1) : path;
+}
 
 export function hasGlob(path: string): boolean {
   return path.includes('*');

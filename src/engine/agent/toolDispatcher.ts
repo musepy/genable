@@ -151,9 +151,7 @@ export class ToolDispatcher {
 
       // ── Expand $LAST variable in string args ──
       if (this.lastNodeId) {
-        const lastRef = this.lastNodeName
-          ? `${this.lastNodeName}#${this.lastNodeId}`
-          : `#${this.lastNodeId}`;
+        const lastRef = this.lastNodeId;
         if (tc.args) {
           for (const field of LAST_EXPANDABLE_FIELDS) {
             if (typeof tc.args[field] === 'string' && tc.args[field].includes('$LAST')) {
@@ -338,30 +336,17 @@ export class ToolDispatcher {
     const data = result?.data;
     if (!data || result?.error != null) return;
 
-    let candidate: string | undefined;
+    let id: string | undefined;
     if (data.idMap && typeof data.idMap === 'object') {
       const ids = Object.values(data.idMap);
-      if (ids.length > 0) candidate = String(ids[ids.length - 1]);
+      if (ids.length > 0) id = String(ids[ids.length - 1]);
     } else if (data.id) {
-      if (data.name) {
-        candidate = `${data.name}#${data.id}`;
-      } else {
-        candidate = String(data.id);
-      }
+      id = String(data.id);
     }
 
-    if (!candidate) return;
-
-    const nameIdMatch = candidate.match(/^(.+)#(\d+:\d+)$/);
-    if (nameIdMatch) {
-      this.lastNodeName = nameIdMatch[1];
-      this.lastNodeId = nameIdMatch[2];
-      return;
-    }
-
-    if (ToolDispatcher.FIGMA_ID_RE.test(candidate)) {
-      this.lastNodeId = candidate;
-      this.lastNodeName = undefined;
+    if (id && ToolDispatcher.FIGMA_ID_RE.test(id)) {
+      this.lastNodeId = id;
+      this.lastNodeName = data.name;
     }
   }
 }

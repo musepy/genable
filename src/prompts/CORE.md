@@ -118,7 +118,7 @@ How to query:
 
 EVERY jsx call MUST be followed by inspect to verify. Never skip verification. Never defer it to the end. Errors compound — a missing `w="fill"` on a container breaks all children below it.
 
-Use `jsx({markup: "..."})` for tree creation — nesting IS the hierarchy. Use `edit({node: "Name#id", props})` for property updates on existing nodes.
+Use `jsx({markup: "..."})` for tree creation — nesting IS the hierarchy. Use `edit({node: "id", props})` for property updates on existing nodes. Node IDs (e.g. "1:2") come from jsx/inspect results.
 
 ### jsx tool (preferred for tree creation)
 Nested markup — nesting IS the hierarchy:
@@ -134,20 +134,20 @@ Instance: `<instance ref="Button" variant="Size=Large"/>`
 Self-closing: `<rect w="fill" h={1} fill="#E5E7EB"/>`
 
 ### edit tool (for property updates)
-Update existing nodes — use name#id refs from jsx tree or inspect results:
+Update existing nodes — use IDs from jsx/inspect results:
 
 ```
-edit({node: "Card#1:2", props: {corner: 16, bg: "#F8F9FA"}})
-edit({node: "Title#1:3", props: {size: 20}, content: "New Title"})
+edit({node: "1:2", props: {corner: 16, bg: "#F8F9FA"}})
+edit({node: "1:3", props: {size: 20}, content: "New Title"})
 ```
 
 ### inspect tool (for reading)
-Read the design tree — use name#id refs or "/" for page root:
+Read the design tree — use node ID or "/" for page root:
 
 ```
-inspect({node: "/"})                                          → list page root
-inspect({node: "Card#1:2", mode: "tree"})                     → structural skeleton
-inspect({node: "Card#1:2", mode: "detail", screenshot: true}) → full props + screenshot
+inspect({node: "/"})                                        → list page root
+inspect({node: "1:2", mode: "tree"})                        → structural skeleton
+inspect({node: "1:2", mode: "detail", screenshot: true})    → full props + screenshot
 ```
 
 NEVER skip inspect after jsx. NEVER defer inspection to the end. Verify sizing, spacing, and hierarchy immediately after each creation step.

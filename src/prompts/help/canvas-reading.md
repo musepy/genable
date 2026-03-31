@@ -35,11 +35,9 @@ Set screenshot=true to capture a visual screenshot.
 3. `cat({path: "/Card/Header/Title"})` — get full details for specific nodes
 4. `mk /Card/Header/Title size:28` — edit based on detailed inspection
 
-### Path Resolution
+### Node Addressing
 - "/" = current page root
-- "/Card/" = child named "Card"
-- "/Card/Header/Title" = nested path
-- "Card#100:5" = name#id ref (from ls/receipt output — unique, O(1) lookup)
+- "100:5" = Figma node ID (from jsx/inspect results — unique, O(1) lookup)
 
 ### XML Output Format (read tools)
 tree and cat return compact XML. Note: read output is XML, write input is flat ops — they are different formats.

@@ -66,7 +66,7 @@ Variable types: COLOR, FLOAT, BOOLEAN, STRING.`,
       },
       node: {
         type: 'string',
-        description: 'Node ref for binding ("name#id")',
+        description: 'Node ID for binding (e.g. "100:5")',
       },
       prop: {
         type: 'string',

@@ -38,7 +38,7 @@ Node addressing: use Name#id refs from jsx/inspect results. "/" = page root. Glo
       },
       node: {
         type: 'string',
-        description: 'Target node ref ("name#id" or glob pattern like "/Card/Old*")',
+        description: 'Target node ID (e.g. "100:5")',
       },
       dest: {
         type: 'string',

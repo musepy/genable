@@ -39,7 +39,7 @@ Property types: TEXT, BOOLEAN, INSTANCE_SWAP.`,
       },
       node: {
         type: 'string',
-        description: 'Target node ref ("name#id")',
+        description: 'Target node ID (e.g. "100:5")',
       },
       nodes: {
         type: 'array',

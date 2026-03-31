@@ -263,7 +263,7 @@ export interface WalkResult {
   nodeId: string;
   name: string;
   type: string;
-  childRefs: string[];
+  childRefs: Array<{ name: string; id: string }>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -433,7 +433,7 @@ export async function walkTree(
   } catch { /* best-effort */ }
 
   // ── Recurse children (VNodes only, not strings) ──
-  const childRefs: string[] = [];
+  const childRefs: Array<{ name: string; id: string }> = [];
   const vnodeChildren = vnode.children.filter(
     (c): c is VNode => typeof c === 'object' && c !== null && 'type' in c,
   );
@@ -444,7 +444,7 @@ export async function walkTree(
     for (const child of vnodeChildren) {
       const childResult = await walkTree(child, createdNode, ctx);
       if (childResult) {
-        childRefs.push(`${childResult.name}#${childResult.nodeId}`);
+        childRefs.push({ name: childResult.name, id: childResult.nodeId });
       }
     }
   }

@@ -28,7 +28,7 @@ mk /ExistingCard/Footer/Btn/Label text size:12 fill:#FFF weight:Medium -- Action
 mk /Card/Icon frame w:40 h:40 bg:#EEE corner:20 && cat $LAST -s
 ```
 
-**By name#id** — use ref from ls/receipt for precise targeting:
+**By node ID** — use ID from jsx/inspect for precise targeting:
 ```
-mk /NewChild#1134:25994/ text size:14 fill:#333 -- Inserted by ref
+edit({node: "1134:25994", props: {size: 14, fill: "#333"}})
 ```

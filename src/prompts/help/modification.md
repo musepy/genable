@@ -23,7 +23,7 @@ Safety: `rm` warns when deleting nodes you didn't create (`⚠ not created by yo
 If you see this warning and the user didn't explicitly ask for deletion, stop and confirm:
 "Found existing [node name] — should I remove it or work alongside it?"
 
-**CRITICAL: target existing nodes by path (from ls/tree output) or by name#id ref (`Card#100:5`).**
+**CRITICAL: target existing nodes by ID from jsx/inspect results (e.g. `100:5`).**
 
 **BATCH EDITS**: Use `sed` for bulk property changes across a subtree — one command replaces all matching values:
 ```

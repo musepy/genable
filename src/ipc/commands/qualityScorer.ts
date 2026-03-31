@@ -94,7 +94,7 @@ function scoreSpacing(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: frame.id, nodeName: frame.name, dimension: 'spacing',
         message: `${childCount} children, no gap`,
-        fix: `edit({node: "${frame.name}#${frame.id}", props: {gap: 16}})`,
+        fix: `edit({node: "${frame.id}", props: {gap: 16}})`,
       });
     }
   }
@@ -125,7 +125,7 @@ function scorePadding(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: frame.id, nodeName: frame.name, dimension: 'padding',
         message: `has fill but no padding`,
-        fix: `edit({node: "${frame.name}#${frame.id}", props: {p: 16}})`,
+        fix: `edit({node: "${frame.id}", props: {p: 16}})`,
       });
     }
   }
@@ -204,7 +204,7 @@ function scoreTypography(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: t.node.id, nodeName: t.node.name, dimension: 'typography',
         message: `font size ${t.size}px < 12px minimum`,
-        fix: `edit({node: "${t.node.name}#${t.node.id}", props: {size: 12}})`,
+        fix: `edit({node: "${t.node.id}", props: {size: 12}})`,
       });
     }
   }
@@ -278,7 +278,7 @@ function scoreContrast(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: text.id, nodeName: text.name, dimension: 'contrast',
         message: `contrast ${ratio.toFixed(1)}:1 < ${required}:1 AA (${fs}px on ${rgbaToHex(bgColor)})`,
-        fix: `edit({node: "${text.name}#${text.id}", props: {fill: "#000000"}})`,
+        fix: `edit({node: "${text.id}", props: {fill: "#000000"}})`,
       });
     }
   }
@@ -359,7 +359,7 @@ function scoreLayoutCoverage(data: TreeData, issues: QualityIssue[]): number {
       issues.push({
         nodeId: frame.id, nodeName: frame.name, dimension: 'layoutCoverage',
         message: `${frame.children.length} children but no auto-layout`,
-        fix: `edit({node: "${frame.name}#${frame.id}", props: {layout: "column"}})`,
+        fix: `edit({node: "${frame.id}", props: {layout: "column"}})`,
       });
     }
   }

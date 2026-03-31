@@ -35,11 +35,11 @@ Searchable properties: fillColor, textColor, strokeColor, strokeWeight, opacity,
       },
       scope: {
         type: 'string',
-        description: 'Limit search to subtree. "name#id" format. Default: entire page.',
+        description: 'Limit search to subtree. Node ID (e.g. "100:5"). Default: entire page.',
       },
       node: {
         type: 'string',
-        description: 'Target node ref ("name#id"). Required for discover/replace modes.',
+        description: 'Target node ID (e.g. "100:5"). Required for discover/replace modes.',
       },
       props: {
         type: 'array',

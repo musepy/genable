@@ -339,7 +339,7 @@ export interface JsonSerializeOptions {
   structural?: boolean;
   /** Skeleton mode: only id, name, children — pure hierarchy, no properties. */
   skeleton?: boolean;
-  /** Minimal mode: id, name, type, children as "Name#id" refs. For handler responses. */
+  /** Minimal mode: id, name, type, children as {name, id} objects. For handler responses. */
   minimal?: boolean;
 }
 
@@ -360,7 +360,7 @@ export class JsonNodeSerializer {
   }
 
   /**
-   * Minimal mode: {id, name, type, children: ["Name#id", ...]}.
+   * Minimal mode: {id, name, type, children: [{name, id}, ...]}.
    * Used for handler responses (jsx, edit, inspect page detail).
    */
   private static serializeMinimalNode(node: NodeLayer): any {
@@ -375,7 +375,7 @@ export class JsonNodeSerializer {
     if (node.children && node.children.length > 0) {
       result.children = node.children.map((child: NodeLayer) => {
         const cName = (child.props as any)?.name || TAG_MAP[child.type] || 'node';
-        return `${cName}#${child.id}`;
+        return { name: cName, id: child.id };
       });
     }
     return result;

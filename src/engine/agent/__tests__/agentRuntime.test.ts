@@ -94,7 +94,7 @@ describe('AgentRuntime', () => {
     expect(messages[2].role).toBe('tool');
   });
 
-  it('should reject unknown tool names with UNKNOWN_COMMAND error', async () => {
+  it('should reject unknown tool names with UNKNOWN_TOOL error', async () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'start task',
@@ -113,7 +113,7 @@ describe('AgentRuntime', () => {
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [
-        { name: 'run', description: 'Run', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } },
+        { name: 'jsx', description: 'Create', parameters: { type: 'object', properties: { markup: { type: 'string' } }, required: ['markup'] } },
       ],
       ipcBridge: mockIpcBridge,
       loopPolicy: { useSkillSystem: false } as any
@@ -122,13 +122,14 @@ describe('AgentRuntime', () => {
     const result = await runtime.run('Create something');
 
     expect(result).toBe('Recovered');
-    expect(mockIpcBridge.callTool).not.toHaveBeenCalled();
+    // task_start should be rejected locally — NOT forwarded to IPC
+    expect(mockIpcBridge.callTool).not.toHaveBeenCalledWith('task_start', expect.anything());
 
     const firstToolTurn = (mockProvider.formatToolResults as any).mock.calls[0][0];
     const firstResponse = firstToolTurn[0].response;
-    expect(firstResponse.error).toBeDefined();
-    expect(firstResponse.error.code).toBe('UNKNOWN_COMMAND');
-    expect(firstResponse.error.message).toContain('Unknown command');
+    // presentForLLM flattens errors — check for the error string in the response
+    const responseStr = JSON.stringify(firstResponse);
+    expect(responseStr).toContain('Unknown tool');
   });
 
   it('should return graceful message when max iterations reached', async () => {

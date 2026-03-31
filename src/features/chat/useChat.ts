@@ -437,11 +437,13 @@ export function useChat({
           }
           return null
         },
-        man: async (params: any) => {
-          // man reuses the same local knowledge sources as query
+        knowledge: async (params: any) => {
+          // knowledge tool — local knowledge sources (guidelines, style, help)
           const source = params.source || 'help'
+          // Accept both 'topic' (new schema) and 'query' (legacy) for the lookup key
+          const topicOrQuery = params.topic || params.tags || params.query || ''
           if (source === 'guidelines') {
-            const topic = (params.query || '').toLowerCase().trim()
+            const topic = topicOrQuery.toLowerCase().trim()
             const content = (guidelinesCatalog as Record<string, string>)[topic]
             if (!content) {
               return { success: false, error: { code: 'UNKNOWN_TOPIC',
@@ -453,12 +455,12 @@ export function useChat({
             return { success: true, data: { tags: (styleCatalog as any).tags } }
           }
           if (source === 'style') {
-            const queryTags = normalizeStyleTags(params.query || '')
+            const queryTags = normalizeStyleTags(topicOrQuery)
             const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
             const match = matchStyleGuide(queryTags, guides)
             if (!match) {
               return { success: false, error: { code: 'NO_STYLE_MATCH',
-                message: `No style guide matched tags "${queryTags.join(', ')}". Use man style-tags to see available tags.` } }
+                message: `No style guide matched tags "${queryTags.join(', ')}". Use knowledge({source: "style-tags"}) to see available tags.` } }
             }
             return {
               success: true,
@@ -466,7 +468,7 @@ export function useChat({
             }
           }
           if (source === 'help') {
-            const query = (params.query || '').trim()
+            const query = topicOrQuery.trim()
             if (!query) {
               return { success: true, data: { topics: [...helpIndex.listTopics(), ...getSkillTopics()] } }
             }

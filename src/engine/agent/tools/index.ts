@@ -2,39 +2,31 @@
  * @file index.ts
  * @description Consolidated entry point for all Agentic Tools.
  *
- * LLM sees a single `run` tool. Internally, commands are dispatched to
- * individual command definitions (context, outline, inspect, design, replace, query).
- *
- * toolDisplayMap and allToolDefinitions are indexed by command name (not 'run')
- * so that downstream code (events, cleaning, idempotency) works transparently.
+ * 9 first-class tools — all structured JSON, no CLI parsing layer.
+ * toolDisplayMap indexed by tool name for downstream code (events, cleaning).
  */
 
-// ── Unified Tools ──
-import { unifiedTools, getAllCommandDefinitions } from './unified';
+import { unifiedTools } from './unified';
 import { ToolDefinition, ToolDisplayMeta } from './types';
 
 /**
  * Primary tool set for LLM function calling.
- * Contains only the `run` tool — the single LLM-facing entry point.
  */
 export const agentTools: ToolDefinition[] = unifiedTools;
 
 /**
- * Static lookup: command name → display metadata.
- * Built from individual command definitions (not the `run` wrapper).
+ * Static lookup: tool name → display metadata.
  */
 export const toolDisplayMap: Record<string, ToolDisplayMeta> = Object.fromEntries(
-  getAllCommandDefinitions()
+  unifiedTools
     .filter(t => t.display)
     .map(t => [t.name, t.display!])
 );
 
 /**
- * All command definitions — used for auto-deriving runtime sets
- * (e.g., idempotent tools, tool result cleaning).
- * These are the individual commands, not the `run` wrapper.
+ * All tool definitions — used for auto-deriving runtime sets.
  */
-export const allToolDefinitions: ToolDefinition[] = getAllCommandDefinitions();
+export const allToolDefinitions: ToolDefinition[] = unifiedTools;
 
 // Re-export types and utilities
 export * from './types';

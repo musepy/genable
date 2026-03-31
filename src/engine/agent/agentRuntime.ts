@@ -27,7 +27,7 @@ import { compressConsumedToolResults } from './context/turnResultCompressor';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
-import { COMMAND_NAMES } from './tools/unified/commandRegistry';
+import { TOOL_NAMES } from './tools/unified';
 import { getContextProfile } from './context/constants';
 import { clearOverflows } from './overflowStore';
 import { executeSubtask } from './subtask/executor';
@@ -144,10 +144,11 @@ export class AgentRuntime {
         throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
       },
     );
-    // Allow both the `run` wrapper AND all command names (unwrapped by dispatcher)
+    // All tools are first-class — tool names from definitions + TOOL_NAMES + `more` (pagination)
     this.allowedExecutionToolNames = new Set([
       ...options.tools.map((tool) => tool.name),
-      ...COMMAND_NAMES,
+      ...TOOL_NAMES,
+      'more',
     ]);
     // Hook system (must be initialized before ToolDispatcher so interceptors can reference hookRunner)
     this.hookRegistry = new HookRegistry();
@@ -833,14 +834,13 @@ export class AgentRuntime {
       }
 
       // ──── HOOK: afterLLMResponse ────
-      // Unwrap `run` tool calls so loop detection sees command names (not all 'run')
+      // All tools are first-class now — no unwrapping needed
       const rawCalls = rawToolCallsForLoopDetection.length > 0 ? rawToolCallsForLoopDetection : toolCallsForExecution;
-      const unwrappedCalls = rawCalls.map(tc => ToolDispatcher.unwrapRunCommand(tc));
       const hookCtx: HookContext = {
         iteration,
         maxIterations: this.maxIterations,
         responseText: response.text,
-        toolCalls: unwrappedCalls,
+        toolCalls: rawCalls,
         messages: this.turnMessages,
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),

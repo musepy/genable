@@ -1,11 +1,9 @@
 /**
  * @file toolDispatcher.ts
- * @description Extracted from agentRuntime.ts — encapsulates tool validation,
- * execution dispatch, timeout handling, and result cleaning. Pure class with
- * injected dependencies, no reference to AgentRuntime.
+ * @description Encapsulates tool validation, execution dispatch, timeout handling,
+ * and result cleaning. Pure class with injected dependencies.
  *
- * CLI form: unwrapRunCommand() now parses CLI strings (e.g. "ls /Card/ -s")
- * and maps them to structured args. Supports && chains.
+ * All tools are first-class — no CLI parsing, no `run` wrapper, no chains.
  */
 
 import { LLMToolCall, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
@@ -15,29 +13,9 @@ import { getOverflow } from './overflowStore';
 import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
 import { toolDisplayMap } from './tools';
-import { getCommandHelp, isValidCommand, findClosestCommand } from './tools/unified/commandRegistry';
-import {
-  parseCommandString,
-  mapToToolArgs,
-  type ParsedChain,
-} from './tools/unified/commandParser';
+import { findClosestTool } from './tools/unified';
 import { presentForLLM } from './tools/unified/presentation';
 import { handleScratchCommand } from './scratchpad/handler';
-
-// ---------------------------------------------------------------------------
-// Deprecated commands — hidden from LLM + rejected at dispatch
-// ---------------------------------------------------------------------------
-
-/** Commands no longer exposed to the LLM. Use jsx/edit instead. */
-const DEPRECATED_COMMANDS = new Set(['mk', 'create', 'render', 'token']);
-
-/** Helpful migration messages for each deprecated command. */
-const DEPRECATED_SUGGESTIONS: Record<string, string> = {
-  mk: 'Use jsx({markup: "..."}) for creation or edit({node, props}) for updates.',
-  create: 'Use jsx({markup: "..."}) for structured tree creation.',
-  render: 'Use jsx({markup: "..."}) for creation. Render tokens are no longer available.',
-  token: 'Token system has been removed. Use jsx with explicit properties instead.',
-};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,47 +66,27 @@ export interface ToolDispatcherConfig {
   throwIfCanceled: (iteration?: number) => void;
   onToolCall?: (tc: LLMToolCall) => void;
   onToolResult?: (tc: LLMToolCall, result: any) => void;
-  /**
-   * Async hook interceptor called BEFORE each tool executes.
-   * Return 'skip' to skip this tool, 'abort' to stop the loop.
-   */
   beforeToolExec?: (tc: LLMToolCall) => Promise<ToolInterceptResult | void>;
-  /**
-   * Async hook interceptor called AFTER each tool executes.
-   * Can modify the result via modifiedResult.
-   */
   afterToolExec?: (tc: LLMToolCall, result: any) => Promise<ToolInterceptResult | void>;
   /** Provider-specific tool results formatter. */
   formatToolResults: (results: LLMToolResult[]) => LLMMessage;
 }
 
 // ---------------------------------------------------------------------------
-// Error used by AgentRuntime for cancellation detection in catch blocks
-// ---------------------------------------------------------------------------
-
-/** Sentinel class for canceled-agent detection inside Promise.race. */
-class ToolDispatcherCanceledError extends Error {
-  public readonly code = 'AGENT_CANCELED';
-  constructor(message = 'Canceled') {
-    super(message);
-    this.name = 'ToolDispatcherCanceledError';
-  }
-}
-
-// ---------------------------------------------------------------------------
 // ToolDispatcher
 // ---------------------------------------------------------------------------
 
+/** Fields where $LAST variable should be expanded. */
+const LAST_EXPANDABLE_FIELDS = ['node', 'scope', 'dest', 'parent', 'path'];
+
 export class ToolDispatcher {
-  /** Last created/modified node ID — expanded as $LAST in commands. */
+  /** Last created/modified node ID — expanded as $LAST. */
   private lastNodeId: string | undefined;
-  /** Last created/modified node name — used with lastNodeId for $LAST expansion. */
   private lastNodeName: string | undefined;
 
-  // ─── Duplicate call tracking (Phase 0.3) ──────────────────
+  // ─── Duplicate call tracking ──────────────────────────────
   private callSignatureMap = new Map<string, number>();
 
-  /** Reset call tracking state. Called at the start of each run(). */
   public resetCallTracking(): void {
     this.callSignatureMap.clear();
   }
@@ -140,25 +98,15 @@ export class ToolDispatcher {
     return count > 1;
   }
 
-  // ─── Noop detection (Phase 0.4) ───────────────────────────
+  // ─── Noop detection ───────────────────────────────────────
 
-  /**
-   * Detect noop from tool return values.
-   * A noop = tool executed successfully but made no observable change.
-   * Based on return-value heuristics (no IPC snapshot needed).
-   */
   private static isNoopResult(toolName: string, result: any): boolean {
     if (!result || result.error != null) return false;
     const data = result.data;
     if (!data) return false;
 
-    // edit tool: edited: 0 means nothing changed
     if (toolName === 'edit' && data.edited === 0) return true;
-
-    // jsx tool: created: 0 or empty children
     if (toolName === 'jsx' && data.created === 0) return true;
-
-    // run commands: various zero-change indicators
     if (data.moved === 0 || data.deleted === 0 || data.copied === 0) return true;
 
     return false;
@@ -170,7 +118,7 @@ export class ToolDispatcher {
     private allowedToolNames: Set<string>,
     private config: ToolDispatcherConfig,
   ) {
-    // Register built-in local executors (no IPC needed)
+    // Built-in local executor: `more` — paginates truncated output
     this.toolExecutors['more'] = async (args: any) => {
       const id = Number(args?.id);
       if (!id || isNaN(id)) {
@@ -184,64 +132,13 @@ export class ToolDispatcher {
     };
   }
 
-  /** Merge additional executors (e.g. when reusing runtime across turns). */
   public mergeExecutors(executors: Record<string, ToolExecutor>): void {
     Object.assign(this.toolExecutors, executors);
   }
 
-  // ─── Run command unwrapping ────────────────────────────────────
-
   /**
-   * Unwrap a `run` tool call into the underlying command.
-   *
-   * CLI format:
-   *   run({command: "ls /"})              → {name: "ls", args: {path: "/"}}
-   *   run({command: "cat /Card/ -s"})     → {name: "cat", args: {path: "/Card/", screenshot: true}}
-   *   run({command: "design", input: "ops..."}) → {name: "design", args: {ops: "ops..."}}
-   *
-   * Chain format (returns with __chain metadata, handled in executeTool):
-   *   run({command: "tree / && cat /Card/"}) → {name: "run", args: {__chain: ..., input: ...}}
-   *
-   * Non-`run` tool calls pass through unchanged.
-   */
-  public static unwrapRunCommand(tc: LLMToolCall): LLMToolCall {
-    if (tc.name !== 'run') return tc;
-
-    const command = tc.args?.command;
-    if (!command || typeof command !== 'string') {
-      // No command → return tool overview as help
-      return { ...tc, args: { __help: true } };
-    }
-
-    const chain = parseCommandString(command);
-
-    // Chain: keep as 'run' with __chain metadata, handled in executeTool
-    if (chain.commands.length > 1) {
-      return { ...tc, args: { __chain: chain, input: tc.args?.input } };
-    }
-
-    // Single command
-    const parsed = chain.commands[0];
-    if (!parsed || !parsed.name) {
-      return { ...tc, args: { __help: true } };
-    }
-
-    // Command name only (no positional args, no flags) → help mode
-    if (parsed.positionalArgs.length === 0 && Object.keys(parsed.flags).length === 0 && !tc.args?.input) {
-      return { ...tc, name: parsed.name, args: { __help: true } };
-    }
-
-    const args = mapToToolArgs(parsed, tc.args?.input);
-    if (!args) {
-      return { ...tc, name: parsed.name, args: { __help: true } };
-    }
-
-    return { ...tc, name: parsed.name, args };
-  }
-
-  /**
-   * Dispatch an array of tool calls — handles terminal signals, execution,
-   * timeout, error classification, and result cleaning.
+   * Dispatch an array of tool calls — handles execution, timeout,
+   * error classification, and result cleaning.
    */
   public async dispatch(
     toolCalls: LLMToolCall[],
@@ -254,69 +151,47 @@ export class ToolDispatcher {
       tc.id = this.config.normalizeToolCallId(tc, 'call');
       const startedAt = Date.now();
 
-      // ── Expand $LAST variable ──
-      let expandedTc = tc;
+      // ── Expand $LAST variable in string args ──
       if (this.lastNodeId) {
         const lastRef = this.lastNodeName
           ? `${this.lastNodeName}#${this.lastNodeId}`
           : `#${this.lastNodeId}`;
-        // In run CLI commands
-        if (tc.name === 'run' && typeof tc.args?.command === 'string' && tc.args.command.includes('$LAST')) {
-          expandedTc = { ...tc, args: { ...tc.args, command: tc.args.command.replace(/\$LAST/g, lastRef) } };
-        }
-        // In first-class tools with path arg (inspect, edit)
-        else if (typeof tc.args?.path === 'string' && tc.args.path.includes('$LAST')) {
-          expandedTc = { ...tc, args: { ...tc.args, path: tc.args.path.replace(/\$LAST/g, lastRef) } };
+        if (tc.args) {
+          for (const field of LAST_EXPANDABLE_FIELDS) {
+            if (typeof tc.args[field] === 'string' && tc.args[field].includes('$LAST')) {
+              tc.args[field] = tc.args[field].replace(/\$LAST/g, lastRef);
+            }
+          }
         }
       }
 
-      // ── Unwrap `run` → command name ──
-      // Keep original name for LLMToolResult (Gemini requires functionResponse.name to match)
-      const originalName = expandedTc.name;
-      const unwrapped = ToolDispatcher.unwrapRunCommand(expandedTc);
-      const commandName = unwrapped.name;
+      const toolName = tc.name;
 
-      // ── Reject deprecated commands (dual guarantee: hidden from description + rejected here) ──
-      if (DEPRECATED_COMMANDS.has(commandName)) {
-        const suggestion = DEPRECATED_SUGGESTIONS[commandName] || 'Use jsx or edit instead.';
-        toolResults.push({
-          name: originalName,
-          id: tc.id,
-          response: {
-            error: { code: 'DEPRECATED_COMMAND', message: `"${commandName}" is deprecated. ${suggestion}` },
-          },
-          thought_signature: tc.thought_signature,
-        });
-        continue;
-      }
-
-      // ── Dispatch tool to executor (using command name for events/display) ──
-      const displayMeta = toolDisplayMap[commandName];
+      // ── Dispatch tool (events/display) ──
+      const displayMeta = toolDisplayMap[toolName];
       this.config.emitRuntimeEvent({
         type: 'tool_call',
         iteration: iteration + 1,
-
         phase: 'execution',
-        toolCall: { id: tc.id, name: commandName, displayName: displayMeta?.displayName, group: displayMeta?.group, args: unwrapped.args },
+        toolCall: { id: tc.id, name: toolName, displayName: displayMeta?.displayName, group: displayMeta?.group, args: tc.args },
       });
-      this.config.onToolCall?.(unwrapped);
+      this.config.onToolCall?.(tc);
 
-      // ── Duplicate call detection (Phase 0.3) ──
-      const isDuplicate = this.isDuplicateCall(unwrapped);
+      // ── Duplicate call detection ──
+      const isDuplicate = this.isDuplicateCall(tc);
 
       // ── beforeToolExec hook interceptor ──
       if (this.config.beforeToolExec) {
-        const intercept = await this.config.beforeToolExec(unwrapped);
+        const intercept = await this.config.beforeToolExec(tc);
         if (intercept?.action === 'abort') {
           throw new Error(intercept.reason || 'Aborted by beforeToolExec hook');
         }
         if (intercept?.action === 'skip') {
-          // Push a skipped result so the LLM knows
           toolResults.push({
-            name: originalName,
+            name: toolName,
             id: tc.id,
             response: {
-              error: { code: 'HOOK_SKIPPED', message: intercept.reason || `Command "${commandName}" was blocked.` },
+              error: { code: 'HOOK_SKIPPED', message: intercept.reason || `Tool "${toolName}" was blocked.` },
             },
             thought_signature: tc.thought_signature,
           });
@@ -324,13 +199,13 @@ export class ToolDispatcher {
         }
       }
 
-      let result = await this.executeToolWithTimeout(unwrapped);
+      let result = await this.executeToolWithTimeout(tc);
 
       const durationMs = Date.now() - startedAt;
 
       // ── afterToolExec hook interceptor ──
       if (this.config.afterToolExec) {
-        const intercept = await this.config.afterToolExec(unwrapped, result);
+        const intercept = await this.config.afterToolExec(tc, result);
         if (intercept?.modifiedResult !== undefined) {
           result = intercept.modifiedResult;
         }
@@ -338,20 +213,20 @@ export class ToolDispatcher {
 
       const resultSuccess = result?.error == null;
 
-      // ── Noop detection (Phase 0.4) ──
-      const isNoop = ToolDispatcher.isNoopResult(commandName, result);
+      // ── Noop detection ──
+      const isNoop = ToolDispatcher.isNoopResult(toolName, result);
 
       // ── Track $LAST — extract last created/modified node ID ──
       this.extractLastNodeId(result);
 
-      this.config.onToolResult?.(unwrapped, result);
+      this.config.onToolResult?.(tc, result);
       const errorMessage = resultSuccess ? undefined : (result?.error?.message || result?.error?.code || 'Tool execution failed');
 
-      // ── Emit ToolLogEntry (Phase 0.2) ──
+      // ── Emit ToolLogEntry ──
       const logEntry: ToolLogEntry = {
         callId: tc.id,
-        toolName: commandName,
-        args: unwrapped.args,
+        toolName,
+        args: tc.args,
         startedAt,
         durationMs,
         success: resultSuccess,
@@ -368,11 +243,10 @@ export class ToolDispatcher {
       this.config.emitRuntimeEvent({
         type: 'tool_result',
         iteration: iteration + 1,
-
         phase: 'execution',
         toolResult: {
           id: tc.id,
-          name: commandName,
+          name: toolName,
           displayName: displayMeta?.displayName,
           group: displayMeta?.group,
           success: resultSuccess,
@@ -384,11 +258,6 @@ export class ToolDispatcher {
         },
       });
 
-      // Log design failures with per-line details for real-time debugging
-      if (!resultSuccess && commandName === 'design' && errorMessage) {
-        console.warn(`[${commandName}] iter=${iteration + 1} ${durationMs}ms\n${errorMessage}`);
-      }
-
       // Extract image attachment before presentation pipe
       let imageAttachment: { mimeType: string; data: string } | undefined;
       if (result?.data?.__image) {
@@ -396,12 +265,11 @@ export class ToolDispatcher {
         delete result.data.__image;
       }
 
-      // Layer 2: single presentation pipe — exit code, meta, stderr, guards
-      const presented = presentForLLM(result, commandName, durationMs);
+      // Presentation pipe — exit code, meta, stderr, guards
+      const presented = presentForLLM(result, toolName, durationMs);
 
       toolResults.push({
-        // Use original name ('run') for Gemini functionResponse.name matching
-        name: originalName,
+        name: toolName,
         id: tc.id,
         response: presented,
         thought_signature: tc.thought_signature,
@@ -409,7 +277,6 @@ export class ToolDispatcher {
       });
     }
 
-    // Format tool results into a message
     const toolResultsMessage = this.config.formatToolResults(toolResults);
     toolResultsMessage.id = this.config.generateId('tol');
 
@@ -427,7 +294,6 @@ export class ToolDispatcher {
         setTimeout(() => reject(new Error(`"${tc.name}" timed out after ${timeout}ms. Try a simpler operation or retry.`)), timeout);
       }),
     ]).catch(e => {
-      // Re-throw cancellation errors so the caller can handle them
       if (e?.code === 'AGENT_CANCELED' || e?.name === 'AgentRuntimeCanceledError') {
         throw e;
       }
@@ -444,38 +310,15 @@ export class ToolDispatcher {
   private async executeTool(tc: LLMToolCall): Promise<any> {
     this.config.throwIfCanceled();
 
-    // ── Help mode: return command documentation ──
-    if (tc.args?.__help) {
-      if (tc.name === 'run') {
-        return {
-          data: `Commands available. Run any command name alone for detailed usage.
-
-Write:  mv /src/ /dest/    rm /path/          cp /src/ /dest/
-Search: grep <query>       sed /path/ prop    man [topic]
-Script: js <expression>    var <subcommand>   comp <subcommand>
-
-Glob: /path/Prefix* matches children by pattern. $LAST = last created node ID.
-Operators: cmd1 && cmd2 (and)  cmd1 ; cmd2 (seq)  cmd1 || cmd2 (or)
-Exit codes: 0 = success, 1 = error, 127 = not found`,
-        };
-      }
-      return { data: getCommandHelp(tc.name) };
-    }
-
     // ── Scratchpad intercept (sandbox-local, zero IPC) ──
     const scratchResult = await handleScratchCommand(tc.name, tc.args);
     if (scratchResult) return scratchResult;
 
-    // ── Chain mode: execute multiple commands sequentially ──
-    if (tc.args?.__chain) {
-      return this.executeChain(tc.args.__chain as ParsedChain, tc.args?.input);
-    }
-
-    // ── Unknown command guard ──
+    // ── Unknown tool guard ──
     if (!this.allowedToolNames.has(tc.name)) {
-      const suggestion = findClosestCommand(tc.name);
+      const suggestion = findClosestTool(tc.name);
       const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
-      return { error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${tc.name}".${hint}` } };
+      return { error: { code: 'UNKNOWN_TOOL', message: `Unknown tool "${tc.name}".${hint}` } };
     }
 
     // ── Execute via local executor or IPC ──
@@ -489,7 +332,7 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
         result = await this.ipcBridge.callTool(tc.name, tc.args);
       }
       if (result == null) {
-        return { error: { code: 'NO_TOOL_EXECUTOR', message: `Command "${tc.name}" not available.` } };
+        return { error: { code: 'NO_TOOL_EXECUTOR', message: `Tool "${tc.name}" not available.` } };
       }
       return result;
     } catch (e: any) {
@@ -499,159 +342,8 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
     }
   }
 
-  // ─── Chain execution ────────────────────────────────────────
-
-  /**
-   * Execute a chain of commands with Unix operator semantics.
-   *
-   * Operators:
-   * - `&&` : run next only if previous succeeded (AND)
-   * - `||` : run next only if previous failed (OR)
-   * - `;`  : run next regardless (SEQ)
-   * - `|`  : pipe previous stdout as input to next (PIPE)
-   *
-   * Each command goes through validation and IPC independently.
-   * Returns a single combined result for the chain.
-   */
-  private async executeChain(chain: ParsedChain, input?: string): Promise<any> {
-    const results: any[] = [];
-    let pipeData: any = undefined; // data flowing through pipe
-
-    for (let i = 0; i < chain.commands.length; i++) {
-      this.config.throwIfCanceled();
-
-      const cmd = chain.commands[i];
-      const prevOp = i > 0 ? chain.operators[i - 1] : undefined;
-      const prevResult = i > 0 ? results[i - 1] : undefined;
-      const prevSuccess = prevResult?.error == null;
-
-      // ── Operator semantics: decide whether to run this command ──
-      if (prevOp === '&&' && !prevSuccess) {
-        results.push({
-          command: cmd.raw,
-          error: { code: 'CHAIN_SKIPPED', message: `Skipped — previous command "${chain.commands[i - 1].raw}" failed. Fix the failing command first, then retry the chain.` },
-        });
-        continue;
-      }
-
-      if (prevOp === '||' && prevSuccess) {
-        // || : skip if previous succeeded
-        results.push({
-          command: cmd.raw,
-          data: { skipped: true, reason: 'Previous command succeeded (|| operator).' },
-        });
-        continue;
-      }
-
-      // ; : always run (no skip logic)
-      // | : always run (pipe data handled below)
-
-      // $LAST expansion: replace $LAST in positional args with last node ref
-      if (this.lastNodeId) {
-        const lastRef = this.lastNodeName
-          ? `${this.lastNodeName}#${this.lastNodeId}`
-          : `#${this.lastNodeId}`;
-        for (let j = 0; j < cmd.positionalArgs.length; j++) {
-          if (cmd.positionalArgs[j].includes('$LAST')) {
-            cmd.positionalArgs[j] = cmd.positionalArgs[j].replace(/\$LAST/g, lastRef);
-          }
-        }
-      }
-
-      // Map CLI args — pipe operator injects previous result as input
-      let cmdInput = i === 0 ? input : undefined;
-      if (prevOp === '|' && prevResult) {
-        // Pipe: serialize previous result as input for the next command
-        cmdInput = typeof prevResult.data === 'string'
-          ? prevResult.data
-          : JSON.stringify(prevResult.data ?? prevResult);
-        pipeData = prevResult;
-      }
-
-      const args = mapToToolArgs(cmd, cmdInput);
-      if (!args) {
-        results.push({
-          command: cmd.raw,
-          error: { code: 'PARSE_ERROR', message: `Cannot parse: "${cmd.raw}". Run "${cmd.name}" alone for usage help.` },
-        });
-        break; // can't continue chain
-      }
-
-      // Validate command name
-      if (!isValidCommand(cmd.name)) {
-        results.push({
-          command: cmd.raw,
-          error: { code: 'UNKNOWN_COMMAND', message: `Unknown command "${cmd.name}".${(() => { const s = findClosestCommand(cmd.name); return s ? ` Did you mean "${s}"?` : ''; })()} Available: ls, tree, cat, mk, mv, rm, cp, grep, sed, man` },
-        });
-        break;
-      }
-
-      // Pipe: inject piped node IDs into args for read commands
-      if (prevOp === '|' && pipeData) {
-        this.injectPipeData(cmd.name, args, pipeData);
-      }
-
-      // Execute via local executor or IPC
-      let result: any;
-      try {
-        // Scratchpad intercept (sandbox-local, zero IPC)
-        const scratchResult = await handleScratchCommand(cmd.name, args);
-        if (scratchResult) {
-          result = scratchResult;
-        }
-
-        // Text pipe: grep on piped text content (Unix-style text filtering)
-        if (args.__pipedText && cmd.name === 'grep') {
-          const text = args.__pipedText as string;
-          const query = args.query || cmd.positionalArgs[0] || '';
-          delete args.__pipedText;
-          if (query) {
-            const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-            const matched = text.split('\n').filter(line => pattern.test(line));
-            result = { data: { listing: matched.join('\n') || '(no matches)' } };
-          }
-        }
-
-        if (result == null) {
-          const toolExec = this.toolExecutors[cmd.name];
-          if (toolExec) {
-            result = await toolExec(args);
-          }
-        }
-        if (result == null && this.ipcBridge) {
-          result = await this.ipcBridge.callTool(cmd.name, args);
-        }
-        if (result == null) {
-          result = { error: { code: 'NO_EXECUTOR', message: `No executor for "${cmd.name}".` } };
-        }
-      } catch (e: any) {
-        result = { error: { code: 'EXEC_ERROR', message: `${cmd.name}: ${e.message}` } };
-      }
-
-      // Track $LAST from chain command results
-      this.extractLastNodeId(result);
-
-      results.push({ command: cmd.raw, ...result });
-    }
-
-    // Single command in chain → flatten (don't wrap in chain array)
-    if (results.length === 1) {
-      return results[0];
-    }
-
-    return {
-      error: results.some(r => r.error != null) ? { code: 'CHAIN_ERROR', message: 'One or more chain commands failed.' } : undefined,
-      data: { chain: results },
-    };
-  }
-
   // ─── $LAST variable tracking ────────────────────────────────
 
-  /**
-   * Extract the last created/modified node ID from a tool result.
-   * Sources: idMap (mk/design), id (mv/single-node ops).
-   */
-  /** Figma node IDs are always `digits:digits` */
   private static readonly FIGMA_ID_RE = /^\d+:\d+$/;
 
   private extractLastNodeId(result: any): void {
@@ -663,7 +355,6 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       const ids = Object.values(data.idMap);
       if (ids.length > 0) candidate = String(ids[ids.length - 1]);
     } else if (data.id) {
-      // jsx spreads {id, name, type, children} directly into data
       if (data.name) {
         candidate = `${data.name}#${data.id}`;
       } else {
@@ -673,7 +364,6 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
 
     if (!candidate) return;
 
-    // Support name#id format: "Card#1:2" → extract bare ID + name
     const nameIdMatch = candidate.match(/^(.+)#(\d+:\d+)$/);
     if (nameIdMatch) {
       this.lastNodeName = nameIdMatch[1];
@@ -686,50 +376,4 @@ Exit codes: 0 = success, 1 = error, 127 = not found`,
       this.lastNodeName = undefined;
     }
   }
-
-  // ─── Pipe data injection ────────────────────────────────────
-
-  /**
-   * Inject piped data from a previous command into the next command's args.
-   *
-   * Pipe semantics for design tools:
-   * - grep results (node IDs) → cat/tree/sed receive first node's path
-   * - grep property discovery → sed receives values for replacement
-   * - ls/tree output → grep can search within
-   */
-  private injectPipeData(commandName: string, args: Record<string, any>, prevResult: any): void {
-    const data = prevResult?.data ?? prevResult;
-
-    // Text pipe: listing/tree output → grep does text filtering (Unix-style)
-    if (typeof data?.listing === 'string' && commandName === 'grep') {
-      // Override grep to do text search on piped content instead of canvas search
-      args.__pipedText = data.listing;
-    }
-    if (typeof data?.tree === 'string' && commandName === 'grep') {
-      args.__pipedText = data.tree;
-    }
-
-    // grep node search → cat/tree/ls/sed: inject first result's ref as path
-    if (data?.results && Array.isArray(data.results) && data.results.length > 0) {
-      const firstNode = data.results[0];
-      if (firstNode?.id && ['cat', 'tree', 'ls', 'sed', 'mk', 'rm'].includes(commandName)) {
-        if (!args.path || args.path === '/') {
-          args.path = firstNode.name ? `${firstNode.name}#${firstNode.id}` : `#${firstNode.id}`;
-        }
-      }
-    }
-
-    // mk/design result (idMap) → cat/tree/ls: inject last created node as path
-    if (data?.idMap && typeof data.idMap === 'object') {
-      const ids = Object.values(data.idMap);
-      if (ids.length > 0 && ['cat', 'tree', 'ls'].includes(commandName)) {
-        if (!args.path || args.path === '/') {
-          const lastVal = String(ids[ids.length - 1]);
-          // idMap values are already name#id format — use directly
-          args.path = lastVal;
-        }
-      }
-    }
-  }
-
 }

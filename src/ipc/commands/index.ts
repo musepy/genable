@@ -1,13 +1,12 @@
 /**
  * @file commands/index.ts
- * @description Command handler registry — maps command names to handler functions.
+ * @description Command handler registry — maps tool/command names to handler functions.
  *
  * This is the single dispatch table for all IPC tool calls.
  * Each handler is self-contained: validates args, executes, formats output.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { findClosestCommand } from '../../engine/agent/tools/unified/commandRegistry';
 
 // Command handler groups
 import { registerSessionNodes } from './pathResolver';
@@ -22,6 +21,11 @@ import { handleInspect } from './inspectHandler';
 import { handleEdit } from './editHandler';
 import { handleMemoryCommand } from './memoryHandler';
 import { handleScanTokens } from './tokenScanner';
+// New tool adapters
+import { handleSearch } from './searchAdapter';
+import { handleStructure } from './structureAdapter';
+import { handleVarTool } from './varAdapter';
+import { handleCompTool } from './compAdapter';
 
 // ── Command handler type ──
 
@@ -30,7 +34,20 @@ export type CommandHandler = (parameters: any) => Promise<ToolResponse>;
 // ── Dispatch table ──
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
-  // Unix CLI commands
+  // First-class tools (LLM-facing)
+  jsx: handleJsx,
+  inspect: handleInspect,
+  edit: handleEdit,
+  search: handleSearch,
+  structure: handleStructure,
+  js: handleJs,
+  var: handleVarTool,
+  comp: handleCompTool,
+  // knowledge is handled locally in sandbox — should not arrive at IPC
+  knowledge: async () => ({
+    error: { code: 'LOCAL_ONLY', message: 'knowledge is handled locally. This is an internal routing error.' },
+  }),
+  // Legacy command names — kept for backward compat during transition
   tree: handleTree,
   cat: handleCat,
   mk: handleMk,
@@ -39,17 +56,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   cp: handleCp,
   grep: handleGrep,
   sed: handleSed,
-  js: handleJs,
-  var: handleVar,
-  comp: handleComp,
-  jsx: handleJsx,
-  inspect: handleInspect,
-  edit: handleEdit,
   'scan-tokens': handleScanTokens,
-  // man is handled locally in sandbox — should not arrive at IPC
-  man: async () => ({
-    error: { code: 'LOCAL_ONLY', message: 'man command is handled locally. This is an internal routing error.' },
-  }),
 };
 
 // ── Dispatch function ──
@@ -61,12 +68,10 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
 
   const handler = COMMAND_HANDLERS[toolName];
   if (!handler) {
-    const suggestion = findClosestCommand(toolName);
-    const hint = suggestion ? ` Did you mean "${suggestion}"?` : '';
     return {
       error: {
         code: 'UNKNOWN_TOOL',
-        message: `Unknown command "${toolName}".${hint} Available: ${Object.keys(COMMAND_HANDLERS).join(', ')}`,
+        message: `Unknown tool "${toolName}". Available: ${Object.keys(COMMAND_HANDLERS).join(', ')}`,
       },
     };
   }

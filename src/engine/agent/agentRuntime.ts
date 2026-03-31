@@ -354,6 +354,9 @@ export class AgentRuntime {
   /**
    * Create chat panel if it doesn't exist, return its node ID.
    * Returns null on failure (non-fatal — caller falls back gracefully).
+   *
+   * TODO: Chat panel uses deleted `render` tool — needs migration to `jsx` or removal.
+   * Currently always returns null (render → UNKNOWN_TOOL), callers fall back gracefully.
    */
   private async ensureChatPanel(iteration: number): Promise<string | null> {
     if (this.chatPanelId) return this.chatPanelId;

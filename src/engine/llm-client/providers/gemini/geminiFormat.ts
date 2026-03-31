@@ -4,7 +4,7 @@
  * Shared by GeminiProvider (SDK) and ProxyProvider (raw HTTP).
  */
 
-import { LLMResponse, LLMToolCall, Part, LLMMessage } from '../types';
+import { LLMResponse, LLMToolCall, LLMToolResult, Part, LLMMessage } from '../types';
 import { ToolDefinition } from '../../../agent/tools/types';
 import { isGemini3Model } from '../../modelFilter';
 import { GEMINI_CONFIG } from '../../config';
@@ -102,6 +102,37 @@ export function mapLLMMessageToGeminiContent(msg: LLMMessage): any {
     });
 
   return { role, parts };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// History formatting: LLMResponse/LLMToolResult → LLMMessage
+// Shared by GeminiProvider and ProxyProvider.
+// ═══════════════════════════════════════════════════════════════
+
+/** Format a Gemini LLM response into a history message, preserving fullParts with thought metadata. */
+export function formatResponseGemini(response: LLMResponse): LLMMessage {
+  if (!response.toolCalls || response.toolCalls.length === 0) {
+    return { id: randomId('mdl_'), role: 'model', content: response.text || '' };
+  }
+  const content = (response.fullParts || []).filter((p: any) => {
+    return p.functionCall || p.thought || (p.text && p.text.trim() !== '');
+  });
+  return { id: randomId('mdl_'), role: 'model', content };
+}
+
+/** Format tool results into a Gemini history message, preserving thought_signature and image attachments. */
+export function formatToolResultsGemini(results: LLMToolResult[]): LLMMessage {
+  const content: Part[] = [];
+  for (const tr of results) {
+    content.push({
+      functionResponse: { name: tr.name, response: tr.response },
+      thought_signature: tr.thought_signature,
+    } as any);
+    if (tr.imageAttachment) {
+      content.push({ inlineData: { mimeType: tr.imageAttachment.mimeType, data: tr.imageAttachment.data } });
+    }
+  }
+  return { id: randomId('tol_'), role: 'tool', content };
 }
 
 /** Builds the Gemini generationConfig object (temperature, thinking, schema). */

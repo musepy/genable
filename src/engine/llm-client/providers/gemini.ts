@@ -4,10 +4,10 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, Part, LLMToolResult, getToolSystemInstructionDefault } from './types';
+import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolResult, getToolSystemInstructionDefault } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { GeminiErrorHandler } from './gemini/geminiErrorHandler';
-import { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload } from './gemini/geminiFormat';
+import { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload, formatResponseGemini, formatToolResultsGemini } from './gemini/geminiFormat';
 import { GeminiLogger } from './gemini/geminiLogger';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
@@ -72,29 +72,11 @@ export class GeminiProvider implements LLMProvider {
   }
 
   formatResponse(response: LLMResponse): LLMMessage {
-    if (!response.toolCalls || response.toolCalls.length === 0) {
-      return { id: 'mdl_' + Math.random().toString(36).substring(7), role: 'model', content: response.text || '' };
-    }
-
-    const content = (response.fullParts || []).filter((p: any) => {
-      return p.functionCall || p.thought || (p.text && p.text.trim() !== '');
-    });
-
-    return { id: 'mdl_' + Math.random().toString(36).substring(7), role: 'model', content };
+    return formatResponseGemini(response);
   }
 
   formatToolResults(results: LLMToolResult[]): LLMMessage {
-    const content: Part[] = [];
-    for (const tr of results) {
-      content.push({
-        functionResponse: { name: tr.name, response: tr.response },
-        thought_signature: tr.thought_signature,
-      } as any);
-      if (tr.imageAttachment) {
-        content.push({ inlineData: { mimeType: tr.imageAttachment.mimeType, data: tr.imageAttachment.data } });
-      }
-    }
-    return { id: 'tol_' + Math.random().toString(36).substring(7), role: 'tool', content };
+    return formatToolResultsGemini(results);
   }
 
   // ── Config Building ──────────────────────────────────────────────────────────

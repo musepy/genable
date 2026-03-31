@@ -16,7 +16,6 @@ import {
   LLMMessage,
   LLMToolCall,
   LLMToolResult,
-  Part,
   LLMProviderCapabilities,
   formatResponseDefault,
   formatToolResultsDefault,
@@ -26,6 +25,7 @@ import { ToolDefinition } from '../../agent/tools/types';
 import { DASHSCOPE_CONFIG } from '../config';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
+import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
 
 export type FetchProxy = (
   url: string,
@@ -107,7 +107,7 @@ export class DashScopeProvider implements LLMProvider {
 
     const body: any = {
       model: this.modelName,
-      messages: this.mapMessages(messages),
+      messages: mapMessagesToOpenAI(messages),
       temperature: temperature ?? defaultTemp,
       ...(maxTokens && { max_tokens: maxTokens }),
     };
@@ -289,33 +289,19 @@ export class DashScopeProvider implements LLMProvider {
   // ── Response Mapping (OpenAI chat/completions format — non-streaming) ────────
 
   private mapToLLMResponse(data: any): LLMResponse {
-    const choice = data.choices?.[0];
-    const message = choice?.message;
-
-    const rawToolCalls: LLMToolCall[] | undefined = message?.tool_calls?.map((tc: any) => ({
-      id: tc.id,
-      name: tc.function.name,
-      args: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments,
-    }));
+    const response = mapOpenAIToLLMResponse(data);
 
     // Guard: discard tool calls with empty args (Kimi K2.5 known issue)
-    const toolCalls = rawToolCalls?.filter(tc => {
-      const hasArgs = tc.args != null && typeof tc.args === 'object' && Object.keys(tc.args).length > 0;
-      if (!hasArgs) console.warn(`[DashScope] Discarding empty tool call: ${tc.name}`);
-      return hasArgs;
-    });
+    if (response.toolCalls) {
+      response.toolCalls = response.toolCalls.filter(tc => {
+        const hasArgs = tc.args != null && typeof tc.args === 'object' && Object.keys(tc.args).length > 0;
+        if (!hasArgs) console.warn(`[DashScope] Discarding empty tool call: ${tc.name}`);
+        return hasArgs;
+      });
+      if (response.toolCalls.length === 0) response.toolCalls = undefined;
+    }
 
-    return {
-      text: message?.content || '',
-      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
-      finishReason: choice?.finish_reason || undefined,
-      usage: data.usage ? {
-        promptTokens: data.usage.prompt_tokens || 0,
-        completionTokens: data.usage.completion_tokens || 0,
-        totalTokens: data.usage.total_tokens || 0,
-        cachedTokens: data.usage.prompt_tokens_details?.cached_tokens || undefined,
-      } : undefined,
-    };
+    return response;
   }
 
   // ── Streaming Response Mapping (OpenAI delta format) ──────────────────────────
@@ -379,60 +365,4 @@ export class DashScopeProvider implements LLMProvider {
     };
   }
 
-  // ── Message Mapping ──────────────────────────────────────────────────────────
-
-  private mapMessages(messages: LLMMessage[]): any[] {
-    const mapped: any[] = [];
-
-    for (const m of messages) {
-      let role: string = m.role;
-      if (role === 'model') role = 'assistant';
-
-      // Tool results → individual messages per OpenAI spec
-      if (m.role === 'tool' && Array.isArray(m.content)) {
-        for (const part of m.content) {
-          if (part.functionResponse) {
-            mapped.push({
-              role: 'tool',
-              tool_call_id: part.tool_call_id || 'unknown',
-              content: JSON.stringify(part.functionResponse.response),
-            });
-          }
-        }
-        continue;
-      }
-
-      let content: any = m.content;
-      if (Array.isArray(m.content)) {
-        content = m.content.map((p: Part) => {
-          if (p.text) return { type: 'text', text: p.text };
-          if (p.inlineData) return { type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } };
-          return null;
-        }).filter(Boolean);
-        if (content.length === 1 && content[0].type === 'text') content = content[0].text;
-        else if (content.length === 0) content = null;
-      }
-
-      const msg: any = { role, content };
-
-      // Assistant tool calls
-      if (m.role === 'model' && Array.isArray(m.content)) {
-        const tcs = m.content
-          .filter((p: Part) => p.functionCall)
-          .map((p: Part) => ({
-            id: p.tool_call_id || randomId('call_'),
-            type: 'function',
-            function: { name: p.functionCall!.name, arguments: JSON.stringify(p.functionCall!.args) },
-          }));
-        if (tcs.length > 0) {
-          msg.tool_calls = tcs;
-          if (!msg.content) msg.content = null;
-        }
-      }
-
-      mapped.push(msg);
-    }
-
-    return mapped;
-  }
 }

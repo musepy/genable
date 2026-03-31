@@ -8,6 +8,7 @@
 3. 系统与运行环境       → 程序跑在哪里，CPU/内存/进程/沙箱
 4. 节点模型与序列化管线  → Figma 怎么管理节点，数据怎么给 LLM 看
 5. 属性注册表与 LLM 边界 → 属性怎么分类，LLM 能看到/操作什么
+6. domain 层与写入管线  → 属性怎么从 LLM 字符串变成 Figma API 调用，文本解析→代码模板演进
 ```
 
 ## 文档索引
@@ -21,6 +22,7 @@
 | 3 | [系统与运行环境](system-and-runtime-fundamentals.md) | CPU/内存、顺序/分支/循环、进程/沙箱、JS 宿主、文件系统、inode、async/await |
 | 4 | [节点模型与序列化管线](figma-node-and-serialization-pipeline.md) | ID/type/name、getNodeById、树遍历、管线问题、黑名单、自动发现 |
 | 5 | [属性注册表与 LLM 边界](property-registration-and-llm-boundary.md) | PROPERTY_REGISTRY/BLACKLIST/PROPERTY_META、认知盲区、分级可见性、Override、Figma 面板即分类 |
+| 6 | [domain 层与写入管线](domain-architecture-and-pipeline.md) | design-ir(已删除)、property-specs(直通 Figma)、node-normalizers(4类规则)、gradient-parser、expandShorthands→templateFunctions、propertyDependencies(约束+顺序+拓扑)、templateCompiler(sucrase+执行) |
 
 ### 概念关联
 
@@ -45,6 +47,11 @@ TypeScript（语言）
         │     PROPERTY_REGISTRY（全量）→ BLACKLIST（过滤）→ PROPERTY_META（使用手册）
         │     LLM 认知边界：读用黑名单守门，写用白名单守门
         │     Figma 面板分组 = 最自然的属性分类
+        │     └── domain 层与写入管线（→ 文档 6）
+        │           LLM JSX 字符串 → templateCompiler(sucrase 编译+执行) → VNode 树
+        │           templateFunctions 注入：节点类型 + 计算工具 + 设计快捷方式
+        │           VNode → nodeFactory → propertyDependencies(约束检查) → Figma API
+        │           演进：文本解析(jsxParser, 已删除) → 代码模板(templateCompiler)
         │
         └── LLM 工具调用（→ 文档 4）
               LLM 输出文本 → 插件解析 → figma.* 执行
@@ -67,3 +74,5 @@ TypeScript（语言）
 | [design-quality-methodology-2026-03-22.md](design-quality-methodology-2026-03-22.md) | 设计质量方法论 |
 | [domain-architecture-and-pipeline.md](domain-architecture-and-pipeline.md) | domain/ 目录架构、管线三层、IR 过时分析、文本解析 vs 代码模板对比 |
 | [template-architecture-design.md](template-architecture-design.md) | 模板架构 5 层设计：14 常量 + ~22 函数替代 ~1200 行 parser，含设计系统接入和画布感知新能力 |
+| [runtime-refactor-pre-assessment.md](runtime-refactor-pre-assessment.md) | Agent Runtime 重构计划前置评估：事实验证（3 个错误）、Phase 优先级调整建议 |
+| [vercel-sdk-bundle-feasibility.md](vercel-sdk-bundle-feasibility.md) | Vercel AI SDK Figma sandbox 前置评估：3 方案构建测试、bundle 增量数据、结论=不采用 SDK runtime |

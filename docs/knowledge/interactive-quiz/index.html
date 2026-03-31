@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Quiz</title>
+    <!-- Tailwind CSS (Neutral style) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['Geist Mono', 'ui-monospace', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+        /* Restrained Smooth Transitions */
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        
+        .slide-fade-enter-active { transition: all 0.3s ease-out; }
+        .slide-fade-leave-active { transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1); }
+        .slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(10px); opacity: 0; }
+        
+        /* Markdown Styles Overrides */
+        .prose pre { padding: 1rem; border-radius: 0.375rem; background-color: #f4f4f5; border: 1px solid #e4e4e7; margin: 1rem 0; overflow-x: auto; font-family: 'Geist Mono', monospace; font-size: 0.875rem;}
+        .prose code { color: #27272a; }
+        .prose p { margin-bottom: 0.75rem; line-height: 1.6; }
+        .prose strong { color: #18181b; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-zinc-50 text-zinc-800 antialiased selection:bg-zinc-200">
+
+<div id="app" class="min-h-screen flex flex-col max-w-3xl mx-auto px-4 py-8 md:py-16">
+    
+    <!-- Header: Consistent minimalist header telling you where you are -->
+    <header class="mb-12 border-b border-zinc-200 pb-4 flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-medium tracking-tight text-zinc-900">{{ config.title }}</h1>
+            <p class="text-sm text-zinc-500 mt-1" v-if="currentScreen === 'quiz'">进度: {{ currentIndex + 1 }} / {{ totalQuestions }}</p>
+        </div>
+    </header>
+
+    <main class="flex-grow">
+        
+        <!-- ======================= -->
+        <!-- SCREEN 1: WELCOME       -->
+        <!-- ======================= -->
+        <transition name="fade" mode="out-in">
+            <div v-if="currentScreen === 'welcome'" key="welcome" class="space-y-8">
+                <div class="prose max-w-none text-zinc-600">
+                    <p class="text-lg">{{ config.description }}</p>
+                    <p>这个模块与主程序解耦，专用于量化你在 <strong>TS底层、进程沙箱、数据通信与Agent管线</strong> 等知识维度的能力栈。</p>
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-400 mt-8 mb-4">考核维度 (Domains)</h3>
+                    <ul class="space-y-2 border-l-2 border-zinc-200 pl-4">
+                        <li v-for="(label, key) in config.domains" :key="key" class="text-sm">
+                            <span class="font-medium text-zinc-700">{{ label.split(' ')[0] }}</span> 
+                            <span class="text-zinc-500">{{ label.substring(label.indexOf(' ')) }}</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <button @click="startQuiz" class="group mt-8 inline-flex items-center justify-center px-6 py-3 border border-zinc-300 shadow-sm text-sm font-medium rounded-md text-zinc-800 bg-white hover:bg-zinc-50 hover:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-500 transition-colors">
+                    开始评测
+                    <svg class="ml-2 -mr-1 w-4 h-4 text-zinc-400 group-hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </button>
+            </div>
+
+
+            <!-- ======================= -->
+            <!-- SCREEN 2: QUIZ          -->
+            <!-- ======================= -->
+            <div v-else-if="currentScreen === 'quiz'" key="quiz">
+                
+                <!-- Progress Bar -->
+                <div class="w-full bg-zinc-200 rounded-full h-1.5 mb-8 overflow-hidden">
+                    <div class="bg-zinc-800 h-1.5 transition-all duration-500 ease-in-out" :style="{ width: progressPercentage + '%' }"></div>
+                </div>
+
+                <!-- Tags & Difficulty -->
+                <div class="flex items-center space-x-3 mb-6">
+                    <!-- Domain Tags -->
+                    <template v-if="Array.isArray(currentQuestion.domain)">
+                        <span v-for="d in currentQuestion.domain" :key="d" class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600 border border-zinc-200 uppercase tracking-wider">
+                            {{ d }}
+                        </span>
+                    </template>
+                    <template v-else>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-600 border border-zinc-200 uppercase tracking-wider">
+                            {{ currentQuestion.domain }}
+                        </span>
+                    </template>
+
+                    <!-- Question Type -->
+                    <span class="text-xs text-zinc-400 flex items-center border-l border-zinc-300 pl-3">
+                        <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        {{ currentQuestion.type === 'single' ? '单选' : '多选' }}
+                    </span>
+
+                    <!-- Difficulty -->
+                    <span class="text-xs text-zinc-400 flex items-center pl-2">
+                         <span class="text-amber-400 mr-1" v-for="n in (currentQuestion.difficulty || 1)" :key="n">★</span>
+                         难度
+                    </span>
+                </div>
+
+                <!-- Question Text -->
+                <div class="prose max-w-none mb-10 text-zinc-800 text-lg" v-html="renderMarkdown(currentQuestion.question)"></div>
+
+                <!-- Options -->
+                <div class="space-y-3 mb-10">
+                    <div v-for="option in currentQuestion.options" :key="option.id"
+                         @click="toggleOption(option.id)"
+                         class="relative flex items-start p-4 border rounded-lg cursor-pointer transition-all duration-200 ease-in-out group"
+                         :class="[
+                            selectedOptions.includes(option.id) 
+                                ? (showExplanation ? (option.isCorrect ? 'border-emerald-500 bg-emerald-50/30' : 'border-rose-400 bg-rose-50/30') : 'border-zinc-800 bg-zinc-50 shadow-sm') 
+                                : (showExplanation && option.isCorrect ? 'border-emerald-500 bg-emerald-50/30' : 'border-zinc-200 hover:border-zinc-400 bg-white'),
+                            showExplanation ? 'cursor-default' : 'hover:bg-zinc-50'
+                         ]">
+
+                        <div class="min-w-0 flex-1">
+                            <span class="block text-[15px] leading-relaxed" 
+                                  :class="selectedOptions.includes(option.id) ? 'text-zinc-900 font-medium' : 'text-zinc-600'">
+                                {{ option.text }}
+                            </span>
+                        </div>
+                        
+                        <!-- State Icons (Only appear after submission) -->
+                        <div v-if="showExplanation" class="flex-shrink-0 ml-4 pt-1">
+                             <svg v-if="option.isCorrect" class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                             </svg>
+                             <svg v-else-if="selectedOptions.includes(option.id) && !option.isCorrect" class="w-5 h-5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                             </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action / Feedback Area -->
+                <div class="border-t border-zinc-200 pt-8 mt-4">
+                    <button v-if="!showExplanation" 
+                            @click="submitAnswer" 
+                            :disabled="selectedOptions.length === 0"
+                            class="px-6 py-2.5 bg-zinc-900 text-white text-sm font-medium rounded-md hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zinc-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        确认提交
+                    </button>
+
+                    <transition name="slide-fade">
+                        <div v-if="showExplanation">
+                             <div class="mb-6 rounded-md p-4" :class="isAnswerCorrect ? 'bg-emerald-50/50' : 'bg-rose-50/50'">
+                                 <div class="flex">
+                                     <div class="flex-shrink-0">
+                                        <svg v-if="isAnswerCorrect" class="h-5 w-5 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                        </svg>
+                                        <svg v-else class="h-5 w-5 text-rose-400" viewBox="0 0 20 20" fill="currentColor">
+                                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                        </svg>
+                                     </div>
+                                     <div class="ml-3">
+                                         <h3 class="text-sm font-medium" :class="isAnswerCorrect ? 'text-emerald-800' : 'text-rose-800'">
+                                             {{ isAnswerCorrect ? '回答正确' : '回答不完全正确/错误' }}
+                                         </h3>
+                                     </div>
+                                 </div>
+                                 
+                                 <div class="mt-4 text-sm text-zinc-700 prose max-w-none" v-html="renderMarkdown(currentQuestion.explanation)"></div>
+                             </div>
+
+                             <button @click="nextQuestion" class="px-6 py-2.5 bg-zinc-100 border border-zinc-300 text-zinc-900 text-sm font-medium rounded-md hover:bg-zinc-200 transition-colors">
+                                 {{ currentIndex < totalQuestions - 1 ? '下一题' : '查看诊断报告' }} &rarr;
+                             </button>
+                        </div>
+                    </transition>
+                </div>
+
+            </div>
+
+
+            <!-- ======================= -->
+            <!-- SCREEN 3: REPORT        -->
+            <!-- ======================= -->
+            <div v-else-if="currentScreen === 'report'" key="report" class="space-y-10">
+                <div class="text-center">
+                    <h2 class="text-2xl font-semibold text-zinc-900">能力诊断报告</h2>
+                    <p class="text-zinc-500 mt-2">基于你在底层机制与架构分析的综合表现</p>
+                </div>
+
+                <div class="bg-white border border-zinc-200 shadow-sm rounded-lg p-6 flex items-center justify-between">
+                     <div>
+                         <p class="text-sm font-medium uppercase tracking-widest text-zinc-500">综合正确率 (Overall)</p>
+                         <p class="text-3xl font-light text-zinc-900 mt-1">{{ reportData.overallRate.toFixed(0) }}%</p>
+                     </div>
+                     <div class="text-right text-sm text-zinc-500">
+                         答对 {{ reportData.overallCorrect }} / 共 {{ reportData.overallTotal }} 题
+                     </div>
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-medium uppercase text-zinc-900 mb-4 border-b border-zinc-200 pb-2">维度分析 (Domain Analysis)</h3>
+                    <div class="space-y-6">
+                        <div v-for="(data, key) in reportData.domains" :key="key">
+                            <div class="flex justify-between text-sm mb-1.5">
+                                <span class="font-medium text-zinc-700">{{ data.label }}</span>
+                                <span class="text-zinc-500">{{ data.correct }}/{{ data.total }}</span>
+                            </div>
+                            <div class="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
+                                <div class="h-1.5 transition-all duration-1000 ease-out" 
+                                     :class="data.rate >= 80 ? 'bg-zinc-800' : (data.rate >= 50 ? 'bg-zinc-500' : 'bg-rose-400')"
+                                     :style="{ width: data.rate + '%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LLM Action Card (V2 Automated) -->
+                <div class="mt-12 bg-zinc-50 border border-emerald-200 rounded-lg p-6">
+                    <div class="flex items-center mb-2 text-emerald-600">
+                        <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <h4 class="text-sm font-semibold">指标已静默同步至本地系统</h4>
+                    </div>
+                    <p class="text-[13px] text-zinc-600 mb-4 leading-relaxed">
+                        LLM 助手现已可在后台读取 <code>metrics_latest.json</code>。你无需再手动复制，可直接通知模型调取成绩单并开启下一步的对抗性讲解与实战演练。
+                    </p>
+                    <button @click="startQuiz" class="px-4 py-2 bg-white border border-zinc-300 shadow-sm text-[13px] font-medium rounded text-zinc-700 hover:bg-zinc-50 transition-colors">
+                        重新发起挑战
+                    </button>
+                </div>
+            </div>
+        </transition>
+
+    </main>
+
+    <footer class="mt-16 text-center text-xs text-zinc-400">
+        <p>Interactive Architecture Knowledge Assessment Terminal</p>
+    </footer>
+</div>
+
+<!-- Load application logic as module -->
+<script type="module" src="./app.js"></script>
+
+</body>
+</html>

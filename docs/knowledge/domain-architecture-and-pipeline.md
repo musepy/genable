@@ -2,6 +2,8 @@
 
 2026-03-28 架构分析。domain/ 目录的文件职责、管线三层、IR 过时状态、以及文本解析 vs 代码模板的架构对比。
 
+> **状态更新 (2026-03-30)**: 文本解析→代码模板的演进已实施。jsxParser.ts 和 design-ir.ts 已删除，替换为 templateCompiler.ts + templateFunctions.ts。第 1-3 层已实现，第 4-5 层（设计系统接入、画布感知）为下一步计划。详见 [template-architecture-design.md](template-architecture-design.md)。
+
 ## 学习路径
 
 ```

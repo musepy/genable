@@ -2,37 +2,51 @@
  * @file unified/index.ts
  * @description Barrel export for unified tool definitions.
  *
- * LLM-facing API: 9 first-class tools, all structured JSON, no CLI parsing.
- * - jsx, inspect, edit — core CRUD (unchanged)
- * - search, structure, knowledge — promoted from `run` CLI
- * - var, comp — design system tools, promoted from `run` CLI
- * - js — escape hatch, promoted from `run` CLI
+ * LLM-facing API: 20 first-class tools, all structured JSON, verb_noun naming.
  */
 
 import { jsxDefinition } from './jsx';
 import { inspectDefinition } from './inspect';
 import { editDefinition } from './edit';
-import { searchDefinition } from './searchTool';
-import { structureDefinition } from './structureTool';
+import { findNodesDefinition, discoverPropsDefinition, replacePropsDefinition } from './searchTool';
+import { deleteNodeDefinition, moveNodeDefinition, cloneNodeDefinition } from './structureTool';
 import { knowledgeDefinition } from './knowledgeTool';
-import { varToolDefinition } from './varTool';
-import { compToolDefinition } from './compTool';
+import { listVariablesDefinition, createVariableDefinition, bindVariableDefinition, aliasVariableDefinition } from './varTool';
+import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
 import { jsToolDefinition } from './jsTool';
 import { ToolDefinition } from '../types';
 
 /**
  * Primary tool set for LLM function calling.
- * All tools use structured JSON parameters with simple types.
+ * All tools use structured JSON parameters with verb_noun naming.
  */
 export const unifiedTools: ToolDefinition[] = [
+  // Core CRUD
   jsxDefinition,
   inspectDefinition,
   editDefinition,
-  searchDefinition,
-  structureDefinition,
+  // Search
+  findNodesDefinition,
+  discoverPropsDefinition,
+  replacePropsDefinition,
+  // Structure
+  deleteNodeDefinition,
+  moveNodeDefinition,
+  cloneNodeDefinition,
+  // Knowledge
   knowledgeDefinition,
-  varToolDefinition,
-  compToolDefinition,
+  // Variables
+  listVariablesDefinition,
+  createVariableDefinition,
+  bindVariableDefinition,
+  aliasVariableDefinition,
+  // Components
+  createComponentDefinition,
+  combineComponentsDefinition,
+  addComponentPropDefinition,
+  listComponentPropsDefinition,
+  createInstanceDefinition,
+  // Escape hatch
   jsToolDefinition,
 ];
 

@@ -1,55 +1,96 @@
 /**
  * @file searchTool.ts
- * @description Search nodes and properties, or batch-replace values.
+ * @description Search tools — verb_noun first-class tools.
  *
- * Replaces: grep + sed (from `run` CLI).
- * Three modes: find (default), discover, replace — inferred from params.
+ * 3 tools replacing the old `search({mode inferred})` pattern.
  */
 
 import { ToolDefinition } from '../types';
 
-export const searchDefinition: ToolDefinition = {
-  name: 'search',
+export const findNodesDefinition: ToolDefinition = {
+  name: 'find_nodes',
   executionStrategy: 'parallel',
-  description: `Search nodes and properties, or batch-replace values.
-
-Modes (inferred from params):
-  find     — search nodes by name/type (default)
-  discover — discover property values in a subtree
-  replace  — batch search-and-replace properties
+  description: `Search nodes by name or type.
 
 Examples:
-  search({query: "Button"})
-  search({query: "frame", scope: "Card#1:2"})
-  search({node: "Card#1:2", props: ["fillColor", "fontSize"]})
-  search({node: "Card#1:2", replace: "fillColor:#FFF/#000"})
-  search({node: "Card#1:2", replace: "fontSize:14/16 cornerRadius:8/12"})
-
-Searchable properties: fillColor, textColor, strokeColor, strokeWeight, opacity, cornerRadius, gap, fontSize, fontFamily, fontWeight.`,
+  find_nodes({query: "Button"})
+  find_nodes({query: "frame", scope: "Card#1:2"})`,
   parameters: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: 'Search query — matches node name or type. Triggers find mode.',
+        description: 'Search query — matches node name or type',
       },
       scope: {
         type: 'string',
-        description: 'Limit search to subtree. Node ID (e.g. "100:5"). Default: entire page.',
+        description: 'Limit search to subtree. Node ref ("name#id"). Default: entire page.',
       },
+    },
+    required: ['query'],
+  },
+};
+
+export const discoverPropsDefinition: ToolDefinition = {
+  name: 'discover_props',
+  executionStrategy: 'parallel',
+  description: `Discover unique property values in a subtree.
+
+Examples:
+  discover_props({node: "Card#1:2", props: ["fillColor", "fontSize"]})
+
+Searchable properties: fillColor, textColor, strokeColor, strokeWeight, opacity, cornerRadius, gap, fontSize, fontFamily, fontWeight.`,
+  parameters: {
+    type: 'object',
+    properties: {
       node: {
         type: 'string',
-        description: 'Target node ID (e.g. "100:5"). Required for discover/replace modes.',
+        description: 'Target node ref ("name#id")',
       },
       props: {
         type: 'array',
-        description: 'Properties to discover. Triggers discover mode.',
+        description: 'Properties to discover',
         items: { type: 'string', description: 'Property name' },
       },
-      replace: {
+    },
+    required: ['node', 'props'],
+  },
+};
+
+export const replacePropsDefinition: ToolDefinition = {
+  name: 'replace_props',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Batch search-and-replace property values in a subtree.
+
+Examples:
+  replace_props({node: "Card#1:2", rules: [{prop: "fillColor", from: "#FFF", to: "#000"}]})
+  replace_props({node: "Card#1:2", rules: [
+    {prop: "fillColor", from: "#FFF", to: "#000"},
+    {prop: "fontSize", from: "14", to: "16"}
+  ]})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      node: {
         type: 'string',
-        description: 'Replacement rules string: "prop:from/to [prop:from/to ...]". Triggers replace mode.',
+        description: 'Target node ref ("name#id")',
+      },
+      rules: {
+        type: 'array',
+        description: 'Replacement rules',
+        items: {
+          type: 'object',
+          description: '{prop, from, to}',
+          properties: {
+            prop: { type: 'string', description: 'Property name' },
+            from: { type: 'string', description: 'Value to find' },
+            to: { type: 'string', description: 'Value to replace with' },
+          },
+          required: ['prop', 'from', 'to'],
+        },
       },
     },
+    required: ['node', 'rules'],
   },
 };

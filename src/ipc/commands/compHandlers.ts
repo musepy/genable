@@ -26,7 +26,7 @@ export async function handleComp(parameters: any): Promise<ToolResponse> {
 
 // ── comp create — convert frame to component ──
 
-async function handleCompCreate(params: any): Promise<ToolResponse> {
+export async function handleCompCreate(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   if (!paths || paths.length === 0) {
     return { error: 'Usage: comp create <path>' };
@@ -106,7 +106,7 @@ async function handleCompCreate(params: any): Promise<ToolResponse> {
 
 // ── comp combine — combine as variant set ──
 
-async function handleCompCombine(params: any): Promise<ToolResponse> {
+export async function handleCompCombine(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   const setName = params.name as string | undefined;
 
@@ -163,7 +163,7 @@ async function handleCompCombine(params: any): Promise<ToolResponse> {
 
 // ── comp prop — add component property ──
 
-async function handleCompProp(params: any): Promise<ToolResponse> {
+export async function handleCompProp(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   const propName = params.name as string;
   const propType = (params.propType as string || '').toUpperCase();
@@ -212,7 +212,7 @@ async function handleCompProp(params: any): Promise<ToolResponse> {
 
 // ── comp ls — list component properties ──
 
-async function handleCompLs(params: any): Promise<ToolResponse> {
+export async function handleCompLs(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   if (!paths || paths.length === 0) {
     return { error: 'Usage: comp ls <path>' };
@@ -287,7 +287,7 @@ async function handleCompLs(params: any): Promise<ToolResponse> {
 
 // ── comp instance — create instance ──
 
-async function handleCompInstance(params: any): Promise<ToolResponse> {
+export async function handleCompInstance(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   const parentPath = params.parent as string | undefined;
 

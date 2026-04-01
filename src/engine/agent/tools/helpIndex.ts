@@ -33,8 +33,13 @@ function sanitizeLegacyHelp(text: string): string {
     .replace(/`tree`/g, '`inspect`')
     .replace(/`cat`/g, '`inspect`')
     .replace(/`man`/g, '`knowledge`')
-    .replace(/`grep`/g, '`search`')
-    .replace(/`sed`/g, '`search (replace mode)`')
+    .replace(/`grep`/g, '`find_nodes`')
+    .replace(/`sed`/g, '`replace_props`')
+    .replace(/\bcomp create\b/g, 'create_component')
+    .replace(/\bcomp combine\b/g, 'combine_components')
+    .replace(/\bcomp instance\b/g, 'create_instance')
+    .replace(/\bcomp prop\b/g, 'add_component_prop')
+    .replace(/\bcomp ls\b/g, 'list_component_props')
     .replace(/\brender\b(?!ing|ed|s)/gi, 'jsx');
 }
 

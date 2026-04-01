@@ -1,82 +1,129 @@
 /**
  * @file varTool.ts
- * @description Manage Figma variables (design tokens).
+ * @description Variable (design token) tools — verb_noun first-class tools.
  *
- * Replaces: run var (from `run` CLI).
+ * 4 tools replacing the old `var({action})` action-routed pattern.
  */
 
 import { ToolDefinition } from '../types';
 
-export const varToolDefinition: ToolDefinition = {
-  name: 'var',
-  executionStrategy: 'sequential',
-  mutates: true,
-  description: `Manage Figma variables (design tokens) — list, create, bind, alias.
-
-Actions:
-  ls    — list collections & variables
-  create — create variable or collection
-  bind  — bind variable to node property
-  alias — create alias (semantic -> primitive)
+export const listVariablesDefinition: ToolDefinition = {
+  name: 'list_variables',
+  executionStrategy: 'parallel',
+  description: `List variable collections and variables.
 
 Examples:
-  var({action: "ls"})
-  var({action: "ls", collection: "Theme"})
-  var({action: "create", variable: "colors/primary", type: "COLOR", value: "#1A1A1A"})
-  var({action: "create", collection: "Theme", modes: "Light,Dark"})
-  var({action: "create", variable: "Theme/bg", type: "COLOR", value: "#FFFFFF", mode: "Light"})
-  var({action: "create", variable: "Theme/bg", type: "COLOR", value: "#1A1A1A", mode: "Dark"})
-  var({action: "create", variable: "spacing/md", type: "FLOAT", value: "16"})
-  var({action: "bind", node: "Card#1:2", prop: "fills", variable: "Theme/bg"})
-  var({action: "alias", variable: "semantic/text-primary", target: "colors/primary"})
+  list_variables()
+  list_variables({collection: "Theme"})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      collection: {
+        type: 'string',
+        description: 'Filter by collection name',
+      },
+    },
+  },
+};
+
+export const createVariableDefinition: ToolDefinition = {
+  name: 'create_variable',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Create a variable or variable collection.
+
+Variable: provide variable + type + value.
+Collection: provide collection (+ optional modes).
+
+Examples:
+  create_variable({variable: "colors/primary", type: "COLOR", value: "#1A1A1A"})
+  create_variable({collection: "Theme", modes: ["Light", "Dark"]})
+  create_variable({variable: "Theme/bg", type: "COLOR", value: "#FFFFFF", mode: "Light"})
+  create_variable({variable: "spacing/md", type: "FLOAT", value: "16"})
 
 Variable types: COLOR, FLOAT, BOOLEAN, STRING.`,
   parameters: {
     type: 'object',
     properties: {
-      action: {
-        type: 'string',
-        description: '"ls", "create", "bind", or "alias"',
-        enum: ['ls', 'create', 'bind', 'alias'],
-      },
-      collection: {
-        type: 'string',
-        description: 'Collection name (ls: filter; create: new collection name)',
-      },
       variable: {
         type: 'string',
-        description: 'Variable path "collection/name" (create, bind, alias)',
+        description: 'Variable path "collection/name"',
       },
       type: {
         type: 'string',
-        description: 'Variable type (create only)',
+        description: 'Variable type',
         enum: ['COLOR', 'FLOAT', 'BOOLEAN', 'STRING'],
       },
       value: {
         type: 'string',
         description: 'Variable value — #hex for COLOR, number for FLOAT, true/false, or string',
       },
-      modes: {
+      collection: {
         type: 'string',
-        description: 'Comma-separated mode names for collection creation',
+        description: 'Collection name (for collection creation)',
+      },
+      modes: {
+        type: 'array',
+        description: 'Mode names for collection creation',
+        items: { type: 'string', description: 'Mode name' },
       },
       mode: {
         type: 'string',
         description: 'Target mode for per-mode value setting',
       },
+    },
+  },
+};
+
+export const bindVariableDefinition: ToolDefinition = {
+  name: 'bind_variable',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Bind a variable to a node property.
+
+Examples:
+  bind_variable({node: "Card#1:2", prop: "fills", variable: "Theme/bg"})
+  bind_variable({node: "Title#1:3", prop: "fontSize", variable: "sizing/heading"})`,
+  parameters: {
+    type: 'object',
+    properties: {
       node: {
         type: 'string',
-        description: 'Node ID for binding (e.g. "100:5")',
+        description: 'Node ref ("name#id")',
       },
       prop: {
         type: 'string',
         description: 'Node property to bind (fills, fontSize, paddingTop, etc.)',
       },
-      target: {
+      variable: {
         type: 'string',
-        description: 'Target variable path for alias ("collection/name")',
+        description: 'Variable path "collection/name"',
       },
     },
-    required: ['action'],
+    required: ['node', 'prop', 'variable'],
+  },
+};
+
+export const aliasVariableDefinition: ToolDefinition = {
+  name: 'alias_variable',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Create a variable alias (semantic → primitive).
+
+Examples:
+  alias_variable({variable: "semantic/text-primary", target: "colors/primary"})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      variable: {
+        type: 'string',
+        description: 'Source variable path "collection/name"',
+      },
+      target: {
+        type: 'string',
+        description: 'Target variable path "collection/name"',
+      },
+    },
+    required: ['variable', 'target'],
   },
 };

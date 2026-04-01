@@ -40,40 +40,128 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     required: [],
     repairHint: 'provide "node" + "props" for single edit, or "nodes" array for batch',
   },
-  // Promoted tools
+  // Search tools
   {
-    tool: 'search',
+    tool: 'find_nodes',
     mode: 'EXECUTION',
-    required: [],
-    repairHint: 'provide "query" for find, "node"+"props" for discover, or "node"+"replace" for replace',
+    required: [{ name: 'query', trim: true, check: 'required' }],
+    repairHint: 'provide "query" string to search nodes by name or type',
   },
   {
-    tool: 'structure',
+    tool: 'discover_props',
     mode: 'EXECUTION',
     required: [
-      { name: 'action', trim: true, check: 'required' },
       { name: 'node', trim: true, check: 'required' },
+      { name: 'props', check: 'required' },
     ],
-    repairHint: 'provide "action" (move/delete/clone) and "node" ref',
+    repairHint: 'provide "node" ref and "props" array of property names',
   },
+  {
+    tool: 'replace_props',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'node', trim: true, check: 'required' },
+      { name: 'rules', check: 'required' },
+    ],
+    repairHint: 'provide "node" ref and "rules" array [{prop, from, to}]',
+  },
+  // Structure tools
+  {
+    tool: 'delete_node',
+    mode: 'EXECUTION',
+    required: [{ name: 'node', trim: true, check: 'required' }],
+    repairHint: 'provide "node" ref to delete',
+  },
+  {
+    tool: 'move_node',
+    mode: 'EXECUTION',
+    required: [{ name: 'node', trim: true, check: 'required' }],
+    repairHint: 'provide "node" ref + "dest", "name", or "index"',
+  },
+  {
+    tool: 'clone_node',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'node', trim: true, check: 'required' },
+      { name: 'dest', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide "node" ref and "dest" path',
+  },
+  // Knowledge
   {
     tool: 'knowledge',
     mode: 'EXECUTION',
     required: [],
     repairHint: 'optionally provide "topic" or "source"+"tags"',
   },
+  // Variable tools
   {
-    tool: 'var',
+    tool: 'list_variables',
     mode: 'EXECUTION',
-    required: [{ name: 'action', trim: true, check: 'required' }],
-    repairHint: 'provide "action" (ls/create/bind/alias) and required params',
+    required: [],
+    repairHint: 'optionally provide "collection" to filter',
   },
   {
-    tool: 'comp',
+    tool: 'create_variable',
     mode: 'EXECUTION',
-    required: [{ name: 'action', trim: true, check: 'required' }],
-    repairHint: 'provide "action" (create/combine/prop/ls/instance) and required params',
+    required: [],
+    repairHint: 'provide "variable"+"type"+"value" for a variable, or "collection" for a collection',
   },
+  {
+    tool: 'bind_variable',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'node', trim: true, check: 'required' },
+      { name: 'prop', trim: true, check: 'required' },
+      { name: 'variable', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide "node", "prop", and "variable" path',
+  },
+  {
+    tool: 'alias_variable',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'variable', trim: true, check: 'required' },
+      { name: 'target', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide "variable" and "target" paths',
+  },
+  // Component tools
+  {
+    tool: 'create_component',
+    mode: 'EXECUTION',
+    required: [{ name: 'node', trim: true, check: 'required' }],
+    repairHint: 'provide "node" ref to convert to component',
+  },
+  {
+    tool: 'combine_components',
+    mode: 'EXECUTION',
+    required: [{ name: 'nodes', check: 'required' }],
+    repairHint: 'provide "nodes" array of component refs',
+  },
+  {
+    tool: 'add_component_prop',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'node', trim: true, check: 'required' },
+      { name: 'name', trim: true, check: 'required' },
+      { name: 'type', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide "node", "name", and "type" (TEXT/BOOLEAN/INSTANCE_SWAP)',
+  },
+  {
+    tool: 'list_component_props',
+    mode: 'EXECUTION',
+    required: [{ name: 'node', trim: true, check: 'required' }],
+    repairHint: 'provide "node" ref of component or instance',
+  },
+  {
+    tool: 'create_instance',
+    mode: 'EXECUTION',
+    required: [{ name: 'node', trim: true, check: 'required' }],
+    repairHint: 'provide "node" ref of component to instantiate',
+  },
+  // Escape hatch
   {
     tool: 'js',
     mode: 'EXECUTION',

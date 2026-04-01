@@ -22,14 +22,14 @@ export async function handleVar(parameters: any): Promise<ToolResponse> {
     case 'alias': return handleVarAlias(parameters);
     default:
       return {
-        error: { code: 'UNKNOWN_SUBCOMMAND', message: `Unknown var subcommand "${sub}". Use: ls, mk, bind, alias` },
+        error: `Unknown var subcommand "${sub}". Use: ls, mk, bind, alias`,
       };
   }
 }
 
 // ── var ls ──
 
-async function handleVarLs(params: any): Promise<ToolResponse> {
+export async function handleVarLs(params: any): Promise<ToolResponse> {
   const filterCollection = params.collection as string | undefined;
   const verbose = params.verbose as boolean | undefined;
 
@@ -113,20 +113,20 @@ async function handleVarLs(params: any): Promise<ToolResponse> {
 
 // ── var mk (create variable or set value) ──
 
-async function handleVarMk(params: any): Promise<ToolResponse> {
+export async function handleVarMk(params: any): Promise<ToolResponse> {
   const varPath = params.variable as string;
   const rawType = params.varType as string | undefined;
   const rawValue = params.value as string | undefined;
   const modeName = params.mode as string | undefined;
 
   if (!varPath) {
-    return { error: { code: 'MISSING_ARG', message: 'Usage: var mk <collection/name> <TYPE> <value>' } };
+    return { error: 'Usage: var mk <collection/name> <TYPE> <value>' };
   }
 
   // Parse collection/name from path
   const slashIdx = varPath.indexOf('/');
   if (slashIdx < 0) {
-    return { error: { code: 'MISSING_ARG', message: 'Variable path must include collection: var mk <collection/name> <TYPE> <value>' } };
+    return { error: 'Variable path must include collection: var mk <collection/name> <TYPE> <value>' };
   }
   const collectionName = varPath.slice(0, slashIdx);
   const variableName = varPath.slice(slashIdx + 1);
@@ -144,7 +144,7 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
   // Determine type
   const type = normalizeVarType(rawType || guessType(rawValue || '', varPath));
   if (!type) {
-    return { error: { code: 'INVALID_TYPE', message: `Cannot determine variable type. Specify explicitly: var mk ${varPath} COLOR|FLOAT|BOOLEAN|STRING <value>` } };
+    return { error: `Cannot determine variable type. Specify explicitly: var mk ${varPath} COLOR|FLOAT|BOOLEAN|STRING <value>` };
   }
 
   // Find or create variable
@@ -162,14 +162,14 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
   if (rawValue !== undefined) {
     const figmaValue = parseValueForFigma(rawValue, type);
     if (figmaValue === undefined) {
-      return { error: { code: 'INVALID_VALUE', message: `Cannot parse "${rawValue}" as ${type}.` } };
+      return { error: `Cannot parse "${rawValue}" as ${type}.` };
     }
 
     if (modeName) {
       // Set for specific mode
       const mode = collection.modes.find(m => m.name.toLowerCase() === modeName.toLowerCase());
       if (!mode) {
-        return { error: { code: 'MODE_NOT_FOUND', message: `Mode "${modeName}" not found in collection "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` } };
+        return { error: `Mode "${modeName}" not found in collection "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` };
       }
       variable.setValueForMode(mode.modeId, figmaValue);
     } else {
@@ -201,12 +201,12 @@ async function handleVarMk(params: any): Promise<ToolResponse> {
 
 // ── var mk --collection (create collection with modes) ──
 
-async function handleVarMkCollection(params: any): Promise<ToolResponse> {
+export async function handleVarMkCollection(params: any): Promise<ToolResponse> {
   const collName = params.collection as string;
   const modesStr = params.modes as string | undefined;
 
   if (!collName) {
-    return { error: { code: 'MISSING_ARG', message: 'Usage: var mk --collection <name> [--modes Light,Dark]' } };
+    return { error: 'Usage: var mk --collection <name> [--modes Light,Dark]' };
   }
 
   // Check if collection already exists
@@ -250,27 +250,27 @@ async function handleVarMkCollection(params: any): Promise<ToolResponse> {
 
 // ── var bind ──
 
-async function handleVarBind(params: any): Promise<ToolResponse> {
+export async function handleVarBind(params: any): Promise<ToolResponse> {
   const nodePath = params.nodePath as string;
   const property = params.property as string;
   const varPath = params.variable as string;
 
   if (!nodePath || !property || !varPath) {
-    return { error: { code: 'MISSING_ARG', message: 'Usage: var bind <node-path> <property> <collection/varName>' } };
+    return { error: 'Usage: var bind <node-path> <property> <collection/varName>' };
   }
 
   // Resolve node
   const resolved = await resolvePathToNode(nodePath);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
-    return { error: { code: 'INVALID_NODE', message: 'Cannot bind variables to a page node.' } };
+    return { error: 'Cannot bind variables to a page node.' };
   }
   const node = resolved.node;
 
   // Find variable
   const variable = await findVariableByPath(varPath);
   if (!variable) {
-    return { error: { code: 'VARIABLE_NOT_FOUND', message: `Variable "${varPath}" not found. Use "var ls" to list available variables.` } };
+    return { error: `Variable "${varPath}" not found. Use "var ls" to list available variables.` };
   }
 
   // Bind
@@ -298,31 +298,31 @@ async function handleVarBind(params: any): Promise<ToolResponse> {
     };
   } catch (e: any) {
     return {
-      error: { code: 'BIND_FAILED', message: `Failed to bind: ${e?.message ?? e}` },
+      error: `Failed to bind: ${e?.message ?? e}`,
     };
   }
 }
 
 // ── var alias ──
 
-async function handleVarAlias(params: any): Promise<ToolResponse> {
+export async function handleVarAlias(params: any): Promise<ToolResponse> {
   const sourceVarPath = params.variable as string;
   const targetVarPath = params.target as string;
 
   if (!sourceVarPath || !targetVarPath) {
-    return { error: { code: 'MISSING_ARG', message: 'Usage: var alias <semantic/name> <target/name>' } };
+    return { error: 'Usage: var alias <semantic/name> <target/name>' };
   }
 
   // Find target variable
   const targetVar = await findVariableByPath(targetVarPath);
   if (!targetVar) {
-    return { error: { code: 'VARIABLE_NOT_FOUND', message: `Target variable "${targetVarPath}" not found.` } };
+    return { error: `Target variable "${targetVarPath}" not found.` };
   }
 
   // Parse source path
   const slashIdx = sourceVarPath.indexOf('/');
   if (slashIdx < 0) {
-    return { error: { code: 'MISSING_ARG', message: 'Alias path must include collection: var alias <collection/name> <target>' } };
+    return { error: 'Alias path must include collection: var alias <collection/name> <target>' };
   }
   const collectionName = sourceVarPath.slice(0, slashIdx);
   const variableName = sourceVarPath.slice(slashIdx + 1);

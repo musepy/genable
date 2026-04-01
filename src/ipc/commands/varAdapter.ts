@@ -1,29 +1,42 @@
 /**
  * @file varAdapter.ts
- * @description Thin adapter for the `var` tool — maps structured params to handleVar.
+ * @description Adapters for variable tools — maps structured params to varHandlers.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { handleVar } from './varHandlers';
+import { handleVarLs, handleVarMk, handleVarMkCollection, handleVarBind, handleVarAlias } from './varHandlers';
 
-export async function handleVarTool(params: any): Promise<ToolResponse> {
-  // Map action → subcommand (handleVar expects "ls", "mk", "mk-collection", "bind", "alias")
-  let subcommand = params.action;
-  if (subcommand === 'create') {
-    // Creating a collection (collection set, no variable) → mk-collection
-    subcommand = (params.collection && !params.variable) ? 'mk-collection' : 'mk';
+export async function handleListVariables(params: any): Promise<ToolResponse> {
+  return handleVarLs({ collection: params.collection });
+}
+
+export async function handleCreateVariable(params: any): Promise<ToolResponse> {
+  // Collection creation: collection set without variable
+  if (params.collection && !params.variable) {
+    return handleVarMkCollection({
+      collName: params.collection,
+      modesStr: Array.isArray(params.modes) ? params.modes.join(',') : params.modes,
+    });
   }
-
-  return handleVar({
-    subcommand,
-    collection: params.collection,
-    variable: params.variable,
+  return handleVarMk({
+    varPath: params.variable,
     varType: params.type,
     value: params.value,
-    modes: params.modes,
     mode: params.mode,
+  });
+}
+
+export async function handleBindVariable(params: any): Promise<ToolResponse> {
+  return handleVarBind({
     nodePath: params.node,
     property: params.prop,
+    variable: params.variable,
+  });
+}
+
+export async function handleAliasVariable(params: any): Promise<ToolResponse> {
+  return handleVarAlias({
+    variable: params.variable,
     target: params.target,
   });
 }

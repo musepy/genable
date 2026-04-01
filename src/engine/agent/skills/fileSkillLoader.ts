@@ -69,11 +69,11 @@ function sanitizeLegacyToolReferences(text: string): string {
   return text
     // CLI run() wrapper → direct tool calls
     .replace(/run\(\{command:\s*"man\s+/g, 'knowledge({topic: "')
-    .replace(/run\(\{command:\s*"grep\s+/g, 'search({query: "')
-    .replace(/run\(\{command:\s*"sed\s+/g, 'search({node: "')
-    .replace(/run\(\{command:\s*"rm\s+/g, 'structure({action: "delete", node: "')
-    .replace(/run\(\{command:\s*"mv\s+/g, 'structure({action: "move", node: "')
-    .replace(/run\(\{command:\s*"cp\s+/g, 'structure({action: "clone", node: "')
+    .replace(/run\(\{command:\s*"grep\s+/g, 'find_nodes({query: "')
+    .replace(/run\(\{command:\s*"sed\s+/g, 'replace_props({node: "')
+    .replace(/run\(\{command:\s*"rm\s+/g, 'delete_node({node: "')
+    .replace(/run\(\{command:\s*"mv\s+/g, 'move_node({node: "')
+    .replace(/run\(\{command:\s*"cp\s+/g, 'clone_node({node: "')
     // Standalone CLI command names in code blocks/examples
     .replace(/\bmk\s+\//g, 'jsx  /')
     .replace(/\bcat\s+\//g, 'inspect /')

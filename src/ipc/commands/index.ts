@@ -14,18 +14,16 @@ import { handleTree, handleCat } from './readHandlers';
 import { handleMk, handleRm, handleMv, handleCp } from './writeHandlers';
 import { handleGrep, handleSed } from './searchHandlers';
 import { handleJs } from './jsHandler';
-import { handleVar } from './varHandlers';
-import { handleComp } from './compHandlers';
 import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';
 import { handleEdit } from './editHandler';
 import { handleMemoryCommand } from './memoryHandler';
 import { handleScanTokens } from './tokenScanner';
-// New tool adapters
-import { handleSearch } from './searchAdapter';
-import { handleStructure } from './structureAdapter';
-import { handleVarTool } from './varAdapter';
-import { handleCompTool } from './compAdapter';
+// verb_noun tool adapters
+import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './searchAdapter';
+import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAdapter';
+import { handleListVariables, handleCreateVariable, handleBindVariable, handleAliasVariable } from './varAdapter';
+import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './compAdapter';
 
 // ── Command handler type ──
 
@@ -34,20 +32,35 @@ export type CommandHandler = (parameters: any) => Promise<ToolResponse>;
 // ── Dispatch table ──
 
 const COMMAND_HANDLERS: Record<string, CommandHandler> = {
-  // First-class tools (LLM-facing)
+  // First-class tools (LLM-facing, verb_noun naming)
   jsx: handleJsx,
   inspect: handleInspect,
   edit: handleEdit,
-  search: handleSearch,
-  structure: handleStructure,
   js: handleJs,
-  var: handleVarTool,
-  comp: handleCompTool,
+  // Search tools
+  find_nodes: handleFindNodes,
+  discover_props: handleDiscoverProps,
+  replace_props: handleReplaceProps,
+  // Structure tools
+  delete_node: handleDeleteNode,
+  move_node: handleMoveNode,
+  clone_node: handleCloneNode,
+  // Variable tools
+  list_variables: handleListVariables,
+  create_variable: handleCreateVariable,
+  bind_variable: handleBindVariable,
+  alias_variable: handleAliasVariable,
+  // Component tools
+  create_component: handleCreateComponent,
+  combine_components: handleCombineComponents,
+  add_component_prop: handleAddComponentProp,
+  list_component_props: handleListComponentProps,
+  create_instance: handleCreateInstance,
   // knowledge is handled locally in sandbox — should not arrive at IPC
   knowledge: async () => ({
-    error: { code: 'LOCAL_ONLY', message: 'knowledge is handled locally. This is an internal routing error.' },
+    error: 'knowledge is handled locally. This is an internal routing error.',
   }),
-  // Legacy command names — kept for backward compat during transition
+  // Legacy command names — kept for backward compat
   tree: handleTree,
   cat: handleCat,
   mk: handleMk,
@@ -69,10 +82,7 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
   const handler = COMMAND_HANDLERS[toolName];
   if (!handler) {
     return {
-      error: {
-        code: 'UNKNOWN_TOOL',
-        message: `Unknown tool "${toolName}". Available: ${Object.keys(COMMAND_HANDLERS).join(', ')}`,
-      },
+      error: `Unknown tool "${toolName}". Available: ${Object.keys(COMMAND_HANDLERS).join(', ')}`,
     };
   }
 

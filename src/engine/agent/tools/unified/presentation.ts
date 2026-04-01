@@ -5,16 +5,16 @@
  * Single function that transforms raw tool results into LLM-ready format.
  * Applied once, at the shell level, after command execution.
  *
- * Pipeline: result → exit code → meta footer → stderr → overflow guard → binary guard → strip noise
+ * Pipeline: result → meta footer → stderr → overflow guard → binary guard → strip noise
  *
  * Design principle: commands own their output format.
  * This pipe only adds metadata, guards against LLM cognitive limits,
  * and strips noise fields that waste LLM attention budget.
+ * No exit codes — error presence/absence is the only signal.
  */
 
 import {
-  computeExitCode,
-  formatMeta,
+  formatTiming,
   extractStderr,
   truncateOverflow,
   guardBinary,
@@ -26,21 +26,27 @@ import {
 // ---------------------------------------------------------------------------
 
 const KEEP_FIELDS: Record<string, string[] | null> = {
-  // Write commands — LLM needs IDs to reference created nodes + error details for repair
+  // Legacy commands (backward compat)
   cp:      ['idMap'],
   rm:      ['deleted'],
   mv:      ['id', 'name'],
-  // Read commands — LLM needs the content
   tree:    ['tree'],
-  // Search commands
-  grep:    ['results', 'properties'],   // results = node mode, properties = prop mode
+  grep:    ['results', 'properties'],
   sed:     ['replaced', 'details'],
-  // Info
-  man:     null,                        // pass through
-  // First-class tools — pass through (properties are now registry-driven, not a fixed set)
+  man:     null,
+  // Core tools
   inspect: null,
-  jsx:     null,                        // node fields spread to top level — pass through
+  jsx:     null,
   edit:    ['id', 'name', 'type', 'updated', 'results'],
+  // Search tools
+  find_nodes:      ['results'],
+  discover_props:  null,
+  replace_props:   ['replaced', 'details'],
+  // Structure tools
+  delete_node:     ['deleted'],
+  move_node:       ['id', 'name'],
+  clone_node:      ['idMap'],
+  // Variable & component tools — pass through
 };
 
 /** Overflow hints per command — contextual help for the LLM. */
@@ -57,11 +63,10 @@ const OVERFLOW_HINTS: Record<string, string> = {
  * Error: presence of `error` field = failure (replaces success boolean).
  * Matches Open-Pencil's response convention: data fields at top level, error as string.
  *
- * Pipeline: raw result → exit code + stderr (from raw) → flatten data → strip noise → guards
+ * Pipeline: raw result → stderr → flatten data → strip noise → guards
  */
 export function presentForLLM(result: any, commandName: string, durationMs: number): any {
-  // 1. Exit code + stderr from raw result (before flattening)
-  const exitCode = computeExitCode(result);
+  // 1. Stderr from raw result (before flattening)
   const stderr = extractStderr(result);
 
   // 2. Flatten: merge data fields to top level, strip noise
@@ -73,14 +78,13 @@ export function presentForLLM(result: any, commandName: string, durationMs: numb
     cleaned = { output: result.data };
   }
 
-  // 3. Error replaces success boolean — only present on failure
+  // 3. Error — flat string, pass through
   if (result?.error != null) {
-    const err = result.error;
-    cleaned.error = typeof err === 'string' ? err : (err?.message || 'Unknown error');
+    cleaned.error = result.error;
   }
 
-  // 4. Meta footer
-  cleaned._meta = formatMeta(exitCode, durationMs);
+  // 4. Meta footer — timing only, no exit code
+  cleaned._meta = `[${formatTiming(durationMs)}]`;
 
   // 5. Stderr
   if (stderr) cleaned._stderr = stderr;
@@ -118,8 +122,7 @@ function stripForLLM(data: any, commandName: string): any {
           Object.assign(flat, stripFields(sub.data, subCmd));
         }
         if (sub.error != null) {
-          const err = sub.error;
-          flat.error = typeof err === 'string' ? err : (err?.message || 'error');
+          flat.error = sub.error;
         }
         return flat;
       }),

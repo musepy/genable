@@ -2,7 +2,7 @@
 
 > Status: 设计阶段
 > Date: 2026-03-30
-> Related: [执行管线](execution-pipeline.md) | [OpenPencil 架构](openpencil-tool-architecture.md)
+> Related: [执行管线](../execution-pipeline.md) | [OpenPencil 架构](openpencil-tool-architecture.md)
 
 ## 问题
 
@@ -20,6 +20,7 @@
 | [questioning-feedback.md](questioning-feedback.md) | **提问技巧反馈** — 评分 7.5→7.8、术语精确度改进、提问结构化模板、进步路径 |
 | [openpencil-qa-session3.md](openpencil-qa-session3.md) | **OpenPencil Q&A 第三轮** — 回调/钩子/注册概念、工具定义三要素通用性、=== 引用比较、默认行为机制、坐标系统、替换策略解耦、LLM 认知负担、同层错误设计 |
 | [contrastive-grounding.md](contrastive-grounding.md) | **概念对照桥** — 10 个核心概念的"OpenPencil ↔ 我们的代码"双栏对照、对照式学习方法论、触发提问词 |
+| [edit-to-setter-analysis.md](edit-to-setter-analysis.md) | **edit→setter 拆分分析** — OpenPencil 8 setter 拆分三原则（设计决策原子性/参数互斥性/操作目标差异）、Variable 绑定覆盖率（core 60%/+extended ~90%）、handler↔setter 映射、下一步计划 |
 
 ## 方案概览
 

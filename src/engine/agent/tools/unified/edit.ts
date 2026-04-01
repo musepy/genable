@@ -12,24 +12,21 @@ export const editDefinition: ToolDefinition = {
   name: 'edit',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Update properties or text content of existing nodes. Supports single and batch.
+  description: `Batch update properties on multiple nodes. Use after inspect to fix multiple issues at once.
 
-Single:
-  edit({node: "1:2", props: {corner: 16, bg: "#F8F9FA"}})
-  edit({node: "1:3", content: "Updated Title"})
+For single-property changes, prefer focused setters:
+  set_text  — text content
+  set_fill  — fill/background color
+  set_stroke — border
+  set_layout — padding, gap, direction
 
-Batch (preferred when editing multiple nodes):
+Use edit for batch fixes or properties not covered by setters (sizing, radius, opacity, effects, component props):
   edit({nodes: [
-    {node: "1:1", props: {w: "fill"}},
-    {node: "1:2", props: {w: "fill"}},
-    {node: "1:3", props: {bg: "#4F46E5", corner: 8}}
-  ]})
-
-Rules:
-  - Nodes MUST exist — edit never creates
-  - Only listed props change — everything else preserved
-  - Use name#id refs from jsx tree or inspect results
-  - Batch multiple edits into one call — do NOT call edit() per node`,
+    {node: "1:1", props: {w: "fill", corner: 8}},
+    {node: "1:2", props: {opacity: 0.6}},
+    {node: "1:3", content: "Updated text"},
+    {node: "1:4", props: {Name: "Alex", Role: "Engineer"}}
+  ]})`,
   parameters: {
     type: 'object',
     properties: {

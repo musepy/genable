@@ -69,10 +69,10 @@ TypeScript（语言）
 | [property-pipeline.md](property-pipeline.md) | 属性处理管线 |
 | [figma-plugin-api-gotchas.md](figma-plugin-api-gotchas.md) | Figma API 踩坑记录 |
 | [figma-read-api-and-registry-design.md](figma-read-api-and-registry-design.md) | 读取 API 设计 |
-| [openpencil-tool-architecture.md](openpencil-tool-architecture.md) | OpenPencil 工具架构 |
+| [openpencil/](openpencil/) | OpenPencil 工具架构 & 重构计划（9 篇，含 edit→setter 拆分分析） |
 | [agent-architecture-insights-2026-03-17.md](agent-architecture-insights-2026-03-17.md) | Agent 架构洞察 |
 | [design-quality-methodology-2026-03-22.md](design-quality-methodology-2026-03-22.md) | 设计质量方法论 |
 | [domain-architecture-and-pipeline.md](domain-architecture-and-pipeline.md) | domain/ 目录架构、管线三层、IR 过时分析、文本解析 vs 代码模板对比 |
 | [template-architecture-design.md](template-architecture-design.md) | 模板架构 5 层设计：14 常量 + ~22 函数替代 ~1200 行 parser，含设计系统接入和画布感知新能力 |
 | [runtime-refactor-pre-assessment.md](runtime-refactor-pre-assessment.md) | Agent Runtime 重构计划前置评估：事实验证（3 个错误）、Phase 优先级调整建议 |
-| [vercel-sdk-bundle-feasibility.md](vercel-sdk-bundle-feasibility.md) | Vercel AI SDK Figma sandbox 前置评估：3 方案构建测试、bundle 增量数据、结论=不采用 SDK runtime |
+| [vercel-sdk/](vercel-sdk/) | Vercel AI SDK 评估系列（9 篇）：架构、agent loop、provider、schema、multimodal、迁移、可观测性、bundle 可行性 |

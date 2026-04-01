@@ -2,7 +2,7 @@
  * @file unified/index.ts
  * @description Barrel export for unified tool definitions.
  *
- * LLM-facing API: 20 first-class tools, all structured JSON, verb_noun naming.
+ * LLM-facing API: 24 first-class tools, all structured JSON, verb_noun naming.
  */
 
 import { jsxDefinition } from './jsx';
@@ -15,6 +15,7 @@ import { knowledgeDefinition } from './knowledgeTool';
 import { listVariablesDefinition, createVariableDefinition, bindVariableDefinition, aliasVariableDefinition } from './varTool';
 import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
 import { jsToolDefinition } from './jsTool';
+import { setTextDefinition, setFillDefinition, setStrokeDefinition, setLayoutDefinition } from './setterTools';
 import { ToolDefinition } from '../types';
 
 /**
@@ -48,6 +49,11 @@ export const unifiedTools: ToolDefinition[] = [
   addComponentPropDefinition,
   listComponentPropsDefinition,
   createInstanceDefinition,
+  // Setters (focused, single-intent)
+  setTextDefinition,
+  setFillDefinition,
+  setStrokeDefinition,
+  setLayoutDefinition,
   // Escape hatch
   jsToolDefinition,
 ];

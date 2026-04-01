@@ -118,7 +118,7 @@ How to query:
 
 After creation, verify with `inspect` (read structure) and `describe` (validate quality). Errors compound — a missing `w="fill"` on a container breaks all children below it.
 
-Use `jsx({markup: "..."})` for tree creation — nesting IS the hierarchy. Use `edit({node: "id", props})` for property updates on existing nodes. Node IDs (e.g. "1:2") come from jsx/inspect results.
+Use `jsx({markup: "..."})` for tree creation — nesting IS the hierarchy. Use setter tools for focused property changes. Use `edit` for batch fixes. Node IDs (e.g. "1:2") come from jsx/inspect results.
 
 ### jsx tool (preferred for tree creation)
 Nested markup — nesting IS the hierarchy:
@@ -133,12 +133,27 @@ Text: `<text size={24}>content here</text>`
 Instance: `<instance ref="Button" variant="Size=Large"/>`
 Self-closing: `<rect w="fill" h={1} fill="#E5E7EB"/>`
 
-### edit tool (for property updates)
-Update existing nodes — use IDs from jsx/inspect results:
+### Setter tools (focused property changes)
+Each setter = one design decision. Use when changing a single aspect of a node:
 
 ```
-edit({node: "1:2", props: {corner: 16, bg: "#F8F9FA"}})
-edit({node: "1:3", props: {size: 20}, content: "New Title"})
+set_text({node: "1:2", text: "Hello World"})
+set_fill({node: "1:2", bg: "#F5F5F5"})
+set_fill({node: "1:3", fill: "#333"})
+set_stroke({node: "1:2", stroke: "1 #E0E0E0"})
+set_layout({node: "1:2", gap: 16, p: 24})
+set_layout({node: "1:2", layout: "row", justify: "space-between"})
+```
+
+### edit tool (batch updates)
+Use after inspect to fix multiple issues at once, or for properties not covered by setters (sizing, radius, opacity, effects, component props):
+
+```
+edit({nodes: [
+  {node: "1:1", props: {w: "fill", corner: 8}},
+  {node: "1:2", props: {opacity: 0.6}},
+  {node: "1:3", content: "Updated text"}
+]})
 ```
 
 ### inspect tool (read properties)
@@ -161,7 +176,7 @@ describe({node: "1:2", depth: 1})   → quick check (root + direct children)
 Returns per-node: `role` (button/card/heading/icon/avatar...), `summary` (visual appearance), `layout` (layout description), `issues` (severity: error/warning/info + fix suggestions).
 
 ### Verification workflow
-After jsx: `inspect` to see what was created, `describe` to catch issues, `edit` to fix.
+After jsx: `inspect` to see what was created, `describe` to catch issues, setter/`edit` to fix.
 - Skeleton phase: `describe({depth: 2})` — verify layout structure
 - Fill content: `describe({depth: 1})` — spot-check for layout drift
 - Polish: `describe` — final validation

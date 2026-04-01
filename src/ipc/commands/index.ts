@@ -25,6 +25,7 @@ import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './sear
 import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAdapter';
 import { handleListVariables, handleCreateVariable, handleBindVariable, handleAliasVariable } from './varAdapter';
 import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './compAdapter';
+import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from './setterAdapter';
 
 // ── Command handler type ──
 
@@ -58,6 +59,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   add_component_prop: handleAddComponentProp,
   list_component_props: handleListComponentProps,
   create_instance: handleCreateInstance,
+  // Setters (focused, single-intent — delegate to editHandler)
+  set_text: handleSetText,
+  set_fill: handleSetFill,
+  set_stroke: handleSetStroke,
+  set_layout: handleSetLayout,
   // knowledge is handled locally in sandbox — should not arrive at IPC
   knowledge: async () => ({
     error: 'knowledge is handled locally. This is an internal routing error.',

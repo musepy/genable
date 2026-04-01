@@ -173,21 +173,25 @@ export function SettingsPanel({
                   }}>
                     available models
                   </label>
-                  <label style={{
-                    fontSize: tokens.fontSize[1],
-                    color: 'var(--gray-11)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: tokens.space[1],
-                    cursor: 'pointer'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={showFreeOnly}
-                      onChange={(e) => setShowFreeOnly((e.target as HTMLInputElement).checked)}
-                    />
-                    Show free models only
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowFreeOnly(v => !v)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      padding: '3px 8px',
+                      borderRadius: 'var(--radius-3)',
+                      border: showFreeOnly ? '1px solid rgba(62,99,221,0.15)' : 'var(--border-subtle)',
+                      background: showFreeOnly ? 'var(--accent-3)' : 'transparent',
+                      color: showFreeOnly ? 'var(--accent-9)' : 'var(--gray-9)',
+                      fontSize: tokens.fontSize[1],
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    Free
+                  </button>
                 </div>
                 <ModelSelector 
                   models={suggestedModels}

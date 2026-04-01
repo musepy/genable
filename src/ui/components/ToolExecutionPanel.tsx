@@ -28,22 +28,16 @@ interface ToolExecutionPanelProps {
   onErrorAction?: (action: ErrorActionType) => void
 }
 
-/** UI-side tool display mapping — keeps display concerns out of ToolDefinition. */
-const TOOL_DISPLAY: Record<string, string> = {
+/** Special-case overrides for tool display names that don't auto-derive well. */
+const TOOL_DISPLAY_OVERRIDES: Record<string, string> = {
   jsx: 'JSX',
-  inspect: 'Inspect',
-  edit: 'Edit',
-  search: 'Search',
-  structure: 'Structure',
-  knowledge: 'Knowledge',
-  var: 'Variables',
-  comp: 'Components',
   js: 'JavaScript',
-  subtask: 'Subtask',
 }
 
+/** Auto-derive display name: snake_case → Title Case, with overrides. */
 function getDisplayName(c: ToolCallRecord): string {
-  return TOOL_DISPLAY[c.name] || c.name
+  if (TOOL_DISPLAY_OVERRIDES[c.name]) return TOOL_DISPLAY_OVERRIDES[c.name]
+  return c.name.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
 }
 
 /** Collapse tool calls into unique display names with counts */
@@ -136,7 +130,7 @@ export function ToolExecutionPanel({
     if (isError) setExpanded(true)
   }, [isError])
 
-  // Build status text
+  // Build status text — preview style: "12.4s · 8 tools" (completed), "3.2s" (running)
   const statusParts = useMemo(() => {
     const parts: string[] = []
     if (isError) parts.push(runError || 'Failed')
@@ -146,24 +140,15 @@ export function ToolExecutionPanel({
         ? ` ${reconnectCount}/${maxReconnects}` : ''
       parts.push(`Reconnecting${rc}`)
     } else if (isRunning) {
-      const task = currentTaskTitle || thinkingStatus || ('Thinking')
-      parts.push(`${task}${dots}`)
-    } else if (thinkingStatus) {
-      parts.push(`${thinkingStatus}${dots}`)
+      // Running: just elapsed time
     } else {
-      parts.push('Waiting')
+      // Idle/waiting — no label needed
     }
     if (elapsedText) parts.push(elapsedText)
-    if (!isRunning && toolCount > 0) parts.push(`${toolCount} tool use${toolCount > 1 ? 's' : ''}`)
+    if (!isRunning && toolCount > 0) parts.push(`${toolCount} tool${toolCount > 1 ? 's' : ''}`)
     if (!isRunning && errorCount > 0) parts.push(`${errorCount} failed`)
     return parts
-  }, [runState, runError, reconnectCount, maxReconnects, currentTaskTitle, thinkingStatus, phase, dots, elapsedText, progress, toolCount, errorCount, isRunning, isError])
-
-  // Progress fraction for bar
-  const progressFraction = useMemo(() => {
-    if (!progress || progress.maxIterations <= 0) return 0
-    return Math.max(0, Math.min(1, progress.iteration / progress.maxIterations))
-  }, [progress])
+  }, [runState, runError, reconnectCount, maxReconnects, dots, elapsedText, toolCount, errorCount, isRunning, isError])
 
   if (
     toolCalls.length === 0 && !thinkingStatus && !reasoningPreview &&
@@ -175,8 +160,8 @@ export function ToolExecutionPanel({
   const sz = tokens.fontSize[1]
   const MARKER_W = 14
 
-  // Accent color for error/running/idle states
-  const stateColor = isError ? tokens.colors.error : (isRunning ? tokens.colors.accent : faint)
+  // Marker color — preview: running=accent, done=gray-6, error=error
+  const stateColor = isError ? tokens.colors.error : (isRunning ? tokens.colors.accent : 'var(--gray-6)')
 
   return (
     <div style={{
@@ -217,10 +202,10 @@ export function ToolExecutionPanel({
         {isRunning && onStop && (
           <span
             onClick={(e) => { e.stopPropagation(); onStop() }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.textPrimary }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = dim }}
-            style={{ flexShrink: 0, cursor: 'pointer', marginLeft: tokens.space[2], transition: 'color 150ms ease' }}
-          >esc to stop</span>
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+            style={{ flexShrink: 0, cursor: 'pointer', marginLeft: 'auto', padding: '2px 6px', borderRadius: 'var(--radius-2)', color: dim, transition: 'background 150ms ease' }}
+          >esc</span>
         )}
 
         {runState === 'canceled' && onContinue && (
@@ -237,37 +222,29 @@ export function ToolExecutionPanel({
         )}
       </div>
 
-      {/* Progress bar — visible during running state */}
-      {isRunning && progress && progress.maxIterations > 0 && (
-        <div style={{ marginTop: 3, height: 2, borderRadius: 'var(--radius-full)', background: tokens.colors.alpha[2], overflow: 'hidden' }}>
-          <div style={{
-            width: `${Math.round(progressFraction * 100)}%`,
-            height: '100%',
-            background: tokens.colors.accent,
-            transition: 'width 300ms ease-out',
-            borderRadius: 'var(--radius-full)',
-          }} />
-        </div>
-      )}
+      {/* Progress bar removed — iteration count is not meaningful to users */}
 
-      {/* Live tool activity feed — shows latest tool during execution */}
+      {/* Live tool feed — ⎿ bracket style per preview design */}
       {isRunning && latestTool && (
-        <div style={{
-          marginTop: 4,
-          fontSize: sz,
-          lineHeight: '16px',
-          color: faint,
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.space[1],
-        }}>
-          <span style={{ color: latestTool.status === 'error' ? tokens.colors.error : tokens.colors.accent, fontSize: '9px' }}>●</span>
-          <span>{getDisplayName(latestTool)}</span>
-          {latestTool.status === 'running' && <span>{dots}</span>}
-          {latestTool.status === 'success' && <span style={{ color: tokens.colors.success }}>✓</span>}
-          {latestTool.status === 'error' && <span style={{ color: tokens.colors.error }}>✕</span>}
-          {toolCount > 1 && <span style={{ color: tokens.colors.alpha[3] }}>+{toolCount - 1}</span>}
-          {progress && <span style={{ marginLeft: 'auto', color: tokens.colors.alpha[3] }}>{progress.iteration}/{progress.maxIterations}</span>}
+        <div
+          key={latestTool.name + toolCount}
+          style={{
+            marginTop: 2,
+            fontSize: sz,
+            lineHeight: '18px',
+            color: dim,
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 0,
+            overflow: 'hidden',
+            height: '18px',
+            animation: 'tool-slide-up 0.25s ease-out',
+          }}
+        >
+          <span style={{ color: faint, marginRight: 6, fontSize: '13px', lineHeight: '18px' }}>⎿</span>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {getDisplayName(latestTool)}
+          </span>
         </div>
       )}
 

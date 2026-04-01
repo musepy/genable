@@ -181,6 +181,11 @@ export const globalStyles = `
   }
 
   /* --- Motion & Animations --- */
+  @keyframes tool-slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
   @keyframes skeleton-pulse {
     0%, 100% { opacity: 0.4; }
     50% { opacity: 0.7; }

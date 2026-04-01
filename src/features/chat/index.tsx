@@ -37,20 +37,20 @@ const messagesContainerStyle = {
   paddingBottom: tokens.space[1],
 };
 
-// Model messages: plain left-aligned text
+// Assistant messages: plain left-aligned text, no background
 const messageItemStyle = {
-  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  padding: `4px 10px`,
   width: '100%',
   userSelect: 'text' as const,
   WebkitUserSelect: 'text' as const,
 };
 
-// User messages: subtle background to distinguish
+// User messages: gray background per preview design
 const userItemStyle = {
-  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  padding: `6px 10px`,
   width: '100%',
-  background: tokens.colors.alpha[2],
-  borderRadius: 'var(--radius-4)',
+  background: 'var(--gray-3)',
+  borderRadius: 'var(--radius-3)',
   userSelect: 'text' as const,
   WebkitUserSelect: 'text' as const,
 };

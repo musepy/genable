@@ -719,6 +719,50 @@
       font-size: 14px;
     }
     .pipe-data-popup-body { padding: 8px 12px; }
+    /* Data view toggle */
+    .data-view-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .data-view-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-input);
+      background: var(--bg-input);
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .data-view-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .data-view-btn:hover:not(.active) { background: var(--bg-hover); }
+    .data-view-btn.raw-btn.active { background: #7c3aed; border-color: #7c3aed; }
+    .data-view-btn.llm-btn.active { background: #f59e0b; border-color: #f59e0b; color: #000; }
+    .data-view-spacer { flex: 1; }
+    .stringify-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .stringify-toggle input { cursor: pointer; }
+    .data-diff-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(245,158,11,.15);
+      color: #f59e0b;
+    }
+
     .pipe-data-section { font-size: 10px; color: var(--text-dimmed); text-transform: uppercase; margin: 6px 0 3px; }
     .pipe-data-section:first-child { margin-top: 0; }
     .pipe-data-json {
@@ -1904,10 +1948,7 @@ function pipeShowCallData(index, stage) {
   const slot = document.getElementById('pipe-call-data-slot');
   if (!slot) return;
 
-  const paramsStr = formatToolJSON(tc.params);
-  const resultStr = formatToolJSON(tc.result);
-  const isInput = (stage === 'dispatch');
-  const isOutput = (stage === 'presentForLLM');
+  const viewId = 'pipe-' + index;
 
   let html = '<div class="pipe-data-popup">';
   html += '<div class="pipe-data-popup-header">' +
@@ -1916,23 +1957,7 @@ function pipeShowCallData(index, stage) {
   '</div>';
   html += '<div class="pipe-data-popup-body">';
 
-  if (isInput || stage.includes('parse') || stage.includes('handle') || stage.includes('unwrap')) {
-    html += '<div class="pipe-data-section">Input (Parameters)</div>' +
-      '<pre class="pipe-data-json">' + escHtml(truncate(paramsStr, 2000)) + '</pre>';
-  }
-
-  if (isOutput || stage.includes('present') || stage.includes('Receipt') || stage.includes('score')) {
-    html += '<div class="pipe-data-section">Output (Result)</div>' +
-      '<pre class="pipe-data-json">' + escHtml(truncate(resultStr, 2000)) + '</pre>';
-  }
-
-  if (!isInput && !isOutput) {
-    // Show both for intermediate stages
-    html += '<div class="pipe-data-section">Tool Input</div>' +
-      '<pre class="pipe-data-json">' + escHtml(truncate(paramsStr, 1000)) + '</pre>' +
-      '<div class="pipe-data-section">Tool Output</div>' +
-      '<pre class="pipe-data-json">' + escHtml(truncate(resultStr, 1000)) + '</pre>';
-  }
+  html += buildDataViewer(viewId, tc.name, tc.params, tc.result, tc.durationMs);
 
   if (tc.error) {
     html += '<div class="pipe-data-section">Error</div>' +
@@ -1943,6 +1968,114 @@ function pipeShowCallData(index, stage) {
   slot.innerHTML = html;
 }
 
+// ===== presentForLLM simulation (client-side) =====
+// Mirrors src/engine/agent/tools/unified/presentation.ts KEEP_FIELDS
+const LLM_KEEP_FIELDS = {
+  cp: ['idMap'], rm: ['deleted'], mv: ['id','name'], tree: ['tree'],
+  grep: ['results','properties'], sed: ['replaced','details'], man: null,
+  inspect: null, jsx: null, describe: null, js: null,
+  edit: ['id','name','type','updated','results'],
+  set_text: ['id','name','type','updated','results'],
+  set_fill: ['id','name','type','updated','results'],
+  set_stroke: ['id','name','type','updated','results'],
+  set_layout: ['id','name','type','updated','results'],
+  find_nodes: ['results'], discover_props: null, replace_props: ['replaced','details'],
+  delete_node: ['deleted'], move_node: ['id','name'], clone_node: ['idMap'],
+};
+
+/** Simulate presentForLLM: flatten data, apply KEEP_FIELDS, add _meta. */
+function simulatePresent(raw, toolName, durationMs) {
+  if (!raw || typeof raw !== 'object') return raw;
+  let data = raw.data;
+  if (!data || typeof data !== 'object') {
+    return { ...(raw.error != null ? { error: raw.error } : {}), _meta: '[' + formatDuration(durationMs) + ']' };
+  }
+  // Apply KEEP_FIELDS
+  const keep = LLM_KEEP_FIELDS[toolName];
+  let cleaned;
+  if (keep === null || keep === undefined) {
+    cleaned = { ...data };
+  } else {
+    cleaned = {};
+    for (const f of keep) {
+      if (data[f] !== undefined && data[f] !== null) cleaned[f] = data[f];
+    }
+  }
+  // Strip internal fields
+  delete cleaned._stages;
+  delete cleaned._stderr;
+  if (raw.error != null) cleaned.error = raw.error;
+  cleaned._meta = '[' + formatDuration(durationMs) + ']';
+  if (raw._stderr) cleaned._stderr = raw._stderr;
+  return cleaned;
+}
+
+/** Global stringify mode */
+let globalStringify = false;
+
+/** Format data for display, respecting stringify toggle. */
+function formatDataView(obj, stringify) {
+  if (obj === null || obj === undefined) return '(empty)';
+  if (stringify) return JSON.stringify(obj);
+  return JSON.stringify(obj, null, 2);
+}
+
+/** Build a data viewer with Raw/LLM toggle and stringify switch. */
+function buildDataViewer(id, toolName, params, rawResult, durationMs) {
+  const raw = parseIfString(rawResult);
+  const presented = simulatePresent(raw, toolName, durationMs);
+  const rawStr = formatDataView(raw, globalStringify);
+  const presentStr = formatDataView(presented, globalStringify);
+  const isDifferent = rawStr !== presentStr;
+
+  return '<div class="data-view-bar">' +
+    '<button class="data-view-btn raw-btn active" onclick="switchDataView(this,\'' + id + '\',\'raw\')">Handler Raw</button>' +
+    '<button class="data-view-btn llm-btn" onclick="switchDataView(this,\'' + id + '\',\'llm\')">LLM View' +
+      (isDifferent ? ' <span class="data-diff-badge">diff</span>' : '') + '</button>' +
+    '<span class="data-view-spacer"></span>' +
+    '<label class="stringify-toggle"><input type="checkbox" ' + (globalStringify ? 'checked' : '') +
+      ' onchange="toggleStringify(this,\'' + id + '\',\'' + escHtml(toolName) + '\',' + (durationMs||0) + ')"> stringify</label>' +
+  '</div>' +
+  '<div class="pipe-data-section">Parameters</div>' +
+  '<pre class="pipe-data-json">' + escHtml(formatDataView(parseIfString(params), globalStringify)) + '</pre>' +
+  '<div class="pipe-data-section">Result</div>' +
+  '<pre class="pipe-data-json" id="data-result-' + id + '" data-raw=\'' + escAttr(JSON.stringify(raw)) + '\' data-presented=\'' + escAttr(JSON.stringify(presented)) + '\' data-view="raw">' +
+    escHtml(rawStr) + '</pre>';
+}
+
+function parseIfString(val) {
+  if (!val) return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return val; }
+  }
+  return val;
+}
+
+function escAttr(s) { return String(s||'').replace(/'/g, '&#39;').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+function switchDataView(btn, id, view) {
+  const el = document.getElementById('data-result-' + id);
+  if (!el) return;
+  // Toggle active button
+  btn.parentElement.querySelectorAll('.data-view-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  el.dataset.view = view;
+  const data = view === 'llm' ? JSON.parse(el.dataset.presented) : JSON.parse(el.dataset.raw);
+  el.textContent = formatDataView(data, globalStringify);
+}
+
+function toggleStringify(checkbox, id, toolName, durationMs) {
+  globalStringify = checkbox.checked;
+  const el = document.getElementById('data-result-' + id);
+  if (!el) return;
+  const view = el.dataset.view || 'raw';
+  const data = view === 'llm' ? JSON.parse(el.dataset.presented) : JSON.parse(el.dataset.raw);
+  el.textContent = formatDataView(data, globalStringify);
+  // Also update params
+  const paramsEl = el.previousElementSibling?.previousElementSibling?.previousElementSibling;
+  // skip — params don't change between views
+}
+
 // ===== Conversation Flow =====
 function renderConversation(history) {
   if (!history || history.length === 0) return;
@@ -1951,7 +2084,9 @@ function renderConversation(history) {
   const container = document.getElementById('conv-container');
   container.innerHTML = '';
 
+  let convMsgIdx = 0;
   for (const msg of history) {
+    convMsgIdx++;
     const isUser = msg.role === 'user';
     const div = document.createElement('div');
     div.className = 'conv-msg';
@@ -1970,22 +2105,19 @@ function renderConversation(history) {
     // Tool calls
     if (msg.toolCalls && msg.toolCalls.length > 0) {
       bodyHTML += '<div class="conv-toolcalls">';
-      for (const tc of msg.toolCalls) {
+      for (let tci = 0; tci < msg.toolCalls.length; tci++) {
+        const tc = msg.toolCalls[tci];
         const isErr = tc.status === 'error';
-        const paramsStr = formatToolJSON(tc.parameters);
-        const resultStr = formatToolJSON(tc.result);
+        const viewId = 'conv-' + convMsgIdx + '-' + tci;
         bodyHTML += '<details class="conv-tc">' +
           '<summary>' +
             '<span class="conv-tc-name">' + escHtml(tc.name || '?') + '</span>' +
             '<span class="' + (isErr ? 'conv-tc-status-err' : 'conv-tc-status-ok') + '">' +
-              (isErr ? '✗ Error' : '✓ OK') + '</span>' +
+              (isErr ? '\u2717 Error' : '\u2713 OK') + '</span>' +
           '</summary>' +
           '<div class="conv-tc-body">' +
-            '<div class="conv-tc-section">Parameters</div>' +
-            '<pre class="conv-tc-json">' + escHtml(truncate(paramsStr, 1500)) + '</pre>' +
-            (tc.error ? '<div class="conv-tc-section">Error</div><div class="conv-tc-error">' + escHtml(tc.error) + '</div>' : '') +
-            '<div class="conv-tc-section">Result</div>' +
-            '<pre class="conv-tc-json">' + escHtml(truncate(resultStr, 1500)) + '</pre>' +
+            buildDataViewer(viewId, tc.name, tc.parameters, tc.result, undefined) +
+            (tc.error ? '<div class="pipe-data-section">Error</div><div class="conv-tc-error">' + escHtml(tc.error) + '</div>' : '') +
           '</div>' +
         '</details>';
       }

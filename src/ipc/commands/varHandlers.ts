@@ -9,10 +9,11 @@ import { resolvePathToNode } from './pathResolver';
 import { parseHexToRGBA, rgbaToHex } from '../../utils/colorUtils';
 import { invalidateVariableCache } from '../../engine/actions/handlers/variableBindingHandler';
 import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
+import { traced } from './pipelineTracer';
 
 // ── Main dispatcher ──
 
-export async function handleVar(parameters: any): Promise<ToolResponse> {
+export const handleVar = traced('handleVar()', 'varHandlers.ts', async function handleVar(parameters: any): Promise<ToolResponse> {
   const sub = parameters.subcommand;
   switch (sub) {
     case 'ls': return handleVarLs(parameters);
@@ -25,7 +26,7 @@ export async function handleVar(parameters: any): Promise<ToolResponse> {
         error: `Unknown var subcommand "${sub}". Use: ls, mk, bind, alias`,
       };
   }
-}
+});
 
 // ── var ls ──
 

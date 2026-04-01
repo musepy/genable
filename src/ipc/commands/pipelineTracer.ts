@@ -50,3 +50,23 @@ export class PipelineTracer {
     return this.stages
   }
 }
+
+/**
+ * Wrap a handler function with auto-tracing.
+ * Records a single stage for the full handler execution.
+ * Usage: `export const handleFoo = traced('handleFoo()', 'fooHandler.ts', _handleFoo);`
+ */
+export function traced<T extends (...args: any[]) => Promise<any>>(
+  label: string, file: string, fn: T,
+): T {
+  return (async (...args: any[]) => {
+    const tracer = new PipelineTracer()
+    tracer.enter(label, file)
+    const result = await fn(...args)
+    tracer.exit()
+    if (result && typeof result === 'object') {
+      result._stages = tracer.collect()
+    }
+    return result
+  }) as any as T
+}

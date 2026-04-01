@@ -520,7 +520,7 @@
     /* Tool columns */
     .pipe-cols {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 10px;
       padding: 0 8px;
     }
@@ -1549,15 +1549,14 @@ function renderTimeline(events) {
 // ===== Pipeline Architecture =====
 // Pipeline stages — FALLBACK for recordings without _stages.
 // New recordings auto-report stages from PipelineTracer (src/ipc/commands/pipelineTracer.ts).
+// Synced to: 15 verb_noun tools + 4 first-class tools (f0e22c7)
 const TOOL_PIPELINES = {
   jsx: {
     color: 'jsx',
     stages: [
       { id: 'parse', label: 'parseJsx()', file: 'jsxParser.ts' },
       { id: 'ir', label: 'jsxToIR()', file: 'jsxToIR.ts' },
-      { id: 'exec', label: 'executeIR()', file: 'shared.ts' },
-      { id: 'executor', label: 'executor.executeDesignOps()', file: 'executor.ts' },
-      { id: 'receipt', label: 'buildReceipt()', file: 'receiptBuilder.ts' },
+      { id: 'factory', label: 'nodeFactory.create*()', file: 'nodeFactory.ts' },
       { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
     ]
   },
@@ -1572,31 +1571,76 @@ const TOOL_PIPELINES = {
   edit: {
     color: 'edit',
     stages: [
-      { id: 'ir', label: 'handleEdit() → IR', file: 'editHandler.ts' },
-      { id: 'exec', label: 'executeIR()', file: 'shared.ts' },
-      { id: 'executor', label: 'executor.executeDesignOps()', file: 'executor.ts' },
-      { id: 'receipt', label: 'buildReceipt()', file: 'receiptBuilder.ts' },
+      { id: 'resolve', label: 'resolveNode()', file: 'pathResolver.ts' },
+      { id: 'apply', label: 'nodeFactory.applyProps()', file: 'nodeFactory.ts' },
     ]
   },
-  run: {
+  describe: {
+    color: 'inspect',
+    stages: [
+      { id: 'resolve', label: 'resolveNode()', file: 'pathResolver.ts' },
+      { id: 'serialize', label: 'describeHandler()', file: 'describeHandler.ts' },
+    ]
+  },
+  search: {
     color: 'run',
     stages: [
-      { id: 'unwrap', label: 'unwrapRunCmd()', file: 'toolDispatcher.ts' },
-      { id: 'route', label: 'handler → IR', file: 'writeHandlers.ts' },
-      { id: 'exec', label: 'executeIR()', file: 'shared.ts' },
-      { id: 'executor', label: 'executor.executeDesignOps()', file: 'executor.ts' },
+      { id: 'find', label: 'searchAdapter()', file: 'searchAdapter.ts' },
+      { id: 'handler', label: 'searchHandlers()', file: 'searchHandlers.ts' },
+    ]
+  },
+  structure: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'structureAdapter()', file: 'structureAdapter.ts' },
+      { id: 'handler', label: 'writeHandlers()', file: 'writeHandlers.ts' },
+    ]
+  },
+  var: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'varAdapter()', file: 'varAdapter.ts' },
+      { id: 'handler', label: 'varHandlers()', file: 'varHandlers.ts' },
+    ]
+  },
+  comp: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'compAdapter()', file: 'compAdapter.ts' },
+      { id: 'handler', label: 'compHandlers()', file: 'compHandlers.ts' },
+    ]
+  },
+  js: {
+    color: 'edit',
+    stages: [
+      { id: 'eval', label: 'handleJs()', file: 'jsHandler.ts' },
     ]
   },
 };
 
-// Map tool names to pipeline keys (handle aliases)
+// Map tool names to pipeline keys
 function toolToPipeline(name) {
   if (!name) return null;
   const n = name.toLowerCase();
+  // Create
   if (n === 'jsx' || n === 'mk' || n === 'render' || n === 'design' || n === 'create') return 'jsx';
+  // Read
   if (n === 'inspect' || n === 'cat' || n === 'tree' || n === 'ls') return 'inspect';
-  if (n === 'edit' || n === 'update') return 'edit';
-  if (n === 'run' || n === 'man' || n === 'grep' || n === 'sed' || n === 'mv' || n === 'rm' || n === 'cp') return 'run';
+  if (n === 'describe') return 'describe';
+  // Update
+  if (n === 'edit' || n === 'update' || n === 'set_text' || n === 'set_fill' || n === 'set_stroke' || n === 'set_layout') return 'edit';
+  // Search
+  if (n === 'find_nodes' || n === 'discover_props' || n === 'replace_props' || n === 'grep' || n === 'sed') return 'search';
+  // Structure
+  if (n === 'delete_node' || n === 'move_node' || n === 'clone_node' || n === 'rm' || n === 'mv' || n === 'cp') return 'structure';
+  // Variables
+  if (n === 'list_variables' || n === 'create_variable' || n === 'bind_variable' || n === 'alias_variable') return 'var';
+  // Components
+  if (n === 'create_component' || n === 'combine_components' || n === 'add_component_prop' || n === 'list_component_props' || n === 'create_instance') return 'comp';
+  // JS escape hatch
+  if (n === 'js') return 'js';
+  // Legacy run
+  if (n === 'run' || n === 'man') return 'structure';
   return null;
 }
 
@@ -1664,8 +1708,9 @@ function renderPipeline(events, meta) {
     };
   });
 
-  // Count per pipeline
-  const counts = { jsx: 0, inspect: 0, edit: 0, run: 0 };
+  // Count per pipeline — initialize all keys from TOOL_PIPELINES
+  const counts = {};
+  for (const k of Object.keys(TOOL_PIPELINES)) counts[k] = 0;
   for (const tc of toolCalls) {
     if (tc.pipeline && counts[tc.pipeline] !== undefined) counts[tc.pipeline]++;
   }

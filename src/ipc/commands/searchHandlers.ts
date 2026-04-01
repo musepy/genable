@@ -8,19 +8,20 @@ import { resolvePathToNode } from './pathResolver';
 import {
   extractAllReplacePropertyValues, matchesReplaceValue, applyReplacePropertyValue,
 } from './shared';
+import { traced } from './pipelineTracer';
 
 // ── grep ──
 
-export async function handleGrep(parameters: any): Promise<ToolResponse> {
+export const handleGrep = traced('handleGrep()', 'searchHandlers.ts', async function handleGrep(parameters: any): Promise<ToolResponse> {
   const { mode: grepMode, query: grepQuery, path: grepPath, properties: grepProps } = parameters;
 
   if (grepMode === 'properties') {
     // Property discovery mode
     if (!grepPath) {
-      return { error: { code: 'MISSING_PATH', message: 'Property discovery requires a path. Usage: grep /Card/ fillColor,fontSize' } };
+      return { error: 'Property discovery requires a path. Usage: grep /Card/ fillColor,fontSize' };
     }
     if (!grepProps || !Array.isArray(grepProps) || grepProps.length === 0) {
-      return { error: { code: 'MISSING_PROPERTIES', message: 'Specify properties to discover. Usage: grep /Card/ fillColor,fontSize' } };
+      return { error: 'Specify properties to discover. Usage: grep /Card/ fillColor,fontSize' };
     }
 
     const grepResolved = await resolvePathToNode(grepPath);
@@ -31,7 +32,7 @@ export async function handleGrep(parameters: any): Promise<ToolResponse> {
       : grepResolved.node;
 
     if (!grepRoot) {
-      return { error: { code: 'NO_RESULTS', message: 'No nodes found to search.' } };
+      return { error: 'No nodes found to search.' };
     }
 
     const uniqueValues: Record<string, Set<string | number>> = {};
@@ -76,24 +77,24 @@ export async function handleGrep(parameters: any): Promise<ToolResponse> {
   }
 
   return { data: { results: matches, total: allNodes.length, truncated: allNodes.length > MAX_RESULTS } };
-}
+});
 
 // ── sed ──
 
-export async function handleSed(parameters: any): Promise<ToolResponse> {
+export const handleSed = traced('handleSed()', 'searchHandlers.ts', async function handleSed(parameters: any): Promise<ToolResponse> {
   const { path: sedPath, replacements: sedReplacements } = parameters;
 
   if (!sedPath) {
-    return { error: { code: 'MISSING_PATH', message: 'sed requires a path. Usage: sed /Card/ fillColor:#FFF/#000' } };
+    return { error: 'sed requires a path. Usage: sed /Card/ fillColor:#FFF/#000' };
   }
   if (!sedReplacements || typeof sedReplacements !== 'object' || Object.keys(sedReplacements).length === 0) {
-    return { error: { code: 'MISSING_REPLACEMENTS', message: 'sed requires replacement rules. Usage: sed /Card/ prop:from/to' } };
+    return { error: 'sed requires replacement rules. Usage: sed /Card/ prop:from/to' };
   }
 
   const sedResolved = await resolvePathToNode(sedPath);
   if (!sedResolved.ok) return sedResolved.response;
   if (sedResolved.isPage) {
-    return { error: { code: 'INVALID_TARGET', message: 'Cannot sed page root. Target a specific node.' } };
+    return { error: 'Cannot sed page root. Target a specific node.' };
   }
   const sedRoot = sedResolved.node;
 
@@ -152,6 +153,6 @@ export async function handleSed(parameters: any): Promise<ToolResponse> {
     await doSedReplace(sedRoot);
     return { data: { replaced: totalReplaced, details } };
   } catch (e: any) {
-    return { error: { code: 'EXECUTION_ERROR', message: e?.message ?? 'Unexpected error during sed' } };
+    return { error: e?.message ?? 'Unexpected error during sed' };
   }
-}
+});

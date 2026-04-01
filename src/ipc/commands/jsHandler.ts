@@ -15,6 +15,7 @@
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { getFnCtor } from '../../utils/sandboxEval';
+import { traced } from './pipelineTracer';
 
 const FunctionConstructor = getFnCtor();
 
@@ -181,19 +182,19 @@ const BLOCKED_PATTERNS = [
   /\bimport\b\s*\(/,                      // dynamic import
 ];
 
-export async function handleJs(parameters: any): Promise<ToolResponse> {
+export const handleJs = traced('handleJs()', 'jsHandler.ts', async function handleJs(parameters: any): Promise<ToolResponse> {
   const { code } = parameters;
 
   if (!code || typeof code !== 'string' || code.trim().length === 0) {
     return {
-      error: { code: 'EMPTY_CODE', message: 'No code provided. Usage: js <expression>' },
+      error: 'No code provided. Usage: js <expression>',
     };
   }
 
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(code)) {
       return {
-        error: { code: 'BLOCKED_OPERATION', message: `Blocked: '${pattern.source}' is not allowed in js command. Use the dedicated tool commands (rm, mv, mk) instead.` },
+        error: `Blocked: '${pattern.source}' is not allowed in js command. Use the dedicated tool commands (rm, mv, mk) instead.`,
       };
     }
   }
@@ -253,7 +254,7 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
       if (lessonsText) stderrParts.unshift(lessonsText);
 
       const response: ToolResponse = {
-        error: { code: 'FIGMA_API_ERROR', message: errorMsg },
+        error: errorMsg,
       };
       (response as any)._stderr = stderrParts.join('\n\n');
       return response;
@@ -286,12 +287,8 @@ export async function handleJs(parameters: any): Promise<ToolResponse> {
     if (lessonsText) stderrParts.unshift(lessonsText);
 
     return {
-      error: {
-        code: 'EXECUTION_ERROR',
-        message: allErrors.join('\n'),
-        details: e?.stack?.split('\n').slice(0, 3).join('\n'),
-      },
+      error: allErrors.join('\n'),
       _stderr: stderrParts.join('\n\n'),
     } as any;
   }
-}
+});

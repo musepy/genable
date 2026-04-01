@@ -6,6 +6,7 @@
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
+import { traced } from './pipelineTracer';
 
 // ── Helpers ──
 
@@ -17,7 +18,7 @@ function displayName(internalKey: string): string {
 
 // ── Main dispatcher ──
 
-export async function handleComp(parameters: any): Promise<ToolResponse> {
+export const handleComp = traced('handleComp()', 'compHandlers.ts', async function handleComp(parameters: any): Promise<ToolResponse> {
   const sub = parameters.subcommand;
   switch (sub) {
     case 'create': return handleCompCreate(parameters);
@@ -30,7 +31,7 @@ export async function handleComp(parameters: any): Promise<ToolResponse> {
         error: `Unknown comp subcommand "${sub}". Use: create, combine, prop, ls, instance`,
       };
   }
-}
+});
 
 // ── comp create — convert frame to component ──
 

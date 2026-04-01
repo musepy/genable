@@ -273,9 +273,7 @@ export class AgentRuntime {
       console.log(`[RuntimeEvent] tool_call: ${tc?.name}(${JSON.stringify(tc?.args || {})})`)
     } else if (event.type === 'tool_result') {
       const tr = (event as any).toolResult;
-      const failSuffix = !!tr?.error
-        ? ` — ${typeof tr.error === 'string' ? tr.error : tr.error.message ?? JSON.stringify(tr.error)}`
-        : '';
+      const failSuffix = tr?.error ? ` — ${tr.error}` : '';
       console.log(`[RuntimeEvent] tool_result: ${tr?.name} ${!tr?.error ? 'ok' : 'FAIL'} (${tr?.durationMs}ms)${failSuffix}`);
     }
     this.options.onRuntimeEvent(full);
@@ -352,32 +350,10 @@ export class AgentRuntime {
   // a single panel. Created on first use, reused across turns.
 
   /**
-   * Create chat panel if it doesn't exist, return its node ID.
-   * Returns null on failure (non-fatal — caller falls back gracefully).
-   *
-   * TODO: Chat panel uses deleted `render` tool — needs migration to `jsx` or removal.
-   * Currently always returns null (render → UNKNOWN_TOOL), callers fall back gracefully.
+   * Chat panel rendering is disabled — render tool was removed.
+   * Returns null immediately; callers fall back gracefully.
    */
-  private async ensureChatPanel(iteration: number): Promise<string | null> {
-    if (this.chatPanelId) return this.chatPanelId;
-
-    const markup = `chat-panel\n  chat-title: Genable`;
-    const result = await this.toolDispatcher.dispatch(
-      [{ id: this.generateId('chat-init'), name: 'render', args: { markup } }],
-      iteration,
-    );
-
-    // Extract panel ID (first created node = the chat-panel frame)
-    const content = result.toolResultsMessage?.content;
-    if (Array.isArray(content)) {
-      for (const part of content) {
-        const idMap = (part as any).functionResponse?.response?.data?.idMap;
-        if (idMap?.n1) {
-          this.chatPanelId = String(idMap.n1);
-          return this.chatPanelId;
-        }
-      }
-    }
+  private async ensureChatPanel(_iteration: number): Promise<string | null> {
     return null;
   }
 

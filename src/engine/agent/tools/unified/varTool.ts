@@ -82,14 +82,14 @@ export const bindVariableDefinition: ToolDefinition = {
   description: `Bind a variable to a node property.
 
 Examples:
-  bind_variable({node: "Card#1:2", prop: "fills", variable: "Theme/bg"})
-  bind_variable({node: "Title#1:3", prop: "fontSize", variable: "sizing/heading"})`,
+  bind_variable({node: "1:2", prop: "fills", variable: "Theme/bg"})
+  bind_variable({node: "1:3", prop: "fontSize", variable: "sizing/heading"})`,
   parameters: {
     type: 'object',
     properties: {
       node: {
         type: 'string',
-        description: 'Node ref ("name#id")',
+        description: 'Node ID (e.g. "1:2")',
       },
       prop: {
         type: 'string',

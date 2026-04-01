@@ -7,6 +7,14 @@
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
 
+// ── Helpers ──
+
+/** Strip Figma's internal suffix: "Label#1386:100" → "Label" */
+function displayName(internalKey: string): string {
+  const idx = internalKey.indexOf('#');
+  return idx >= 0 ? internalKey.slice(0, idx) : internalKey;
+}
+
 // ── Main dispatcher ──
 
 export async function handleComp(parameters: any): Promise<ToolResponse> {
@@ -161,6 +169,80 @@ export async function handleCompCombine(params: any): Promise<ToolResponse> {
   };
 }
 
+// ── Auto-bind: find matching child node for property binding ──
+
+/**
+ * Resolve bind target: explicit ID > auto-find by name match.
+ * For TEXT props: finds a text node whose name fuzzy-matches propName.
+ * For BOOLEAN props: finds any node whose name fuzzy-matches propName.
+ */
+async function resolveBindTarget(
+  explicitBind: string | undefined,
+  propType: string,
+  propName: string,
+  compNode: SceneNode,
+): Promise<SceneNode | null> {
+  // Explicit bind target
+  if (explicitBind) {
+    const resolved = await resolvePathToNode(explicitBind);
+    if (resolved.ok && !resolved.isPage) return resolved.node;
+  }
+
+  // Auto-find: walk component children, match by name
+  const targetType = propType === 'TEXT' ? 'TEXT' : null;
+  const candidates: SceneNode[] = [];
+
+  function walk(node: SceneNode) {
+    if (targetType && node.type === targetType) {
+      candidates.push(node);
+    } else if (!targetType && node.type !== 'TEXT') {
+      candidates.push(node);
+    }
+    if ('children' in node) {
+      for (const child of (node as FrameNode).children) {
+        walk(child);
+      }
+    }
+  }
+
+  if ('children' in compNode) {
+    for (const child of (compNode as FrameNode).children) {
+      walk(child);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Score by name similarity to propName
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const target = normalize(propName);
+
+  // Exact match first
+  const exact = candidates.find(c => normalize(c.name) === target);
+  if (exact) return exact;
+
+  // Substring match
+  const sub = candidates.find(c =>
+    normalize(c.name).includes(target) || target.includes(normalize(c.name))
+  );
+  if (sub) return sub;
+
+  // For TEXT props: match by content (default value)
+  if (propType === 'TEXT') {
+    for (const c of candidates) {
+      if (c.type === 'TEXT') {
+        const text = (c as TextNode).characters?.toLowerCase() || '';
+        const defLower = (propName).toLowerCase();
+        if (text.includes(defLower) || defLower.includes(text.replace(/\s+/g, ''))) {
+          return c;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 // ── comp prop — add component property ──
 
 export async function handleCompProp(params: any): Promise<ToolResponse> {
@@ -168,9 +250,10 @@ export async function handleCompProp(params: any): Promise<ToolResponse> {
   const propName = params.name as string;
   const propType = (params.propType as string || '').toUpperCase();
   const defaultValue = params.defaultValue;
+  const bindTarget = params.bindTarget as string | undefined;
 
   if (!paths || paths.length === 0 || !propName || !propType) {
-    return { error: 'Usage: comp prop <path> <name> TEXT|BOOLEAN|INSTANCE_SWAP [defaultValue]' };
+    return { error: 'Usage: add_component_prop({node, name, type, default?, bind?})' };
   }
 
   const validTypes = ['TEXT', 'BOOLEAN', 'INSTANCE_SWAP'];
@@ -198,11 +281,56 @@ export async function handleCompProp(params: any): Promise<ToolResponse> {
   }
 
   try {
-    (node as ComponentNode | ComponentSetNode).addComponentProperty(propName, propType as ComponentPropertyType, defVal);
+    const comp = node as ComponentNode | ComponentSetNode;
+    comp.addComponentProperty(propName, propType as ComponentPropertyType, defVal);
+
+    // Find the property key assigned by Figma (may differ from propName)
+    const propDefs = comp.componentPropertyDefinitions;
+    const propKey = Object.keys(propDefs).find(k =>
+      k === propName || k.startsWith(propName + '#')
+    );
+
+    // Bind property to a child node
+    // Priority: explicit bind target > auto-find by name match
+    let bound = false;
+    let boundNodeId: string | undefined;
+    let boundNodeName: string | undefined;
+
+    const bindNode = await resolveBindTarget(bindTarget, propType, propName, node);
+    if (bindNode && propKey) {
+      try {
+        if (propType === 'TEXT' && bindNode.type === 'TEXT') {
+          (bindNode as TextNode).componentPropertyReferences = {
+            ...(bindNode as TextNode).componentPropertyReferences,
+            characters: propKey,
+          };
+          bound = true;
+        } else if (propType === 'BOOLEAN') {
+          (bindNode as SceneNode).componentPropertyReferences = {
+            ...(bindNode as any).componentPropertyReferences,
+            visible: propKey,
+          };
+          bound = true;
+        }
+        if (bound) {
+          boundNodeId = bindNode.id;
+          boundNodeName = bindNode.name;
+        }
+      } catch {
+        // Binding failed — property was still created
+      }
+    }
+
+    const msg = bound
+      ? `Added ${propType} property "${propName}" → bound to "${boundNodeName}" (${boundNodeId}) (default: ${defVal})`
+      : `Added ${propType} property "${propName}" to "${node.name}" (default: ${defVal}). No matching child found to bind.`;
+
     return {
       data: {
-        message: `Added ${propType} property "${propName}" to "${node.name}" (default: ${defVal})`,
+        message: msg,
         nodeId: node.id,
+        property: propName,
+        bound,
       },
     };
   } catch (e: any) {
@@ -245,7 +373,7 @@ export async function handleCompLs(params: any): Promise<ToolResponse> {
     if (Object.keys(propDefs).length > 0) {
       lines.push('Properties:');
       for (const [key, def] of Object.entries(propDefs)) {
-        lines.push(`  ${def.type.padEnd(15)} ${key.padEnd(25)} default=${String(def.defaultValue)}`);
+        lines.push(`  ${def.type.padEnd(15)} ${displayName(key).padEnd(25)} default=${String(def.defaultValue)}`);
       }
     }
   } else if (node.type === 'COMPONENT') {
@@ -258,7 +386,7 @@ export async function handleCompLs(params: any): Promise<ToolResponse> {
       lines.push('');
       lines.push('Properties:');
       for (const [key, def] of Object.entries(propDefs)) {
-        lines.push(`  ${def.type.padEnd(15)} ${key.padEnd(25)} default=${String(def.defaultValue)}`);
+        lines.push(`  ${def.type.padEnd(15)} ${displayName(key).padEnd(25)} default=${String(def.defaultValue)}`);
       }
     }
 
@@ -269,13 +397,14 @@ export async function handleCompLs(params: any): Promise<ToolResponse> {
     }
   } else if (node.type === 'INSTANCE') {
     const inst = node as InstanceNode;
-    lines.push(`Instance of: ${inst.mainComponent?.name ?? 'unknown'}`);
+    const mainComp = await inst.getMainComponentAsync();
+    lines.push(`Instance of: ${mainComp?.name ?? 'unknown'}`);
     const overrides = inst.componentProperties;
     if (overrides && Object.keys(overrides).length > 0) {
       lines.push('');
       lines.push('Current properties:');
       for (const [key, val] of Object.entries(overrides)) {
-        lines.push(`  ${key}: ${val.value} (${val.type})`);
+        lines.push(`  ${displayName(key)}: ${val.value} (${val.type})`);
       }
     }
   } else {

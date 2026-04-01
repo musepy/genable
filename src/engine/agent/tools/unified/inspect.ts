@@ -19,15 +19,13 @@ Parameters:
   mode: "tree" (structure skeleton, default) or "detail" (full properties)
   depth: Max tree depth (default: 5, max: 10)
   screenshot: Capture visual screenshot (detail mode only). Default: false
-  score: Run quality scoring and return issues. Default: false
 
 Examples:
   inspect({node: "/"})                                          → page structure
   inspect({node: "/", depth: 1})                                → shallow overview
   inspect({node: "100:5", mode: "tree"})                        → structural skeleton
   inspect({node: "100:6", mode: "detail"})                      → full properties
-  inspect({node: "100:5", mode: "detail", screenshot: true})    → properties + screenshot
-  inspect({node: "100:5", score: true})                          → structure + quality score`,
+  inspect({node: "100:5", mode: "detail", screenshot: true})    → properties + screenshot`,
   parameters: {
     type: 'object',
     properties: {
@@ -35,7 +33,6 @@ Examples:
       mode: { type: 'string', description: '"tree" (default) or "detail"' },
       depth: { type: 'number', description: 'Max depth (default: 5, max: 10)' },
       screenshot: { type: 'boolean', description: 'Capture screenshot (detail mode only)' },
-      score: { type: 'boolean', description: 'Run quality scoring (default: false)' },
     },
     required: ['node'],
   },

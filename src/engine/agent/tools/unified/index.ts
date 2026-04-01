@@ -7,6 +7,7 @@
 
 import { jsxDefinition } from './jsx';
 import { inspectDefinition } from './inspect';
+import { describeDefinition } from './describe';
 import { editDefinition } from './edit';
 import { findNodesDefinition, discoverPropsDefinition, replacePropsDefinition } from './searchTool';
 import { deleteNodeDefinition, moveNodeDefinition, cloneNodeDefinition } from './structureTool';
@@ -24,6 +25,7 @@ export const unifiedTools: ToolDefinition[] = [
   // Core CRUD
   jsxDefinition,
   inspectDefinition,
+  describeDefinition,
   editDefinition,
   // Search
   findNodesDefinition,

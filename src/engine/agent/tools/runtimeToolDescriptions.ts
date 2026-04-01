@@ -32,7 +32,7 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     tool: 'inspect',
     mode: 'EXECUTION',
     required: [{ name: 'node', trim: true, check: 'required' }],
-    repairHint: 'provide "node" as a node ref (e.g. "/" for page root, "Card#1:2" for specific node)',
+    repairHint: 'provide "node" as a node ref (e.g. "/" for page root, "1:2" for specific node)',
   },
   {
     tool: 'edit',

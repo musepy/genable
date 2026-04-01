@@ -16,6 +16,7 @@ import { handleGrep, handleSed } from './searchHandlers';
 import { handleJs } from './jsHandler';
 import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';
+import { handleDescribe } from './describeHandler';
 import { handleEdit } from './editHandler';
 import { handleMemoryCommand } from './memoryHandler';
 import { handleScanTokens } from './tokenScanner';
@@ -35,6 +36,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   // First-class tools (LLM-facing, verb_noun naming)
   jsx: handleJsx,
   inspect: handleInspect,
+  describe: handleDescribe,
   edit: handleEdit,
   js: handleJs,
   // Search tools

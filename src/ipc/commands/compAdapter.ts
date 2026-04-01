@@ -20,6 +20,7 @@ export async function handleAddComponentProp(params: any): Promise<ToolResponse>
     name: params.name,
     propType: params.type,
     defaultValue: params.default,
+    bindTarget: params.bind,
   });
 }
 

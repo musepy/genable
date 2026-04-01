@@ -14,7 +14,7 @@ export const findNodesDefinition: ToolDefinition = {
 
 Examples:
   find_nodes({query: "Button"})
-  find_nodes({query: "frame", scope: "Card#1:2"})`,
+  find_nodes({query: "frame", scope: "1:2"})`,
   parameters: {
     type: 'object',
     properties: {
@@ -24,7 +24,7 @@ Examples:
       },
       scope: {
         type: 'string',
-        description: 'Limit search to subtree. Node ref ("name#id"). Default: entire page.',
+        description: 'Limit search to subtree. Node ID (e.g. "1:2"). Default: entire page.',
       },
     },
     required: ['query'],
@@ -37,7 +37,7 @@ export const discoverPropsDefinition: ToolDefinition = {
   description: `Discover unique property values in a subtree.
 
 Examples:
-  discover_props({node: "Card#1:2", props: ["fillColor", "fontSize"]})
+  discover_props({node: "1:2", props: ["fillColor", "fontSize"]})
 
 Searchable properties: fillColor, textColor, strokeColor, strokeWeight, opacity, cornerRadius, gap, fontSize, fontFamily, fontWeight.`,
   parameters: {
@@ -45,7 +45,7 @@ Searchable properties: fillColor, textColor, strokeColor, strokeWeight, opacity,
     properties: {
       node: {
         type: 'string',
-        description: 'Target node ref ("name#id")',
+        description: 'Target node ID (e.g. "1:2")',
       },
       props: {
         type: 'array',
@@ -64,8 +64,8 @@ export const replacePropsDefinition: ToolDefinition = {
   description: `Batch search-and-replace property values in a subtree.
 
 Examples:
-  replace_props({node: "Card#1:2", rules: [{prop: "fillColor", from: "#FFF", to: "#000"}]})
-  replace_props({node: "Card#1:2", rules: [
+  replace_props({node: "1:2", rules: [{prop: "fillColor", from: "#FFF", to: "#000"}]})
+  replace_props({node: "1:2", rules: [
     {prop: "fillColor", from: "#FFF", to: "#000"},
     {prop: "fontSize", from: "14", to: "16"}
   ]})`,
@@ -74,7 +74,7 @@ Examples:
     properties: {
       node: {
         type: 'string',
-        description: 'Target node ref ("name#id")',
+        description: 'Target node ID (e.g. "1:2")',
       },
       rules: {
         type: 'array',

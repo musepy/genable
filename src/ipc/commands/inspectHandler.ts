@@ -6,13 +6,12 @@
  *   - tree (default): skeleton JSON with role, summary, children
  *   - detail: full properties, optional screenshot
  *
- * Quality scoring only runs when `score: true` is passed.
+ * Pure read — no quality scoring. Use `describe` for lint/validation.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
-import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 import { resolvePathToNode, buildNodeRef } from './pathResolver';
 import { exportNodeToBase64 } from './shared';
 import { logger } from '../../utils/logger';
@@ -23,11 +22,10 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
   const mode = parameters.mode || 'tree';
   const depth = Math.min(parameters.depth || 5, 10);
   const wantScreenshot = parameters.screenshot && mode === 'detail';
-  const wantScore = parameters.score === true;
 
   if (!ref) {
     return {
-      error: { code: 'MISSING_PARAM', message: 'Missing required "node" parameter. Use inspect({node: "/"}) for page root.' },
+      error: 'Missing required "node" parameter. Use inspect({node: "/"}) for page root.',
     };
   }
 
@@ -51,13 +49,6 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
     // tree mode (default) — skeleton JSON
     tracer.enter('readHandler()', 'readHandlers.ts');
     result = buildTreeResult(resolved, depth);
-    tracer.exit();
-  }
-
-  // Quality scoring — only when explicitly requested
-  if (wantScore && !result.error) {
-    tracer.enter('scoreNodes()', 'qualityScorer.ts');
-    await attachQualityScore(result, resolved);
     tracer.exit();
   }
 
@@ -146,30 +137,3 @@ async function attachScreenshot(result: ToolResponse, node: SceneNode): Promise<
   }
 }
 
-// ── Quality scoring ──
-
-async function attachQualityScore(
-  result: ToolResponse,
-  resolved: Extract<Awaited<ReturnType<typeof resolvePathToNode>>, { ok: true }>,
-): Promise<void> {
-  try {
-    let scoreIds: string[] = [];
-    if (resolved.isPage) {
-      const topChildren = resolved.page.children.filter((c: SceneNode) => c.visible);
-      if (topChildren.length > 0) {
-        scoreIds = [topChildren[topChildren.length - 1].id];
-      }
-    } else {
-      scoreIds = [resolved.node.id];
-    }
-    if (scoreIds.length > 0) {
-      const report = await scoreCreatedNodes(scoreIds);
-      const qualityStr = formatQualityReport(report);
-      if (qualityStr) {
-        result._stderr = result._stderr
-          ? result._stderr + '\n' + qualityStr
-          : qualityStr;
-      }
-    }
-  } catch { /* best-effort */ }
-}

@@ -25,7 +25,6 @@ import {
 } from '../../engine/actions/nodeFactory';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
-import { scoreCreatedNodes, formatQualityReport } from './qualityScorer';
 import { PipelineTracer } from './pipelineTracer';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -61,10 +60,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
   if (error || vnodes.length === 0) {
     return {
-      error: {
-        code: error?.code || 'COMPILE_ERROR',
-        message: error?.message || 'No valid elements found in JSX markup.',
-      },
+      error: error?.message || 'No valid elements found in JSX markup.',
       _stages: tracer.collect(),
     };
   }
@@ -132,10 +128,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   if (failed || rootResults.length === 0) {
     const stderrLines = ctx.warnings.map(w => `[${w.code}] ${w.message}`);
     return {
-      error: {
-        code: 'EXECUTION_ERROR',
-        message: ctx.warnings[ctx.warnings.length - 1]?.message || 'Failed to create design tree.',
-      },
+      error: ctx.warnings[ctx.warnings.length - 1]?.message || 'Failed to create design tree.',
       _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
       _stages,
     };
@@ -181,19 +174,6 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
       const newRootNode = await figma.getNodeByIdAsync(rootResults[0].nodeId);
       if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);
     } catch { /* best-effort */ }
-  }
-
-  // Quality scoring (best-effort)
-  if (rootNodeId) {
-    try {
-      tracer.enter('scoreNodes()', 'qualityScorer.ts');
-      const report = await scoreCreatedNodes([rootNodeId]);
-      const qualityStr = formatQualityReport(report);
-      if (qualityStr) {
-        _stderr = _stderr ? _stderr + '\n' + qualityStr : qualityStr;
-      }
-      tracer.exit();
-    } catch { /* quality scoring is best-effort */ }
   }
 
   return { data, _stderr, _stages };

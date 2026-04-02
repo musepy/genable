@@ -96,7 +96,7 @@ export const IterationCard = memo(({ iteration, isStreaming = false }: Iteration
           lineHeight: '1.5',
           opacity: isStreaming ? 1 : 0.8,
         }}>
-          <MessageRenderer content={iteration.thinking} />
+          <MessageRenderer content={iteration.thinking} streaming={isStreaming} />
         </div>
       )}
     </div>

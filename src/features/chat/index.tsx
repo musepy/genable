@@ -147,7 +147,7 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
                   </Fragment>
                 )}
 
-                {safeText && <MessageRenderer content={safeText} />}
+                {safeText && <MessageRenderer content={safeText} streaming={msg.streaming} />}
 
                 {msg.rawOutput && (
                   <div style={{ marginTop: tokens.space[2] }}>

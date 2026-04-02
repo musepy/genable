@@ -11,6 +11,7 @@
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "lucide-preact": "^0.562.0",
+    "marked": "^17.0.5",
     "minisearch": "^7.2.0",
     "preact": ">=10",
     "react-markdown": "^10.1.0",

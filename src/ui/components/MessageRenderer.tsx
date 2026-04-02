@@ -1,15 +1,32 @@
 /**
  * @file MessageRenderer.tsx
- * @description Renders LLM text responses as plain text with line breaks
+ * @description Renders LLM text responses with Markdown support and streaming optimization.
+ *
+ * Uses react-markdown for rendering and marked.lexer() for streaming block-boundary detection.
+ * Streaming mode splits content into stable (memoized) + unstable (re-parsed) portions
+ * to avoid O(n) re-parsing of completed blocks on every text delta.
  */
 
-import { h, JSX } from 'preact';
+import { h, Fragment, JSX } from 'preact';
+import { memo } from 'preact/compat';
+import { useRef, useMemo } from 'preact/hooks';
 import { emit } from '@create-figma-plugin/utilities';
+import ReactMarkdown from 'react-markdown';
+import { marked } from 'marked';
 import { tokens } from '../design-system/tokens';
+
+// ============================================
+// Types
+// ============================================
 
 interface MessageRendererProps {
   content: string;
+  streaming?: boolean;
 }
+
+// ============================================
+// Styles
+// ============================================
 
 const containerStyle: JSX.CSSProperties = {
   fontSize: 'var(--font-size-1)',
@@ -29,6 +46,25 @@ const listItemStyle: JSX.CSSProperties = {
   lineHeight: tokens.lineHeight[2],
 };
 
+const inlineCodeStyle: JSX.CSSProperties = {
+  background: 'var(--gray-a3)',
+  padding: '1px 5px',
+  borderRadius: '3px',
+  fontFamily: 'var(--font-family-mono)',
+  fontSize: '0.9em',
+};
+
+const codeBlockStyle: JSX.CSSProperties = {
+  background: 'var(--gray-a2)',
+  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+  borderRadius: 'var(--radius-2)',
+  fontFamily: 'var(--font-family-mono)',
+  fontSize: '0.85em',
+  overflowX: 'auto' as const,
+  lineHeight: '1.5',
+  margin: `${tokens.space[1]}px 0`,
+};
+
 const nodeLinkStyle: JSX.CSSProperties = {
   background: 'var(--accent-a3)',
   color: 'var(--accent-11)',
@@ -40,31 +76,9 @@ const nodeLinkStyle: JSX.CSSProperties = {
   lineHeight: 'inherit',
 };
 
-// Matches [node:ID] or [node:ID|label] where ID can contain colons (e.g. 1234:5678)
-const NODE_LINK_RE = /\[node:([^\]|]+?)(?:\|([^\]]+?))?\]/g;
-
-type Segment = { type: 'text'; value: string } | { type: 'nodeLink'; id: string; label: string };
-
-function parseNodeLinks(text: string): Segment[] {
-  const segments: Segment[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  NODE_LINK_RE.lastIndex = 0;
-  while ((match = NODE_LINK_RE.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({ type: 'text', value: text.slice(lastIndex, match.index) });
-    }
-    const id = match[1];
-    const label = match[2] || id;
-    segments.push({ type: 'nodeLink', id, label });
-    lastIndex = NODE_LINK_RE.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    segments.push({ type: 'text', value: text.slice(lastIndex) });
-  }
-  return segments;
-}
+// ============================================
+// Node Link Chip (preserved from original)
+// ============================================
 
 function NodeLinkChip({ id, label }: { id: string; label: string }) {
   return (
@@ -84,38 +98,117 @@ function NodeLinkChip({ id, label }: { id: string; label: string }) {
   );
 }
 
-function renderLineContent(text: string): (string | JSX.Element)[] {
-  const segments = parseNodeLinks(text);
-  if (segments.length === 1 && segments[0].type === 'text') {
-    return [text];
+// ============================================
+// Pre-processing: [node:ID|label] → markdown link
+// ============================================
+
+const NODE_LINK_RE = /\[node:([^\]|]+?)(?:\|([^\]]+?))?\]/g;
+
+function preprocessNodeLinks(content: string): string {
+  return content.replace(NODE_LINK_RE, (_, id, label) => {
+    const safeLabel = (label || id).replace(/[[\]()]/g, '\\$&');
+    return `[${safeLabel}](nodelink://${id})`;
+  });
+}
+
+// ============================================
+// Markdown component overrides
+// ============================================
+
+const markdownComponents: Record<string, any> = {
+  p: ({ children }: any) => <p style={paragraphStyle}>{children}</p>,
+  li: ({ children }: any) => <li style={listItemStyle}>{children}</li>,
+  pre: ({ children }: any) => <pre style={codeBlockStyle}>{children}</pre>,
+  code: ({ inline, children }: any) =>
+    inline
+      ? <code style={inlineCodeStyle}>{children}</code>
+      : <code>{children}</code>,
+  a: ({ href, children }: any) => {
+    if (href?.startsWith('nodelink://')) {
+      const id = decodeURIComponent(href.replace('nodelink://', ''));
+      const label = Array.isArray(children) ? children.join('') : String(children ?? id);
+      return <NodeLinkChip id={id} label={label} />;
+    }
+    return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+  },
+};
+
+// ============================================
+// MarkdownBlock — memoized single-block renderer
+// ============================================
+
+const MarkdownBlock = memo(({ content }: { content: string }) => {
+  const processed = useMemo(() => preprocessNodeLinks(content), [content]);
+  return (
+    <ReactMarkdown components={markdownComponents}>
+      {processed}
+    </ReactMarkdown>
+  );
+});
+
+// ============================================
+// StreamingMarkdown — stable/unstable split
+//
+// Strategy (from Claude Code):
+// - Use marked.lexer() to find markdown block boundaries
+// - Everything before the last block = "stable" (content won't change, memoized)
+// - The last block = "unstable" (still growing, re-parsed each delta)
+// - stablePrefixRef advances monotonically as blocks complete
+// ============================================
+
+function StreamingMarkdown({ content }: { content: string }) {
+  const stablePrefixRef = useRef('');
+
+  // Reset if text was replaced (e.g. turn_end summary overrides accumulated text)
+  if (!content.startsWith(stablePrefixRef.current)) {
+    stablePrefixRef.current = '';
   }
-  return segments.map((seg, i) =>
-    seg.type === 'text'
-      ? seg.value
-      : <NodeLinkChip key={i} id={seg.id} label={seg.label} />
+
+  // Lex only the tail (from current stable boundary onwards)
+  const boundary = stablePrefixRef.current.length;
+  const tail = content.substring(boundary);
+  const lexTokens = marked.lexer(tail);
+
+  // Find last content token (skip trailing whitespace-only tokens)
+  let lastContentIdx = lexTokens.length - 1;
+  while (lastContentIdx >= 0 && lexTokens[lastContentIdx]!.type === 'space') {
+    lastContentIdx--;
+  }
+
+  // Advance stable boundary: all complete tokens except the last content token
+  let advance = 0;
+  for (let i = 0; i < lastContentIdx; i++) {
+    advance += lexTokens[i]!.raw.length;
+  }
+  if (advance > 0) {
+    stablePrefixRef.current = content.substring(0, boundary + advance);
+  }
+
+  const stable = stablePrefixRef.current;
+  const unstable = content.substring(stable.length);
+
+  return (
+    <Fragment>
+      {stable && <MarkdownBlock content={stable} />}
+      {unstable && <MarkdownBlock content={unstable} />}
+    </Fragment>
   );
 }
 
-export function MessageRenderer({ content }: MessageRendererProps) {
+// ============================================
+// Main Export
+// ============================================
+
+export function MessageRenderer({ content, streaming }: MessageRendererProps) {
   const safeContent = typeof content === 'string' ? content : String(content ?? '');
   if (!safeContent) return <div />;
 
-  const lines = safeContent.split('\n');
-
   return (
     <div style={containerStyle}>
-      {lines.map((line, i) => {
-        if (line.match(/^[•\-*]\s/)) {
-          return <li key={i} style={listItemStyle}>{renderLineContent(line.slice(2))}</li>;
-        }
-        if (line.match(/^\d+\.\s/)) {
-          return <li key={i} style={listItemStyle}>{renderLineContent(line.slice(line.indexOf('.') + 2))}</li>;
-        }
-        if (line.trim() === '') {
-          return <br key={i} />;
-        }
-        return <p key={i} style={paragraphStyle}>{renderLineContent(line)}</p>;
-      })}
+      {streaming
+        ? <StreamingMarkdown content={safeContent} />
+        : <MarkdownBlock content={safeContent} />
+      }
     </div>
   );
 }

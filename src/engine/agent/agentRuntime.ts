@@ -596,14 +596,19 @@ export class AgentRuntime {
       }
       console.log('='.repeat(60));
 
+      // Use API-reported tokens when available; fall back to chars/4 estimation
+      const effectiveTokens = currentTokens > 0
+        ? currentTokens
+        : Math.ceil(this.contextManager.estimateContextChars() / 4);
+
       this.emitRuntimeEvent({
         type: 'context_usage',
         iteration: iteration + 1,
         phase: 'execution',
         usage: {
-          current: currentTokens,
+          current: effectiveTokens,
           max: AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS,
-          percent: currentTokens > 0 ? Math.round((currentTokens / AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS) * 100) : 0,
+          percent: Math.round((effectiveTokens / AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS) * 100),
           visibleMessages: prompt.length,
           hiddenMessages: 0,
         }
@@ -703,11 +708,21 @@ export class AgentRuntime {
       modelMessage.id = this.generateId('mdl');
       this.contextManager.pushToTurn(modelMessage);
 
-      this.contextManager.setLastPromptTokens(response.usage?.promptTokens ?? this.contextManager.getLastPromptTokens());
-      if (response.usage) {
+      // Token tracking: use API usage when available, fall back to chars/4 estimation.
+      // Critical for providers like DashScope/Kimi K2.5 whose streaming doesn't return usage.
+      if (response.usage && response.usage.promptTokens > 0) {
+        this.contextManager.setLastPromptTokens(response.usage.promptTokens);
         this.runStats.tokenUsage.totalPromptTokens += response.usage.promptTokens;
         this.runStats.tokenUsage.totalCompletionTokens += response.usage.completionTokens;
         this.runStats.tokenUsage.totalTokens += response.usage.totalTokens;
+        this.runStats.tokenUsage.callCount++;
+      } else {
+        // Fallback: estimate from assembled context chars (chars / 4 ≈ tokens)
+        const estimatedPromptTokens = Math.ceil(this.contextManager.estimateContextChars() / 4);
+        this.contextManager.setLastPromptTokens(estimatedPromptTokens);
+        this.runStats.tokenUsage.totalPromptTokens += estimatedPromptTokens;
+        this.runStats.tokenUsage.totalCompletionTokens += (response.usage?.completionTokens || 0);
+        this.runStats.tokenUsage.totalTokens += estimatedPromptTokens + (response.usage?.completionTokens || 0);
         this.runStats.tokenUsage.callCount++;
       }
 

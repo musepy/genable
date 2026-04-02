@@ -302,6 +302,77 @@
       border-radius: 3px;
       flex-shrink: 0;
       white-space: nowrap;
+      cursor: default;
+    }
+    /* Context layer stacked bar */
+    .ctx-layers {
+      display: flex;
+      height: 14px;
+      width: 80px;
+      border-radius: 3px;
+      overflow: hidden;
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .ctx-layer {
+      height: 100%;
+      min-width: 1px;
+      transition: width .2s;
+    }
+    .ctx-l1 { background: #6366f1; } /* system prompt — indigo */
+    .ctx-l2 { background: #f59e0b; } /* summary — amber */
+    .ctx-l3 { background: #22c55e; } /* conversation history — green */
+    .ctx-l4 { background: #3b82f6; } /* turn messages — blue */
+
+    /* Context layer separator in conversation flow */
+    .conv-layer-sep {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      margin: 8px 0;
+      border-top: 1px solid var(--border-card);
+    }
+    .conv-layer-sep:first-child { border-top: none; margin-top: 0; }
+    .conv-layer-dot {
+      width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+    }
+    .conv-layer-sep-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-dimmed);
+    }
+    .conv-layer-sep-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+    /* System message avatar */
+    .conv-avatar.system { background: #6366f1; color: #c7d2fe; }
+    .conv-avatar.tool { background: #166534; color: #86efac; }
+    /* Iteration tabs */
+    .conv-iter-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .conv-iter-tab {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+    }
+    .conv-iter-tab:hover { background: var(--bg-hover); }
+    .conv-iter-tab.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
     }
     .timeline-bars {
       flex: 1;
@@ -361,7 +432,8 @@
     }
 
     /* Tooltip */
-    .bar[data-tooltip]:hover::after {
+    .bar[data-tooltip]:hover::after,
+    .ctx-layers[data-tooltip]:hover::after {
       content: attr(data-tooltip);
       position: absolute;
       bottom: calc(100% + 6px);
@@ -377,6 +449,9 @@
       border: 1px solid var(--border-tooltip);
       max-width: 400px;
       box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    }
+    .ctx-layers {
+      position: relative;
     }
 
     /* Tool call details */
@@ -835,6 +910,29 @@
       border-radius: 6px;
       padding: 10px 14px;
       border: 1px solid var(--border-card);
+    }
+    .conv-text.collapsed {
+      max-height: 120px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+    }
+    .conv-text.collapsed::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 40px;
+      background: linear-gradient(transparent, var(--bg-tool-body));
+      pointer-events: none;
+    }
+    .conv-text-toggle {
+      font-size: 11px;
+      color: #3b82f6;
+      cursor: pointer;
+      padding: 4px 0;
+      user-select: none;
+    }
+    .conv-text-toggle:hover { text-decoration: underline; }
     }
     .conv-text:empty { display: none; }
     .conv-toolcalls {
@@ -1432,7 +1530,7 @@ function renderFull(id, events, meta) {
   renderOverview(meta);
   renderTimeline(events);
   renderPipeline(events, meta);
-  renderConversation(meta.conversationHistory || []);
+  renderConversation(meta.conversationHistory || [], events);
   renderLLMContext(events);
   renderToolDetails(meta.toolCallDetails || []);
   renderFooter(id, meta);
@@ -1570,11 +1668,31 @@ function renderTimeline(events) {
       barsHTML += '<div class="bar bar-tool-err" style="width:auto;flex-shrink:0" data-tooltip="' + escHtml(err.message || '') + '">ERR</div>';
     }
 
-    // Context usage badge
+    // Context usage — stacked layer bar + msg count (click scrolls to conv flow)
     let ctxHTML = '';
     if (ctxUsage?.usage) {
       const u = ctxUsage.usage;
-      ctxHTML = '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      const L = u.layers;
+      if (L) {
+        const total = L.systemPrompt.chars + L.summary.chars + L.conversationHistory.chars + L.turnMessages.chars || 1;
+        const pct = (c) => Math.max(c > 0 ? 1 : 0, (c / total * 100)).toFixed(1);
+        const tip = 'System: ' + L.systemPrompt.chars + ' chars (' + L.systemPrompt.msgs + ' msg)' +
+          '\\nSummary: ' + L.summary.chars + ' chars (' + L.summary.msgs + ' msg)' +
+          '\\nHistory: ' + L.conversationHistory.chars + ' chars (' + L.conversationHistory.msgs + ' msg)' +
+          '\\nTurn: ' + L.turnMessages.chars + ' chars (' + L.turnMessages.msgs + ' msg)' +
+          '\\n\\nClick to view in Conversation Flow';
+        const scrollFn = "document.querySelector('.conv-iter-tab[data-iter=\\'" + iter + "\\']')?.click();" +
+          "document.getElementById('conv-card')?.scrollIntoView({behavior:'smooth'})";
+        ctxHTML = '<div class="ctx-layers" style="cursor:pointer" data-tooltip="' + escHtml(tip) + '" onclick="' + scrollFn + '">' +
+          '<div class="ctx-layer ctx-l1" style="width:' + pct(L.systemPrompt.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l2" style="width:' + pct(L.summary.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l3" style="width:' + pct(L.conversationHistory.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l4" style="width:' + pct(L.turnMessages.chars) + '%"></div>' +
+          '</div>' +
+          '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      } else {
+        ctxHTML = '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      }
     }
 
     // Total duration for this iteration
@@ -2077,32 +2195,152 @@ function toggleStringify(checkbox, id, toolName, durationMs) {
 }
 
 // ===== Conversation Flow =====
-function renderConversation(history) {
-  if (!history || history.length === 0) return;
+function renderConversation(history, events) {
   const card = document.getElementById('conv-card');
-  card.style.display = '';
   const container = document.getElementById('conv-container');
   container.innerHTML = '';
 
+  // Collect per-iteration layer data from context_usage events
+  const ctxEvents = (events || []).filter(e => e.type === 'context_usage' && e.usage?.layers);
+
+  // If we have layer data, show iteration tabs + layer-aware view
+  if (ctxEvents.length > 0) {
+    card.style.display = '';
+    // Tabs
+    const tabsDiv = document.createElement('div');
+    tabsDiv.className = 'conv-iter-tabs';
+    // "Final" tab for the classic flat view
+    for (const ce of ctxEvents) {
+      const tab = document.createElement('span');
+      tab.className = 'conv-iter-tab';
+      tab.dataset.iter = ce.iteration;
+      tab.textContent = 'Iter ' + ce.iteration;
+      tab.onclick = () => renderConvIteration(container, ce, tabsDiv);
+      tabsDiv.appendChild(tab);
+    }
+    const finalTab = document.createElement('span');
+    finalTab.className = 'conv-iter-tab';
+    finalTab.dataset.iter = 'final';
+    finalTab.textContent = 'Final';
+    finalTab.onclick = () => { renderConvFinal(container, history, tabsDiv); };
+    tabsDiv.appendChild(finalTab);
+    container.appendChild(tabsDiv);
+
+    // Default: show last iteration
+    const flowDiv = document.createElement('div');
+    flowDiv.className = 'conv-flow';
+    flowDiv.id = 'conv-flow-inner';
+    container.appendChild(flowDiv);
+    renderConvIteration(flowDiv, ctxEvents[ctxEvents.length - 1], tabsDiv);
+    return;
+  }
+
+  // Fallback: classic flat view (no layer data)
+  if (!history || history.length === 0) return;
+  card.style.display = '';
+  const flowDiv = document.createElement('div');
+  flowDiv.className = 'conv-flow';
+  container.appendChild(flowDiv);
+  renderConvMessages(flowDiv, history);
+}
+
+/** Render a single iteration's 4-layer prompt using conv-msg styling */
+function renderConvIteration(parentOrId, ctxEvent, tabsDiv) {
+  const flow = typeof parentOrId === 'string'
+    ? document.getElementById(parentOrId)
+    : document.getElementById('conv-flow-inner') || parentOrId;
+  flow.innerHTML = '';
+  // Highlight active tab
+  tabsDiv.querySelectorAll('.conv-iter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.iter == ctxEvent.iteration));
+
+  const L = ctxEvent.usage.layers;
+  const layerDefs = [
+    { key: 'systemPrompt', label: 'System Prompt', color: '#6366f1' },
+    { key: 'summary', label: 'Summary', color: '#f59e0b' },
+    { key: 'conversationHistory', label: 'Conversation History', color: '#22c55e' },
+    { key: 'turnMessages', label: 'Turn Messages', color: '#3b82f6' },
+  ];
+
+  for (const ld of layerDefs) {
+    const layer = L[ld.key];
+    if (!layer || (layer.msgs === 0 && layer.chars === 0)) continue;
+
+    // Layer separator header
+    const sep = document.createElement('div');
+    sep.className = 'conv-layer-sep';
+    sep.innerHTML = '<span class="conv-layer-dot" style="background:' + ld.color + '"></span>' +
+      '<span class="conv-layer-sep-label">' + ld.label + '</span>' +
+      '<span class="conv-layer-sep-meta">' + layer.chars + ' chars \u00b7 ' + layer.msgs + ' msg</span>';
+    flow.appendChild(sep);
+
+    // Render each message as a conv-msg with collapse/expand for long content
+    if (layer.messages) {
+      for (const m of layer.messages) {
+        const div = document.createElement('div');
+        div.className = 'conv-msg';
+        const avatarCls = m.role === 'system' ? 'system' : m.role === 'model' ? 'model' : m.role === 'tool' ? 'tool' : 'user';
+        const avatarIcon = m.role === 'system' ? 'S' : m.role === 'model' ? 'A' : m.role === 'tool' ? 'T' : 'U';
+        const roleLabel = m.role === 'system' ? 'System' : m.role === 'model' ? 'Agent' : m.role === 'tool' ? 'Tool' : 'User';
+        const metaHTML = '<span style="color:var(--text-dimmed);font-size:10px;margin-left:8px">' +
+          escHtml(m.id) + ' \u00b7 ' + m.chars + ' chars</span>';
+        const isLong = m.preview.length > 400;
+        const textCls = 'conv-text' + (isLong ? ' collapsed' : '');
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'conv-body';
+        bodyDiv.innerHTML = '<div class="conv-role">' + roleLabel + metaHTML + '</div>';
+        const textEl = document.createElement('div');
+        textEl.className = textCls;
+        textEl.textContent = m.preview;
+        bodyDiv.appendChild(textEl);
+        if (isLong) {
+          const toggle = document.createElement('div');
+          toggle.className = 'conv-text-toggle';
+          toggle.textContent = 'Show full content (' + m.chars + ' chars)';
+          toggle.onclick = () => {
+            const collapsed = textEl.classList.toggle('collapsed');
+            toggle.textContent = collapsed
+              ? 'Show full content (' + m.chars + ' chars)'
+              : 'Collapse';
+          };
+          bodyDiv.appendChild(toggle);
+        }
+        div.innerHTML = '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>';
+        div.appendChild(bodyDiv);
+        flow.appendChild(div);
+      }
+    }
+  }
+}
+
+/** Render "Final" tab — classic flat conversation history */
+function renderConvFinal(parentOrId, history, tabsDiv) {
+  const flow = document.getElementById('conv-flow-inner') ||
+    (typeof parentOrId === 'string' ? document.getElementById(parentOrId) : parentOrId);
+  flow.innerHTML = '';
+  tabsDiv.querySelectorAll('.conv-iter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.iter === 'final'));
+  if (history && history.length > 0) {
+    renderConvMessages(flow, history);
+  } else {
+    flow.innerHTML = '<div style="color:var(--text-dimmed);font-size:12px">No conversation history available</div>';
+  }
+}
+
+/** Classic flat message rendering (used by Final tab and fallback) */
+function renderConvMessages(container, history) {
   let convMsgIdx = 0;
   for (const msg of history) {
     convMsgIdx++;
     const isUser = msg.role === 'user';
     const div = document.createElement('div');
     div.className = 'conv-msg';
-
-    // Avatar
     const avatarCls = isUser ? 'user' : 'model';
     const avatarIcon = isUser ? 'U' : 'A';
-
     let bodyHTML = '<div class="conv-role">' + (isUser ? 'User' : 'Agent') + '</div>';
-
-    // Text
     if (msg.text) {
       bodyHTML += '<div class="conv-text">' + escHtml(msg.text) + '</div>';
     }
-
-    // Tool calls
     if (msg.toolCalls && msg.toolCalls.length > 0) {
       bodyHTML += '<div class="conv-toolcalls">';
       for (let tci = 0; tci < msg.toolCalls.length; tci++) {
@@ -2123,7 +2361,6 @@ function renderConversation(history) {
       }
       bodyHTML += '</div>';
     }
-
     div.innerHTML =
       '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>' +
       '<div class="conv-body">' + bodyHTML + '</div>';

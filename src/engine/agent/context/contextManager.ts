@@ -258,6 +258,65 @@ export class ContextManager {
     return total;
   }
 
+  /** Per-layer chars, message counts, and full content for diagnostics.
+   *  systemPrompt: only included when `includeStaticContent` is true (first call),
+   *  since it's the same across iterations. */
+  getLayerBreakdown(includeStaticContent = true) {
+    const serializeMsg = (msg: LLMMessage) => {
+      const chars = this.estimateMessageChars(msg);
+      let content: string;
+      if (typeof msg.content === 'string') {
+        content = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        const parts: string[] = [];
+        for (const p of msg.content as Part[]) {
+          if (p.text) parts.push(p.text);
+          if (p.functionCall) {
+            parts.push(`[call] ${p.functionCall.name}(${JSON.stringify(p.functionCall.args)})`);
+          }
+          if (p.functionResponse) {
+            parts.push(`[result] ${p.functionResponse.name}: ${JSON.stringify(p.functionResponse.response)}`);
+          }
+        }
+        content = parts.join('\n');
+      } else {
+        content = '';
+      }
+      return { id: msg.id || '', role: msg.role, chars, preview: content };
+    };
+
+    let historyChars = 0;
+    const historyMsgs = this.conversationHistory.map(m => {
+      historyChars += this.estimateMessageChars(m);
+      return serializeMsg(m);
+    });
+    let turnChars = 0;
+    const turnMsgs = this.turnMessages.map(m => {
+      turnChars += this.estimateMessageChars(m);
+      return serializeMsg(m);
+    });
+
+    return {
+      systemPrompt: {
+        chars: this.systemPrompt.length,
+        msgs: this.systemPrompt ? 1 : 0,
+        messages: this.systemPrompt
+          ? [{ id: 'sys_static', role: 'system', chars: this.systemPrompt.length,
+               preview: includeStaticContent ? this.systemPrompt : '(see iteration 1)' }]
+          : [],
+      },
+      summary: {
+        chars: this.summary.length,
+        msgs: this.summary ? 1 : 0,
+        messages: this.summary
+          ? [{ id: 'ctx_summary', role: 'system', chars: this.summary.length, preview: this.summary }]
+          : [],
+      },
+      conversationHistory: { chars: historyChars, msgs: this.conversationHistory.length, messages: historyMsgs },
+      turnMessages: { chars: turnChars, msgs: this.turnMessages.length, messages: turnMsgs },
+    };
+  }
+
   // ─── Private ────────────────────────────────────────────────
 
   /**

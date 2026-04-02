@@ -5,12 +5,34 @@ export interface AgentRuntimeTaskInfo {
   taskTitle: string;
 }
 
+export interface ContextLayerMessagePreview {
+  id: string;
+  role: string;
+  chars: number;
+  /** First N chars of text content, or "[functionCall] name(...)" / "[functionResponse] name(...)" */
+  preview: string;
+}
+
+export interface ContextLayerInfo {
+  chars: number;
+  msgs: number;
+  messages?: ContextLayerMessagePreview[];
+}
+
+export interface ContextLayerBreakdown {
+  systemPrompt: ContextLayerInfo;
+  summary: ContextLayerInfo;
+  conversationHistory: ContextLayerInfo;
+  turnMessages: ContextLayerInfo;
+}
+
 export interface AgentRuntimeContextUsage {
   current: number;
   max: number;
   percent: number;
   visibleMessages: number;
   hiddenMessages: number;
+  layers?: ContextLayerBreakdown;
 }
 
 export interface AgentRuntimeBaseEvent {

@@ -611,6 +611,7 @@ export class AgentRuntime {
           percent: Math.round((effectiveTokens / AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_CONTEXT_TOKENS) * 100),
           visibleMessages: prompt.length,
           hiddenMessages: 0,
+          layers: this.contextManager.getLayerBreakdown(iteration === 0),
         }
       });
 

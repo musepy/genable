@@ -134,16 +134,10 @@ export class AgentOrchestrator {
     }
 
     try {
-      // Read selection every turn (user may select different nodes)
-      const selection = await this.readSelection();
-      const selPrefix = selection.length > 0
-        ? `[Selected] ${selection.slice(0, 10).map(n => `"${n.name}"(${n.type},${n.id})`).join(' ')}`
-        : '';
-
+      // Selection is now an opt-in tool (get_selection) — no auto-injection here.
       this.options.onStatusChange?.('Agent starting...');
-      const enrichedPrompt = selPrefix ? `${selPrefix}\n\n${prompt}` : prompt;
       const startTime = Date.now();
-      const finalResponse = await this.activeAgent.run(enrichedPrompt);
+      const finalResponse = await this.activeAgent.run(prompt);
       const latencyMs = Date.now() - startTime;
 
       const { tokenUsage } = this.activeAgent.getRunStats();
@@ -537,28 +531,6 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
     // Fallback: regex match on raw message for non-Gemini providers
     const msg = (error?.message || '').toLowerCase();
     return /api.?key|401|unauthorized|quota|billing/.test(msg);
-  }
-
-  // ==========================================
-  // SELECTION
-  // ==========================================
-
-  /**
-   * Read Figma's current selection via IPC. Non-blocking: returns [] on timeout.
-   */
-  private async readSelection(): Promise<{id: string; name: string; type: string}[]> {
-    try {
-      const { on: onIpc, emit: emitIpc } = await import('@create-figma-plugin/utilities');
-      return new Promise(resolve => {
-        const timeout = setTimeout(() => resolve([]), 2000);
-        const unsub = onIpc<import('../../types').SendSelectionHandler>('SEND_SELECTION', (data) => {
-          clearTimeout(timeout);
-          unsub();
-          resolve(data.selection);
-        });
-        emitIpc<import('../../types').GetSelectionHandler>('GET_SELECTION');
-      });
-    } catch { return []; }
   }
 
   // ==========================================

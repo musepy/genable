@@ -12,7 +12,7 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 import { registerSessionNodes } from './pathResolver';
 import { handleTree, handleCat } from './readHandlers';
 import { handleMk, handleRm, handleMv, handleCp } from './writeHandlers';
-import { handleGrep, handleSed } from './searchHandlers';
+// grep/sed removed — no callers after verb_noun migration
 import { handleJs } from './jsHandler';
 import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';
@@ -26,6 +26,8 @@ import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAd
 import { handleListVariables, handleCreateVariable, handleBindVariable, handleAliasVariable } from './varAdapter';
 import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './compAdapter';
 import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from './setterAdapter';
+import { handleListMemories, handleSaveMemory, handleDeleteMemory } from './memoryAdapter';
+import { handleGetSelection } from './selectionAdapter';
 
 // ── Command handler type ──
 
@@ -64,19 +66,23 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   set_fill: handleSetFill,
   set_stroke: handleSetStroke,
   set_layout: handleSetLayout,
+  // Memory (persistent across sessions)
+  list_memories: handleListMemories,
+  save_memory: handleSaveMemory,
+  delete_memory: handleDeleteMemory,
+  // Selection (opt-in, LLM calls when needed)
+  get_selection: handleGetSelection,
   // knowledge is handled locally in sandbox — should not arrive at IPC
   knowledge: async () => ({
     error: 'knowledge is handled locally. This is an internal routing error.',
   }),
-  // Legacy command names — kept for backward compat
+  // Legacy command names — internal use only (adapters + scratchpad routing)
   tree: handleTree,
   cat: handleCat,
   mk: handleMk,
   rm: handleRm,
   mv: handleMv,
   cp: handleCp,
-  grep: handleGrep,
-  sed: handleSed,
   'scan-tokens': handleScanTokens,
 };
 

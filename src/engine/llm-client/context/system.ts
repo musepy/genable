@@ -32,12 +32,11 @@ export function buildStaticSystemPrompt(
     // 2. Persistent memory hint + management directives
     parts.push(
 `## PERSISTENT MEMORY
-You have persistent memory at \`/.agent/memory/\`. Use standard commands to read and write:
-- \`ls /.agent/memory/\` — list stored memories
-- \`cat /.agent/memory/\` — read all memories
-- \`cat /.agent/memory/key\` — read a specific memory
-- \`mk /.agent/memory/key text -- value\` — save a memory (persists across sessions)
-- \`rm /.agent/memory/key\` — delete a memory
+You have persistent memory that survives across sessions. Use the memory tools:
+- \`list_memories()\` — list all stored memories
+- \`list_memories({key: "brand-colors"})\` — read a specific memory
+- \`save_memory({key: "typography", value: "Headlines: Space Grotesk 32px. Body: Inter 16px."})\` — save a memory
+- \`delete_memory({key: "old-palette"})\` — delete a memory
 
 ### Memory Management
 On each turn end, evaluate: did the user establish any REUSABLE design decisions?
@@ -51,10 +50,6 @@ DO NOT write memory when:
 - One-off styling choices ("make this button red")
 - Temporary experiments
 - Layout decisions that only apply to this specific design
-
-Memory format: natural language + structured data. Example:
-  Key: "typography"
-  Value: "Headlines: Space Grotesk 32px Medium. Body: Inter 16px Regular. User prefers generous line height (1.5+)."
 
 On warm start (when memory is pre-loaded into context): briefly acknowledge what you remember, then proceed.
   GOOD: "I see your brand uses #2563EB with Inter. I'll keep it consistent."

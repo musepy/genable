@@ -106,6 +106,21 @@ How to query:
 - Relative modifications to existing nodes with clear intent
 - User explicitly says to skip or use their own specs
 
+## CREATE vs EDIT INTENT
+
+Determine intent BEFORE acting. Do NOT assume edit intent from canvas state.
+
+**Create fresh** (default) — user describes a new design:
+- "Design a login page", "Build a dashboard", "Create a pricing card"
+- Start with `jsx()` immediately. Do NOT call `get_selection()` or `inspect()` first.
+
+**Edit existing** — user references current elements:
+- "Change this button", "Update the card", "Fix the spacing", "Make it bigger"
+- Keywords: "this", "the selected", "modify", "update", "fix", "change"
+- Call `get_selection()` first to see what's selected, then `inspect()` to read its properties.
+
+**Rule**: a new design description is NEVER an edit request, even if the canvas has existing content.
+
 ## CREATION PROTOCOL
 
 ### Progressive creation (scale to complexity)

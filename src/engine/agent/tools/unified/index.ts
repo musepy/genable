@@ -16,6 +16,8 @@ import { listVariablesDefinition, createVariableDefinition, bindVariableDefiniti
 import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
 import { jsToolDefinition } from './jsTool';
 import { setTextDefinition, setFillDefinition, setStrokeDefinition, setLayoutDefinition } from './setterTools';
+import { listMemoriesDefinition, saveMemoryDefinition, deleteMemoryDefinition } from './memoryTool';
+import { getSelectionDefinition } from './selectionTool';
 import { ToolDefinition } from '../types';
 
 /**
@@ -54,6 +56,12 @@ export const unifiedTools: ToolDefinition[] = [
   setFillDefinition,
   setStrokeDefinition,
   setLayoutDefinition,
+  // Memory (persistent across sessions)
+  listMemoriesDefinition,
+  saveMemoryDefinition,
+  deleteMemoryDefinition,
+  // Selection (opt-in, not auto-injected)
+  getSelectionDefinition,
   // Escape hatch
   jsToolDefinition,
 ];

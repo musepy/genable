@@ -22,16 +22,14 @@ import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
-import { buildCompressionSummary, capSummary } from './context/contextSummarizer';
-import { compressConsumedToolResults } from './context/turnResultCompressor';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
 import { TOOL_NAMES } from './tools/unified';
-import { getContextProfile } from './context/constants';
 import { clearOverflows } from './overflowStore';
 import { executeSubtask } from './subtask/executor';
 import type { SubtaskContext } from './subtask/types';
+import { ContextManager } from './context/contextManager';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,14 +82,9 @@ export class AgentRuntimeCanceledError extends Error {
 export class AgentRuntime {
   private maxIterations: number;
 
-  // ─── Layered context ───
-  private readonly staticSystemPrompt: string;
-  private summary: string = '';                    // compressed history (only when context is near-full)
-  private conversationHistory: LLMMessage[] = [];  // previous turns' FULL messages
-  private turnMessages: LLMMessage[] = [];         // current turn only, moved to history at turn end
-  private readonly contextBudgetChars: number;     // max chars before triggering compression
+  // ─── Layered context (delegated to ContextManager) ───
+  private readonly contextManager: ContextManager;
 
-  private lastPromptTokens: number = 0;
   private cleaner: ToolResultCleaner;
   private llmCoordinator: LLMGenerationCoordinator;
   private toolDispatcher: ToolDispatcher;
@@ -123,13 +116,15 @@ export class AgentRuntime {
     this.behaviorConfig = resolveBehavior(options.behaviorConfig);
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
-    this.staticSystemPrompt = options.systemPrompt || '';
     // Context budget: 70% of context window (leave 30% for model output + safety margin)
     // chars ≈ tokens * 4 (rough estimate)
     const contextWindowTokens = options.contextWindow
       ?? options.provider.getCapabilities?.().contextWindow
       ?? 1_000_000;
-    this.contextBudgetChars = Math.floor(contextWindowTokens * 0.7) * 4;
+    this.contextManager = new ContextManager({
+      systemPrompt: options.systemPrompt || '',
+      contextBudgetChars: Math.floor(contextWindowTokens * 0.7) * 4,
+    });
     // ToolResultCleaner uses command definitions (not the `run` wrapper)
     // so it can route to the correct cleaning strategy per command.
     this.cleaner = new ToolResultCleaner(allToolDefinitions);
@@ -179,7 +174,7 @@ export class AgentRuntime {
             iteration: this.currentIteration,
             maxIterations: this.maxIterations,
             currentToolCall: tc,
-            messages: this.turnMessages,
+            messages: this.contextManager.getTurnMessages(),
             loopPolicy: this.loopPolicy,
             generateId: (prefix) => this.generateId(prefix),
           };
@@ -195,7 +190,7 @@ export class AgentRuntime {
             maxIterations: this.maxIterations,
             currentToolCall: tc,
             toolResult,
-            messages: this.turnMessages,
+            messages: this.contextManager.getTurnMessages(),
             loopPolicy: this.loopPolicy,
             generateId: (prefix) => this.generateId(prefix),
           };
@@ -215,7 +210,7 @@ export class AgentRuntime {
         const childContext: SubtaskContext = {
           provider: this.options.provider,
           ipcBridge: this.options.ipcBridge,
-          systemPrompt: this.staticSystemPrompt,
+          systemPrompt: this.contextManager.getSystemPrompt(),
           tools: this.options.tools,
           toolExecutors: this.options.toolExecutors,
           maxIterations: Math.min(Math.floor((this.maxIterations - this.currentIteration) / 2), 20),
@@ -310,41 +305,6 @@ export class AgentRuntime {
     return `${prefix}_${timestamp}${random}${this.idCounter}`;
   }
 
-  // ─── Context assembly ─────────────────────────────────────────
-
-  /**
-   * Assemble the prompt from 4-layer context.
-   * Layers: system → summary (compressed) → conversation history (full) → current turn.
-   */
-  private assemblePrompt(): LLMMessage[] {
-    const messages: LLMMessage[] = [];
-
-    // Layer 1: static system prompt
-    if (this.staticSystemPrompt) {
-      messages.push({ id: 'sys_static', role: 'system', content: this.staticSystemPrompt });
-    }
-
-    // Layer 2: compressed summary (only present if some history was compressed)
-    if (this.summary) {
-      messages.push({ id: 'ctx_summary', role: 'system', content: this.summary });
-    }
-
-    // Layer 3: uncompressed conversation history (previous turns, full detail)
-    messages.push(...this.conversationHistory);
-
-    // Layer 4: current turn messages
-    messages.push(...this.turnMessages);
-
-    return messages;
-  }
-
-  /**
-   * End the current turn. Moves turnMessages to conversationHistory (preserving
-   * full detail), then lazily compresses only if approaching context budget.
-   *
-   * turnMessages are NOT cleared here — they stay available for getMessages()
-   * (used by debrief). They're cleared at the start of the next run().
-   */
   // ── Chat Panel System ─────────────────────────────────────────────
   // Persistent chat container: all messages (user + agent) render into
   // a single panel. Created on first use, reused across turns.
@@ -454,110 +414,6 @@ export class AgentRuntime {
     }
   }
 
-  private endTurn(): void {
-    // Move current turn's full messages to conversation history
-    this.conversationHistory.push(...this.turnMessages);
-
-    // Lazy compression: only compress when approaching context budget
-    this.compressIfNeeded();
-  }
-
-  // ─── Lazy compression ──────────────────────────────────────
-
-  /**
-   * Estimate total context size in chars (across all 4 layers).
-   */
-  private estimateContextChars(): number {
-    let total = this.staticSystemPrompt.length + this.summary.length;
-    for (const msg of this.conversationHistory) {
-      total += this.estimateMessageChars(msg);
-    }
-    for (const msg of this.turnMessages) {
-      total += this.estimateMessageChars(msg);
-    }
-    return total;
-  }
-
-  private estimateMessageChars(msg: LLMMessage): number {
-    if (typeof msg.content === 'string') return msg.content.length;
-    if (!Array.isArray(msg.content)) return 0;
-    let total = 0;
-    for (const part of msg.content) {
-      if (part.text) total += part.text.length;
-      if (part.functionCall) {
-        total += (part.functionCall.name?.length || 0)
-          + JSON.stringify(part.functionCall.args || {}).length;
-      }
-      if (part.functionResponse) {
-        total += (part.functionResponse.name?.length || 0)
-          + JSON.stringify(part.functionResponse.response || {}).length;
-      }
-      // Skip inlineData — image token count is provider-specific
-    }
-    return total;
-  }
-
-  /**
-   * Compress oldest turns from conversationHistory into summary,
-   * but ONLY if total context exceeds the budget.
-   *
-   * Compresses one turn at a time (user msg + subsequent model/tool msgs)
-   * until we're under budget or history is empty.
-   */
-  private compressIfNeeded(): void {
-    const totalBefore = this.estimateContextChars();
-    if (totalBefore <= this.contextBudgetChars) {
-      console.log(`[Context] Lazy: ${totalBefore} chars, budget ${this.contextBudgetChars} — no compression needed`);
-      return;
-    }
-
-    console.log(`[Context] Lazy: ${totalBefore} chars exceeds budget ${this.contextBudgetChars} — compressing oldest turns`);
-    let compressed = 0;
-
-    while (this.estimateContextChars() > this.contextBudgetChars && this.conversationHistory.length > 0) {
-      // Extract the oldest turn (from first user msg to next user msg)
-      const oldestTurn = this.extractOldestTurn();
-      if (oldestTurn.length === 0) break;
-
-      const turnSummary = buildCompressionSummary(oldestTurn);
-      if (turnSummary) {
-        this.summary = this.summary
-          ? `${this.summary}\n${turnSummary}`
-          : turnSummary;
-        compressed++;
-      }
-    }
-
-    // Cap summary if it grew too large
-    const maxChars = getContextProfile().summaryMaxChars;
-    if (maxChars > 0 && this.summary.length > maxChars) {
-      this.summary = capSummary(this.summary, maxChars);
-    }
-
-    const totalAfter = this.estimateContextChars();
-    console.log(`[Context] Compressed ${compressed} turns: ${totalBefore} → ${totalAfter} chars (summary: ${this.summary.length} chars)`);
-  }
-
-  /**
-   * Extract the oldest logical turn from conversationHistory.
-   * A turn = a user message + all subsequent model/tool messages until the next user message.
-   * Returns the extracted messages (removed from conversationHistory).
-   */
-  private extractOldestTurn(): LLMMessage[] {
-    if (this.conversationHistory.length === 0) return [];
-
-    // Find the end of the first turn (next user message after index 0)
-    let endIdx = this.conversationHistory.length;
-    for (let i = 1; i < this.conversationHistory.length; i++) {
-      if (this.conversationHistory[i].role === 'user') {
-        endIdx = i;
-        break;
-      }
-    }
-
-    return this.conversationHistory.splice(0, endIdx);
-  }
-
   // ═══════════════════════════════════════════════════════════════
   // MAIN AGENT LOOP
   // ═══════════════════════════════════════════════════════════════
@@ -571,10 +427,10 @@ export class AgentRuntime {
     this.cancelReason = 'Canceled by user';
 
     // Clear previous turn's messages (already moved to conversationHistory by endTurn)
-    this.turnMessages = [];
+    this.contextManager.startTurn();
 
     // Add user message to current turn
-    this.turnMessages.push({
+    this.contextManager.pushToTurn({
       id: this.generateId('usr'),
       role: 'user',
       content: userPrompt,
@@ -601,10 +457,10 @@ export class AgentRuntime {
     });
 
     // ── Load persistent memory on first turn ──
-    if (this.conversationHistory.length === 0 && this.options.ipcBridge) {
+    if (this.contextManager.isFirstTurn() && this.options.ipcBridge) {
       try {
         const memResult = await Promise.race([
-          this.options.ipcBridge.callTool('cat', { path: '/.agent/memory/' }),
+          this.options.ipcBridge.callTool('list_memories', {}),
           new Promise<null>(r => setTimeout(() => r(null), 2000)),
         ]);
         if (memResult && !memResult.error && memResult.data?.memories) {
@@ -612,7 +468,7 @@ export class AgentRuntime {
           const keys = Object.keys(memories);
           if (keys.length > 0) {
             const memoryText = keys.map(k => `- ${k}: ${memories[k]}`).join('\n');
-            this.turnMessages.unshift({
+            this.contextManager.unshiftToTurn({
               id: this.generateId('mem'),
               role: 'user',
               content: `[System: Loaded ${keys.length} persistent memories from previous sessions]\n${memoryText}`,
@@ -643,7 +499,7 @@ export class AgentRuntime {
           if (tokenCount > 0) {
             // Try to load previous snapshot for diff
             const prevSnapshotResult = await Promise.race([
-              this.options.ipcBridge.callTool('cat', { path: '/.agent/memory/_token_snapshot' }),
+              this.options.ipcBridge.callTool('list_memories', { key: '_token_snapshot' }),
               new Promise<null>(r => setTimeout(() => r(null), 1000)),
             ]);
 
@@ -660,7 +516,7 @@ export class AgentRuntime {
             }
 
             // Inject token context (onboarding or diff)
-            this.turnMessages.unshift({
+            this.contextManager.unshiftToTurn({
               id: this.generateId('tok'),
               role: 'user',
               content: `[System: Design tokens detected — ${summary}]${diffText}`,
@@ -668,9 +524,9 @@ export class AgentRuntime {
             });
 
             // Save current snapshot for next session's diff
-            this.options.ipcBridge.callTool('mk', {
-              path: '/.agent/memory/_token_snapshot',
-              textContent: JSON.stringify(snapshot),
+            this.options.ipcBridge.callTool('save_memory', {
+              key: '_token_snapshot',
+              value: JSON.stringify(snapshot),
             }).catch(() => { /* non-fatal */ });
           }
         }
@@ -701,7 +557,7 @@ export class AgentRuntime {
       // After the LLM has consumed a tool result, compress it to a compact summary.
       // Preserves node IDs and error details; drops verbose content.
       if (iteration > 0) {
-        const compressed = compressConsumedToolResults(this.turnMessages);
+        const compressed = this.contextManager.compressConsumedResults();
         if (compressed > 0) {
           console.log(`[Context] Compressed ${compressed} consumed tool result(s) in current turn`);
         }
@@ -711,7 +567,7 @@ export class AgentRuntime {
       const beforeIterCtx: HookContext = {
         iteration,
         maxIterations: this.maxIterations,
-        messages: this.turnMessages,
+        messages: this.contextManager.getTurnMessages(),
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),
       };
@@ -720,8 +576,8 @@ export class AgentRuntime {
         throw new Error(beforeIterResult.reason || 'Aborted by beforeIteration hook');
       }
 
-      const prompt = this.assemblePrompt();
-      const currentTokens = this.lastPromptTokens;
+      const prompt = this.contextManager.assemblePrompt();
+      const currentTokens = this.contextManager.getLastPromptTokens();
 
       // Debug: dump full LLM prompt for each iteration (visible in Figma DevTools Console)
       console.log(`\n${'='.repeat(60)}\n[Iteration ${iteration + 1}/${this.maxIterations}] LLM Prompt (${prompt.length} messages)\n${'='.repeat(60)}`);
@@ -820,7 +676,7 @@ export class AgentRuntime {
         maxIterations: this.maxIterations,
         responseText: response.text,
         toolCalls: rawCalls,
-        messages: this.turnMessages,
+        messages: this.contextManager.getTurnMessages(),
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),
       };
@@ -845,14 +701,36 @@ export class AgentRuntime {
       // ──── ADD MODEL RESPONSE TO TURN ────
       const modelMessage = this.options.provider.formatResponse(response);
       modelMessage.id = this.generateId('mdl');
-      this.turnMessages.push(modelMessage);
+      this.contextManager.pushToTurn(modelMessage);
 
-      this.lastPromptTokens = response.usage?.promptTokens ?? this.lastPromptTokens;
+      this.contextManager.setLastPromptTokens(response.usage?.promptTokens ?? this.contextManager.getLastPromptTokens());
       if (response.usage) {
         this.runStats.tokenUsage.totalPromptTokens += response.usage.promptTokens;
         this.runStats.tokenUsage.totalCompletionTokens += response.usage.completionTokens;
         this.runStats.tokenUsage.totalTokens += response.usage.totalTokens;
         this.runStats.tokenUsage.callCount++;
+      }
+
+      // ──── TRUNCATION GUARD (with tool calls) ────
+      // When finishReason='length' AND tool calls exist, the calls are likely truncated
+      // (e.g., incomplete JSX → "Unterminated JSX contents" errors).
+      // Discard truncated calls and ask LLM to retry with simpler output.
+      if (toolCallsForExecution.length > 0 && response.finishReason === 'length') {
+        truncationCount++;
+        const truncatedNames = toolCallsForExecution.map(tc => tc.name).join(', ');
+        console.warn(`[AgentRuntime] Tool calls truncated (finishReason=length, tools=[${truncatedNames}], ${truncationCount}/3). Discarding.`);
+        if (truncationCount <= 3) {
+          this.contextManager.pushToTurn({
+            id: this.generateId('cont'),
+            role: 'user',
+            content: `Your previous response was truncated mid-tool-call (finishReason=length). The tool calls were discarded because they contain incomplete parameters. To fix this: break your design into smaller parts — create fewer nodes per tool call, or split into multiple sequential calls.`,
+            synthetic: true,
+          });
+          continue;
+        }
+        // After 3 truncation retries, let tool calls through (they'll fail with parse errors,
+        // but loop detection will eventually abort).
+        console.warn(`[AgentRuntime] Truncation limit reached (3) with tool calls. Proceeding with truncated calls.`);
       }
 
       // ──── TOOL EXECUTION ────
@@ -871,7 +749,7 @@ export class AgentRuntime {
           this.pendingApproval = null;
           this.throwIfCanceled(iteration + 1);
           if (!approved) {
-            this.turnMessages.push({ id: this.generateId('usr'), role: 'user', content: 'Tools denied by user. Try a different approach.', synthetic: true });
+            this.contextManager.pushToTurn({ id: this.generateId('usr'), role: 'user', content: 'Tools denied by user. Try a different approach.', synthetic: true });
             iteration++;
             continue;
           }
@@ -891,7 +769,7 @@ export class AgentRuntime {
             }
           }
         }
-        this.turnMessages.push(dispatchResult.toolResultsMessage);
+        this.contextManager.pushToTurn(dispatchResult.toolResultsMessage);
 
         // Guardrails (consecutiveFailure, partialFailure, budget) are now
         // handled by builtin afterIteration hooks.
@@ -910,7 +788,7 @@ export class AgentRuntime {
         const afterIterCtx: HookContext = {
           iteration,
           maxIterations: this.maxIterations,
-          messages: this.turnMessages,
+          messages: this.contextManager.getTurnMessages(),
           loopPolicy: this.loopPolicy,
           generateId: (prefix) => this.generateId(prefix),
           iterationToolResults,
@@ -931,7 +809,7 @@ export class AgentRuntime {
           truncationCount++;
           if (truncationCount <= 3) {
             console.warn(`[AgentRuntime] Response truncated (finishReason=${fr}, ${truncationCount}/3). Injecting continuation.`);
-            this.turnMessages.push({
+            this.contextManager.pushToTurn({
               id: this.generateId('cont'),
               role: 'user',
               content: 'Your previous response was truncated. Continue where you left off.',
@@ -964,7 +842,7 @@ export class AgentRuntime {
           totalIterations: iteration + 1,
           summary: response.text || '',
         });
-        this.endTurn();
+        this.contextManager.endTurn();
         return response.text;
       }
     }
@@ -976,13 +854,13 @@ export class AgentRuntime {
       iteration,
       maxIterations: this.maxIterations,
     });
-    this.endTurn();
+    this.contextManager.endTurn();
     return `I've used all ${this.maxIterations} iterations. My progress is saved — say "continue" to pick up where I left off.`;
   }
 
   /** Returns current turn messages (for debrief/diagnostics). */
   public getMessages(): LLMMessage[] {
-    return this.turnMessages;
+    return this.contextManager.getTurnMessages();
   }
 
   public getRunStats() {

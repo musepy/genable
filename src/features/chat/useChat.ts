@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
-import { ChatMessage, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
+import { ChatMessage, ContentBlock, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import { PluginData } from '../../hooks/usePluginData'
 import guidelinesCatalog from '../../generated/guidelines-catalog.json'
 import styleCatalog from '../../generated/style-catalog.json'
@@ -123,6 +123,41 @@ export function useChat({
     })
   }
 
+  // ---- Block routing helpers ----
+  /** Append text to the last text block, or create a new one if last block is tool_group. */
+  function appendTextBlock(blocks: ContentBlock[], delta: string): ContentBlock[] {
+    const next = [...blocks]
+    const last = next[next.length - 1]
+    if (last && last.type === 'text') {
+      next[next.length - 1] = { ...last, content: last.content + delta }
+    } else {
+      next.push({ type: 'text', content: delta })
+    }
+    return next
+  }
+
+  /** Add a tool to the last tool_group, or create a new one if last block is text. */
+  function appendToolBlock(blocks: ContentBlock[], tool: ToolCallRecord): ContentBlock[] {
+    const next = [...blocks]
+    const last = next[next.length - 1]
+    if (last && last.type === 'tool_group') {
+      next[next.length - 1] = { ...last, tools: [...last.tools, tool] }
+    } else {
+      next.push({ type: 'tool_group', tools: [tool] })
+    }
+    return next
+  }
+
+  /** Update a tool's status within any tool_group block. */
+  function updateToolInBlocks(blocks: ContentBlock[], toolId: string, updater: (tc: ToolCallRecord) => ToolCallRecord): ContentBlock[] {
+    return blocks.map(block => {
+      if (block.type !== 'tool_group') return block
+      const hasMatch = block.tools.some(t => t.id === toolId)
+      if (!hasMatch) return block
+      return { ...block, tools: block.tools.map(t => t.id === toolId ? updater(t) : t) }
+    })
+  }
+
   const handleRuntimeEvent = (event: AgentRuntimeEvent) => {
     eventBufferRef.current.push(event)
 
@@ -162,22 +197,24 @@ export function useChat({
         updateStreamingMessage(msg => ({
           ...msg,
           toolCalls: [...(msg.toolCalls || []), newToolCall],
+          blocks: appendToolBlock(msg.blocks || [], newToolCall),
         }))
         break
       }
       case 'tool_result': {
+        const toolUpdater = (tc: ToolCallRecord) => ({
+          ...tc,
+          status: (event.toolResult.error ? 'error' : 'success') as ToolCallRecord['status'],
+          endTime: tc.startTime + event.toolResult.durationMs,
+          error: event.toolResult.error,
+          result: event.toolResult.raw,
+        })
         updateStreamingMessage(msg => ({
           ...msg,
-          toolCalls: (msg.toolCalls || []).map(tc => {
-            if (tc.id !== event.toolResult.id) return tc
-            return {
-              ...tc,
-              status: event.toolResult.error ? 'error' : 'success',
-              endTime: tc.startTime + event.toolResult.durationMs,
-              error: event.toolResult.error,
-              result: event.toolResult.raw,
-            }
-          }),
+          toolCalls: (msg.toolCalls || []).map(tc =>
+            tc.id === event.toolResult.id ? toolUpdater(tc) : tc
+          ),
+          blocks: updateToolInBlocks(msg.blocks || [], event.toolResult.id, toolUpdater),
         }))
         break
       }
@@ -241,6 +278,7 @@ export function useChat({
         updateStreamingMessage(msg => ({
           ...msg,
           text: (msg.text || '') + delta,
+          blocks: appendTextBlock(msg.blocks || [], delta),
         }))
         break
       }
@@ -260,13 +298,28 @@ export function useChat({
         setRuntimeState('idle')
         setRuntimePhase(event.phase)
         setLoadingStatus('')
-        updateStreamingMessage(msg => ({
-          ...msg,
-          text: event.summary || msg.text || '',
-          streaming: false,
-          runState: 'completed',
-          endTime: Date.now(),
-        }))
+        updateStreamingMessage(msg => {
+          const finalText = event.summary || msg.text || ''
+          // Replace last text block with summary, or append one
+          let blocks = msg.blocks || []
+          if (event.summary) {
+            const lastIdx = blocks.length - 1
+            if (lastIdx >= 0 && blocks[lastIdx].type === 'text') {
+              blocks = [...blocks]
+              blocks[lastIdx] = { type: 'text', content: event.summary }
+            } else {
+              blocks = [...blocks, { type: 'text', content: event.summary }]
+            }
+          }
+          return {
+            ...msg,
+            text: finalText,
+            blocks,
+            streaming: false,
+            runState: 'completed',
+            endTime: Date.now(),
+          }
+        })
         break
       }
       case 'canceled': {
@@ -345,6 +398,7 @@ export function useChat({
         streaming: true,
         iterations: [],
         toolCalls: [],
+        blocks: [],
         id: `m-${Date.now() + 1}`,
         startTime: Date.now(),
         runState: 'running',
@@ -559,11 +613,17 @@ export function useChat({
       setHistory(prev =>
         prev.map(msg => {
           if (msg.id !== modelId) return msg
+          // Build blocks from toolCalls + text
+          const blocks: ContentBlock[] = []
+          if (calls.length > 0) blocks.push({ type: 'tool_group', tools: calls })
+          const finalText = text ?? msg.text
+          if (finalText) blocks.push({ type: 'text', content: finalText })
           return {
             ...msg,
             toolCalls: calls,
+            blocks,
             streaming,
-            text: text ?? msg.text,
+            text: finalText,
             ...(msgRunState ? { runState: msgRunState } : {}),
           }
         })
@@ -612,7 +672,7 @@ export function useChat({
       setError(null)
       setHistory([
         { role: 'user', text: 'Refine this plugin UI flow and keep it cleaner.', id: userId },
-        { role: 'model', text: '', streaming: true, iterations: [], toolCalls: [], id: modelId },
+        { role: 'model', text: '', streaming: true, iterations: [], toolCalls: [], blocks: [], id: modelId },
       ])
 
       queue(500, () => {
@@ -687,6 +747,7 @@ export function useChat({
           streaming: true,
           iterations: [],
           toolCalls: calls,
+          blocks: [{ type: 'tool_group' as const, tools: calls }],
           id: `${modelId}-error`,
         },
       ])

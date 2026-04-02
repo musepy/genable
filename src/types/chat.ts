@@ -76,9 +76,19 @@ export interface IterationRecord {
     taskTitle?: string;
 }
 
+// ============================================
+// Content blocks — vertical stream of text + tool groups
+// ============================================
+
+export type ContentBlock =
+    | { type: 'text'; content: string }
+    | { type: 'tool_group'; tools: ToolCallRecord[] };
+
 export interface ChatMessage {
     role: 'user' | 'model';
     text: string;
+    /** Chronological stream of text and tool blocks (new rendering model) */
+    blocks?: ContentBlock[];
     thinking?: ThinkingData;
     rawOutput?: string;
     /** Post-processing corrections applied to LLM output (P2 feature) */

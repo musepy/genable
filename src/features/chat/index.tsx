@@ -8,23 +8,42 @@ import {
 } from '../../ui/index'
 import { PromptChips } from '../../ui/components/PromptChips'
 import { PromptInput } from '../../ui/components/PromptInput'
-import { MessageRenderer } from '../../ui/components/MessageRenderer'
-import { ToolExecutionPanel } from '../../ui/components/ToolExecutionPanel'
+import { ToolBlock } from '../../ui/components/ToolBlock'
+import { TextBlock } from '../../ui/components/TextBlock'
 import { NodeListPanel } from '../../ui/components/NodeListPanel'
-import { RawOutputPanel } from '../../ui/components/RawOutputPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { Button } from '../../ui/components/Button'
-import { FileText } from 'lucide-preact'
-import { generateLogDigest } from './logDigest'
 import { on, emit } from '@create-figma-plugin/utilities'
 import { SendSerializedSelectionHandler, SerializeSelectionHandler } from '../../types'
-import { useClipboard } from '../../ui/hooks/useClipboard'
+// useClipboard removed — Copy Digest deleted
 import type { PluginState } from '../../ui/index'
 
 import { useChat, UseChatProps } from './useChat'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { t } from '../../ui/i18n'
-import type { ErrorActionType } from '../../config/errorPatterns'
+// ErrorActionType removed — error handling moved to StatusBlock
+import type { ContentBlock } from '../../types/chat'
+
+const TRIVIAL_TEXT_THRESHOLD = 20;
+
+/** Merge consecutive tool_groups and skip trivial text fragments between them. */
+function mergeBlocks(blocks: ContentBlock[]): ContentBlock[] {
+  const out: ContentBlock[] = [];
+  for (const block of blocks) {
+    // Skip trivial text fragments (LLM noise like "<", "row", "Semi")
+    if (block.type === 'text' && block.content.trim().length < TRIVIAL_TEXT_THRESHOLD) continue;
+    // Merge consecutive tool_groups
+    if (block.type === 'tool_group') {
+      const last = out[out.length - 1];
+      if (last && last.type === 'tool_group') {
+        out[out.length - 1] = { type: 'tool_group', tools: [...last.tools, ...block.tools] };
+        continue;
+      }
+    }
+    out.push(block);
+  }
+  return out;
+}
 
 // Inline styles — flat transcript layout
 const messagesContainerStyle = {
@@ -45,9 +64,9 @@ const messageItemStyle = {
   WebkitUserSelect: 'text' as const,
 };
 
-// User messages: gray background per preview design
+// User messages: gray background, same padding as other blocks
 const userItemStyle = {
-  padding: `6px 10px`,
+  padding: '4px 10px',
   width: '100%',
   background: 'var(--gray-3)',
   borderRadius: 'var(--radius-3)',
@@ -55,20 +74,134 @@ const userItemStyle = {
   WebkitUserSelect: 'text' as const,
 };
 
-function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatus, reasoningText, runtimePhase, runtimeProgress, runtimeContextUsage, runtimeState, onStop, onContinue, onErrorAction, anchorRef, memoryCount }: {
+// ============================================
+// StatusBlock — running / confirming stop / canceled / error
+// ============================================
+
+function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }: {
+  runState: string;
+  startTime?: number;
+  endTime?: number;
+  error?: string;
+  onStop: () => void;
+  onContinue: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [elapsed, setElapsed] = useState('');
+
+  // Elapsed time ticker
+  useEffect(() => {
+    if (runState !== 'running' || !startTime) {
+      if (startTime && endTime) {
+        setElapsed(formatDuration(endTime - startTime));
+      }
+      return;
+    }
+    const tick = () => setElapsed(formatDuration(Date.now() - startTime));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [runState, startTime, endTime]);
+
+  // Reset confirming when state changes
+  useEffect(() => { setConfirming(false); }, [runState]);
+
+  const sz = tokens.fontSize[1];
+  const dim = tokens.colors.textSecondary;
+
+  if (runState === 'error') {
+    return (
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: tokens.colors.error, padding: '4px 10px' }}>
+        {error || 'Error'}{elapsed ? ` · ${elapsed}` : ''}
+      </div>
+    );
+  }
+
+  if (runState === 'canceled') {
+    return (
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: '4px 10px', display: 'flex', alignItems: 'center' }}>
+        <span>Stopped{elapsed ? ` · ${elapsed}` : ''}</span>
+        <span
+          onClick={onContinue}
+          style={{ marginLeft: 'auto', cursor: 'pointer', padding: '2px 8px', borderRadius: '6px', transition: 'background 120ms', color: dim }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >continue</span>
+      </div>
+    );
+  }
+
+  // padding = scroll container padding (12px) + block inner padding (10px) = 22px
+  const row: h.JSX.CSSProperties = {
+    fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim,
+    padding: `${tokens.space[1]}px ${tokens.space[3] + 10}px`,
+    display: 'flex', alignItems: 'center',
+  };
+
+  const isRunning = runState === 'running';
+
+  // Completed / canceled / error — same word, ed form
+  if (!isRunning) {
+    if (!elapsed) return null;
+    const label = runState === 'error' ? `Error · ${elapsed}`
+      : runState === 'canceled' ? `Stopped · ${elapsed}`
+      : `Thought · ${elapsed}`;
+    return <div style={row}>{label}</div>;
+  }
+
+  // Running — two-step interrupt
+  if (confirming) {
+    return (
+      <div style={row}>
+        <span className="thinking-shimmer">Thinking · {elapsed || '0s'}</span>
+        <span style={{ flex: 1 }} />
+        <span
+          onClick={() => { setConfirming(false); onStop(); }}
+          style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms', color: tokens.colors.error }}
+          onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--error-3)' }}
+          onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >stop</span>
+        <span
+          onClick={() => setConfirming(false)}
+          style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms', marginLeft: tokens.space[1] }}
+          onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+          onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >continue</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={row}>
+      <span className="thinking-shimmer">Thinking · {elapsed || '0s'}</span>
+      <span style={{ flex: 1 }} />
+      <span
+        onClick={() => setConfirming(true)}
+        style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms, color 120ms', color: dim, background: 'transparent' }}
+        onMouseEnter={(e: MouseEvent) => { const el = e.currentTarget as HTMLElement; el.style.background = 'var(--warning-3)'; el.style.color = tokens.colors.warning }}
+        onMouseLeave={(e: MouseEvent) => { const el = e.currentTarget as HTMLElement; el.style.background = 'transparent'; el.style.color = dim }}
+      >click to interrupt</span>
+    </div>
+  );
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+// ============================================
+// MessageList
+// ============================================
+
+function MessageList({ history, loading, runtimeState, onStop, onContinue, anchorRef, memoryCount }: {
   history: any[];
-  expandedRawIds: Set<number>;
-  toggleRaw: (id: number) => void;
   loading: boolean;
-  loadingStatus?: string;
-  reasoningText?: string;
-  runtimePhase: any;
-  runtimeProgress: { iteration: number; maxIterations: number } | null;
-  runtimeContextUsage: any;
   runtimeState: 'idle' | 'running' | 'canceled' | 'error';
   onStop: () => void;
   onContinue: () => void;
-  onErrorAction: (action: ErrorActionType) => void;
   anchorRef: any;
   memoryCount: number;
 }) {
@@ -98,72 +231,54 @@ function MessageList({ history, expandedRawIds, toggleRaw, loading, loadingStatu
       {history.filter(msg => !msg.id?.startsWith('recovery_')).map((msg, i) => {
         const isUserMessage = msg.role === 'user';
         const prevRole = i > 0 ? history[i - 1].role : null;
-        const isCrossRole = prevRole !== null && prevRole !== msg.role;
-        const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[3] : tokens.space[1]);
+        const marginTop = i === 0 ? 0 : tokens.space[1];
 
-        const safeText = typeof msg.text === 'string' ? msg.text : String(msg.text ?? '');
+        if (isUserMessage) {
+          return (
+            <div key={msg.id || `msg-${i}`} style={{ ...userItemStyle, marginTop }}>
+              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
+                {typeof msg.text === 'string' ? msg.text : String(msg.text ?? '')}
+              </span>
+            </div>
+          );
+        }
 
-        const lastIteration = msg.iterations?.[msg.iterations.length - 1];
-        const thinkingStatus = msg.streaming ? (loadingStatus || 'Thinking...') : undefined;
-        const reasoningPreview = msg.streaming ? reasoningText : undefined;
-
-        const shouldShowToolGroup = !isUserMessage && (
-          (msg.toolCalls && msg.toolCalls.length > 0) ||
-          !!thinkingStatus ||
-          !!reasoningPreview ||
-          !!msg.runState
-        );
+        // Model message — flat block stream
+        const isStreaming = !!msg.streaming;
+        const blocks = mergeBlocks(msg.blocks || []);
+        const isError = msg.runState === 'error';
+        const isCanceled = msg.runState === 'canceled';
 
         return (
-          <div key={msg.id || `msg-${i}`} style={{ ...(isUserMessage ? userItemStyle : messageItemStyle), marginTop }}>
-            {isUserMessage ? (
-              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
-                {safeText}
-              </span>
-            ) : (
-              <Fragment>
-                {shouldShowToolGroup && (
-                  <Fragment>
-                    <ToolExecutionPanel
-                      toolCalls={msg.toolCalls}
-                      llmCalls={msg.llmCalls}
-                      thinkingStatus={thinkingStatus}
-                      reasoningPreview={reasoningPreview}
-                      currentTaskTitle={lastIteration?.taskTitle}
-                      phase={msg.streaming ? runtimePhase : undefined}
-                      progress={msg.streaming ? runtimeProgress : null}
-                      contextUsage={msg.streaming ? runtimeContextUsage : null}
-                      runState={msg.streaming ? runtimeState : (msg.runState as any)}
-                      runError={msg.runError}
-                      taskStartTime={msg.startTime}
-                      taskEndTime={msg.endTime}
-                      onStop={onStop}
-                      onContinue={onContinue}
-                      onErrorAction={onErrorAction}
+          <Fragment key={msg.id || `msg-${i}`}>
+            {blocks.map((block: any, bi: number) => {
+              const blockMargin = bi === 0 && marginTop ? marginTop : tokens.space[1];
+              if (block.type === 'text') {
+                return (
+                  <div key={`b-${bi}`} style={{ marginTop: blockMargin }}>
+                    <TextBlock
+                      content={block.content}
+                      streaming={isStreaming && bi === blocks.length - 1}
                     />
-                    {!msg.streaming && (
-                      <NodeListPanel toolCalls={msg.toolCalls || []} />
-                    )}
-                  </Fragment>
-                )}
-
-                {safeText && <MessageRenderer content={safeText} streaming={msg.streaming} />}
-
-                {msg.rawOutput && (
-                  <div style={{ marginTop: tokens.space[2] }}>
-                    <button
-                      onClick={() => toggleRaw(i)}
-                      className="ghost-btn"
-                      style={{ padding: `0 ${tokens.space[2]}px`, background: 'transparent', border: 'none', color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1], cursor: 'pointer' }}
-                    >
-                      {expandedRawIds.has(i) ? t.hideRaw : t.showRaw}
-                    </button>
-                    <RawOutputPanel content={msg.rawOutput} isExpanded={expandedRawIds.has(i)} onToggle={() => toggleRaw(i)} />
                   </div>
-                )}
-              </Fragment>
+                );
+              }
+              if (block.type === 'tool_group') {
+                return (
+                  <div key={`b-${bi}`} style={{ marginTop: blockMargin }}>
+                    <ToolBlock tools={block.tools} />
+                  </div>
+                );
+              }
+              return null;
+            })}
+
+            {/* Node chips — after completion */}
+            {!isStreaming && !isError && (msg.toolCalls?.length ?? 0) > 0 && (
+              <NodeListPanel toolCalls={msg.toolCalls || []} />
             )}
-          </div>
+
+          </Fragment>
         );
       })}
 
@@ -178,10 +293,6 @@ export function ChatFeature(props: UseChatProps) {
     setPrompt,
     history,
     loading,
-    loadingStatus,
-    error,
-    setError,
-    thinkingText,
     generate,
     stopGeneration,
     continueGeneration,
@@ -195,21 +306,14 @@ export function ChatFeature(props: UseChatProps) {
     onOpenSettings,
     providerName,
     runtimeState,
-    runtimePhase,
-    runtimeProgress,
-    runtimeContextUsage,
     memoryCount,
   } = useChat(props)
 
-  const { copy } = useClipboard()
-
   useEffect(() => {
     return on<SendSerializedSelectionHandler>('SEND_SERIALIZED_SELECTION', (data) => {
-      copy(data.jsonString);
-      // Optional: also put it in the prompt to show it works
       setPrompt(data.jsonString);
     });
-  }, [copy, setPrompt]);
+  }, [setPrompt]);
 
   const {
     shouldAutoScroll,
@@ -217,16 +321,12 @@ export function ChatFeature(props: UseChatProps) {
     anchorRef,
   } = useSmartScroll(history, { threshold: 100 });
 
-  const [expandedRawIds, setExpandedRawIds] = useState<Set<number>>(new Set())
-
-  // No longer using Toast for errors
-
   // Conditional scroll
   useEffect(() => {
     if (shouldAutoScroll) {
       anchorRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [history, thinkingText, shouldAutoScroll])
+  }, [history, shouldAutoScroll])
 
   const selectSavedPrompt = (title: string) => {
     const suggestion = t.promptSuggestions.find(s => s.title === title)
@@ -246,42 +346,16 @@ export function ChatFeature(props: UseChatProps) {
   const isEmpty = pluginState === 'EMPTY' || pluginState === 'TYPING';
   const canSubmit = !!prompt.trim();
 
-  // Action Handlers
-  const errorActions: Record<ErrorActionType, () => void> = {
-    openSettings: () => {
-      setError(null);
-      onOpenSettings?.();
-    },
-    dismiss: () => setError(null),
-    retry: () => {
-      setError(null);
-      continueGeneration();
-    },
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       {/* Messages Area */}
       <div style={messagesContainerStyle} ref={containerRef} className="messages-mask">
         <MessageList
           history={history}
-          expandedRawIds={expandedRawIds}
-          toggleRaw={(id) => setExpandedRawIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })}
           loading={loading}
-          loadingStatus={loadingStatus}
-          reasoningText={thinkingText}
-          runtimePhase={runtimePhase}
-          runtimeProgress={runtimeProgress}
-          runtimeContextUsage={runtimeContextUsage}
           runtimeState={runtimeState}
           onStop={stopGeneration}
           onContinue={continueGeneration}
-          onErrorAction={(action) => errorActions[action]()}
           anchorRef={anchorRef}
           memoryCount={memoryCount}
         />
@@ -320,6 +394,26 @@ export function ChatFeature(props: UseChatProps) {
         </div>
       )}
 
+      {/* Status bar — fixed between scroll area and input */}
+      {(() => {
+        const lastModel = [...history].reverse().find((m: any) => m.role === 'model');
+        if (!lastModel) return null;
+        const state = loading ? runtimeState : lastModel.runState;
+        if (!state) return null;
+        return (
+          <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.colors.alpha[2]}` }}>
+            <StatusBlock
+              runState={state}
+              startTime={lastModel.startTime}
+              endTime={lastModel.endTime}
+              error={lastModel.runError}
+              onStop={stopGeneration}
+              onContinue={continueGeneration}
+            />
+          </div>
+        );
+      })()}
+
       {/* Input Area — Flex-anchored at bottom */}
       <div style={{
         flexShrink: 0,
@@ -328,22 +422,6 @@ export function ChatFeature(props: UseChatProps) {
         zIndex: 10,
         position: 'relative',
       }}>
-        {history.length > 0 && !loading && (
-          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: tokens.space[2] }}>
-            <Button
-              variant="ghost"
-              size="sm"
-              leftIcon={<FileText size={12} />}
-              onClick={() => {
-                const digest = generateLogDigest(history, { modelName });
-                copy(digest);
-              }}
-              style={{ color: tokens.colors.textSecondary }}
-            >
-              Copy Digest
-            </Button>
-          </div>
-        )}
 
         <PromptInput
           value={prompt}

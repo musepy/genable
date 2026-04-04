@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Canvas TextBlock — Before / After</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Radix tokens (same as main ui-preview) */
+    :root {
+      --font: 'Inter', -apple-system, sans-serif;
+      --font-mono: 'SF Mono', Menlo, monospace;
+      --gray-1: #fcfcfc; --gray-2: #f9f9f9; --gray-3: #f0f0f0;
+      --gray-4: #e8e8e8; --gray-6: #d9d9d9; --gray-9: #8d8d8d;
+      --gray-11: #646464; --gray-12: #171717;
+      --gray-a2: rgba(0,0,0,0.024); --gray-a3: rgba(0,0,0,0.059); --gray-a4: rgba(0,0,0,0.09);
+      --blue-11: #0D74CE; --blue-a3: rgba(0,143,245,0.098);
+      --color-background: #fcfcfc; --color-surface: #ffffff;
+      --accent-11: var(--blue-11); --accent-a3: var(--blue-a3);
+      --header-height: 52px; --radius-3: 6px;
+      --space-1: 4px; --space-3: 12px;
+      --font-size-1: 12px; --line-height-2: 20px;
+    }
+    [data-theme="dark"] {
+      --gray-1: #111111; --gray-2: #191919; --gray-3: #222222;
+      --gray-4: #2a2a2a; --gray-6: #3a3a3a; --gray-9: #6e6e6e;
+      --gray-11: #b4b4b4; --gray-12: #eeeeee;
+      --gray-a2: rgba(255,255,255,0.024); --gray-a3: rgba(255,255,255,0.057); --gray-a4: rgba(255,255,255,0.074);
+      --blue-11: #8bc8ff; --blue-a3: rgba(0,144,255,0.15);
+      --color-background: var(--gray-1); --color-surface: var(--gray-2);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: #e8e8e8; padding: 40px; display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
+    [data-theme="dark"] body { background: #1a1a1a; }
+
+    .label { font-size: 11px; color: var(--gray-9); margin-bottom: 6px; text-align: center; }
+    .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+    .badge.before { background: #fee2e2; color: #b91c1c; }
+    .badge.after { background: #dcfce7; color: #166534; }
+
+    .plugin-frame {
+      width: 340px; background: var(--color-background);
+      border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.12);
+      overflow: hidden; display: flex; flex-direction: column; height: 420px;
+      position: relative;
+    }
+    .header {
+      height: var(--header-height); display: flex; align-items: center;
+      padding: 0 16px; border-bottom: 0.5px solid var(--gray-a4); flex-shrink: 0;
+    }
+    .header-title { font-weight: 500; color: var(--gray-12); font-size: 13px; }
+    .header-spacer { flex: 1; }
+    .header-btn { background: none; border: none; color: var(--gray-11); cursor: pointer; padding: 4px; border-radius: 6px; }
+    .header-btn:hover { background: var(--gray-3); }
+
+    .messages { flex: 1; overflow-y: auto; padding: var(--space-3); display: flex; flex-direction: column; gap: 4px; }
+    .msg-user { padding: 4px 10px; background: var(--gray-3); border-radius: 6px; font-size: 12px; color: var(--gray-12); line-height: 20px; }
+    .tool-label { font-size: 12px; color: var(--gray-11); padding: 2px 10px; }
+
+    /* Fold container */
+    .fold-wrap { position: relative; cursor: pointer; border-radius: 6px; transition: background 120ms; }
+    .fold-wrap:hover { background: var(--gray-3); }
+    .fold-clip { overflow: hidden; }
+    .expand-hint { text-align: center; font-size: 10px; color: var(--gray-11); padding: 2px 0; pointer-events: none; }
+    /* Before: absolute overlay (current bug) */
+    .expand-overlay { position: absolute; bottom: 0; left: 0; right: 0; height: 20px; display: flex; align-items: flex-end; justify-content: center; font-size: 10px; color: var(--gray-11); padding-bottom: 2px; pointer-events: none; }
+
+    /* Float overlay */
+    .float-overlay { position: absolute; top: var(--header-height); left: 0; right: 0; bottom: 0; background: var(--color-background); z-index: 10; display: none; flex-direction: column; border-top: 1px solid var(--gray-4); }
+    .float-overlay.open { display: flex; }
+    .float-scroll { flex: 1; overflow-y: auto; }
+    .float-close { flex-shrink: 0; text-align: center; font-size: 10px; color: var(--gray-11); padding: 6px; cursor: pointer; }
+
+    .input-area { flex-shrink: 0; padding: 0 12px 12px; }
+    .input-box { border: none; box-shadow: inset 0 0 0 0.5px var(--gray-a4); border-radius: 12px; background: var(--color-surface); padding: 8px 10px; width: 100%; font: 12px/20px var(--font); color: var(--gray-12); outline: none; resize: none; }
+
+    .controls { position: fixed; top: 12px; right: 20px; display: flex; gap: 8px; z-index: 100; }
+    .ctrl-btn { padding: 6px 14px; border: 1px solid var(--gray-6); border-radius: 8px; background: var(--color-surface); color: var(--gray-12); font: 12px var(--font); cursor: pointer; }
+
+    /* Audit panel */
+    .audit-panel { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 2px solid #c00; padding: 16px 20px; max-height: 50vh; overflow: auto; z-index: 999; font: 14px/1.8 monospace; display: none; color: #111; }
+    .audit-panel.open { display: block; }
+    .audit-panel table { width: 100%; border-collapse: collapse; }
+    .audit-panel th { text-align: left; padding: 3px 8px; background: var(--gray-3); }
+    .audit-panel td { padding: 2px 8px; }
+    .audit-panel .fail { background: #fff0f0; font-weight: 600; }
+    .audit-panel .pass-text { color: #16a34a; }
+    .audit-panel .fail-text { color: #dc2626; }
+  </style>
+</head>
+<body>
+
+<div class="controls">
+  <button class="ctrl-btn" onclick="toggleTheme()">Toggle Theme</button>
+  <button class="ctrl-btn" onclick="toggleAudit()">Audit</button>
+</div>
+
+<!-- ===== BEFORE: current code behavior ===== -->
+<div>
+  <div class="label">BEFORE (current code) <span class="badge before">probe fade + no float theme</span></div>
+  <div class="plugin-frame" id="frameBefore">
+    <div class="header"><span class="header-title">Current</span><div class="header-spacer"></div><button class="header-btn" onclick="toggleTheme()">🌙</button></div>
+    <div class="messages" id="msgBefore">
+      <div class="msg-user">Design a settings panel with toggles</div>
+      <div class="tool-label">8 tools</div>
+      <div class="fold-wrap" onclick="openFloat('before')">
+        <div class="fold-clip" id="foldBefore"><canvas id="cvBefore"></canvas></div>
+        <div class="expand-overlay">click to expand</div>
+      </div>
+    </div>
+    <div class="input-area"><textarea class="input-box" rows="2" placeholder="Describe..." disabled></textarea></div>
+    <div class="float-overlay" id="floatBefore">
+      <div class="float-scroll" id="floatScrollBefore" style="padding:4px 0"><canvas id="cvFloatBefore"></canvas></div>
+      <div class="float-close" onclick="closeFloat('before')">click to close</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AFTER: fixed behavior ===== -->
+<div>
+  <div class="label">AFTER (fixed) <span class="badge after">dest-out + double-buffer + float theme</span></div>
+  <div class="plugin-frame" id="frameAfter">
+    <div class="header"><span class="header-title">Fixed</span><div class="header-spacer"></div><button class="header-btn" onclick="toggleTheme()">🌙</button></div>
+    <div class="messages" id="msgAfter">
+      <div class="msg-user">Design a settings panel with toggles</div>
+      <div class="tool-label">8 tools</div>
+      <div class="fold-wrap" onclick="openFloat('after')">
+        <div class="fold-clip" id="foldAfter"><canvas id="cvAfter"></canvas></div>
+        <div class="expand-hint">click to expand</div>
+      </div>
+    </div>
+    <div class="input-area"><textarea class="input-box" rows="2" placeholder="Describe..." disabled></textarea></div>
+    <div class="float-overlay" id="floatAfter">
+      <div class="float-scroll" id="floatScrollAfter" style="padding:12px"><canvas id="cvFloatAfter"></canvas></div>
+      <div class="float-close" onclick="closeFloat('after')">click to close</div>
+    </div>
+  </div>
+</div>
+
+<div class="audit-panel" id="auditPanel"></div>
+
+<script>
+const FONT = "'Inter', -apple-system, sans-serif";
+const FOLD_H = 108;
+const BLOCK_PAD = 10;
+
+// ============================================
+// Color resolution
+// ============================================
+function probeColor(el, varName, prop = 'color') {
+  const probe = document.createElement('div');
+  probe.style[prop] = `var(${varName})`;
+  el.appendChild(probe);
+  const val = getComputedStyle(probe)[prop];
+  el.removeChild(probe);
+  return val;
+}
+function parseRgb(s) { const m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/); return m ? {r:+m[1],g:+m[2],b:+m[3]} : null; }
+
+function getColors(el) {
+  return {
+    text: probeColor(el, '--gray-12'),
+    secondary: probeColor(el, '--gray-11'),
+    accent: probeColor(el, '--accent-11'),
+    codeBg: probeColor(el, '--gray-a2', 'backgroundColor'),
+  };
+}
+
+// ============================================
+// Content
+// ============================================
+const content = [
+  { type: 'h2', text: 'Design Overview' },
+  { type: 'p', text: "I've created a polished settings panel using Roboto typography and color tokens from your design system." },
+  { type: 'h2', text: 'Components' },
+  { type: 'li', bold: 'Typography:', rest: ' All text uses Roboto (32px title, 16px labels).' },
+  { type: 'li', bold: 'Toggle Switches:', rest: ' Notifications (ON), Dark Mode (OFF), Auto-save (ON).' },
+  { type: 'li', bold: 'Color Picker:', rest: ' Circular swatches for Accent Color selection.' },
+  { type: 'li', bold: 'Layout:', rest: ' 600px card with 32px padding and 16px corners.' },
+  { type: 'li', bold: 'Actions:', rest: ' "Cancel" and "Save Changes" footer buttons.' },
+  { type: 'h2', text: 'Design Tokens' },
+  { type: 'li', bold: 'Primary:', rest: ' Colors/Gray/12 (#202020) for contrast.' },
+  { type: 'li', bold: 'Secondary:', rest: ' Colors/Gray/11 (#646464) for subtitles.' },
+  { type: 'li', bold: 'Borders:', rest: ' Colors/Gray/4 (#E8E8E8) for inputs.' },
+  { type: 'p', text: 'Follows Figma layout lessons — proper layering and auto-layout nesting.' },
+];
+
+// ============================================
+// Rendering
+// ============================================
+function drawContent(ctx, colors, w) {
+  // Audit swatch (4x4 solid block at top-right for pixel sampling)
+  ctx.fillStyle = colors.text;
+  ctx.fillRect(w - 8, 0, 4, 4);
+
+  let y = 8;
+  for (const b of content) {
+    if (b.type === 'h2') {
+      y += 14; ctx.font = `600 15px ${FONT}`; ctx.fillStyle = colors.text;
+      ctx.fillText(b.text, BLOCK_PAD, y); y += 8;
+    } else if (b.type === 'p') {
+      y += 4; ctx.font = `400 12px ${FONT}`; ctx.fillStyle = colors.text;
+      let lx = BLOCK_PAD;
+      for (const word of b.text.split(/(?<=\s)/)) {
+        const ww = ctx.measureText(word).width;
+        if (lx + ww > w - BLOCK_PAD && lx > BLOCK_PAD) { lx = BLOCK_PAD; y += 18; }
+        ctx.fillText(word, lx, y); lx += ww;
+      }
+      y += 6;
+    } else if (b.type === 'li') {
+      ctx.font = `400 12px ${FONT}`; ctx.fillStyle = colors.secondary;
+      ctx.fillText('•', BLOCK_PAD + 6, y + 14);
+      ctx.font = `600 12px ${FONT}`; ctx.fillStyle = colors.text;
+      const bw = ctx.measureText(b.bold).width;
+      ctx.fillText(b.bold, BLOCK_PAD + 20, y + 14);
+      ctx.font = `400 12px ${FONT}`;
+      ctx.fillText(b.rest, BLOCK_PAD + 20 + bw, y + 14);
+      y += 20;
+    }
+  }
+  return y + 8;
+}
+
+// --- BEFORE: probe-based fade, clearRect (current bugs) ---
+function renderBefore() {
+  const frame = document.getElementById('frameBefore');
+  const cv = document.getElementById('cvBefore');
+  const ctx = cv.getContext('2d');
+  const dpr = devicePixelRatio;
+  const w = frame.clientWidth;
+  const colors = getColors(frame);
+
+  // Direct render (no double-buffer — flicker risk)
+  cv.width = w * dpr; cv.height = 1;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const h = drawContent(ctx, colors, w);
+
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0, 0, w, h);
+  drawContent(ctx, colors, w);
+
+  // Probe-based fade (needs bg color)
+  if (h > FOLD_H) {
+    const bgStr = probeColor(frame, '--gray-1', 'backgroundColor');
+    const bg = parseRgb(bgStr) || { r: 252, g: 252, b: 252 };
+    const grad = ctx.createLinearGradient(0, FOLD_H - 32, 0, FOLD_H);
+    grad.addColorStop(0, `rgba(${bg.r},${bg.g},${bg.b},0)`);
+    grad.addColorStop(0.6, `rgba(${bg.r},${bg.g},${bg.b},0.85)`);
+    grad.addColorStop(1, `rgba(${bg.r},${bg.g},${bg.b},1)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, FOLD_H - 32, w, 32);
+  }
+  document.getElementById('foldBefore').style.height = Math.min(h, FOLD_H) + 'px';
+}
+
+// Float before: renders once, NO theme re-render
+let floatBeforeRendered = false;
+function renderFloatBefore() {
+  if (floatBeforeRendered) return; // BUG: doesn't re-render on theme change
+  floatBeforeRendered = true;
+  const scroll = document.getElementById('floatScrollBefore');
+  const cv = document.getElementById('cvFloatBefore');
+  const ctx = cv.getContext('2d');
+  const dpr = devicePixelRatio;
+  const w = scroll.clientWidth; // BUG: includes padding
+  const colors = getColors(scroll);
+  cv.width = w * dpr; cv.height = 1;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const h = drawContent(ctx, colors, w);
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  drawContent(ctx, colors, w);
+}
+
+// --- AFTER: destination-out, double-buffer, float re-renders ---
+function renderAfter() {
+  const frame = document.getElementById('frameAfter');
+  const cv = document.getElementById('cvAfter');
+  const dpr = devicePixelRatio;
+  const w = frame.clientWidth;
+  const colors = getColors(frame);
+
+  // Double-buffer
+  const off = document.createElement('canvas');
+  off.width = w * dpr; off.height = 1;
+  const octx = off.getContext('2d');
+  octx.setTransform(dpr,0,0,dpr,0,0);
+  const h = drawContent(octx, colors, w);
+  off.width = w * dpr; off.height = h * dpr;
+  octx.setTransform(dpr,0,0,dpr,0,0);
+  octx.clearRect(0,0,w,h);
+  drawContent(octx, colors, w);
+
+  // Destination-out fade (theme-independent)
+  if (h > FOLD_H) {
+    octx.globalCompositeOperation = 'destination-out';
+    const grad = octx.createLinearGradient(0, FOLD_H - 28, 0, FOLD_H);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,1)');
+    octx.fillStyle = grad;
+    octx.fillRect(0, FOLD_H - 28, w, 28);
+    octx.globalCompositeOperation = 'source-over';
+  }
+
+  // Atomic swap
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  cv.getContext('2d').drawImage(off, 0, 0);
+  document.getElementById('foldAfter').style.height = Math.min(h, FOLD_H) + 'px';
+}
+
+function renderFloatAfter() {
+  const scroll = document.getElementById('floatScrollAfter');
+  const cv = document.getElementById('cvFloatAfter');
+  const dpr = devicePixelRatio;
+  // Correct: subtract padding from clientWidth
+  const s = getComputedStyle(scroll);
+  const w = scroll.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+  const colors = getColors(scroll);
+
+  const off = document.createElement('canvas');
+  off.width = w * dpr; off.height = 1;
+  const octx = off.getContext('2d');
+  octx.setTransform(dpr,0,0,dpr,0,0);
+  const h = drawContent(octx, colors, w);
+  off.width = w * dpr; off.height = h * dpr;
+  octx.setTransform(dpr,0,0,dpr,0,0);
+  octx.clearRect(0,0,w,h);
+  drawContent(octx, colors, w);
+
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  cv.getContext('2d').drawImage(off, 0, 0);
+}
+
+// ============================================
+// Controls
+// ============================================
+function renderAll() { renderBefore(); renderAfter(); }
+
+function toggleTheme() {
+  const h = document.documentElement;
+  const isDark = h.getAttribute('data-theme') === 'dark';
+  h.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  // Before: only main block re-renders (float stays stale)
+  renderBefore();
+  // After: everything re-renders including float
+  renderAfter();
+  if (document.getElementById('floatAfter').classList.contains('open')) renderFloatAfter();
+}
+
+function openFloat(which) {
+  document.getElementById('float' + cap(which)).classList.add('open');
+  if (which === 'before') renderFloatBefore();
+  else renderFloatAfter();
+}
+function closeFloat(which) { document.getElementById('float' + cap(which)).classList.remove('open'); }
+function cap(s) { return s[0].toUpperCase() + s.slice(1); }
+
+// Theme observer for AFTER panel (simulates MutationObserver + rAF)
+new MutationObserver(() => requestAnimationFrame(() => {
+  renderAfter();
+  if (document.getElementById('floatAfter').classList.contains('open')) renderFloatAfter();
+})).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ============================================
+// Audit
+// ============================================
+function toggleAudit() {
+  const panel = document.getElementById('auditPanel');
+  if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+  panel.classList.add('open');
+  runAudit();
+}
+
+function runAudit() {
+  const rows = [];
+  function lum(px) { return 0.299*px[0] + 0.587*px[1] + 0.114*px[2]; }
+  function sample(id, x, y) { return document.getElementById(id).getContext('2d').getImageData(x,y,1,1).data; }
+
+  function auditTheme(name) {
+    const isDark = name === 'dark';
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    renderAll();
+    // Temporarily show floats so canvases have dimensions for sampling
+    document.getElementById('floatBefore').style.display = 'flex';
+    document.getElementById('floatAfter').style.display = 'flex';
+    floatBeforeRendered = false; renderFloatBefore();
+    renderFloatAfter();
+
+    rows.push({ section: name.toUpperCase() });
+
+    // Sample from audit swatch (4x4 at top-right of each canvas)
+    const pairs = [
+      ['cvBefore', 'Before: text color'],
+      ['cvAfter', 'After: text color'],
+      ['cvFloatBefore', 'Before: float text'],
+      ['cvFloatAfter', 'After: float text'],
+    ];
+    for (const [id, label] of pairs) {
+      const el = document.getElementById(id);
+      const w = parseInt(el.style.width) || 316;
+      const px = sample(id, w - 6, 2);
+      const L = lum(px);
+      // Must be opaque (alpha > 200) AND correct luminance
+      const pass = px[3] > 200 && (isDark ? L > 180 : L < 60);
+      rows.push({ label, val: `rgba(${px[0]},${px[1]},${px[2]},${px[3]})`, L: L.toFixed(0), pass,
+        expect: isDark ? 'opaque + light' : 'opaque + dark' });
+    }
+
+    // Fold fade alpha
+    for (const [id, label] of [['cvBefore','Before: fade'], ['cvAfter','After: fade']]) {
+      const px = sample(id, 80, FOLD_H - 2);
+      const isBefore = label.includes('Before');
+      const pass = isBefore ? px[3] > 200 : px[3] < 30; // before=opaque bg, after=transparent
+      rows.push({ label, val: `alpha=${px[3]}`, L: '-', pass, expect: isBefore ? 'opaque (probe bg)' : 'transparent (dest-out)' });
+    }
+
+    // Float stale test: switch theme, check if Before float has wrong colors
+    if (isDark) {
+      // Before float was rendered in light (stale) — check contrast
+      const floatPx = sample('cvFloatBefore', 100, 2);
+      const bgPx = sample('cvFloatBefore', 200, 50);
+      const contrast = Math.abs(lum(floatPx) - lum(bgPx));
+      rows.push({ label: 'Before: float stale contrast', val: `ΔL=${contrast.toFixed(0)}`, L: '-',
+        pass: false, expect: 'STALE — low contrast expected' });
+
+      const floatPx2 = sample('cvFloatAfter', 100, 2);
+      const bgPx2 = sample('cvFloatAfter', 200, 50);
+      const contrast2 = Math.abs(lum(floatPx2) - lum(bgPx2));
+      rows.push({ label: 'After: float re-rendered', val: `ΔL=${contrast2.toFixed(0)}`, L: '-',
+        pass: contrast2 > 120, expect: 'good contrast (>120)' });
+    }
+  }
+
+  auditTheme('light');
+  auditTheme('dark');
+  // Hide floats, reset
+  document.getElementById('floatBefore').style.display = '';
+  document.getElementById('floatAfter').style.display = '';
+  document.documentElement.setAttribute('data-theme', 'light');
+  renderAll();
+
+  // Render
+  let html = '<strong>Before/After Audit</strong><table><tr><th>Check</th><th>Value</th><th>L</th><th>Expected</th><th>Pass</th></tr>';
+  let allAfterPass = true;
+  for (const r of rows) {
+    if (r.section) { html += `<tr><td colspan=5 style="padding:6px 8px;font-weight:700;background:var(--gray-a3)">${r.section}</td></tr>`; continue; }
+    const cls = r.pass ? '' : 'fail';
+    if (r.label.includes('After') && !r.pass) allAfterPass = false;
+    html += `<tr class="${cls}"><td>${r.label}</td><td>${r.val}</td><td style="text-align:center">${r.L}</td><td>${r.expect}</td><td>${r.pass ? '✓' : '✗'}</td></tr>`;
+  }
+  html += '</table>';
+  html += `<div style="margin-top:8px"><strong>After panel: ${allAfterPass ? '<span class="pass-text">✓ ALL PASS</span>' : '<span class="fail-text">✗ FAILURES</span>'}</strong></div>`;
+  document.getElementById('auditPanel').innerHTML = html;
+}
+
+renderAll();
+
+// Auto-audit if ?audit in URL
+if (location.search.includes('audit')) {
+  setTimeout(() => {
+    runAudit();
+    const panel = document.getElementById('auditPanel');
+    // Move to body as static block, not fixed overlay
+    panel.style.cssText = 'display:block;position:static;margin:20px auto;padding:20px;font:14px/2 monospace;max-width:760px;background:#fff;border:2px solid #c00;border-radius:8px;color:#111';
+    document.body.appendChild(panel);
+  }, 500);
+}
+</script>
+</body>
+</html>

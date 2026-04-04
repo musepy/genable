@@ -5,6 +5,11 @@
  * Replaces DOM-based react-markdown rendering with canvas fillText.
  * Supports: heading hierarchy, lists, code blocks, inline formatting,
  * clickable node links, streaming, and fold/expand.
+ *
+ * Key techniques (verified in tools/ui-preview/canvas-textblock.html):
+ * - Double-buffer: offscreen canvas → drawImage (no flicker on theme toggle)
+ * - destination-out fade: theme-independent, no bg color probe needed
+ * - MutationObserver + rAF: re-render on theme change without debounce delay
  */
 
 import { h, Fragment, createRef } from 'preact';
@@ -28,9 +33,84 @@ import {
 const CLAMP_LINES = 6;
 const LINE_HEIGHT = 18;
 const FOLD_HEIGHT = CLAMP_LINES * LINE_HEIGHT + 8;
+const FADE_H = 28;
 
 // ============================================
-// Component
+// Shared: theme observer hook
+// ============================================
+
+function useThemeKey() {
+  const [key, setKey] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setKey(k => k + 1));
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-theme', 'data-color-mode'],
+    });
+    return () => { observer.disconnect(); cancelAnimationFrame(raf); };
+  }, []);
+  return key;
+}
+
+// ============================================
+// Shared: double-buffer render
+// ============================================
+
+function doubleBufferRender(
+  canvas: HTMLCanvasElement,
+  width: number,
+  container: HTMLElement,
+  content: string,
+  opts?: { fold?: boolean },
+): LayoutResult | null {
+  const dpr = window.devicePixelRatio || 1;
+  const colors = resolveThemeColors(container);
+
+  // Offscreen canvas for layout + render
+  const off = document.createElement('canvas');
+  off.width = width * dpr;
+  off.height = 1;
+  const octx = off.getContext('2d');
+  if (!octx) return null;
+
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const result = layout(octx, content, width, colors);
+
+  const h = result.height;
+  off.width = width * dpr;
+  off.height = h * dpr;
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  octx.clearRect(0, 0, width, h);
+  render(octx, result, colors);
+
+  // Fold fade via destination-out — theme-independent, no bg probe needed
+  if (opts?.fold && h > FOLD_HEIGHT) {
+    octx.globalCompositeOperation = 'destination-out';
+    const grad = octx.createLinearGradient(0, FOLD_HEIGHT - FADE_H, 0, FOLD_HEIGHT);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,1)');
+    octx.fillStyle = grad;
+    octx.fillRect(0, FOLD_HEIGHT - FADE_H, width, FADE_H);
+    octx.globalCompositeOperation = 'source-over';
+  }
+
+  // Atomic swap — visible canvas is never blank
+  canvas.width = width * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${h}px`;
+  const ctx = canvas.getContext('2d');
+  if (ctx) ctx.drawImage(off, 0, 0);
+
+  return result;
+}
+
+// ============================================
+// CanvasTextBlock
 // ============================================
 
 interface CanvasTextBlockProps {
@@ -42,23 +122,11 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<LayoutResult | null>(null);
-  const colorsRef = useRef<ReturnType<typeof resolveThemeColors> | null>(null);
 
   const [folded, setFolded] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
   const [canvasHeight, setCanvasHeight] = useState(0);
-  const [themeKey, setThemeKey] = useState(0); // bumped on theme change to trigger re-render
-
-  // Watch for theme changes (Figma toggles class/attributes on root element)
-  useEffect(() => {
-    const target = document.documentElement;
-    const observer = new MutationObserver(() => {
-      colorsRef.current = null; // invalidate cached colors
-      setThemeKey(k => k + 1);  // force re-render
-    });
-    observer.observe(target, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-color-mode'] });
-    return () => observer.disconnect();
-  }, []);
+  const themeKey = useThemeKey();
 
   // Layout + render
   useEffect(() => {
@@ -66,66 +134,17 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const dpr = window.devicePixelRatio || 1;
     const width = container.clientWidth;
     if (width <= 0) return;
 
-    // Resolve colors
-    const colors = resolveThemeColors(container);
-    colorsRef.current = colors;
+    const needsFold = !streaming;
+    const result = doubleBufferRender(canvas, width, container, content, { fold: needsFold });
+    if (!result) return;
 
-    // Get a context for measurement + rendering
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Layout
-    const result = layout(ctx, content, width, colors);
     layoutRef.current = result;
-
-    // Determine if fold is needed (only after streaming finishes)
-    const needsFold = !streaming && result.height > FOLD_HEIGHT;
-    setFolded(needsFold);
-
-    // Streaming: render at full height (grows as tokens arrive)
-    // Folded: cap at FOLD_HEIGHT
-    const displayHeight = needsFold ? FOLD_HEIGHT : result.height;
-    setCanvasHeight(displayHeight);
-
-    // Size canvas (DPR-aware)
-    canvas.width = width * dpr;
-    canvas.height = displayHeight * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${displayHeight}px`;
-
-    // Render
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, displayHeight);
-    render(ctx, result, colors);
-
-    // Fade out at bottom when folded only — not during streaming
-    if (needsFold) {
-      const fadeH = 32;
-      const fadeY = displayHeight - fadeH;
-      // Resolve background color via temp element — standard property resolution
-      // works reliably even in Figma iframe where getPropertyValue for custom
-      // properties returns empty strings.
-      const bgRgb = (() => {
-        const probe = document.createElement('div');
-        probe.style.backgroundColor = 'var(--gray-1)';
-        container.appendChild(probe);
-        const resolved = getComputedStyle(probe).backgroundColor;
-        container.removeChild(probe);
-        const m = resolved.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-        if (m) return { r: +m[1]!, g: +m[2]!, b: +m[3]! };
-        return { r: 252, g: 252, b: 252 };
-      })();
-      const grad = ctx.createLinearGradient(0, fadeY, 0, displayHeight);
-      grad.addColorStop(0, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},0)`);
-      grad.addColorStop(0.6, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},0.85)`);
-      grad.addColorStop(1, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},1)`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, fadeY, width, fadeH);
-    }
+    const shouldFold = !streaming && result.height > FOLD_HEIGHT;
+    setFolded(shouldFold);
+    setCanvasHeight(shouldFold ? FOLD_HEIGHT : result.height);
   }, [content, streaming, themeKey]);
 
   // Mouse move — cursor change on link hover
@@ -133,12 +152,8 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
     const canvas = canvasRef.current;
     const result = layoutRef.current;
     if (!canvas || !result) return;
-
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const hit = hitTest(result, x, y);
+    const hit = hitTest(result, e.clientX - rect.left, e.clientY - rect.top);
     canvas.style.cursor = hit ? 'pointer' : folded ? 'pointer' : 'default';
   }, [folded]);
 
@@ -147,26 +162,15 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
     const canvas = canvasRef.current;
     const result = layoutRef.current;
     if (!canvas || !result) return;
-
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const hit = hitTest(result, x, y);
+    const hit = hitTest(result, e.clientX - rect.left, e.clientY - rect.top);
     if (hit) {
       e.stopPropagation();
-      if (hit.nodeId) {
-        emit('SELECT_NODE', { nodeId: hit.nodeId });
-      } else if (hit.href) {
-        window.open(hit.href, '_blank', 'noopener,noreferrer');
-      }
+      if (hit.nodeId) emit('SELECT_NODE', { nodeId: hit.nodeId });
+      else if (hit.href) window.open(hit.href, '_blank', 'noopener,noreferrer');
       return;
     }
-
-    // If folded and no link hit, open full card
-    if (folded) {
-      setCardOpen(true);
-    }
+    if (folded) setCardOpen(true);
   }, [folded]);
 
   return (
@@ -187,32 +191,27 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
         onMouseLeave={folded ? (e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' } : undefined}
         onClick={folded ? () => setCardOpen(true) : undefined}
       >
-        <canvas
-          ref={canvasRef}
-          onMouseMove={onMouseMove}
-          onClick={onClick}
-          style={{
-            display: 'block',
-            width: '100%',
-          }}
-        />
+        {/* Clipping wrapper for fold */}
+        <div style={{
+          overflow: 'hidden',
+          height: folded ? FOLD_HEIGHT : undefined,
+        }}>
+          <canvas
+            ref={canvasRef}
+            onMouseMove={onMouseMove}
+            onClick={onClick}
+            style={{ display: 'block', width: '100%' }}
+          />
+        </div>
+        {/* Expand hint below canvas — not overlapping content */}
         {folded && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 20,
-              display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'center',
-              fontSize: 10,
-              color: tokens.colors.textSecondary,
-              paddingBottom: 2,
-              pointerEvents: 'none',
-            }}
-          >
+          <div style={{
+            textAlign: 'center',
+            fontSize: 10,
+            color: tokens.colors.textSecondary,
+            padding: '2px 0',
+            pointerEvents: 'none',
+          }}>
             click to expand
           </div>
         )}
@@ -227,61 +226,52 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
 }
 
 // ============================================
-// FloatingCanvasCard — full content overlay (also canvas)
+// FloatingCanvasCard
 // ============================================
 
 function FloatingCanvasCard({ content, onClose }: { content: string; onClose: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layoutRef = useRef<LayoutResult | null>(null);
+  const themeKey = useThemeKey();
 
+  // Animate in on mount
   useEffect(() => {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-
-    // Animate in
     requestAnimationFrame(() => {
-      container.style.opacity = '1';
-      container.style.transform = 'translateY(0)';
+      if (containerRef.current) {
+        containerRef.current.style.opacity = '1';
+        containerRef.current.style.transform = 'translateY(0)';
+      }
     });
+  }, []);
 
-    const dpr = window.devicePixelRatio || 1;
-    const width = container.clientWidth;
-    const colors = resolveThemeColors(container);
-    const ctx = canvas.getContext('2d');
-    if (!ctx || width <= 0) return;
+  // Render — re-runs on content change AND theme change
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!scroll || !canvas || !container) return;
 
-    const result = layout(ctx, content, width, colors);
+    // Subtract padding from clientWidth to get content box width
+    const s = getComputedStyle(scroll);
+    const width = scroll.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight);
+    if (width <= 0) return;
+
+    const result = doubleBufferRender(canvas, width, container, content);
     layoutRef.current = result;
-
-    canvas.width = width * dpr;
-    canvas.height = result.height * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${result.height}px`;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, result.height);
-    render(ctx, result, colors);
-  }, [content]);
+  }, [content, themeKey]);
 
   const onCanvasClick = useCallback((e: MouseEvent) => {
     const canvas = canvasRef.current;
     const result = layoutRef.current;
     if (!canvas || !result) return;
-
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const hit = hitTest(result, x, y);
+    const hit = hitTest(result, e.clientX - rect.left, e.clientY - rect.top);
     if (hit) {
       e.stopPropagation();
-      if (hit.nodeId) {
-        emit('SELECT_NODE', { nodeId: hit.nodeId });
-      } else if (hit.href) {
-        window.open(hit.href, '_blank', 'noopener,noreferrer');
-      }
+      if (hit.nodeId) emit('SELECT_NODE', { nodeId: hit.nodeId });
+      else if (hit.href) window.open(hit.href, '_blank', 'noopener,noreferrer');
     }
   }, []);
 
@@ -290,8 +280,7 @@ function FloatingCanvasCard({ content, onClose }: { content: string; onClose: ()
     const result = layoutRef.current;
     if (!canvas || !result) return;
     const rect = canvas.getBoundingClientRect();
-    const hit = hitTest(result, e.clientX - rect.left, e.clientY - rect.top);
-    canvas.style.cursor = hit ? 'pointer' : 'default';
+    canvas.style.cursor = hitTest(result, e.clientX - rect.left, e.clientY - rect.top) ? 'pointer' : 'default';
   }, []);
 
   const close = () => {
@@ -304,6 +293,8 @@ function FloatingCanvasCard({ content, onClose }: { content: string; onClose: ()
       onClose();
     }
   };
+
+  const pad = tokens.grid.scrollPad;
 
   return (
     <div
@@ -322,7 +313,7 @@ function FloatingCanvasCard({ content, onClose }: { content: string; onClose: ()
         transition: 'opacity 120ms ease, transform 120ms ease',
       }}
     >
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: `${pad}px` }}>
         <canvas
           ref={canvasRef}
           onClick={onCanvasClick}
@@ -331,9 +322,9 @@ function FloatingCanvasCard({ content, onClose }: { content: string; onClose: ()
         />
       </div>
       <div style={{
-        flexShrink: 0, padding: '6px 10px', textAlign: 'center',
+        flexShrink: 0, textAlign: 'center',
         fontSize: 10, color: tokens.colors.textSecondary,
-        pointerEvents: 'none',
+        padding: '6px 10px', pointerEvents: 'none',
       }}>
         click to close
       </div>

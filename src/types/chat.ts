@@ -87,6 +87,8 @@ export type ContentBlock =
 export interface ChatMessage {
     role: 'user' | 'model';
     text: string;
+    /** Context attachments (page, selection, skill) submitted with this message */
+    attachments?: import('../types').ContextAttachment[];
     /** Chronological stream of text and tool blocks (new rendering model) */
     blocks?: ContentBlock[];
     thinking?: ThinkingData;

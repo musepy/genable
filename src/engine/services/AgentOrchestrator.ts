@@ -115,6 +115,10 @@ export class AgentOrchestrator {
     this.activeAgent?.resolveApproval(approved);
   }
 
+  public answerQuestion(answer: string): void {
+    this.activeAgent?.resolveQuestion(answer);
+  }
+
   async generate(prompt: string, pluginData: AgentPluginData) {
     const loopPolicy = resolveAgentLoopPolicy(this.options.loopPolicy);
     await AgentOrchestrator.ensureSkillsInitialized(loopPolicy.useSkillSystem);

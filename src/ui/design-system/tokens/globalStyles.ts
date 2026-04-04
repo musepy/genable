@@ -54,7 +54,7 @@ export const globalStyles = `
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    padding: 0 var(--space-3);
+    padding: 0 10px; /* 10px padding aligns text to 22px when container pad is 12px */
     height: 32px;
     background: transparent;
     color: var(--gray-11);

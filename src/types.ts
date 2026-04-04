@@ -5,12 +5,11 @@ export type { NodeLayer };
 
 export interface Settings {
   apiKey: string; // Active/Default key for backward compatibility
-  apiKeys?: Record<string, string>; // [NEW] Map of provider -> key
+  apiKeys?: Record<string, string>; // Map of provider -> key
   modelName: string;
+  /** Per-provider model names (loaded from storage, used for provider switch restore) */
+  modelNames?: Record<string, string>;
   providerName?: 'gemini' | 'openrouter' | 'dashscope';
-  availableModels?: { name: string; displayName: string }[];
-  /** Timestamp when models were last fetched (for SWR cache) */
-  cacheTimestamp?: number;
 }
 
 export interface CreateLayersHandler extends EventHandler {
@@ -160,6 +159,14 @@ export interface SendSerializedSelectionHandler extends EventHandler {
   name: 'SEND_SERIALIZED_SELECTION';
   handler: (data: { jsonString: string }) => void;
 }
+
+// --- Context Attachments ---
+
+export type ContextAttachment =
+  | { type: 'skill'; skillId: string; name: string }
+  | { type: 'selection'; nodes: { id: string; name: string; type: string }[] }
+  | { type: 'page'; pageId: string; pageName: string }
+
 
 export interface SelectNodeHandler extends EventHandler {
   name: 'SELECT_NODE';

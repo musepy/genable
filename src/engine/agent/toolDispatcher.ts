@@ -275,6 +275,9 @@ export class ToolDispatcher {
   // ─── Private helpers ────────────────────────────────────────
 
   private async executeToolWithTimeout(tc: LLMToolCall): Promise<any> {
+    // ask_user waits for user input — exempt from standard timeout
+    if (tc.name === 'ask_user') return this.executeTool(tc);
+
     const timeout = this.config.toolTimeoutMs;
 
     return Promise.race([

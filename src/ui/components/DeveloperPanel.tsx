@@ -19,10 +19,11 @@ const panelStyle: h.JSX.CSSProperties = {
 };
 
 const buttonStyle: h.JSX.CSSProperties = {
-  padding: `${tokens.space[2]}px ${tokens.space[4]}px`,
-  background: tokens.colors.surface,
+  padding: `${tokens.space[2]}px 0`,
+  background: 'transparent',
   color: tokens.colors.textPrimary,
-  border: 'var(--border-default)',
+  border: 'none',
+  borderBottom: '0.5px solid var(--border-default)',
   borderRadius: 'var(--radius-3)',
   cursor: 'pointer',
   fontSize: tokens.fontSize[1],
@@ -47,7 +48,7 @@ export function DeveloperPanel({
       </div>
 
       <button
-        style={{ ...buttonStyle, background: tokens.colors.accentAlpha[2], color: tokens.colors.accent, borderColor: tokens.colors.accentAlpha[4] }}
+        style={{ ...buttonStyle, color: tokens.colors.accent }}
         onClick={() => {
           if (confirm('Clear all API keys and return to onboarding?')) {
             onLogout?.();
@@ -58,7 +59,7 @@ export function DeveloperPanel({
       </button>
 
       <button
-        style={{ ...buttonStyle, borderColor: tokens.colors.accentAlpha[5], color: tokens.colors.accent, background: 'transparent' }}
+        style={{ ...buttonStyle, borderBottom: 'none', color: tokens.colors.accent }}
         onClick={() => onRestoreSession?.()}
       >
         Restore Saved Session

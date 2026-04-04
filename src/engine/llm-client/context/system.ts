@@ -6,12 +6,13 @@
  * The result never changes between iterations, enabling KV-cache
  * reuse at the LLM provider layer.
  *
- * All static prompt content comes from one catalog file:
- *   CORE — Identity, environment, scene graph, design thinking, conventions, creation protocol, turn management
+ * Prompt content comes from two catalog files:
+ *   SYSTEM — Identity, environment, scene graph, design thinking, conventions (WHAT & WHY)
+ *   SOP    — Workflows, creation flow, verification gate, quality patterns (HOW)
  */
 
 import { ToolDefinition } from '../../agent/tools/types';
-import { CORE } from '../../prompt/promptRegistry';
+import { SYSTEM, SOP } from '../../prompt/promptRegistry';
 import { serializeTools } from './toolSerializer';
 
 /**
@@ -26,10 +27,13 @@ export function buildStaticSystemPrompt(
 ): string {
     const parts: string[] = [];
 
-    // 1. Core (identity + environment + scene graph + design thinking + conventions + creation + turn management)
-    parts.push(CORE.trim());
+    // 1. System prompt (WHAT & WHY: identity + environment + scene graph + design thinking + conventions)
+    parts.push(SYSTEM.trim());
 
-    // 2. Persistent memory hint + management directives
+    // 2. SOP (HOW: workflows + creation flow + verification gate + quality patterns)
+    parts.push(SOP.trim());
+
+    // 3. Persistent memory hint + management directives
     parts.push(
 `## PERSISTENT MEMORY
 You have persistent memory that survives across sessions. Use the memory tools:
@@ -56,7 +60,7 @@ On warm start (when memory is pre-loaded into context): briefly acknowledge what
   BAD: "Loading memory... Found 5 entries... Entry 1: brand-colors..."`
     );
 
-    // 3. Scratchpad hint (session-scoped working memory)
+    // 4. Scratchpad hint (session-scoped working memory)
     parts.push(
 `## SCRATCHPAD (Session Working Memory)
 Session-scoped notepad at \`/.agent/scratch/\`. Use it to store intermediate data during complex tasks:
@@ -70,7 +74,7 @@ Unlike persistent memory, scratchpad is cleared when the session ends. Use it fo
 - Color palettes or spacing values to reuse`
     );
 
-    // 4. Subtask delegation hint
+    // 5. Subtask delegation hint
     parts.push(
 `## SUBTASK DELEGATION
 For complex multi-part designs, delegate independent sections to focused sub-agents:
@@ -82,48 +86,14 @@ Each subtask gets its own iteration budget and focus. Use when:
 Do NOT use subtask for simple operations (1-2 tool calls) or dependent work.`
     );
 
-    // 4.5. Layout quality rules (high-frequency failure patterns)
-    parts.push(
-`## LAYOUT QUALITY RULES
-These rules address the most common design quality failures. Violating them produces designs that look like wireframes, not finished products.
-
-1. **Label + Control rows** (toggle, checkbox, input with label): ALWAYS use layout:row with the label on the left (w:fill) and the control on the right (fixed width). This creates proper space-between alignment.
-   - GOOD: \`<frame layout="row" w="fill" gap={16}><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}>...</frame></frame>\`
-   - BAD: \`<frame layout="row" gap={16}><frame name="Label">...</frame><frame name="Toggle">...</frame></frame>\` (both hug = control not right-aligned)
-   - **Toggle switch structure**: The track is a pill-shaped frame. The knob sits inside and moves LEFT (OFF) or RIGHT (ON) via primaryAxisAlignItems.
-     - ON:  \`<frame w={44} h={24} corner="full" bg="#4F46E5" layout="row" p={2} align="center" justify="end"><frame w={20} h={20} corner="full" bg="#FFFFFF" shadow="0,1,3,0,#0000001A"/></frame>\`
-     - OFF: \`<frame w={44} h={24} corner="full" bg="#D1D5DB" layout="row" p={2} align="center" justify="start"><frame w={20} h={20} corner="full" bg="#FFFFFF" shadow="0,1,3,0,#0000001A"/></frame>\`
-     - Key: knob (20px) must be clearly smaller than track height (24px). Use justify="end" for ON, justify="start" for OFF. Mix ON/OFF states for realism — never all the same.
-
-2. **Icons and avatars**: NEVER create an empty frame as a visual placeholder. Use \`icon\` type with a lucide icon name, or a text emoji, or a colored circle with initials.
-   - GOOD: \`<icon name="Bell" icon="lucide:bell" size={20} />\` or \`<frame w={96} h={96} corner="full" bg="#E0E7FF"><text size={32}>SC</text></frame>\`
-   - BAD: \`<frame w={20} h={20} />\` (invisible empty box)
-
-3. **Flex containers with 3+ children**: ALWAYS set an explicit gap value. Zero gap between items makes everything look cramped.
-   - Parent frames (page-level sections): gap={32} or gap={24}
-   - Card internals: gap={16} or gap={12}
-   - Tight groups (label + sublabel): gap={4}
-
-4. **Every card/page needs at least one CTA**: login → Sign In button, profile → Follow/Message button, settings → Save button, pricing → Choose Plan button. A design without actions is a wireframe.
-
-5. **Figma ≠ CSS: space-between needs a fill child**: In CSS flexbox, space-between distributes space automatically. In Figma, if ALL children are hug/fixed, space-between has NO visible effect — children just stack from the start. You MUST make at least one child w="fill" (or h="fill" for vertical) to push siblings apart.
-   - Toggle row: \`<frame layout="row" w="fill"><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}/></frame>\` — Label w:fill pushes Toggle to right edge
-   - Card with CTA at bottom: \`<frame layout="column" h="fill"><frame name="Header">...</frame><frame name="Features" h="fill">...</frame><frame name="CTA" w="fill"/></frame>\` — Features h:fill pushes CTA to bottom
-
-6. **Sibling cards in a row**: Each card MUST use w="fill" (NOT a fixed pixel width like w={320}). Figma auto-layout does NOT shrink fixed-width children — they overflow and get clipped. Use w="fill" so cards distribute the parent's width evenly.
-   - GOOD: \`<frame layout="row" gap={24} w="fill"><frame name="Card1" w="fill">...</frame><frame name="Card2" w="fill">...</frame></frame>\`
-   - BAD: \`<frame layout="row" gap={24} w="fill"><frame name="Card1" w={320}>...</frame><frame name="Card2" w={320}>...</frame></frame>\` (320×3 + gaps > parent width → clipped)
-   - Also: sibling cards with different content lengths should ALL use h="fill" (sizingV:fill / stretch) so they share the same height. The CTA button stays at the bottom when using layout:column + space-between or by placing it last with the feature list taking w="fill".`
-    );
-
-    // 5. Tool definitions
+    // 6. Tool definitions
     if (tools.length > 0) {
         parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, create designs, inspect results, and modify properties:\n\n' + serializeTools(tools));
     } else {
         parts.push('## AVAILABLE TOOLS\nNo specific tools are available for this session.');
     }
 
-    // 6. Provider tool instructions
+    // 7. Provider tool instructions
     const providerInstructions = provider.getToolSystemInstruction(tools);
     if (providerInstructions) {
         parts.push(providerInstructions.trim());

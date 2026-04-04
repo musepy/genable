@@ -118,12 +118,14 @@ export function classifyError(error: any): AgentErrorCategory {
     return AgentErrorCategory.RETRYABLE_RATE_LIMIT;
   }
 
-  // ── Transient / Overloaded (503, 5xx) ──
+  // ── Transient / Overloaded (5xx, timeout) ──
   if (
     type === GeminiErrorType.OVERLOADED ||
     statusCode === 503 ||
     message.includes('503') ||
-    message.toLowerCase().includes('overloaded') ||
+    lower.includes('overloaded') ||
+    lower.includes('timeout') ||
+    /\berror\s+5\d{2}\b/.test(message) ||
     (statusCode && statusCode >= 500 && statusCode < 600)
   ) {
     return AgentErrorCategory.RETRYABLE_TRANSIENT;

@@ -302,16 +302,35 @@ interface ThemeColors {
 }
 
 export function resolveThemeColors(el: HTMLElement): ThemeColors {
-  const s = getComputedStyle(el);
-  const get = (v: string) => s.getPropertyValue(v).trim() || v;
+  // Canvas fillStyle does NOT accept CSS variables like 'var(--gray-12)'.
+  // getPropertyValue() can return empty strings in Figma iframe.
+  // Use a probe element to force the browser to resolve the variable to an actual color.
+  const resolveColor = (varName: string, fallback: string): string => {
+    const probe = document.createElement('div');
+    probe.style.color = `var(${varName})`;
+    el.appendChild(probe);
+    const resolved = getComputedStyle(probe).color;
+    el.removeChild(probe);
+    return resolved || fallback;
+  };
+
+  const resolveBg = (varName: string, fallback: string): string => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = `var(${varName})`;
+    el.appendChild(probe);
+    const resolved = getComputedStyle(probe).backgroundColor;
+    el.removeChild(probe);
+    return resolved || fallback;
+  };
+
   return {
-    text: get('--gray-12') || '#1a1a1a',
-    textSecondary: get('--gray-11') || '#6b6b6b',
-    accent: get('--accent-11') || '#0066cc',
-    accentBg: get('--accent-a3') || 'rgba(0,102,204,0.08)',
-    codeBg: get('--gray-a2') || 'rgba(0,0,0,0.03)',
-    codeText: get('--gray-12') || '#1a1a1a',
-    linkColor: get('--accent-11') || '#0066cc',
+    text: resolveColor('--gray-12', '#1a1a1a'),
+    textSecondary: resolveColor('--gray-11', '#6b6b6b'),
+    accent: resolveColor('--accent-11', '#0066cc'),
+    accentBg: resolveBg('--accent-a3', 'rgba(0,102,204,0.08)'),
+    codeBg: resolveBg('--gray-a2', 'rgba(0,0,0,0.03)'),
+    codeText: resolveColor('--gray-12', '#1a1a1a'),
+    linkColor: resolveColor('--accent-11', '#0066cc'),
   };
 }
 

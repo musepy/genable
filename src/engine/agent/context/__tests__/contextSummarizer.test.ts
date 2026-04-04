@@ -22,15 +22,15 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Build a card' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'create', args: { xml: '<frame name="Card">...</frame>' } } },
+          { functionCall: { name: 'design', args: { xml: '<frame name="Card">...</frame>', parentId: '0:1' } } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
           {
             functionResponse: {
-              name: 'create',
-              response: { data: { idMap: { Card: '100:1', Title: '100:2' } } },
+              name: 'design',
+              response: { data: { created: 2, idMap: { Card: '100:1', Title: '100:2' } } },
             },
           },
         ],
@@ -39,7 +39,7 @@ describe('buildCompressionSummary', () => {
     ];
     const summary = buildCompressionSummary(messages);
     expect(summary).toContain('User: Build a card');
-    expect(summary).toContain('create(');
+    expect(summary).toContain('design(');
     expect(summary).toContain('100:1');
     expect(summary).toContain('100:2');
     expect(summary).toContain('Agent: Card created');
@@ -58,7 +58,7 @@ describe('buildCompressionSummary', () => {
           {
             functionResponse: {
               name: 'edit',
-              response: { error: { message: 'NODE_NOT_FOUND: 99:1' } },
+              response: { error: 'NODE_NOT_FOUND: 99:1' },
             },
           },
         ],
@@ -205,17 +205,17 @@ describe('buildCompressionSummary', () => {
     expect(summary).toContain('edited 3');
   });
 
-  it('summarizes CLI mk command with idMap', () => {
+  it('summarizes cp command with idMap', () => {
     const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Create a card' },
+      { id: 'u1', role: 'user', content: 'Copy a card' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'mk', args: { path: '/Card/', type: 'frame' } } },
+          { functionCall: { name: 'cp', args: { path: '/Card/', target: '/Copy/' } } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'mk', response: { data: { idMap: { Card: '962:1', Title: '962:5' } } } } },
+          { functionResponse: { name: 'cp', response: { data: { idMap: { Card: '962:1', Title: '962:5' } } } } },
         ],
       },
     ];
@@ -310,7 +310,7 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'design',
               response: {
-                error: { code: 'PARTIAL_FAILURE', message: '3 created, 2 failed' },
+                error: '3 created, 2 failed',
                 data: {
                   created: 3,
                   failed: 2,
@@ -352,7 +352,7 @@ describe('buildCompressionSummary', () => {
             functionResponse: {
               name: 'design',
               response: {
-                error: { code: 'BATCH_TOO_LARGE', message: '45 operations exceeds the hard limit of 30' },
+                error: 'batch of 45 operations exceeds the hard limit of 30',
               },
             },
           },
@@ -410,7 +410,7 @@ describe('buildCompressionSummary', () => {
               response: {
                 _compressed: true,
                 summary: 'PARTIAL_FAILURE: 2 failed, 1 succeeded',
-                error: { code: 'PARTIAL_FAILURE', message: '2 ops failed' },
+                error: '2 ops failed',
               },
             },
           },

@@ -355,7 +355,7 @@ describe('consecutiveFailureGuard', () => {
     registry.registerAll(guard.hooks);
     const runner = new HookRunner(registry);
 
-    const failResults = [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: { code: 'FAIL', message: 'failed' } } }];
+    const failResults = [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: 'failed' } }];
 
     // 2 failures → no message (threshold is 3)
     for (let i = 0; i < 2; i++) {
@@ -381,7 +381,7 @@ describe('consecutiveFailureGuard', () => {
     // 2 failures
     for (let i = 0; i < 2; i++) {
       await runner.run('afterIteration', makeCtx({
-        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: { code: 'FAIL', message: 'failed' } } }],
+        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: 'failed' } }],
       }));
     }
 
@@ -393,7 +393,7 @@ describe('consecutiveFailureGuard', () => {
     // 2 more failures → no inject (count reset)
     for (let i = 0; i < 2; i++) {
       const ctx = makeCtx({
-        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: { code: 'FAIL', message: 'failed' } } }],
+        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: 'failed' } }],
       });
       await runner.run('afterIteration', ctx);
       expect(ctx.messages).toHaveLength(0);
@@ -412,7 +412,7 @@ describe('partialFailureGuard', () => {
       iterationToolResults: [{
         toolCall: { id: '1', name: 'jsx', args: {} },
         result: {
-          error: { code: 'PARTIAL_FAILURE' },
+          error: 'PARTIAL_FAILURE',
           data: { errors: [{ op: 'create /Card/Title', error: 'Font not found' }] },
         },
       }],

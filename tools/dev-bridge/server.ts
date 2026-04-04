@@ -78,6 +78,19 @@ function sendSSE(triggerId: string, event: string, data: any) {
   }
 }
 
+// --- ask_user answer store ---
+
+const pendingAnswers = new Map<string, string>();
+const answerWaiters = new Map<string, Array<(answer: string) => void>>();
+
+function notifyAnswerWaiters(triggerId: string, answer: string) {
+  const waiters = answerWaiters.get(triggerId);
+  if (waiters) {
+    for (const resolve of waiters) resolve(answer);
+    answerWaiters.delete(triggerId);
+  }
+}
+
 // --- long-poll waiters ---
 
 const resultWaiters = new Map<string, Array<(data: any) => void>>();
@@ -532,6 +545,61 @@ const server = createServer(async (req, res) => {
         res.end(html);
       } catch {
         json(res, 500, { error: 'Dashboard file not found' });
+      }
+    } else if (path.startsWith('/answer/') && method === 'POST') {
+      // Claude Code posts answer to an ask_user question
+      const triggerId = path.slice('/answer/'.length);
+      const body = await readBody(req);
+      const payload = JSON.parse(body.toString('utf-8'));
+      const answer = payload.answer;
+      if (!answer || typeof answer !== 'string') {
+        json(res, 400, { error: 'Missing "answer" string field' });
+        return;
+      }
+      pendingAnswers.set(triggerId, answer);
+      notifyAnswerWaiters(triggerId, answer);
+      sendSSE(triggerId, 'answer', { answer });
+      json(res, 200, { ok: true, triggerId, answer });
+      console.log(`[answer] ${triggerId}: "${answer}"`);
+    } else if (path.startsWith('/answer/') && method === 'GET') {
+      // Plugin polls for answer (supports ?wait=N long-poll)
+      const triggerId = path.slice('/answer/'.length);
+      const stored = pendingAnswers.get(triggerId);
+      if (stored) {
+        pendingAnswers.delete(triggerId);
+        json(res, 200, { answer: stored });
+        return;
+      }
+      const waitSec = Number(url.searchParams.get('wait')) || 0;
+      if (waitSec > 0) {
+        const timeoutMs = Math.min(waitSec, 120) * 1000;
+        let resolved = false;
+        const timeout = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+          const waiters = answerWaiters.get(triggerId);
+          if (waiters) {
+            const idx = waiters.indexOf(resolve);
+            if (idx >= 0) waiters.splice(idx, 1);
+            if (waiters.length === 0) answerWaiters.delete(triggerId);
+          }
+          cors(res);
+          res.writeHead(204);
+          res.end();
+        }, timeoutMs);
+        function resolve(answer: string) {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          pendingAnswers.delete(triggerId);
+          json(res, 200, { answer });
+        }
+        if (!answerWaiters.has(triggerId)) answerWaiters.set(triggerId, []);
+        answerWaiters.get(triggerId)!.push(resolve);
+      } else {
+        cors(res);
+        res.writeHead(204);
+        res.end();
       }
     } else {
       json(res, 404, { error: 'Not found' });

@@ -22,16 +22,13 @@ export async function executeSubtask(
   // Depth guard
   if (context.depth >= context.maxDepth) {
     return {
-      error: {
-        code: 'MAX_DEPTH',
-        message: `Cannot create subtask: maximum recursion depth (${context.maxDepth}) reached. Complete this work inline instead.`,
-      },
+      error: `Cannot create subtask: maximum recursion depth (${context.maxDepth}) reached. Complete this work inline instead.`,
     };
   }
 
   if (!prompt || prompt.trim().length === 0) {
     return {
-      error: { code: 'MISSING_PROMPT', message: 'Subtask requires a prompt describing the work to delegate.' },
+      error: 'Subtask requires a prompt describing the work to delegate.',
     };
   }
 
@@ -82,11 +79,11 @@ export async function executeSubtask(
   } catch (error: any) {
     if (error instanceof AgentRuntimeCanceledError) {
       return {
-        error: { code: 'CANCELED', message: 'Subtask was canceled.' },
+        error: 'Subtask was canceled.',
       };
     }
     return {
-      error: { code: 'SUBTASK_ERROR', message: error.message || 'Subtask failed.' },
+      error: error.message || 'Subtask failed.',
     };
   } finally {
     clearInterval(cancelInterval);

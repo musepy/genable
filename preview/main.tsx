@@ -82,6 +82,18 @@ function triggerHandler(eventName: string, data: any) {
       }, 50)
     }
 
+    if (eventName === 'GET_SELECTION') {
+      setTimeout(() => {
+        triggerHandler('SEND_SELECTION', {
+          selection: [
+            { id: '5:12', name: 'Card', type: 'FRAME' },
+            { id: '5:18', name: 'Button', type: 'FRAME' },
+            { id: '5:24', name: 'Button', type: 'FRAME' },
+          ]
+        })
+      }, 50)
+    }
+
     if (eventName === 'SAVE_SETTINGS') {
       const settings = args[0]
       if (settings?.apiKey) {

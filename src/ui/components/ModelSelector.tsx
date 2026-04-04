@@ -124,7 +124,7 @@ export function ModelSelector({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: `var(--space-1) var(--space-3) var(--space-1) var(--space-2)`, // Reduced vertical padding to 4px
+              padding: `var(--space-1) ${tokens.grid.blockPad}px var(--space-1) ${tokens.grid.blockPad}px`,
               minHeight: 32,
               borderRadius: 'var(--radius-4)', // Slightly smaller radius for more compact look
               cursor: 'pointer',

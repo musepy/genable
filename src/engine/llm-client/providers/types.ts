@@ -202,7 +202,8 @@ export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
     id: 'gen_' + Math.random().toString(36).substring(7),
     role: 'tool',
     content: results.map(tr => ({
-      functionResponse: { name: tr.name, response: tr.response }
+      functionResponse: { name: tr.name, response: tr.response },
+      tool_call_id: tr.id,
       // thought_signature intentionally omitted - not allowed in functionResponse
     }))
   };

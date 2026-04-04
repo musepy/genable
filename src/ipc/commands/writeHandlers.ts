@@ -250,7 +250,7 @@ async function executeSingleMk(
 ): Promise<ToolResponse> {
   const { parentPath, nodeName } = splitPath(path);
   if (!nodeName) {
-    return { error: { code: 'INVALID_PATH', message: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' } };
+    return { error: 'mk requires a target name in path, e.g. mk /Card/ or mk /Card/Title' };
   }
 
   // ID-based path: if nodeName is a bare Figma ID (digits:digits), resolve and update directly
@@ -268,7 +268,7 @@ async function executeSingleMk(
       const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
       return { data: { idMap: { [node.name]: node.id } }, _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined };
     }
-    return { error: { code: 'NODE_NOT_FOUND', message: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` } };
+    return { error: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` };
   }
 
   // Try to resolve the full path to check if node exists (for upsert)
@@ -292,7 +292,7 @@ async function executeSingleMk(
   if (!parentResolved.ok) return parentResolved.response;
 
   if (!parentResolved.isPage && !('children' in parentResolved.node)) {
-    return { error: { code: 'NOT_A_CONTAINER', message: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` } };
+    return { error: `Cannot create "${nodeName}" inside "${parentResolved.node.name}" (${parentResolved.node.type.toLowerCase()}) — it has no children. Use a frame as parent.` };
   }
 
   const siblings = parentResolved.isPage
@@ -324,7 +324,7 @@ async function executeSingleMk(
 
   const result = await createNodeDirect(type, parentNode, rawProps, textContent, refComponent);
   if (!result.nodeId) {
-    return { error: { code: 'CREATE_FAILED', message: result.warnings[0]?.message || 'Failed to create node' } };
+    return { error: result.warnings[0]?.message || 'Failed to create node' };
   }
 
   // Tag as agent-created
@@ -348,7 +348,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   const lines = batchInput.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('//'));
 
   if (lines.length === 0) {
-    return { error: { code: 'EMPTY_BATCH', message: 'No mk commands in batch input.' } };
+    return { error: 'No mk commands in batch input.' };
   }
 
   const MK_TYPES = new Set(['frame', 'text', 'rect', 'ellipse', 'line', 'icon', 'image', 'group', 'section', 'vector', 'component', 'variantset']);
@@ -427,7 +427,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   }
 
   if (parsed.length === 0) {
-    return { error: { code: 'PARSE_ERROR', message: 'No valid mk commands parsed from batch input.' } };
+    return { error: 'No valid mk commands parsed from batch input.' };
   }
 
   // ── Sequential execution with symbol resolution ──
@@ -539,7 +539,7 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
   }
 
   if (createdNodeIds.length === 0) {
-    return { error: { code: 'CREATE_FAILED', message: warnings.join('; ') || 'No nodes created.' } };
+    return { error: warnings.join('; ') || 'No nodes created.' };
   }
 
   const stderrLines = warnings.map(w => `[warn] ${w}`);
@@ -558,7 +558,7 @@ export async function handleMk(parameters: any): Promise<ToolResponse> {
   }
 
   if (!mkPath) {
-    return { error: { code: 'INVALID_PATH', message: 'mk requires a path. Usage: mk /Card/ frame w:400 layout:column' } };
+    return { error: 'mk requires a path. Usage: mk /Card/ frame w:400 layout:column' };
   }
 
   // Guard: detect embedded batch commands in propTokens
@@ -583,7 +583,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   if (hasGlob(rmPath)) {
     const globNodes = await resolveGlobPaths(rmPath);
     if (globNodes.length === 0) {
-      return { error: { code: 'NO_MATCH', message: `No nodes matched pattern "${rmPath}". Use ls to check available children.` } };
+      return { error: `No nodes matched pattern "${rmPath}". Use ls to check available children.` };
     }
     const warnings: string[] = [];
     let deleted = 0;
@@ -602,7 +602,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   const rmResolved = await resolvePathToNode(rmPath);
   if (!rmResolved.ok) return rmResolved.response;
   if (rmResolved.isPage) {
-    return { error: { code: 'INVALID_TARGET', message: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' } };
+    return { error: 'Cannot delete page root. Target a specific node, e.g. rm /Card/' };
   }
 
   const rmNodeName = rmResolved.node.name;
@@ -633,16 +633,16 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   const { sourcePath: mvSourcePath, destPath: mvDestPath, at: mvAtIndex } = parameters;
 
   if (!mvSourcePath) {
-    return { error: { code: 'MISSING_SOURCE', message: 'mv requires a source path. Usage: mv /OldName /NewName' } };
+    return { error: 'mv requires a source path. Usage: mv /OldName /NewName' };
   }
   if (!mvDestPath) {
-    return { error: { code: 'MISSING_DEST', message: 'mv requires a destination path. Usage: mv /OldName /NewName' } };
+    return { error: 'mv requires a destination path. Usage: mv /OldName /NewName' };
   }
 
   const mvSourceResolved = await resolvePathToNode(mvSourcePath);
   if (!mvSourceResolved.ok) return mvSourceResolved.response;
   if (mvSourceResolved.isPage) {
-    return { error: { code: 'INVALID_SOURCE', message: 'Cannot move page root.' } };
+    return { error: 'Cannot move page root.' };
   }
   const mvNode = mvSourceResolved.node;
   const mvOldName = mvNode.name;
@@ -659,7 +659,7 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
   } else {
     const { parentPath: mvParentPath, nodeName: mvTargetName } = splitPath(mvDestPath);
     if (!mvTargetName) {
-      return { error: { code: 'INVALID_DEST', message: 'Destination must include a name, e.g. mv /Card/OldTitle /Card/NewTitle' } };
+      return { error: 'Destination must include a name, e.g. mv /Card/OldTitle /Card/NewTitle' };
     }
     mvNewName = mvTargetName;
 
@@ -671,7 +671,7 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
     } else if ('children' in mvParentResolved.node) {
       mvNewParent = mvParentResolved.node as BaseNode & ChildrenMixin;
     } else {
-      return { error: { code: 'INVALID_DEST', message: `"${mvParentPath}" is not a container. Cannot move node there.` } };
+      return { error: `"${mvParentPath}" is not a container. Cannot move node there.` };
     }
   }
 
@@ -720,22 +720,22 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
   const { sourcePath: cpSourcePath, destPath: cpDestPath, propsRaw: cpPropsRaw } = parameters;
 
   if (!cpSourcePath) {
-    return { error: { code: 'MISSING_SOURCE', message: 'cp requires a source path. Usage: cp /Source/ /Dest/ {overrides}' } };
+    return { error: 'cp requires a source path. Usage: cp /Source/ /Dest/ {overrides}' };
   }
   if (!cpDestPath) {
-    return { error: { code: 'MISSING_DEST', message: 'cp requires a destination path. Usage: cp /Source/ /Dest/ {overrides}' } };
+    return { error: 'cp requires a destination path. Usage: cp /Source/ /Dest/ {overrides}' };
   }
 
   const cpSourceResolved = await resolvePathToNode(cpSourcePath);
   if (!cpSourceResolved.ok) return cpSourceResolved.response;
   if (cpSourceResolved.isPage) {
-    return { error: { code: 'INVALID_SOURCE', message: 'Cannot clone page root.' } };
+    return { error: 'Cannot clone page root.' };
   }
   const cpSourceId = cpSourceResolved.node.id;
 
   const { parentPath: cpParentPath, nodeName: cpCloneName } = splitPath(cpDestPath);
   if (!cpCloneName) {
-    return { error: { code: 'INVALID_PATH', message: 'Destination path must include a name, e.g. /Card/Hover/' } };
+    return { error: 'Destination path must include a name, e.g. /Card/Hover/' };
   }
 
   const cpParentResolved = await resolvePathToNode(cpParentPath);
@@ -777,7 +777,7 @@ export async function handleCp(parameters: any): Promise<ToolResponse> {
   );
 
   if (!result.nodeId) {
-    return { error: { code: 'CLONE_FAILED', message: result.warnings[0]?.message || 'Clone failed' } };
+    return { error: result.warnings[0]?.message || 'Clone failed' };
   }
 
   // Tag as agent-created

@@ -57,38 +57,38 @@ export async function handleScratchCommand(toolName: string, parameters: any): P
       const value = scratchGet(key);
       if (value === undefined) {
         const keys = scratchList();
-        return { error: { code: 'NOT_FOUND', message: `Scratch note "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
+        return { error: `Scratch note "${key}" not found. Available: ${keys.join(', ') || '(none)'}` };
       }
       return { data: { key, value } };
     }
 
     case 'mk': {
       if (!key) {
-        return { error: { code: 'MISSING_KEY', message: 'Scratch key required. Usage: mk /.agent/scratch/my-key text -- value to store' } };
+        return { error: 'Scratch key required. Usage: mk /.agent/scratch/my-key text -- value to store' };
       }
       const textContent = parameters.textContent;
       if (!textContent) {
-        return { error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/scratch/${key} text -- value to store` } };
+        return { error: `No value provided. Usage: mk /.agent/scratch/${key} text -- value to store` };
       }
       const result = scratchSet(key, textContent);
       if (result.error) {
-        return { error: { code: 'STORE_ERROR', message: result.error! } };
+        return { error: result.error! };
       }
       return { data: { key, stored: textContent, hint: 'Note saved. Session-scoped — cleared when session ends.' } };
     }
 
     case 'rm': {
       if (!key) {
-        return { error: { code: 'MISSING_KEY', message: 'Specify which note to delete. Usage: rm /.agent/scratch/key' } };
+        return { error: 'Specify which note to delete. Usage: rm /.agent/scratch/key' };
       }
       const existed = scratchDelete(key);
       if (!existed) {
-        return { error: { code: 'NOT_FOUND', message: `Scratch note "${key}" not found.` } };
+        return { error: `Scratch note "${key}" not found.` };
       }
       return { data: { key, deleted: true } };
     }
 
     default:
-      return { error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on scratch paths. Use ls, cat, mk, rm.` } };
+      return { error: `Command "${toolName}" is not supported on scratch paths. Use ls, cat, mk, rm.` };
   }
 }

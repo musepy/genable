@@ -6,7 +6,6 @@
  * Only responsibilities: route, catch, emit result.
  */
 
-import type { ToolResponse } from '../../engine/agent/tools/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { logger } from '../../utils/logger';
 import { dispatchCommand } from '../commands';
@@ -29,8 +28,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
     emit('TOOL_RESULT', {
       requestId,
       response: {
-        error: { code: 'INTERNAL_ERROR', message },
-      } as ToolResponse,
+        error: message,
+      },
     });
   }
 }

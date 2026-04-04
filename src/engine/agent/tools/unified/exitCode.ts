@@ -1,11 +1,8 @@
 /**
  * @file exitCode.ts
- * @description Unix-standard exit codes and metadata formatting.
+ * @description LLM presentation utilities: timing, stderr, overflow, binary guards.
  *
- * Layer 2 (LLM Presentation): exit code + timing metadata.
- * - exit:0 — success, result is trustworthy
- * - exit:1 — general error, check output
- * - exit:127 — command not found, change direction
+ * No exit codes — error presence/absence is the only signal (OpenPencil convention).
  *
  * Timing format:
  * - <1000ms → "12ms" (cheap, call freely)
@@ -13,36 +10,6 @@
  */
 
 import { saveOverflow } from '../../overflowStore';
-
-// ── Exit code mapping ──────────────────────────────────────────────
-
-/** Standard Unix exit codes. */
-export const EXIT_SUCCESS = 0;
-export const EXIT_ERROR = 1;
-export const EXIT_NOT_FOUND = 127;
-
-/** Error codes that map to exit:127 (command/path not found). */
-const NOT_FOUND_CODES = new Set([
-  'UNKNOWN_COMMAND',
-  'COMMAND_NOT_FOUND',
-  'NO_TOOL_EXECUTOR',
-  'PATH_NOT_FOUND',
-  'NODE_NOT_FOUND',
-]);
-
-/**
- * Compute Unix exit code from a tool result.
- * Convention: success=true → 0, not-found errors → 127, other errors → 1.
- */
-export function computeExitCode(result: any): number {
-  if (!result) return EXIT_ERROR;
-  if (result.error == null) return EXIT_SUCCESS;
-
-  const code = result.error?.code;
-  if (code && NOT_FOUND_CODES.has(code)) return EXIT_NOT_FOUND;
-
-  return EXIT_ERROR;
-}
 
 // ── Meta formatting ────────────────────────────────────────────────
 
@@ -53,14 +20,6 @@ export function computeExitCode(result: any): number {
 export function formatTiming(durationMs: number): string {
   if (durationMs < 1000) return `${durationMs}ms`;
   return `${(durationMs / 1000).toFixed(1)}s`;
-}
-
-/**
- * Format the `_meta` footer for tool results.
- * Unix-standard: `[exit:0 | 12ms]`
- */
-export function formatMeta(exitCode: number, durationMs: number): string {
-  return `[exit:${exitCode} | ${formatTiming(durationMs)}]`;
 }
 
 // ── Stderr formatting ──────────────────────────────────────────────
@@ -88,8 +47,8 @@ export function extractStderr(result: any): string | null {
   }
 
   // Error message (only for failed results)
-  if (result?.error != null && result?.error?.message) {
-    parts.push(`[error] ${result.error.message}`);
+  if (result?.error != null && typeof result.error === 'string') {
+    parts.push(`[error] ${result.error}`);
   }
 
   // Legacy fallback: extract from data fields if no pre-built stderr

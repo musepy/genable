@@ -1,199 +1,259 @@
-import { h } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
-import { Button } from './Button';
-import { Input } from './Input';
+import { h, Fragment } from 'preact';
+import { useState, useRef, useEffect } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
+import { grid } from '../design-system/tokens/layout';
+
+type ProviderName = 'gemini' | 'openrouter' | 'dashscope';
+type OnboardStep = 'idle' | 'connecting' | 'error';
+
+/** Detect provider from API key prefix */
+function detectProvider(key: string): { provider: ProviderName; label: string } | null {
+  const k = key.trim();
+  if (k.startsWith('AIzaSy')) return { provider: 'gemini', label: 'Google Gemini' };
+  if (k.startsWith('sk-or-v1-')) return { provider: 'openrouter', label: 'OpenRouter' };
+  if (k.startsWith('sk-ant-')) return { provider: 'openrouter', label: 'Anthropic' }; // OpenAI-compatible via proxy
+  if (k.length > 10) return { provider: 'dashscope', label: 'OpenAI Compatible' }; // fallback
+  return null;
+}
+
+/** Mask API key for display */
+function maskKey(key: string): string {
+  if (key.length <= 10) return key;
+  return key.slice(0, 10) + '••••••••';
+}
 
 interface OnboardingViewProps {
   apiKey: string;
   setApiKey: (key: string) => void;
-  providerName: 'gemini' | 'openrouter' | 'dashscope';
-  setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope') => void;
+  providerName: ProviderName;
+  setProviderName: (name: ProviderName) => void;
   onComplete: (apiKey: string) => void;
   onFetchModels: (apiKey: string) => Promise<void>;
   isLoading?: boolean;
   error?: string | null;
 }
 
-/**
- * OnboardingView - Welcome screen for first-time users
- * Displays a concise form to connect an API key
- */
-export function OnboardingView({ 
+export function OnboardingView({
   apiKey,
   setApiKey,
   providerName,
   setProviderName,
-  onComplete, 
-  onFetchModels, 
-  isLoading = false, 
+  onComplete,
+  onFetchModels,
+  isLoading = false,
   error,
 }: OnboardingViewProps) {
+  const [step, setStep] = useState<OnboardStep>('idle');
   const [localError, setLocalError] = useState<string | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [detectedLabel, setDetectedLabel] = useState<string | null>(null);
+  const [maskedKey, setMaskedKey] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-focus input on mount
   useEffect(() => {
-    setLocalError(null);
-  }, [providerName]);
+    inputRef.current?.focus();
+  }, []);
 
-  const providerMetaMap: Record<string, { label: string; placeholder: string; keyUrl: string; keyLabel: string }> = {
-    gemini: { label: 'Gemini', placeholder: 'AIzaSy...', keyUrl: 'https://aistudio.google.com/apikey', keyLabel: 'Google AI Studio' },
-    openrouter: { label: 'OpenRouter', placeholder: 'sk-or-v1-...', keyUrl: 'https://openrouter.ai/keys', keyLabel: 'OpenRouter Keys' },
-    dashscope: { label: 'DashScope', placeholder: 'sk-...', keyUrl: 'https://bailian.console.aliyun.com/', keyLabel: 'Alibaba Cloud Bailian' },
-  };
-  const providerMeta = providerMetaMap[providerName] || providerMetaMap.gemini;
-
-  const handleConnect = async () => {
-    if (!apiKey.trim()) {
-      setLocalError('Please enter your API key');
-      return;
+  // Reset error when typing
+  useEffect(() => {
+    if (step === 'error') {
+      setStep('idle');
+      setLocalError(null);
     }
-    
+  }, [apiKey]);
+
+  const handleSubmit = async () => {
+    const key = apiKey.trim();
+    if (!key) return;
+
+    const detected = detectProvider(key);
+    if (detected) {
+      setProviderName(detected.provider);
+      setDetectedLabel(detected.label);
+    }
+    setMaskedKey(maskKey(key));
+    setStep('connecting');
     setLocalError(null);
-    
+
     try {
-      // Verify key first by fetching models
-      await onFetchModels(apiKey);
-      // If successful, complete onboarding
-      onComplete(apiKey);
+      await onFetchModels(key);
+      onComplete(key);
     } catch (e) {
+      setStep('error');
       setLocalError(e instanceof Error ? e.message : 'Failed to connect');
     }
   };
 
   const displayError = error || localError;
-  const canSubmit = apiKey.trim().length > 0 && !isLoading;
+  const showKey = step === 'connecting' || step === 'error';
+  const showInput = step === 'idle' || step === 'error';
+  const pad = grid.blockPad; // 10px — text padding inside body
 
   return (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      padding: `${tokens.space[4]}px ${tokens.space[3]}px`,  // 16px vertical, 12px horizontal (scroll pad)
       background: 'var(--color-background)',
-      boxSizing: 'border-box',
     }}>
-      <div style={{ marginBottom: tokens.space[5] }}>
-        <h2 style={{ fontSize: tokens.fontSize[2], fontWeight: tokens.fontWeight.medium, margin: 0, color: 'var(--gray-12)' }}>
-          Setup Connection
-        </h2>
-      </div>
+      {/* Spacer — pushes body to bottom */}
+      <div style={{ flex: 1 }} />
 
-      <div style={{ 
-        display: 'flex', 
-        gap: tokens.space[4], 
-        borderBottom: 'var(--border-default)',
-        marginBottom: tokens.space[4],
+      {/* Body — all content as one block, min-height locks position */}
+      <div style={{
+        flexShrink: 0,
+        padding: `0 ${grid.scrollPad}px ${grid.scrollPad}px`,
+        minHeight: 300,
       }}>
-        {(['gemini', 'openrouter', 'dashscope'] as const).map(p => {
-          const isActive = providerName === p;
-          const label = p === 'gemini' ? 'Gemini' : p === 'openrouter' ? 'OpenRouter' : 'DashScope';
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setProviderName(p)}
-              style={{
-                padding: `0 0 ${tokens.space[2]}px 0`,
-                border: 'none',
-                background: 'transparent',
-                color: isActive ? 'var(--gray-12)' : 'var(--gray-9)',
-                fontSize: tokens.fontSize[1],
-                fontWeight: tokens.fontWeight.medium,
-                cursor: 'pointer',
-                position: 'relative',
-              }}
-            >
-              {label}
-              {isActive && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: -1,
-                  left: 0,
-                  right: 0,
-                  height: 2,
-                  background: 'var(--gray-12)',
-                  borderRadius: '2px 2px 0 0',
-                }} />
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>API Key</span>
-          <a 
-            href={providerMeta.keyUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-9)', textDecoration: 'none' }}
-          >
-            Get from {providerMeta.keyLabel}
-          </a>
-        </div>
-        
-        <Input
-          type={showApiKey ? 'text' : 'password'}
-          placeholder={providerMeta.placeholder}
-          value={apiKey}
-          onInput={(e) => {
-            setApiKey((e.target as HTMLInputElement).value);
-            if (localError) setLocalError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && canSubmit) {
-              handleConnect();
-            }
-          }}
-          rightElement={
-            <button
-              type="button"
-              onClick={() => setShowApiKey(prev => !prev)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--gray-10)',
-                cursor: 'pointer',
-                fontSize: tokens.fontSize[1],
-                padding: '0 4px',
-              }}
-            >
-              {showApiKey ? 'Hide' : 'Show'}
-            </button>
-          }
-          style={{ borderColor: displayError ? 'var(--error-9)' : undefined }}
-        />
-        
-        <div style={{ fontSize: '10px', color: 'var(--gray-9)' }}>
-          Keys are stored locally in Figma client storage.
-        </div>
-      </div>
-
-      {displayError && (
+        {/* Title */}
         <div style={{
-          fontSize: tokens.fontSize[1],
-          color: 'var(--error-11)',
-          padding: `${tokens.space[2]}px`,
-          background: 'var(--error-3)',
-          borderRadius: 'var(--radius-2)',
-          border: '1px solid var(--error-6)',
+          paddingLeft: pad,
+          fontSize: 32,
+          fontWeight: 400,
+          fontFamily: "var(--typography-font-family-emphasis)",
+          color: 'var(--gray-12)',
+          lineHeight: 1.25,
+          letterSpacing: '-0.2px',
         }}>
-          {displayError}
+          Build something<br />great.
         </div>
-      )}
 
-      <div style={{ marginTop: 'auto', paddingTop: tokens.space[4] }}>
-        <Button 
-          variant="primary" 
-          fullWidth 
-          isLoading={isLoading}
-          disabled={!canSubmit}
-          onClick={handleConnect}
-        >
-          Connect & Start
-        </Button>
+        {/* Subtitle — changes per state */}
+        <div style={{
+          paddingLeft: pad,
+          fontSize: tokens.fontSize[1],
+          color: 'var(--gray-9)',
+          marginTop: tokens.space[1],
+          lineHeight: tokens.lineHeight[2],
+        }}>
+          {step === 'idle' && (
+            <Fragment>
+              Paste your API key to connect.{' '}
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
+              >Get one free</a>
+            </Fragment>
+          )}
+          {step === 'connecting' && (
+            <span className="thinking-shimmer">Connecting...</span>
+          )}
+          {step === 'error' && (
+            <Fragment>
+              <span style={{ color: 'var(--error-11)' }}>Invalid key.</span>{' '}
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
+              >Get a new one</a>
+            </Fragment>
+          )}
+        </div>
+
+        {/* Key display — shown after paste */}
+        {showKey && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space[2],
+            padding: `${tokens.space[2]}px ${pad}px`,
+            background: 'var(--gray-3)',
+            borderRadius: 'var(--radius-3)',
+            fontSize: tokens.fontSize[1],
+            fontFamily: 'var(--font-mono, monospace)',
+            color: 'var(--gray-11)',
+            letterSpacing: '0.2px',
+            marginTop: tokens.space[3],
+            border: step === 'error' ? '1px solid var(--error-3)' : 'none',
+          }}>
+            <span>{maskedKey}</span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 500,
+              fontFamily: tokens.font.sans,
+              color: step === 'error' ? 'var(--error-11)' : 'var(--accent-11)',
+              letterSpacing: 0,
+              marginLeft: 'auto',
+              flexShrink: 0,
+            }}>
+              {step === 'error' ? 'Failed' : detectedLabel || 'Detecting...'}
+            </span>
+          </div>
+        )}
+
+        {/* Input — shown in idle and error states */}
+        {showInput && (
+          <div style={{ marginTop: tokens.space[3] }}>
+            <div style={{
+              position: 'relative',
+              borderRadius: 'var(--radius-4)',
+              boxShadow: step === 'error'
+                ? '0 0 0 1px rgba(233,61,130,0.2)'
+                : `0 0 0 1px var(--gray-a4)`,
+            }}>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Paste API key..."
+                value={apiKey}
+                onInput={(e) => setApiKey((e.target as HTMLInputElement).value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && apiKey.trim()) handleSubmit();
+                }}
+                style={{
+                  width: '100%',
+                  height: 40,
+                  padding: `0 40px 0 ${pad}px`,
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
+                  fontSize: tokens.fontSize[1],
+                  fontFamily: 'var(--font-mono, monospace)',
+                  color: 'var(--gray-12)',
+                  letterSpacing: '0.2px',
+                  borderRadius: 'var(--radius-4)',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!apiKey.trim() || isLoading}
+                style={{
+                  position: 'absolute',
+                  right: 4,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  borderRadius: 'var(--radius-4)',
+                  background: apiKey.trim() ? 'var(--gray-12)' : 'transparent',
+                  color: apiKey.trim() ? 'var(--color-background)' : 'var(--gray-8)',
+                  cursor: apiKey.trim() ? 'pointer' : 'default',
+                  transition: 'var(--transition-crisp)',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+              </button>
+            </div>
+            <div style={{
+              fontSize: 11,
+              color: 'var(--gray-9)',
+              marginTop: tokens.space[2],
+              paddingLeft: pad,
+            }}>
+              Stored locally in Figma.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

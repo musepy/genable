@@ -2,7 +2,7 @@
 
 > Date: 2026-03-30
 > Status: 分析完成，方案 A 详细设计完成
-> Related: [方案 A 详细设计](tool-refactoring-option-a.md) | [学习笔记索引](learning-index.md)
+> Related: [方案 A 详细设计](tool-refactoring-option-a.md) | [学习笔记索引](../learning-index.md)
 
 ## 当前架构
 

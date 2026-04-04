@@ -99,6 +99,7 @@ export function SettingsPanel({
             gap: tokens.space[4], 
             borderBottom: 'var(--border-default)',
             marginBottom: tokens.space[4],
+            padding: `0 ${tokens.grid.blockPad}px`,
           }}>
             {(['gemini', 'openrouter', 'dashscope'] as const).map(p => {
               const isActive = providerName === p;
@@ -139,7 +140,7 @@ export function SettingsPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
             {/* Input & Link */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[1] }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[1], padding: `0 ${tokens.grid.blockPad}px` }}>
                 <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>API Key</span>
                 <a 
                   href={providerMeta.keyUrl} 
@@ -164,7 +165,7 @@ export function SettingsPanel({
             {/* Model Selector */}
             {suggestedModels.length > 0 && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[2] }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[2], padding: `0 ${tokens.grid.blockPad}px` }}>
                   <label style={{ 
                     fontSize: tokens.fontSize[1],
                     color: 'var(--gray-9)', 
@@ -206,7 +207,7 @@ export function SettingsPanel({
         </div>
 
         {/* Developer Tools (Dogfood) */}
-        <div style={{ marginTop: tokens.space[6], padding: `0 var(--space-3)` }}>
+        <div style={{ marginTop: tokens.space[6], padding: `0 ${tokens.grid.blockPad}px` }}>
           <div 
             onClick={() => setShowDeveloper(!showDeveloper)}
             style={{ 

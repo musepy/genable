@@ -143,12 +143,15 @@ export class LLMGenerationCoordinator {
             if (chunk) {
               const now = Date.now();
               if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
+                // Flush any buffered text BEFORE the current chunk to preserve order
+                const text = this.pendingTextDelta + chunk;
+                this.pendingTextDelta = '';
                 this.config.emitRuntimeEvent({
                   type: 'text_delta',
                   phase: 'execution',
-            
+
                   iteration: iteration + 1,
-                  text: chunk,
+                  text,
                 });
                 this.lastTextNotificationTime = now;
               } else {

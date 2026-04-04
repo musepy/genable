@@ -24,16 +24,17 @@ export function Input({
   const inputBaseStyle: h.JSX.CSSProperties = {
     height: tokens.size.input.sm, // Compact input (32px)
     width: '100%',
-    padding: `0 ${tokens.space[3]}px`,
-    paddingRight: rightElement ? 48 : tokens.space[3],
+    padding: `0 ${tokens.grid.blockPad}px`,
+    paddingRight: rightElement ? 48 : tokens.grid.blockPad,
     fontSize: tokens.fontSize[1],
     fontFamily: tokens.font.sans,
     background: 'transparent', // Transparent to avoid dark mode issues
     color: tokens.colors.textPrimary,
-    border: 'var(--border-default)',
+    border: 'none',
+    boxShadow: 'inset 0 0 0 0.5px var(--border-default)',
     borderRadius: 'var(--radius-3)', // Flatter design
     outline: 'none',
-    transition: 'border-color var(--duration-normal) var(--ease-default)',
+    transition: 'border-color var(--duration-normal) var(--ease-default), box-shadow var(--duration-normal) var(--ease-default)',
     ...(style as any),
   };
 

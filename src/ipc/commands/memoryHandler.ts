@@ -55,18 +55,18 @@ export async function handleMemoryCommand(toolName: string, parameters: any): Pr
       const value = await memoryGet(key);
       if (value === undefined) {
         const keys = await memoryList();
-        return { error: { code: 'NOT_FOUND', message: `Memory "${key}" not found. Available: ${keys.join(', ') || '(none)'}` } };
+        return { error: `Memory "${key}" not found. Available: ${keys.join(', ') || '(none)'}` };
       }
       return { data: { key, value } };
     }
 
     case 'mk': {
       if (!key) {
-        return { error: { code: 'MISSING_KEY', message: 'Memory key required. Usage: mk /.agent/memory/my-key text -- value to store' } };
+        return { error: 'Memory key required. Usage: mk /.agent/memory/my-key text -- value to store' };
       }
       const textContent = parameters.textContent;
       if (!textContent) {
-        return { error: { code: 'MISSING_VALUE', message: `No value provided. Usage: mk /.agent/memory/${key} text -- value to store` } };
+        return { error: `No value provided. Usage: mk /.agent/memory/${key} text -- value to store` };
       }
       await memorySet(key, textContent);
       return { data: { key, stored: textContent, hint: 'Memory saved. Persists across sessions.' } };
@@ -74,16 +74,16 @@ export async function handleMemoryCommand(toolName: string, parameters: any): Pr
 
     case 'rm': {
       if (!key) {
-        return { error: { code: 'MISSING_KEY', message: 'Specify which memory to delete. Usage: rm /.agent/memory/key' } };
+        return { error: 'Specify which memory to delete. Usage: rm /.agent/memory/key' };
       }
       const existed = await memoryDelete(key);
       if (!existed) {
-        return { error: { code: 'NOT_FOUND', message: `Memory "${key}" not found.` } };
+        return { error: `Memory "${key}" not found.` };
       }
       return { data: { key, deleted: true } };
     }
 
     default:
-      return { error: { code: 'UNSUPPORTED', message: `Command "${toolName}" is not supported on memory paths. Use ls, cat, mk, rm.` } };
+      return { error: `Command "${toolName}" is not supported on memory paths. Use ls, cat, mk, rm.` };
   }
 }

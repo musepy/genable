@@ -109,7 +109,7 @@
       </frame>
     </frame>
   </frame>
-  <rect name='Separator' width='fill' h='1' bg='#E5E5EA' p='0 0 0 64'/>
+  <line name='Separator' w='fill' stroke='#E5E5EA'/>
   <frame name='List Item 2' layout='row' gap='12' alignItems='center' p='12 16' width='fill' height='hug' bg='transparent'>
     <frame name='Icon Wrapper' layout='row' justifyContent='center' alignItems='center' w='36' h='36' bg='#34C759' corner='8'>
       <icon name='Icon' icon='lucide:bluetooth' size='20' fill='#FFFFFF'/>

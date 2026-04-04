@@ -147,6 +147,14 @@ export interface AgentRuntimeToolApprovalRequestEvent extends AgentRuntimeBaseEv
   toolCalls: { id: string; name: string; args: any }[];
 }
 
+export interface AgentRuntimeAskUserQuestionEvent extends AgentRuntimeBaseEvent {
+  type: 'ask_user_question';
+  phase: AgentRuntimePhase;
+  iteration: number;
+  question: string;
+  options: { label: string; description?: string }[];
+}
+
 export interface AgentRuntimeCanceledEvent extends AgentRuntimeBaseEvent {
   type: 'canceled';
   phase: AgentRuntimePhase;
@@ -244,6 +252,7 @@ export type AgentRuntimeEvent =
   | AgentRuntimeTurnEndEvent
   | AgentRuntimeRetryEvent
   | AgentRuntimeToolApprovalRequestEvent
+  | AgentRuntimeAskUserQuestionEvent
   | AgentRuntimeCanceledEvent
   | AgentRuntimeLLMRequestEvent
   | AgentRuntimeLLMResponseEvent
@@ -262,6 +271,7 @@ export type AgentRuntimeEventType =
   | 'turn_end'
   | 'retry'
   | 'tool_approval_request'
+  | 'ask_user_question'
   | 'canceled'
   | 'llm_request'
   | 'llm_response'

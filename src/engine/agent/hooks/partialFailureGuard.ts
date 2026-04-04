@@ -23,7 +23,7 @@ export function createPartialFailureGuard(): {
       if (!ctx.iterationToolResults || ctx.iterationToolResults.length === 0) return;
 
       const partialFailures = ctx.iterationToolResults
-        .filter(r => r.result?.error?.code === 'PARTIAL_FAILURE')
+        .filter(r => r.result?.error != null && Array.isArray(r.result?.data?.errors))
         .map(r => r.result);
 
       if (partialFailures.length === 0) return;

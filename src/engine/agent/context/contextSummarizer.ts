@@ -235,11 +235,10 @@ function summarizeArgs(toolName: string, args: any): string {
  * WHY something failed, not just THAT it failed.
  */
 function summarizeFailResult(toolName: string, resp: any): string {
-  const errorCode = resp.error?.code || '';
-  const errorMsg = truncate(String(resp.error?.message || resp.error || ''), 100);
+  const errorMsg = truncate(String(resp.error || ''), 100);
 
-  // PARTIAL_FAILURE: include per-op errors + surviving idMap
-  if (errorCode === 'PARTIAL_FAILURE' && resp.data) {
+  // PARTIAL_FAILURE: detected by presence of data.errors array
+  if (Array.isArray(resp.data?.errors) && resp.data) {
     const parts: string[] = [`PARTIAL_FAILURE: ${errorMsg}`];
 
     // Per-op error details
@@ -257,8 +256,8 @@ function summarizeFailResult(toolName: string, resp: any): string {
     return parts.join(', ');
   }
 
-  // BATCH_TOO_LARGE: preserve the specific count so LLM knows to split
-  if (errorCode === 'BATCH_TOO_LARGE') {
+  // BATCH_TOO_LARGE: preserve the specific message so LLM knows to split
+  if (errorMsg.toLowerCase().includes('batch') || errorMsg.toLowerCase().includes('too large')) {
     return `FAIL(BATCH_TOO_LARGE): ${errorMsg}`;
   }
 

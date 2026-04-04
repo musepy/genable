@@ -7,95 +7,81 @@ import {
   ResetSettingsHandler,
 } from '../types'
 import { ModelService } from '../services/ModelService'
-import { DEFAULT_MODEL, SUPPORTED_MODELS, MODEL_CACHE_TTL_MS } from '../ui/constants/models'
+import { DEFAULT_MODEL, SUPPORTED_MODELS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
 
-type ApiKeyMap = Record<'gemini' | 'openrouter' | 'dashscope', string>
+type ProviderName = 'gemini' | 'openrouter' | 'dashscope'
+type ApiKeyMap = Record<ProviderName, string>
+type ModelNameMap = Record<string, string>
 
 export function useModelSettings() {
   const { toast } = useToast()
 
-  const [apiKey, setApiKey] = useState<string>('')
+  // --- Core state ---
   const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '', dashscope: '' })
-  const [modelName, setModelName] = useState<string>(DEFAULT_MODEL)
-  const [providerName, setProviderName] = useState<'gemini' | 'openrouter' | 'dashscope'>('gemini')
+  const [providerName, setProviderName] = useState<ProviderName>('gemini')
+  const [modelNames, setModelNames] = useState<ModelNameMap>({})  // per-provider model names
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
-  const [cacheTimestamp, setCacheTimestamp] = useState<number>(0)
 
+  // --- UI state ---
   const [hasConfig, setHasConfig] = useState<boolean>(false)
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
   const [showSettings, setShowSettings] = useState<boolean>(false)
-
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [fetchStatus, setFetchStatus] = useState<'idle' | 'fetching' | 'success' | 'fail'>('idle')
 
   const isRefreshingRef = useRef(false)
 
-  /**
-   * Check if cache is stale (> 24h)
-   */
-  const isCacheStale = useCallback((timestamp: number): boolean => {
-    if (timestamp === 0) return true
-    return Date.now() - timestamp > MODEL_CACHE_TTL_MS
-  }, [])
+  // --- Derived ---
+  const apiKey = apiKeys[providerName] || ''
+  const modelName = modelNames[providerName] || DEFAULT_MODEL
 
-  /**
-   * Get models synchronously - NEVER blocks UI
-   * Priority: cached/fetched models → static manifest
-   */
+  // --- Helpers ---
+
+  /** Update model name for the current provider */
+  const setModelName = useCallback((name: string) => {
+    setModelNames(prev => ({ ...prev, [providerName]: name }))
+  }, [providerName])
+
+  /** Get model list synchronously — static fallback if empty */
   const getModels = useCallback((): { name: string, displayName: string }[] => {
     return suggestedModels.length > 0 ? suggestedModels : (SUPPORTED_MODELS[providerName] || SUPPORTED_MODELS.gemini)
   }, [suggestedModels, providerName])
 
-  /**
-   * Background refresh - non-blocking, updates cache silently
-   */
+  /** Background SWR refresh */
   const refreshModelsInBackground = useCallback(async (key: string) => {
     if (isRefreshingRef.current || !key) return
-    
     isRefreshingRef.current = true
     try {
-      // Use Service's silent warmCache method
       await ModelService.warmCache(providerName, key)
-      
-      // Get refreshed models (will return from cache if just updated)
       const result = await ModelService.getModels(providerName, key, false)
       if (!result.error && result.models.length > 0) {
         setSuggestedModels(result.models)
-        setCacheTimestamp(Date.now())
       }
     } catch (e) {
-      // Silent fail for background refresh - don't disrupt UI
       console.warn('[SWR] Background model refresh failed:', e)
     } finally {
       isRefreshingRef.current = false
     }
   }, [providerName])
 
-  const loadSettings = useCallback(() => {
+  // --- Persistence ---
+
+  const persistSettings = useCallback(() => {
+    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
+      apiKey: apiKeys[providerName] || '',
+      apiKeys,
+      modelName,
+      providerName,
+    })
+  }, [apiKeys, modelName, providerName])
+
+  // --- Settings load ---
+
+  useEffect(() => {
     emit<LoadSettingsHandler>('LOAD_SETTINGS')
   }, [])
 
-  const persistSettings = useCallback((next: {
-    apiKey: string;
-    apiKeys: ApiKeyMap;
-    modelName: string;
-    providerName: 'gemini' | 'openrouter' | 'dashscope';
-  }) => {
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
-      apiKey: next.apiKey,
-      apiKeys: next.apiKeys,
-      modelName: next.modelName,
-      providerName: next.providerName,
-      availableModels: suggestedModels,
-      cacheTimestamp
-    })
-  }, [suggestedModels, cacheTimestamp])
-
-  /**
-   * Listen for settings updates
-   * Re-binds when dependencies change (like refreshModelsInBackground)
-   */
   useEffect(() => {
     return on<SettingsLoadedHandler>('SETTINGS_LOADED', (s) => {
       const nextProvider = s.providerName || 'gemini'
@@ -104,146 +90,98 @@ export function useModelSettings() {
         openrouter: s.apiKeys?.openrouter || '',
         dashscope: s.apiKeys?.dashscope || '',
       }
-
       // Legacy single key support
       if (!s.apiKeys && s.apiKey) {
         nextApiKeys[nextProvider] = s.apiKey
       }
 
       const activeKey = nextApiKeys[nextProvider] || ''
-      const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || nextApiKeys.dashscope || s.apiKey)
+      const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || nextApiKeys.dashscope)
 
       setApiKeys(nextApiKeys)
 
-      // Force-sync empty state after reset even when already initialized
       if (!isInitialized || !hasAnyKey) {
         setProviderName(nextProvider)
-        setApiKey(activeKey || '')
         setHasConfig(Boolean(activeKey))
         setShowSettings(false)
         setSettingsError(null)
         setFetchStatus('idle')
       }
 
-      if (!isInitialized && s.modelName) {
-        setModelName(s.modelName)
+      // Per-provider model names from storage
+      if (!isInitialized && s.modelNames) {
+        setModelNames(s.modelNames)
+      } else if (!isInitialized && s.modelName) {
+        // Migration: old single modelName → current provider
+        setModelNames(prev => ({ ...prev, [nextProvider]: s.modelName }))
       } else if (!hasAnyKey) {
-        setModelName(DEFAULT_MODEL)
+        setModelNames({})
       }
 
-      if (s.availableModels && s.availableModels.length > 0) {
-        setSuggestedModels(s.availableModels)
-      } else if (!hasAnyKey) {
-        setSuggestedModels(ModelService.getStaticModels(nextProvider))
-      }
+      // Model list set by provider switch effect (runs after this state update)
+      // Don't call refreshModelsInBackground here — stale closure over providerName
 
-      if (s.cacheTimestamp) {
-        setCacheTimestamp(s.cacheTimestamp)
-      } else if (!hasAnyKey) {
-        setCacheTimestamp(0)
-      }
-      
-      // SWR: Trigger background refresh if cache is stale and we have an API key
-      if (activeKey && isCacheStale(s.cacheTimestamp || 0)) {
-        // Delay slightly to not block initial render
-        setTimeout(() => refreshModelsInBackground(activeKey), 100)
-      }
-      
       setIsInitialized(true)
     })
-  }, [isCacheStale, refreshModelsInBackground, isInitialized])
+  }, [isInitialized])
 
-  /**
-   * Initial Load Trigger
-   * Only runs once on mount
-   */
+  // --- Provider switch: sync model list + trigger SWR ---
+
   useEffect(() => {
-    loadSettings()
-  }, [loadSettings])
+    if (!isInitialized) return
+    setSuggestedModels(ModelService.getStaticModels(providerName))
+    setFetchStatus('idle')
+    setSettingsError(null)
 
-  /**
-   * Sync active apiKey when providerName changes
-   */
-  useEffect(() => {
-    const activeKey = apiKeys[providerName] || '';
-    setApiKey(activeKey || '');
-    
-    // [FIX] Show static models first when switching providers to prevent flicker
-    const staticModels = ModelService.getStaticModels(providerName);
-    setSuggestedModels(staticModels); 
-    setFetchStatus('idle');
-    setSettingsError(null);
-
-    // Trigger background refresh for the new provider
-    if (activeKey) {
-      refreshModelsInBackground(activeKey);
+    const key = apiKeys[providerName] || ''
+    if (key) {
+      refreshModelsInBackground(key)
     }
-  }, [providerName, refreshModelsInBackground]);
+  }, [providerName, isInitialized, apiKeys, refreshModelsInBackground])
 
-  /**
-   * Update specific provider key
-   */
+  // --- Actions ---
+
   const updateApiKey = (key: string) => {
-    setApiKey(key);
-    setApiKeys(prev => ({
-      ...prev,
-      [providerName]: key
-    }));
-  };
+    setApiKeys(prev => ({ ...prev, [providerName]: key }))
+  }
 
   const handleSaveSettings = () => {
-    persistSettings({
-      apiKey,
-      apiKeys,
-      modelName,
-      providerName
-    })
-    // FIX: hasConfig based on whether active key is non-empty
-    const activeKey = apiKeys[providerName] || ''
-    setHasConfig(Boolean(activeKey))
+    persistSettings()
+    setHasConfig(Boolean(apiKeys[providerName]))
     setShowSettings(false)
   }
 
   const completeOnboarding = useCallback((key: string) => {
-    const nextApiKeys: ApiKeyMap = {
-      ...apiKeys,
-      [providerName]: key,
-    }
-    setApiKey(key)
+    const nextApiKeys: ApiKeyMap = { ...apiKeys, [providerName]: key }
     setApiKeys(nextApiKeys)
     setHasConfig(true)
     setShowSettings(false)
-    persistSettings({
+    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
       apiKey: key,
       apiKeys: nextApiKeys,
       modelName,
       providerName,
     })
     toast('Connected successfully', 'success')
-  }, [apiKeys, modelName, persistSettings, providerName, toast])
+  }, [apiKeys, modelName, providerName, toast])
 
-  /**
-   * Explicit model fetch - used during onboarding/settings
-   * Shows loading state (unlike background refresh)
-   */
+  /** Explicit model fetch — shows loading state */
   const handleFetchModels = async (keyOverride?: string) => {
-    const keyToUse = keyOverride || apiKeys[providerName] || apiKey;
+    const keyToUse = keyOverride || apiKeys[providerName] || ''
     setFetchStatus('fetching')
-    
+
     try {
       const result = await ModelService.getModels(providerName, keyToUse, true)
-      
+
       if (!result.error) {
         setSuggestedModels(result.models)
-        setCacheTimestamp(Date.now())
         setFetchStatus('success')
-        
-        // Auto-select model if current one is not in the list
+
+        // Auto-select if current model not in list
         if (result.models.length > 0 && !result.models.find(m => m.name === modelName)) {
           setModelName(result.models[0].name)
         }
       } else {
-        // Fallback models are already in result.models if success is false
         setSuggestedModels(result.models)
         setFetchStatus('fail')
         setSettingsError(result.error || 'Failed to fetch models')
@@ -258,7 +196,6 @@ export function useModelSettings() {
     }
   }
 
-  /** Clear all stored keys and return to onboarding. */
   const logout = useCallback(() => {
     emit<ResetSettingsHandler>('RESET_SETTINGS')
     toast('Logged out', 'default')
@@ -268,9 +205,9 @@ export function useModelSettings() {
     setIsInitialized(false)
     setSettingsError(null)
     setFetchStatus('idle')
-    loadSettings()
+    emit<LoadSettingsHandler>('LOAD_SETTINGS')
     toast('Restored saved session', 'success')
-  }, [loadSettings, toast])
+  }, [toast])
 
   return {
     apiKey,
@@ -280,7 +217,7 @@ export function useModelSettings() {
     modelName,
     setModelName,
     providerName,
-    setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope') => setProviderName(name),
+    setProviderName: (name: ProviderName) => setProviderName(name),
     suggestedModels,
     setSuggestedModels,
     hasConfig,
@@ -295,7 +232,7 @@ export function useModelSettings() {
     handleFetchModels,
     getModels,
     refreshModelsInBackground,
-    isCacheStale: isCacheStale(cacheTimestamp),
+    isCacheStale: false, // No longer tracked — SWR always refreshes on load
     logout,
     restoreSavedSession,
   }

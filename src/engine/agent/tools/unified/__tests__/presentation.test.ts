@@ -6,22 +6,20 @@ describe('presentForLLM — flat response format', () => {
     const result = {
       data: {
         idMap: { Card: '100:1', Title: '100:2' },
-        created: 2,
         count: 2,
         diagnostics: { elapsed: 42 },
       },
     };
-    const presented = presentForLLM(result, 'mk', 50);
-    // Data fields promoted to top level
+    const presented = presentForLLM(result, 'cp', 50);
+    // Data fields promoted to top level (cp keeps idMap)
     expect(presented.idMap).toEqual({ Card: '100:1', Title: '100:2' });
-    expect(presented.created).toBe(2);
-    // Noise stripped
+    // Noise stripped (count, diagnostics not in cp keep-list)
     expect(presented.count).toBeUndefined();
     expect(presented.diagnostics).toBeUndefined();
     // No data wrapper
     expect(presented.data).toBeUndefined();
     expect(presented.success).toBeUndefined();
-    expect(presented._meta).toContain('exit:0');
+    expect(presented._meta).toMatch(/\[\d+m?s?\]/);
   });
 
   it('flattens ls result — listing at top level', () => {
@@ -63,7 +61,7 @@ describe('presentForLLM — flat response format', () => {
     expect(presented.totalSearched).toBeUndefined();
   });
 
-  it('no success field on success (exit:0 in _meta is sufficient)', () => {
+  it('no success field on success (_meta timing is sufficient)', () => {
     const result = {
       data: { idMap: { Card: '100:1' } },
     };
@@ -74,12 +72,12 @@ describe('presentForLLM — flat response format', () => {
   it('error as string replaces success:false + error object', () => {
     const result = {
       data: {},
-      error: { code: 'EXEC_ERROR', message: 'Failed to create' },
+      error: 'Failed to create',
     };
     const presented = presentForLLM(result, 'mk', 10);
     expect(presented.error).toBe('Failed to create');
     expect(presented.success).toBeUndefined();
-    expect(presented._meta).toContain('exit:1');
+    expect(presented._meta).toMatch(/\[\d+m?s?\]/);
   });
 
   it('flattens chain sub-results too', () => {
@@ -116,7 +114,7 @@ describe('presentForLLM — flat response format', () => {
         chain: [
           {
             command: 'cat /Missing/',
-            error: { code: 'NOT_FOUND', message: 'Node not found' },
+            error: 'Node not found',
             data: {},
           },
         ],
@@ -144,21 +142,25 @@ describe('presentForLLM — flat response format', () => {
     expect(presented.output).toBe('mk — create nodes\n\nUsage: mk /path/ [type]');
   });
 
-  it('strips design result to lean shape', () => {
+  it('strips result to lean shape per keep-list', () => {
     const result = {
       data: {
-        idMap: { Card: '100:1' },
-        created: 3,
-        edited: 1,
-        deleted: 0,
+        id: '100:1',
+        name: 'Card',
+        type: 'frame',
+        updated: 3,
+        results: [{ prop: 'fill', status: 'ok' }],
         defaultsApplied: [{ property: 'textAutoResize' }],
         warningCount: 1,
       },
     };
-    const presented = presentForLLM(result, 'design', 200);
-    expect(presented.idMap).toEqual({ Card: '100:1' });
-    expect(presented.created).toBe(3);
-    expect(presented.deleted).toBe(0);
+    const presented = presentForLLM(result, 'edit', 200);
+    // edit keeps: id, name, type, updated, results
+    expect(presented.id).toBe('100:1');
+    expect(presented.name).toBe('Card');
+    expect(presented.updated).toBe(3);
+    expect(presented.results).toHaveLength(1);
+    // Noise stripped
     expect(presented.defaultsApplied).toBeUndefined();
     expect(presented.warningCount).toBeUndefined();
   });
@@ -167,13 +169,15 @@ describe('presentForLLM — flat response format', () => {
     const result = {
       data: {
         idMap: {},
-        created: 0,
-        degraded: [],
+        deleted: 0,
+        results: [],
       },
     };
-    const presented = presentForLLM(result, 'design', 10);
+    // edit has a keep-list: ['id', 'name', 'type', 'updated', 'results']
+    const presented = presentForLLM(result, 'edit', 10);
+    // Empty object and empty array stripped even if in keep-list
     expect(presented.idMap).toBeUndefined();
-    expect(presented.degraded).toBeUndefined();
+    expect(presented.results).toBeUndefined();
   });
 
   it('preserves stderr extraction before stripping', () => {
@@ -184,7 +188,8 @@ describe('presentForLLM — flat response format', () => {
         violations: [{ message: 'sizing reverted' }],
       },
     };
-    const presented = presentForLLM(result, 'mk', 50);
+    // cp has a keep-list: ['idMap'] — warnings/violations stripped from output
+    const presented = presentForLLM(result, 'cp', 50);
     expect(presented._stderr).toContain('font fallback');
     expect(presented._stderr).toContain('sizing reverted');
     expect(presented.warnings).toBeUndefined();

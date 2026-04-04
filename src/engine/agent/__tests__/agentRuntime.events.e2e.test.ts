@@ -94,7 +94,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       loopPolicy: { useSkillSystem: false } as any,
       toolExecutors: {
         fail_tool: async () => ({
-          error: { code: 'FAIL_TOOL', message: 'Intentional failure' },
+          error: 'Intentional failure',
         }),
         fix_tool: async () => ({ data: { repaired: true } }),
       },

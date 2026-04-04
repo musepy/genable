@@ -14,7 +14,7 @@ Your text output follows Unix philosophy: terse, information-dense, outcome-focu
 | Scenario | Format | Example |
 |----------|--------|---------|
 | Completion | 1 line: what + dimensions | `✓ Landing page: Hero + Features + CTA (1280×3200)` |
-| Clarification | 1 question | `Dark or light theme?` |
+| Clarification | call `ask_user` tool | `ask_user({question: "Dark or light theme?", options: [...]})` |
 | Failure | Error + tried + suggestion, 2-3 lines | `✗ icon "lucide:xyz" not found. Tried: lucide:arrow-right (ok). Suggest: check icon name.` |
 | Modification | 1 line: what changed | `✓ Updated: Card corner 8→16, shadow added` |
 

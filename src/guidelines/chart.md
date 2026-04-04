@@ -112,10 +112,10 @@
   </frame>
   <frame name='Chart Area' layout='column' gap='0' width='fill' h='200' bg='transparent'>
     <frame name='Grid' layout='column' justifyContent='space-between' width='fill' height='fill' bg='transparent'>
-      <rect name='Grid Line' width='fill' h='1' bg='#F3F4F6'/>
-      <rect name='Grid Line' width='fill' h='1' bg='#F3F4F6'/>
-      <rect name='Grid Line' width='fill' h='1' bg='#F3F4F6'/>
-      <rect name='Grid Line' width='fill' h='1' bg='#F3F4F6'/>
+      <line name='Grid Line' w='fill' stroke='#F3F4F6'/>
+      <line name='Grid Line' w='fill' stroke='#F3F4F6'/>
+      <line name='Grid Line' w='fill' stroke='#F3F4F6'/>
+      <line name='Grid Line' w='fill' stroke='#F3F4F6'/>
     </frame>
   </frame>
   <frame name='X Labels' layout='row' justifyContent='space-between' width='fill' height='hug' bg='transparent'>

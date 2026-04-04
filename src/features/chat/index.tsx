@@ -1,6 +1,5 @@
 import { h, Fragment } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
-import { Sparkles } from 'lucide-preact'
 import { tokens } from '../../ui/design-system/tokens'
 import {
   derivePluginState,
@@ -214,13 +213,23 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
   const isEmpty = history.length === 0 && !loading;
 
   if (isEmpty) {
+    const pad = tokens.grid.blockPad; // 10px
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', flex: 1, gap: tokens.space[2], color: tokens.colors.textSecondary, textAlign: 'center', paddingTop: tokens.space[5] }}>
-        <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.accent }} />
-        <span style={{
-          fontSize: tokens.fontSize[2],
-          lineHeight: 'var(--typography-line-height-2)',
-        }}>{t.emptyStateHint}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flex: 1, padding: `0 ${pad}px` }}>
+        <div style={{
+          fontSize: 32,
+          fontWeight: 400,
+          fontFamily: 'var(--typography-font-family-emphasis)',
+          color: 'var(--gray-12)',
+          lineHeight: 1.25,
+          letterSpacing: '-0.2px',
+        }}>Build something<br />great.</div>
+        <div style={{
+          fontSize: tokens.fontSize[1],
+          color: 'var(--gray-9)',
+          marginTop: tokens.space[1],
+          lineHeight: tokens.lineHeight[2],
+        }}>{t.emptyStateHint}</div>
         {memoryCount > 0 && (
           <span style={{
             fontSize: 11,

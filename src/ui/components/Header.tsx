@@ -50,7 +50,7 @@ export function Header({
           fontSize: tokens.fontSize[2],
           fontWeight: tokens.fontWeight.regular,
           color: 'var(--gray-11)',
-          paddingLeft: 'var(--space-3)'
+          paddingLeft: tokens.grid.blockPad
         }}>
           Settings
         </div>
@@ -58,9 +58,11 @@ export function Header({
 
       {/* New Design button - Hidden in settings */}
       {!isSettingsOpen && (
-        <button 
+        <button
           className={"header-chip " + (newChatEnabled ? "" : "disabled")}
-          style={{ display: newChatVisible ? 'inline-flex' : 'none' }}
+          style={{ 
+            display: newChatVisible ? 'inline-flex' : 'none'
+          }}
           onClick={onNewChat}
           aria-label={t.newDesign}
           aria-disabled={!newChatEnabled}

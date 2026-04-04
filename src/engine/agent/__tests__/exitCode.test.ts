@@ -1,57 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeExitCode,
   formatTiming,
-  formatMeta,
   extractStderr,
   truncateOverflow,
   isBinaryContent,
   guardBinary,
-  EXIT_SUCCESS,
-  EXIT_ERROR,
-  EXIT_NOT_FOUND,
   MAX_OUTPUT_LINES,
 } from '../../agent/tools/unified/exitCode';
-
-// ── computeExitCode ──────────────────────────────────────────────
-
-describe('computeExitCode', () => {
-  it('returns 0 for success', () => {
-    expect(computeExitCode({ data: {} })).toBe(EXIT_SUCCESS);
-  });
-
-  it('returns 0 when success is not explicitly false', () => {
-    expect(computeExitCode({ data: 'hello' })).toBe(EXIT_SUCCESS);
-  });
-
-  it('returns 1 for generic errors', () => {
-    expect(computeExitCode({ error: { code: 'EXEC_ERROR', message: 'fail' } })).toBe(EXIT_ERROR);
-  });
-
-  it('returns 127 for UNKNOWN_COMMAND', () => {
-    expect(computeExitCode({ error: { code: 'UNKNOWN_COMMAND', message: 'not found' } })).toBe(EXIT_NOT_FOUND);
-  });
-
-  it('returns 127 for PATH_NOT_FOUND', () => {
-    expect(computeExitCode({ error: { code: 'PATH_NOT_FOUND', message: 'no path' } })).toBe(EXIT_NOT_FOUND);
-  });
-
-  it('returns 127 for NODE_NOT_FOUND', () => {
-    expect(computeExitCode({ error: { code: 'NODE_NOT_FOUND', message: 'no node' } })).toBe(EXIT_NOT_FOUND);
-  });
-
-  it('returns 127 for NO_TOOL_EXECUTOR', () => {
-    expect(computeExitCode({ error: { code: 'NO_TOOL_EXECUTOR', message: 'no exec' } })).toBe(EXIT_NOT_FOUND);
-  });
-
-  it('returns 1 for null result', () => {
-    expect(computeExitCode(null)).toBe(EXIT_ERROR);
-  });
-
-  it('returns 1 for error without code', () => {
-    expect(computeExitCode({ error: { message: 'something broke' } })).toBe(EXIT_ERROR);
-  });
-});
 
 // ── formatTiming ─────────────────────────────────────────────────
 
@@ -71,22 +26,6 @@ describe('formatTiming', () => {
   it('shows one decimal place for seconds', () => {
     expect(formatTiming(1234)).toBe('1.2s');
     expect(formatTiming(10567)).toBe('10.6s');
-  });
-});
-
-// ── formatMeta ───────────────────────────────────────────────────
-
-describe('formatMeta', () => {
-  it('formats success with fast timing', () => {
-    expect(formatMeta(0, 12)).toBe('[exit:0 | 12ms]');
-  });
-
-  it('formats error with slow timing', () => {
-    expect(formatMeta(1, 3200)).toBe('[exit:1 | 3.2s]');
-  });
-
-  it('formats not-found', () => {
-    expect(formatMeta(127, 0)).toBe('[exit:127 | 0ms]');
   });
 });
 
@@ -110,13 +49,13 @@ describe('extractStderr', () => {
   });
 
   it('extracts error message from failed result', () => {
-    const result = { error: { message: 'Node not found' } };
+    const result = { error: 'Node not found' };
     expect(extractStderr(result)).toContain('[error] Node not found');
   });
 
   it('combines warnings and errors', () => {
     const result = {
-      error: { message: 'Failed' },
+      error: 'Failed',
       data: { warnings: ['partial save'] },
     };
     const stderr = extractStderr(result)!;

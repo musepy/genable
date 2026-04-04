@@ -104,6 +104,7 @@ export class AgentRuntime {
   private eventSequence = 0;
   private canceledEventEmitted = false;
   private pendingApproval: { resolve: (approved: boolean) => void } | null = null;
+  private pendingQuestion: { resolve: (answer: string) => void } | null = null;
   private chatPanelId: string | null = null;
   private turnCreatedNodeIds: string[] = [];
   private designRootId: string | null = null;  // persists across turns for edit-turn links
@@ -223,6 +224,30 @@ export class AgentRuntime {
       },
     });
 
+    // Register ask_user executor (sandbox-local, pauses for user input)
+    this.toolDispatcher.mergeExecutors({
+      ask_user: async (args: any) => {
+        const { question, options } = args || {};
+        if (!question || !Array.isArray(options) || options.length < 2) {
+          return { error: 'ask_user requires a question and 2-4 options.' };
+        }
+        this.emitRuntimeEvent({
+          type: 'ask_user_question',
+          phase: 'execution',
+          iteration: this.currentIteration,
+          question,
+          options: options.map((o: any) => ({ label: o.label, description: o.description })),
+        });
+        const answer = await new Promise<string>(r => {
+          this.pendingQuestion = { resolve: r };
+        });
+        this.pendingQuestion = null;
+        this.throwIfCanceled();
+        if (!answer) return { error: 'Question was canceled by user.' };
+        return { data: { answer } };
+      },
+    });
+
     if (process.env.NODE_ENV === 'test') {
       (this as any).THROTTLE_MS = 0;
     }
@@ -237,6 +262,10 @@ export class AgentRuntime {
       this.pendingApproval.resolve(false);
       this.pendingApproval = null;
     }
+    if (this.pendingQuestion) {
+      this.pendingQuestion.resolve('');
+      this.pendingQuestion = null;
+    }
     if (this.activeAbortController && !this.activeAbortController.signal.aborted) {
       this.activeAbortController.abort();
     }
@@ -246,6 +275,11 @@ export class AgentRuntime {
   public resolveApproval(approved: boolean): void {
     this.pendingApproval?.resolve(approved);
     this.pendingApproval = null;
+  }
+
+  public resolveQuestion(answer: string): void {
+    this.pendingQuestion?.resolve(answer);
+    this.pendingQuestion = null;
   }
 
   public mergeToolExecutors(executors: Record<string, import('./tools/types').ToolExecutor>): void {
@@ -438,6 +472,7 @@ export class AgentRuntime {
 
     let iteration = 0;
     let truncationCount = 0;
+    let askUserNudged = false;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
     this.toolDispatcher.resetCallTracking();
@@ -835,6 +870,30 @@ export class AgentRuntime {
             continue;
           }
           console.warn(`[AgentRuntime] Truncation limit reached (3). Forcing turn end.`);
+        }
+
+        // ──── ASK_USER NUDGE ────
+        // If text-only response contains multiple question marks, the LLM is trying
+        // to ask questions via plain text instead of using ask_user. Nudge once per run.
+        if (!askUserNudged && response.text && response.text.includes('?') && !response.text.includes('✓')) {
+          const questionCount = (response.text.match(/\?/g) || []).length;
+          if (questionCount >= 2) {
+            askUserNudged = true;
+            console.log(`[AgentRuntime] Text-only response with ${questionCount} questions — nudging to use ask_user tool`);
+            this.contextManager.pushToTurn({
+              id: this.generateId('model'),
+              role: 'model',
+              content: response.text,
+            });
+            this.contextManager.pushToTurn({
+              id: this.generateId('nudge'),
+              role: 'user',
+              content: 'Do not ask questions in plain text — the user cannot reply inline. Use the ask_user tool to present options. Pick the single most important question and call ask_user with 2-4 options.',
+              synthetic: true,
+            });
+            iteration++;
+            continue;
+          }
         }
 
         // Auto-bubble: render agent's reply in chat panel BEFORE turn_end

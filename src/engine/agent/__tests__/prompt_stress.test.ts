@@ -236,7 +236,7 @@ function createMockExecutors(state: MockFigmaState): Record<string, ToolExecutor
     design: async (params: any) => {
       const ops = params.ops || '';
       if (!ops || ops.trim().length === 0) {
-        return { error: { code: 'EMPTY_OPS', message: 'Empty ops' } };
+        return { error: 'Empty ops' };
       }
       // Design ops may contain create, update, or delete operations
       // For mock purposes, treat as create XML

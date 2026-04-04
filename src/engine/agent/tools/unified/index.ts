@@ -18,6 +18,7 @@ import { jsToolDefinition } from './jsTool';
 import { setTextDefinition, setFillDefinition, setStrokeDefinition, setLayoutDefinition } from './setterTools';
 import { listMemoriesDefinition, saveMemoryDefinition, deleteMemoryDefinition } from './memoryTool';
 import { getSelectionDefinition } from './selectionTool';
+import { askUserDefinition } from './askUser';
 import { ToolDefinition } from '../types';
 
 /**
@@ -62,6 +63,8 @@ export const unifiedTools: ToolDefinition[] = [
   deleteMemoryDefinition,
   // Selection (opt-in, not auto-injected)
   getSelectionDefinition,
+  // User interaction
+  askUserDefinition,
   // Escape hatch
   jsToolDefinition,
 ];

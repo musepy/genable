@@ -90,7 +90,7 @@
     <icon name='Logo' icon='lucide:layout-dashboard' size='24' fill='#FFFFFF'/>
     <text name='Brand' size='18' weight='Bold' fill='#FFFFFF'>Admin</text>
   </frame>
-  <rect name='Divider' width='fill' h='1' bg='#1E293B'/>
+  <line name='Divider' w='fill' stroke='#1E293B'/>
   <frame name='Nav Group' layout='column' gap='4' width='fill' height='hug' bg='transparent' p='16 0'>
     <text name='Group Label' size='12' weight='Medium' fill='#64748B' p='0 12 8 12'>MAIN</text>
     <frame name='Nav Active' layout='row' gap='12' alignItems='center' p='10 12' width='fill' height='hug' bg='#1E293B' corner='8'>
@@ -179,6 +179,6 @@
 | Sidebar without `height='fill'` | Sidebar must stretch to fill viewport: `height='fill'` |
 | Nav links without gap | Horizontal nav links: `gap='32'` for breathing room |
 | Active state same as inactive | Active: `weight='Medium'` + darker color; sidebar: `bg='#1E293B'` |
-| No separator between nav groups | Use `<rect>` divider or group labels between sections |
+| No separator between nav groups | Use `<line>` divider or group labels between sections |
 | Tab indicator missing | Active tab needs a `2px` colored rect at bottom |
 | Breadcrumb without chevron separators | Use `lucide:chevron-right` between items, `14px` |

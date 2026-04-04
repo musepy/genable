@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ContentBlock, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
+import type { ContextAttachment } from '../../types'
 import { PluginData } from '../../hooks/usePluginData'
 import guidelinesCatalog from '../../generated/guidelines-catalog.json'
 import styleCatalog from '../../generated/style-catalog.json'
@@ -50,6 +51,11 @@ export interface ToolApprovalRequest {
   toolCalls: { id: string; name: string; args: any }[]
 }
 
+export interface UserQuestionRequest {
+  question: string
+  options: { label: string; description?: string }[]
+}
+
 type RunState = 'idle' | 'running' | 'canceled' | 'error'
 
 export function useChat({
@@ -73,6 +79,7 @@ export function useChat({
   const [runtimeProgress, setRuntimeProgress] = useState<{ iteration: number; maxIterations: number } | null>(null)
   const [runtimeContextUsage, setRuntimeContextUsage] = useState<AgentRuntimeContextUsage | null>(null)
   const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null)
+  const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null)
   const [memoryCount, setMemoryCount] = useState<number>(0)
 
   const [thinkingLevel] = useState<'minimal' | 'low' | 'high'>('high')
@@ -286,6 +293,10 @@ export function useChat({
         setPendingApproval({ toolCalls: event.toolCalls })
         break
       }
+      case 'ask_user_question': {
+        setPendingQuestion({ question: event.question, options: event.options })
+        break
+      }
       case 'budget_exhausted': {
         updateStreamingMessage(msg => ({
           ...msg,
@@ -328,6 +339,7 @@ export function useChat({
         setLoadingStatus('Canceled by user')
         setRuntimePhase(event.phase)
         setPendingApproval(null)
+    setPendingQuestion(null)
         updateStreamingMessage(msg => ({
           ...msg,
           text: msg.text || event.reason || 'Canceled by user',
@@ -347,6 +359,7 @@ export function useChat({
         setRuntimePhase(event.phase)
         setError(event.message)
         setPendingApproval(null)
+    setPendingQuestion(null)
         updateStreamingMessage(msg => ({
           ...msg,
           streaming: false,
@@ -373,9 +386,17 @@ export function useChat({
     }
   }
 
-  const generateFromPrompt = async (inputPrompt: string, options?: GenerateOptions) => {
+  const generateFromPrompt = async (inputPrompt: string, options?: GenerateOptions & { attachments?: ContextAttachment[] }) => {
     const normalizedPrompt = inputPrompt.trim()
     if (!normalizedPrompt) return
+
+    // Enrich prompt with skill references for the agent
+    const skillTokens = (options?.attachments ?? [])
+      .filter((a): a is Extract<ContextAttachment, { type: 'skill' }> => a.type === 'skill')
+      .map(a => `@${a.skillId}`)
+    const enrichedPrompt = skillTokens.length > 0
+      ? `${skillTokens.join(' ')} ${normalizedPrompt}`
+      : normalizedPrompt
 
     setLoading(true)
     setError(null)
@@ -386,12 +407,13 @@ export function useChat({
     setLoadingStatus('Agent starting...')
     setThinkingText('')
     setPendingApproval(null)
+    setPendingQuestion(null)
     activeRunIdRef.current = null
     eventBufferRef.current = []
 
     setHistory(prev => [
       ...prev,
-      { role: 'user', text: normalizedPrompt, id: `u-${Date.now()}` },
+      { role: 'user', text: normalizedPrompt, attachments: options?.attachments, id: `u-${Date.now()}` },
       {
         role: 'model',
         text: '',
@@ -545,7 +567,7 @@ export function useChat({
         },
       }
 
-      await activeOrchestratorRef.current.generate(normalizedPrompt, { toolExecutors: localExecutors })
+      await activeOrchestratorRef.current.generate(enrichedPrompt, { toolExecutors: localExecutors })
     } catch (e: any) {
       console.error('[useChat] Unhandled generation error:', e)
       setRuntimeState('error')
@@ -554,10 +576,10 @@ export function useChat({
     }
   }
 
-  const generate = async () => {
+  const generate = async (attachments?: ContextAttachment[]) => {
     const normalizedPrompt = prompt.trim()
     if (!normalizedPrompt || loading) return
-    await generateFromPrompt(normalizedPrompt)
+    await generateFromPrompt(normalizedPrompt, { attachments })
   }
 
   const stopGeneration = () => {
@@ -573,6 +595,12 @@ export function useChat({
   const respondToApproval = (approved: boolean) => {
     activeOrchestratorRef.current?.approveTools(approved)
     setPendingApproval(null)
+    setPendingQuestion(null)
+  }
+
+  const respondToQuestion = (answer: string) => {
+    activeOrchestratorRef.current?.answerQuestion(answer)
+    setPendingQuestion(null)
   }
 
   const handleRestore = () => {
@@ -587,6 +615,7 @@ export function useChat({
     setLoadingStatus('')
     setThinkingText('')
     setPendingApproval(null)
+    setPendingQuestion(null)
   }
 
   useEffect(() => {
@@ -848,8 +877,8 @@ export function useChat({
   }
 
   const { devBridgeStatus } = useDevBridge(
-    { generateFromPrompt, handleRestore, switchModel },
-    { loading, runtimeState, history, modelName, eventBufferRef },
+    { generateFromPrompt, handleRestore, switchModel, respondToQuestion },
+    { loading, runtimeState, history, modelName, eventBufferRef, pendingQuestion },
   )
 
   const { mcpBridgeStatus } = useMcpBridge()
@@ -870,6 +899,8 @@ export function useChat({
     continueGeneration,
     pendingApproval,
     respondToApproval,
+    pendingQuestion,
+    respondToQuestion,
     runtimeState,
     runtimePhase,
     runtimeProgress,

@@ -68,8 +68,8 @@ describe('IpcBridge (Sandbox Thread)', () => {
 
     const result = await callPromise;
     expect(result.error).toBeDefined();
-    expect(result.error?.code).toBe('TIMEOUT');
-    expect(result.error?.message).toContain('timed out');
+    expect(typeof result.error).toBe('string');
+    expect(result.error).toContain('timed out');
   });
 
   it('should ignore TOOL_RESULT for unknown requestIds', async () => {
@@ -86,7 +86,7 @@ describe('IpcBridge (Sandbox Thread)', () => {
     // We can check if it resolves eventually or times out
     vi.advanceTimersByTime(31000); // Wait for default timeout
     const result = await callPromise;
-    expect(result.error?.code).toBe('TIMEOUT');
+    expect(result.error).toContain('timed out');
   });
 
   it('should reject pending requests on dispose', async () => {

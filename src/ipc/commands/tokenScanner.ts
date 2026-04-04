@@ -38,10 +38,7 @@ export async function handleScanTokens(): Promise<ToolResponse> {
     };
   } catch (e) {
     return {
-      error: {
-        code: 'SCAN_FAILED',
-        message: `Token scan failed: ${e instanceof Error ? e.message : String(e)}`,
-      },
+      error: `Token scan failed: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
 }

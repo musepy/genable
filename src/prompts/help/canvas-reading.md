@@ -60,7 +60,7 @@ tree and cat return compact XML. Note: read output is XML, write input is flat o
 ```xml
 <frame id="1:2" name="Card" layout="V" w="320" sizingV="HUG">
   <text id="3:4" name="Title">Welcome</text>
-  <rect id="7:8" name="Divider" h="1"/>
+  <line id="7:8" name="Divider"/>
 </frame>
 ```
 
@@ -68,6 +68,6 @@ tree and cat return compact XML. Note: read output is XML, write input is flat o
 ```xml
 <frame id="1:2" name="Card" layout="V" gap="12" fill="#FFF" w="320" sizingV="HUG" p="24">
   <text id="3:4" name="Title" size="24" weight="Bold" fill="#111" textAutoResize="WIDTH_AND_HEIGHT">Welcome</text>
-  <rect id="7:8" name="Divider" h="1" fill="#E0E0E0"/>
+  <line id="7:8" name="Divider" stroke="#E0E0E0"/>
 </frame>
 ```

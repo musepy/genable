@@ -3,7 +3,7 @@
 > Date: 2026-03-30
 > Status: 设计完成，待确认
 > Parent: [工具重构总览](tool-refactoring-overview.md)
-> Related: [执行管线](execution-pipeline.md) | [OpenPencil 架构](openpencil-tool-architecture.md)
+> Related: [执行管线](../execution-pipeline.md) | [OpenPencil 架构](openpencil-tool-architecture.md)
 
 ## 设计目标
 

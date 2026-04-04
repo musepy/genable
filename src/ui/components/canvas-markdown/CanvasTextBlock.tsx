@@ -47,13 +47,17 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
   const [folded, setFolded] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
   const [canvasHeight, setCanvasHeight] = useState(0);
+  const [themeKey, setThemeKey] = useState(0); // bumped on theme change to trigger re-render
 
-  // Resolve theme colors once (and on theme change)
-  const getColors = useCallback(() => {
-    if (!colorsRef.current && containerRef.current) {
-      colorsRef.current = resolveThemeColors(containerRef.current);
-    }
-    return colorsRef.current;
+  // Watch for theme changes (Figma toggles class/attributes on root element)
+  useEffect(() => {
+    const target = document.documentElement;
+    const observer = new MutationObserver(() => {
+      colorsRef.current = null; // invalidate cached colors
+      setThemeKey(k => k + 1);  // force re-render
+    });
+    observer.observe(target, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-color-mode'] });
+    return () => observer.disconnect();
   }, []);
 
   // Layout + render
@@ -102,20 +106,18 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
     if (needsFold) {
       const fadeH = 32;
       const fadeY = displayHeight - fadeH;
-      // Resolve background color for fade gradient.
-      // Try CSS variable first (works in normal browsers), fall back to theme
-      // detection for Figma iframe where getPropertyValue may return empty.
+      // Resolve background color via temp element — standard property resolution
+      // works reliably even in Figma iframe where getPropertyValue for custom
+      // properties returns empty strings.
       const bgRgb = (() => {
-        const raw = getComputedStyle(container).getPropertyValue('--gray-1').trim();
-        const hex = raw.match(/^#([0-9a-f]{6})$/i);
-        if (hex) {
-          const h = hex[1]!;
-          return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
-        }
-        // Fallback: detect theme from data-theme attribute + OS preference
-        const t = document.documentElement.dataset.theme;
-        const isDark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        return isDark ? { r: 17, g: 17, b: 17 } : { r: 252, g: 252, b: 252 };
+        const probe = document.createElement('div');
+        probe.style.backgroundColor = 'var(--gray-1)';
+        container.appendChild(probe);
+        const resolved = getComputedStyle(probe).backgroundColor;
+        container.removeChild(probe);
+        const m = resolved.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+        if (m) return { r: +m[1]!, g: +m[2]!, b: +m[3]! };
+        return { r: 252, g: 252, b: 252 };
       })();
       const grad = ctx.createLinearGradient(0, fadeY, 0, displayHeight);
       grad.addColorStop(0, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},0)`);
@@ -124,7 +126,7 @@ export function CanvasTextBlock({ content, streaming }: CanvasTextBlockProps) {
       ctx.fillStyle = grad;
       ctx.fillRect(0, fadeY, width, fadeH);
     }
-  }, [content, streaming]);
+  }, [content, streaming, themeKey]);
 
   // Mouse move — cursor change on link hover
   const onMouseMove = useCallback((e: MouseEvent) => {

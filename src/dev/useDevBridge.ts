@@ -23,6 +23,7 @@ interface DevBridgeCallbacks {
   generateFromPrompt: (prompt: string, options?: GenerateOptions) => Promise<void>
   handleRestore: () => void
   switchModel?: (provider: string, model: string) => void
+  respondToQuestion?: (answer: string) => void
 }
 
 interface DevBridgeState {
@@ -31,6 +32,7 @@ interface DevBridgeState {
   history: ChatMessage[]
   modelName: string
   eventBufferRef: RefObject<AgentRuntimeEvent[]>
+  pendingQuestion: { question: string; options: { label: string; description?: string }[] } | null
 }
 
 interface TriggerPayload {
@@ -145,6 +147,60 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     }
     lastCompletedCountRef.current = completed.length
   }, [state.history])
+
+  // Handle ask_user questions during bridge-initiated runs:
+  // stream the question to bridge, long-poll for answer, then respond
+  useEffect(() => {
+    if (!triggerIdRef.current || !state.pendingQuestion) return
+    if (!callbacksRef.current.respondToQuestion) return
+
+    const triggerId = triggerIdRef.current
+    const question = state.pendingQuestion
+    let canceled = false
+
+    // Stream question event to bridge SSE
+    fetchBridge(`/event/${triggerId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'ask_user_question',
+        question: question.question,
+        options: question.options,
+      }),
+    }).catch(() => {})
+
+    console.log(`[DevBridge] ask_user: "${question.question}" — polling /answer/${triggerId}`)
+
+    // Long-poll for answer (up to 120s)
+    fetchBridge(`/answer/${triggerId}?wait=120`).then(async (res) => {
+      if (canceled) return
+      // 200 with answer = explicit response from external caller
+      if (res && res.ok) {
+        try {
+          const data = await res.json()
+          if (data.answer && callbacksRef.current.respondToQuestion) {
+            console.log(`[DevBridge] answer received: "${data.answer}"`)
+            callbacksRef.current.respondToQuestion(data.answer)
+            return
+          }
+        } catch { /* parse error — fall through to fallback */ }
+      }
+      // Timeout (204), error (404/500), or no answer field → auto-select first option
+      if (callbacksRef.current.respondToQuestion) {
+        const fallback = question.options[0]?.label || ''
+        console.log(`[DevBridge] no answer (status=${res?.status}), auto-selecting: "${fallback}"`)
+        callbacksRef.current.respondToQuestion(fallback)
+      }
+    }).catch(() => {
+      if (!canceled && callbacksRef.current.respondToQuestion) {
+        const fallback = question.options[0]?.label || ''
+        console.log(`[DevBridge] answer fetch failed, auto-selecting: "${fallback}"`)
+        callbacksRef.current.respondToQuestion(fallback)
+      }
+    })
+
+    return () => { canceled = true }
+  }, [state.pendingQuestion])
 
   // Post result back to bridge when a bridge-initiated run ends
   useEffect(() => {

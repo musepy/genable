@@ -69,10 +69,7 @@ export class IpcBridge {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId);
           resolve({
-            error: {
-              code: 'TIMEOUT',
-              message: `Tool call '${toolName}' timed out after ${timeoutMs}ms`
-            }
+            error: `Tool call '${toolName}' timed out after ${timeoutMs}ms`
           });
         }
       }, timeoutMs);

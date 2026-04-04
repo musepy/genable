@@ -342,7 +342,9 @@
   </div>
 
   <div class="plugin-header">
-    <span class="title">Genable (Alignment Test)</span>
+    <button class="header-chip-example" style="margin-left: 10px; display: inline-flex; align-items: center; padding: 0 12px; height: 32px; border: 1px solid #ddd; border-radius: 12px; font-size: 13px;">
+      <span style="margin-right: 4px;">+</span> New Design
+    </button>
   </div>
 
   <div class="messages-area">
@@ -423,7 +425,7 @@
   </div>
 
   <div class="plugin-header">
-    <span class="title">Settings</span>
+    <div class="settings-title" style="font-size: 14px; padding-left: 10px;">Settings</div>
   </div>
 
   <div class="settings-scroll" data-audit="settings">
@@ -782,6 +784,8 @@ function runAudit() {
   rows.push({ label: '── CHAT ──', boxL:'', textL:'', textR:'', boxR:'', okL:'', okR:'' });
 
   document.querySelectorAll('#frame .user-msg').forEach((el, i) => measureInFrame(el, `User msg ${i}`, chatFrame));
+  const chip = document.querySelector('#frame .header-chip-example');
+  if (chip) measureInFrame(chip, 'Header Chip', chatFrame);
   document.querySelectorAll('#frame .status-block').forEach((el, i) => {
     measureInFrame(el, `Status ${i}`, chatFrame);
     const action = el.querySelector('.action');
@@ -811,6 +815,8 @@ function runAudit() {
   const settingsFrame = document.getElementById('frame-settings');
   if (settingsFrame) {
     rows.push({ label: '── SETTINGS ──', boxL:'', textL:'', textR:'', boxR:'', okL:'', okR:'' });
+    const sTitle = settingsFrame.querySelector('.settings-title');
+    if (sTitle) measureInFrame(sTitle, 'Header Title', settingsFrame);
     settingsFrame.querySelectorAll('.settings-section-title').forEach((el, i) => measureInFrame(el, `Section title ${i}`, settingsFrame));
     settingsFrame.querySelectorAll('.settings-row').forEach((el, i) => measureInFrame(el, `Settings row ${i}`, settingsFrame));
     settingsFrame.querySelectorAll('.settings-input').forEach((el, i) => measureInFrame(el, `Settings input ${i}`, settingsFrame));

@@ -34,7 +34,7 @@ export class NodeLayoutService {
     
     if (!node) {
       return {
-        error: { code: 'NODE_NOT_FOUND', message: `Node ${nodeId} not found.` }
+        error: `Node ${nodeId} not found.`
       };
     }
 
@@ -43,7 +43,7 @@ export class NodeLayoutService {
       return {};
     } catch (e: any) {
       return {
-        error: { code: 'DELETE_ERROR', message: e.message }
+        error: e.message
       };
     }
   }

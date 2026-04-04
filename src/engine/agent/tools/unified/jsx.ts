@@ -21,7 +21,7 @@ Elements: frame, text, rect, ellipse, line, icon, image, instance, component, gr
 Attributes: same shorthands (w, h, bg, layout, gap, p, corner, fill, size, weight, stroke, shadow)
 Text: <text size={24}>content here</text>
 Instance: <instance ref="Button" variant="Size=Large"/>
-Self-closing: <rect w="fill" h={1} fill="#E5E7EB"/>
+Self-closing: <line w="fill" stroke="#E5E7EB"/> (divider — use line not rect for dividers/separators)
 
 Use jsx for tree creation. Use edit for property updates on existing nodes.`,
   parameters: {

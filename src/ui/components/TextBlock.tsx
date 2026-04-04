@@ -204,7 +204,7 @@ function FloatingCard({ content, onClose }: { content: string; onClose: () => vo
     requestAnimationFrame(() => {
       if (ref.current) {
         ref.current.style.opacity = '1';
-        ref.current.style.transform = 'scale(1)';
+        ref.current.style.transform = 'translateY(0)';
       }
     });
   }, []);
@@ -213,7 +213,7 @@ function FloatingCard({ content, onClose }: { content: string; onClose: () => vo
     const el = ref.current;
     if (el) {
       el.style.opacity = '0';
-      el.style.transform = 'scale(.97)';
+      el.style.transform = 'translateY(8px)';
       setTimeout(onClose, 120);
     } else {
       onClose();
@@ -225,14 +225,16 @@ function FloatingCard({ content, onClose }: { content: string; onClose: () => vo
       ref={ref}
       onClick={close}
       style={{
-        position: 'fixed', inset: '10px', zIndex: 100,
-        background: 'var(--color-background)', border: `1px solid ${tokens.colors.surfaceHover}`,
-        borderRadius: 'var(--radius-3)',
-        boxShadow: '0 4px 20px rgba(0,0,0,.2), 0 1px 4px rgba(0,0,0,.1)',
+        position: 'fixed',
+        top: 'var(--header-height)', left: 0, right: 0, bottom: 0,
+        zIndex: 100,
+        background: 'var(--color-background)',
+        borderTop: `1px solid ${tokens.colors.surfaceHover}`,
+        boxShadow: '0 -1px 8px rgba(0,0,0,.08)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         cursor: 'pointer',
-        opacity: 0, transform: 'scale(.97)',
-        transition: 'opacity 100ms ease, transform 100ms ease',
+        opacity: 0, transform: 'translateY(8px)',
+        transition: 'opacity 120ms ease, transform 120ms ease',
       }}
     >
       <div style={{

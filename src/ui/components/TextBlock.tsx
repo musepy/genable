@@ -11,6 +11,7 @@ import { memo } from 'preact/compat';
 import { useRef, useState, useEffect, useMemo } from 'preact/hooks';
 import { emit } from '@create-figma-plugin/utilities';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
 import { tokens } from '../design-system/tokens';
 
@@ -66,15 +67,29 @@ const mdComponents: Record<string, any> = {
     }
     return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
   },
+  // GFM tables
+  table: ({ children }: any) => (
+    <div style={{ overflowX: 'auto', margin: `${tokens.space[1]}px 0` }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 'inherit' }}>{children}</table>
+    </div>
+  ),
+  th: ({ children }: any) => (
+    <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--gray-6)', fontWeight: 600 }}>{children}</th>
+  ),
+  td: ({ children }: any) => (
+    <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--gray-a3)' }}>{children}</td>
+  ),
 };
 
 // ============================================
 // Memoized markdown renderer
 // ============================================
 
+const remarkPlugins = [remarkGfm];
+
 const Md = memo(({ content }: { content: string }) => {
   const processed = useMemo(() => preprocessNodeLinks(content), [content]);
-  return <ReactMarkdown components={mdComponents}>{processed}</ReactMarkdown>;
+  return <ReactMarkdown remarkPlugins={remarkPlugins} components={mdComponents}>{processed}</ReactMarkdown>;
 });
 
 // ============================================
@@ -120,20 +135,16 @@ export function TextBlock({ content, streaming }: TextBlockProps) {
   // Check fold after content settles (not during streaming)
   useEffect(() => {
     if (streaming || !elRef.current) return;
-    // Wait for DOM to settle before measuring
     requestAnimationFrame(() => {
       const el = elRef.current;
       if (!el) return;
-      // Temporarily remove clamp to measure true height
-      const prevDisplay = el.style.display;
-      const prevClamp = el.style.webkitLineClamp;
+      // Temporarily remove maxHeight to measure true scrollHeight
+      const prevMaxH = el.style.maxHeight;
       const prevOverflow = el.style.overflow;
-      el.style.display = '';
-      el.style.webkitLineClamp = '';
+      el.style.maxHeight = 'none';
       el.style.overflow = '';
       const needsFold = el.scrollHeight > CLAMP_LINES * LINE_HEIGHT + 8;
-      el.style.display = prevDisplay;
-      el.style.webkitLineClamp = prevClamp;
+      el.style.maxHeight = prevMaxH;
       el.style.overflow = prevOverflow;
       setFolded(needsFold);
     });
@@ -146,13 +157,15 @@ export function TextBlock({ content, streaming }: TextBlockProps) {
     padding: '4px 10px',
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
+    userSelect: 'text',
+    WebkitUserSelect: 'text',
   };
 
-  // line-clamp — clips exactly at line boundary
+  // Fold: maxHeight clips at line boundary.
+  // NOT -webkit-line-clamp — that forces -webkit-box display which collapses
+  // all block-level children (tables, paragraphs) into a single inline text flow.
   if (streaming || folded) {
-    style.display = '-webkit-box';
-    style.WebkitBoxOrient = 'vertical';
-    style.WebkitLineClamp = CLAMP_LINES;
+    style.maxHeight = CLAMP_LINES * LINE_HEIGHT + 8; // +8 for padding
     style.overflow = 'hidden';
   }
 
@@ -213,9 +226,9 @@ function FloatingCard({ content, onClose }: { content: string; onClose: () => vo
       onClick={close}
       style={{
         position: 'fixed', inset: '10px', zIndex: 100,
-        background: 'white', border: `1px solid ${tokens.colors.surfaceHover}`,
+        background: 'var(--color-background)', border: `1px solid ${tokens.colors.surfaceHover}`,
         borderRadius: 'var(--radius-3)',
-        boxShadow: '0 4px 20px rgba(0,0,0,.1), 0 1px 4px rgba(0,0,0,.05)',
+        boxShadow: '0 4px 20px rgba(0,0,0,.2), 0 1px 4px rgba(0,0,0,.1)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         cursor: 'pointer',
         opacity: 0, transform: 'scale(.97)',
@@ -226,13 +239,14 @@ function FloatingCard({ content, onClose }: { content: string; onClose: () => vo
         flex: 1, overflowY: 'auto', padding: '12px 10px',
         fontSize: tokens.fontSize[1], lineHeight: tokens.lineHeight[2],
         color: tokens.colors.textPrimary,
+        userSelect: 'text', WebkitUserSelect: 'text',
       }}>
         <Md content={content} />
       </div>
       <div style={{
         flexShrink: 0, padding: '24px 10px 8px', textAlign: 'center',
         fontSize: 11, color: tokens.colors.textSecondary,
-        background: 'linear-gradient(transparent, white 50%)',
+        background: 'linear-gradient(transparent, var(--color-background) 50%)',
         marginTop: -24, position: 'relative', pointerEvents: 'none',
       }}>
         click to close

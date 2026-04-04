@@ -29,8 +29,9 @@ export type { LLMModel, RawGeminiModel } from './modelFilter';
 export { GeminiProvider } from './providers/gemini';
 export { OpenRouterProvider } from './providers/openrouter';
 export { DashScopeProvider } from './providers/dashscope';
+export { AnthropicProvider } from './providers/anthropic';
 export { ProxyProvider } from './providers/proxy';
-export { OPENROUTER_CONFIG, DASHSCOPE_CONFIG } from './config';
+export { OPENROUTER_CONFIG, DASHSCOPE_CONFIG, ANTHROPIC_CONFIG } from './config';
 
 // Gemini format utilities (shared by GeminiProvider + ProxyProvider)
 export { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload, ensureBase64 } from './providers/gemini/geminiFormat';

@@ -63,7 +63,7 @@ interface ModelPopoverProps {
   onSelectModel: (modelName: string) => void;
   onApiKeyChange: (key: string) => void;
   onOpenSettings?: () => void;
-  providerName?: 'gemini' | 'openrouter' | 'dashscope'; // [NEW]
+  providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
   
   // P4: Layout variants
   placement?: 'bottom' | 'top';  // Popover 弹出方向

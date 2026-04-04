@@ -93,7 +93,7 @@ export const thinkingStreamCss = `
     100% { background-position: 200% center; }
   }
   .thinking-shimmer {
-    background: linear-gradient(90deg, var(--gray-9), var(--gray-6), var(--gray-9));
+    background: linear-gradient(90deg, var(--accent-11), var(--accent-8), var(--accent-11));
     background-size: 200% 100%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;

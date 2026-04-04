@@ -44,7 +44,7 @@ interface UseChatProps {
   setModelName?: (name: string) => void
   suggestedModels?: { name: string; displayName: string }[]
   onOpenSettings?: () => void
-  providerName: 'gemini' | 'openrouter' | 'dashscope'
+  providerName: 'gemini' | 'openrouter' | 'dashscope' | 'claude'
 }
 
 export interface ToolApprovalRequest {

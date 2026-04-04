@@ -81,6 +81,17 @@ export const OPENROUTER_CONFIG = {
  * DashScope Coding Plan API configuration
  * Uses OpenAI-compatible protocol with Claude Code user-agent for coding plan compliance.
  */
+/**
+ * Anthropic Claude Messages API configuration
+ */
+export const ANTHROPIC_CONFIG = {
+  BASE_URL: 'https://api.anthropic.com',
+  /** DashScope Anthropic-compatible endpoint (uses same DashScope API key) */
+  DASHSCOPE_BASE_URL: 'https://dashscope.aliyuncs.com/apps/anthropic',
+  DEFAULT_MODEL: 'claude-sonnet-4-20250514',
+  API_VERSION: '2023-06-01',
+} as const;
+
 export const DASHSCOPE_CONFIG = {
   BASE_URL: 'https://coding.dashscope.aliyuncs.com/v1',
   DEFAULT_MODEL: 'qwen3.5-plus',

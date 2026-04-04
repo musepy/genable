@@ -7,8 +7,8 @@
  */
 
 import { h } from 'preact';
-import { Plus, AlignJustify, Sun, Moon, X } from 'lucide-preact';
-import { tokens } from '../design-system/tokens';
+import { AlignJustify, Sun, Moon, X } from 'lucide-preact';
+import { tokens, motion } from '../design-system/tokens';
 import { t } from '../i18n';
 
 export interface HeaderProps {
@@ -56,35 +56,32 @@ export function Header({
         </div>
       )}
 
-      {/* New Design button - Hidden in settings */}
-      {!isSettingsOpen && (
-        <button
-          className={"header-chip " + (newChatEnabled ? "" : "disabled")}
-          style={{ 
-            display: newChatVisible ? 'inline-flex' : 'none'
-          }}
-          onClick={onNewChat}
-          aria-label={t.newDesign}
-          aria-disabled={!newChatEnabled}
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          <span>{t.newDesign}</span>
-        </button>
-      )}
+      {/* New Design button - Fades out when settings open */}
+      <button
+        className={"header-chip " + (newChatEnabled ? "" : "disabled")}
+        style={{
+          display: newChatVisible ? 'inline-flex' : 'none',
+          ...motion.fade(!isSettingsOpen),
+        }}
+        onClick={onNewChat}
+        aria-label={t.newDesign}
+        aria-disabled={!newChatEnabled}
+      >
+        <span>+ {t.newDesign}</span>
+      </button>
       
       <div style={{ flex: 1 }} />
 
-      {/* Theme Toggle - Hidden in settings */}
-      {!isSettingsOpen && (
-        <button 
-          className="header-icon-btn"
-          onClick={onToggleTheme}
-          title={theme === 'dark' ? t.light : t.dark}
-          aria-label={theme === 'dark' ? t.light : t.dark}
-        >
-          {theme === 'dark' ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
-        </button>
-      )}
+      {/* Theme Toggle - Fades out when settings open */}
+      <button
+        className="header-icon-btn"
+        onClick={onToggleTheme}
+        title={theme === 'dark' ? t.light : t.dark}
+        aria-label={theme === 'dark' ? t.light : t.dark}
+        style={motion.fade(!isSettingsOpen)}
+      >
+        {theme === 'dark' ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
+      </button>
 
       <button
         className={`header-icon-btn ${isSettingsOpen ? 'is-active' : ''}`}

@@ -136,9 +136,33 @@ export async function fetchDashScopeModels(_apiKey: string): Promise<LLMModel[]>
 }
 
 /**
+ * Claude models — static list (Anthropic models API requires auth, return curated list)
+ */
+export async function fetchClaudeModels(apiKey: string): Promise<LLMModel[]> {
+  // Native Anthropic key (sk-ant-) → native Claude models
+  // DashScope key → DashScope models via Anthropic-compatible endpoint
+  const isNative = apiKey.startsWith('sk-ant-');
+  if (isNative) {
+    return [
+      { name: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
+      { name: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet' },
+      { name: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku' },
+    ];
+  }
+  // DashScope Anthropic-compatible models
+  return [
+    { name: 'kimi-k2.5', displayName: 'Kimi K2.5' },
+    { name: 'qwen3-coder-plus', displayName: 'Qwen3 Coder Plus' },
+    { name: 'qwen3-max', displayName: 'Qwen3 Max' },
+    { name: 'qwen3.5-plus', displayName: 'Qwen3.5 Plus' },
+    { name: 'qwen3-coder-flash', displayName: 'Qwen3 Coder Flash' },
+  ];
+}
+
+/**
  * Unified model fetcher
  */
-export async function fetchModels(provider: 'gemini' | 'openrouter' | 'dashscope', apiKey: string): Promise<LLMModel[]> {
+export async function fetchModels(provider: 'gemini' | 'openrouter' | 'dashscope' | 'claude', apiKey: string): Promise<LLMModel[]> {
   if (provider === 'gemini') {
     return fetchGeminiModels(apiKey);
   }
@@ -147,6 +171,9 @@ export async function fetchModels(provider: 'gemini' | 'openrouter' | 'dashscope
   }
   if (provider === 'dashscope') {
     return fetchDashScopeModels(apiKey);
+  }
+  if (provider === 'claude') {
+    return fetchClaudeModels(apiKey);
   }
   // Unknown provider — never send API key to wrong endpoint
   console.warn(`[modelFilter] Unknown provider: ${provider}, returning empty model list`);

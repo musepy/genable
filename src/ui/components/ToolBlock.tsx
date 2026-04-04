@@ -9,7 +9,7 @@
 
 import { h } from 'preact';
 import { useState } from 'preact/hooks';
-import { tokens } from '../design-system/tokens';
+import { tokens, motion } from '../design-system/tokens';
 import type { ToolCallRecord } from '../../types/chat';
 
 interface ToolBlockProps {
@@ -73,12 +73,8 @@ export function ToolBlock({ tools }: ToolBlockProps) {
       </div>
 
       {/* Drawer — in-place expand */}
-      <div style={{
-        display: 'grid',
-        gridTemplateRows: expanded ? '1fr' : '0fr',
-        transition: 'grid-template-rows 220ms ease',
-      }}>
-        <div style={{ overflow: 'hidden' }}>
+      <div style={motion.disclosure(expanded)}>
+        <div style={motion.disclosureContent}>
           {visibleTools.map((tool, i) => {
             const args = formatArgs(tool.parameters);
             return (

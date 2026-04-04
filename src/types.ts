@@ -9,7 +9,7 @@ export interface Settings {
   modelName: string;
   /** Per-provider model names (loaded from storage, used for provider switch restore) */
   modelNames?: Record<string, string>;
-  providerName?: 'gemini' | 'openrouter' | 'dashscope';
+  providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
 }
 
 export interface CreateLayersHandler extends EventHandler {

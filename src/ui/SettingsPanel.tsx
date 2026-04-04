@@ -10,14 +10,14 @@
 
 import { h } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { tokens } from './design-system/tokens';
+import { tokens, motion } from './design-system/tokens';
 import { Button } from './components/Button';
 import { Input } from './components/Input';
 import { ModelSelector } from './components/ModelSelector';
 import { useDebounce } from './hooks/useDebounce';
 import { LocalComponent } from '../types';
 import { DeveloperPanel } from './components/DeveloperPanel';
-import { ChevronDown, ChevronUp, Github, ExternalLink, ChevronRight } from 'lucide-preact';
+import { ChevronDown, Github, ExternalLink, ChevronRight } from 'lucide-preact';
 import { useState } from 'preact/hooks';
 
 export interface SettingsPanelProps {
@@ -25,8 +25,8 @@ export interface SettingsPanelProps {
   setApiKey: (key: string) => void;
   modelName: string;
   setModelName: (name: string) => void;
-  providerName: 'gemini' | 'openrouter' | 'dashscope'; // [NEW]
-  setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope') => void; // [NEW]
+  providerName: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
+  setProviderName: (name: 'gemini' | 'openrouter' | 'dashscope' | 'claude') => void;
   suggestedModels: { name: string; displayName: string }[];
   fetchStatus: 'idle' | 'fetching' | 'success' | 'fail';
   settingsError: string | null;
@@ -56,7 +56,7 @@ export function SettingsPanel({
   localComponents = []
 }: SettingsPanelProps) {
   
-  const [expandedProvider, setExpandedProvider] = useState<'gemini' | 'openrouter' | 'dashscope' | null>(providerName);
+  const [expandedProvider, setExpandedProvider] = useState<'gemini' | 'openrouter' | 'dashscope' | 'claude' | null>(providerName);
   const [showDeveloper, setShowDeveloper] = useState(false);
   const [showFreeOnly, setShowFreeOnly] = useState(providerName === 'gemini');
   
@@ -76,6 +76,7 @@ export function SettingsPanel({
     gemini: { label: 'Gemini', keyUrl: 'https://aistudio.google.com/apikey', keyLabel: 'Google AI Studio' },
     openrouter: { label: 'OpenRouter', keyUrl: 'https://openrouter.ai/keys', keyLabel: 'OpenRouter Keys' },
     dashscope: { label: 'DashScope', keyUrl: 'https://bailian.console.aliyun.com/', keyLabel: 'Alibaba Cloud Bailian' },
+    claude: { label: 'Claude', keyUrl: 'https://console.anthropic.com/settings/keys', keyLabel: 'Anthropic Console' },
   };
   const providerMeta = providerMetaMap[providerName] || providerMetaMap.gemini;
 
@@ -101,7 +102,7 @@ export function SettingsPanel({
             marginBottom: tokens.space[4],
             padding: `0 ${tokens.grid.blockPad}px`,
           }}>
-            {(['gemini', 'openrouter', 'dashscope'] as const).map(p => {
+            {(['gemini', 'openrouter', 'dashscope', 'claude'] as const).map(p => {
               const isActive = providerName === p;
               const tabLabel = providerMetaMap[p]?.label || p;
               return (
@@ -118,20 +119,21 @@ export function SettingsPanel({
                     fontWeight: tokens.fontWeight.medium,
                     cursor: 'pointer',
                     position: 'relative',
+                    transition: `color ${motion.duration.crisp}ms var(--ease-in-out)`,
                   }}
                 >
                   {tabLabel}
-                  {isActive && (
-                    <div style={{
-                      position: 'absolute',
-                      bottom: -1,
-                      left: 0,
-                      right: 0,
-                      height: 2,
-                      background: 'var(--gray-12)',
-                      borderRadius: '2px 2px 0 0',
-                    }} />
-                  )}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: -1,
+                    left: 0,
+                    right: 0,
+                    height: 2,
+                    background: 'var(--gray-12)',
+                    borderRadius: '2px 2px 0 0',
+                    transform: isActive ? 'scaleX(1)' : 'scaleX(0)',
+                    transition: `transform ${motion.duration.normal}ms var(--ease-in-out)`,
+                  }} />
                 </button>
               )
             })}
@@ -208,29 +210,31 @@ export function SettingsPanel({
 
         {/* Developer Tools (Dogfood) */}
         <div style={{ marginTop: tokens.space[6], padding: `0 ${tokens.grid.blockPad}px` }}>
-          <div 
+          <div
             onClick={() => setShowDeveloper(!showDeveloper)}
-            style={{ 
+            style={{
               fontSize: tokens.fontSize[1],
-              color: 'var(--gray-9)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: tokens.space[1], 
+              color: 'var(--gray-9)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.space[1],
               cursor: 'pointer',
               opacity: 0.6
             }}
           >
-            {showDeveloper ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            <span style={motion.rotate(showDeveloper)}><ChevronDown size={12} /></span>
             Developer Tools
           </div>
-          {showDeveloper && (
-            <div style={{ marginTop: tokens.space[3] }}>
-              <DeveloperPanel
-                onLogout={onLogout}
-                onRestoreSession={onRestoreSession}
-              />
+          <div style={motion.disclosure(showDeveloper)}>
+            <div style={motion.disclosureContent}>
+              <div style={{ marginTop: tokens.space[3] }}>
+                <DeveloperPanel
+                  onLogout={onLogout}
+                  onRestoreSession={onRestoreSession}
+                />
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 

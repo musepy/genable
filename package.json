@@ -61,8 +61,8 @@
     "capabilities": [
       "inspect"
     ],
-    "id": "1583731690321161999",
-    "name": "Genable (IR Test)",
+    "id": "1583731690321161934",
+    "name": "Genable",
     "main": "src/main.ts",
     "ui": "src/ui.tsx",
     "documentAccess": "dynamic-page",
@@ -75,7 +75,9 @@
         "https://api.iconify.design",
         "https://openrouter.ai",
         "https://coding.dashscope.aliyuncs.com",
-        "https://figma-ai-generator.muse40007.workers.dev"
+        "https://figma-ai-generator.muse40007.workers.dev",
+        "https://api.anthropic.com",
+        "https://dashscope.aliyuncs.com"
       ],
       "devAllowedDomains": [
         "http://localhost:3456",

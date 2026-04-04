@@ -11,7 +11,7 @@
 import { fetchModels, LLMModel } from '../engine/llm-client/modelFilter';
 import { SUPPORTED_MODELS, MODEL_CACHE_TTL_MS, ModelConfig } from '../ui/constants/models';
 
-export type ProviderName = 'gemini' | 'openrouter' | 'dashscope';
+export type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude';
 
 export interface ModelFetchResult {
   models: LLMModel[];

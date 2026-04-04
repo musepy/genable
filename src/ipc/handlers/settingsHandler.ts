@@ -12,9 +12,11 @@ const K = {
   GEMINI:     'GEMINI_API_KEY_GEMINI',
   OPENROUTER: 'GEMINI_API_KEY_OPENROUTER',
   DASHSCOPE:  'GEMINI_API_KEY_DASHSCOPE',
+  CLAUDE:     'GEMINI_API_KEY_CLAUDE',
   MODEL_GEMINI:     'MODEL_GEMINI',
   MODEL_OPENROUTER: 'MODEL_OPENROUTER',
   MODEL_DASHSCOPE:  'MODEL_DASHSCOPE',
+  MODEL_CLAUDE:     'MODEL_CLAUDE',
   MODEL_LEGACY:     'GEMINI_MODEL_NAME',
   PROVIDER:   'GEMINI_PROVIDER_NAME',
 } as const;
@@ -23,6 +25,7 @@ const MODEL_KEY_FOR_PROVIDER: Record<string, string> = {
   gemini:     K.MODEL_GEMINI,
   openrouter: K.MODEL_OPENROUTER,
   dashscope:  K.MODEL_DASHSCOPE,
+  claude:     K.MODEL_CLAUDE,
 };
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
@@ -40,16 +43,18 @@ function upsert(key: string, value: string | undefined): Promise<void> {
 
 export async function handleLoadSettings(): Promise<void> {
   try {
-    const [legacy, gemini, openrouter, dashscope,
-           modelGemini, modelOpenrouter, modelDashscope, modelLegacy,
+    const [legacy, gemini, openrouter, dashscope, claude,
+           modelGemini, modelOpenrouter, modelDashscope, modelClaude, modelLegacy,
            provider] = await Promise.all([
       figma.clientStorage.getAsync(K.LEGACY),
       figma.clientStorage.getAsync(K.GEMINI),
       figma.clientStorage.getAsync(K.OPENROUTER),
       figma.clientStorage.getAsync(K.DASHSCOPE),
+      figma.clientStorage.getAsync(K.CLAUDE),
       figma.clientStorage.getAsync(K.MODEL_GEMINI),
       figma.clientStorage.getAsync(K.MODEL_OPENROUTER),
       figma.clientStorage.getAsync(K.MODEL_DASHSCOPE),
+      figma.clientStorage.getAsync(K.MODEL_CLAUDE),
       figma.clientStorage.getAsync(K.MODEL_LEGACY),
       figma.clientStorage.getAsync(K.PROVIDER),
     ]);
@@ -58,8 +63,10 @@ export async function handleLoadSettings(): Promise<void> {
     const geminiKey   = gemini   ?? legacy ?? '';
     const openrouterKey = openrouter ?? '';
     const dashscopeKey = dashscope ?? '';
+    const claudeKey = claude ?? '';
     const activeKey = providerName === 'openrouter' ? openrouterKey
       : providerName === 'dashscope' ? dashscopeKey
+      : providerName === 'claude' ? claudeKey
       : geminiKey;
 
     // Per-provider model names (fall back to legacy global key for migration)
@@ -67,11 +74,12 @@ export async function handleLoadSettings(): Promise<void> {
       gemini:     modelGemini ?? modelLegacy ?? DEFAULT_MODEL,
       openrouter: modelOpenrouter ?? '',
       dashscope:  modelDashscope ?? '',
+      claude:     modelClaude ?? '',
     };
 
     emit<SettingsLoadedHandler>('SETTINGS_LOADED', {
       apiKey: activeKey,
-      apiKeys: { gemini: geminiKey, openrouter: openrouterKey, dashscope: dashscopeKey },
+      apiKeys: { gemini: geminiKey, openrouter: openrouterKey, dashscope: dashscopeKey, claude: claudeKey },
       modelName: modelNames[providerName] || DEFAULT_MODEL,
       modelNames,
       providerName,
@@ -87,6 +95,7 @@ export async function handleSaveSettings(settings: Settings): Promise<void> {
     const geminiKey     = settings.apiKeys?.gemini;
     const openrouterKey = settings.apiKeys?.openrouter;
     const dashscopeKey  = settings.apiKeys?.dashscope;
+    const claudeKey     = settings.apiKeys?.claude;
     const provider      = settings.providerName || 'gemini';
 
     // Save model name to the per-provider key
@@ -97,6 +106,7 @@ export async function handleSaveSettings(settings: Settings): Promise<void> {
       geminiKey     !== undefined ? upsert(K.GEMINI, geminiKey)         : Promise.resolve(),
       openrouterKey !== undefined ? upsert(K.OPENROUTER, openrouterKey) : Promise.resolve(),
       dashscopeKey  !== undefined ? upsert(K.DASHSCOPE, dashscopeKey)   : Promise.resolve(),
+      claudeKey     !== undefined ? upsert(K.CLAUDE, claudeKey)         : Promise.resolve(),
       // Legacy key — synced with gemini key
       upsert(K.LEGACY, geminiKey ?? settings.apiKey),
       // Per-provider model name
@@ -116,7 +126,7 @@ export async function handleResetSettings(): Promise<void> {
 
     emit<SettingsLoadedHandler>('SETTINGS_LOADED', {
       apiKey: '',
-      apiKeys: { gemini: '', openrouter: '', dashscope: '' },
+      apiKeys: { gemini: '', openrouter: '', dashscope: '', claude: '' },
       modelName: DEFAULT_MODEL,
       providerName: 'gemini',
     });

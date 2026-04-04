@@ -177,14 +177,19 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   }
 
   return (
-    <div style={row}>
+    <div
+      style={row}
+      onMouseEnter={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
+      onMouseLeave={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '0'; }}
+    >
       <span className="thinking-shimmer">Thinking · {elapsed || '0s'}</span>
       <span style={{ flex: 1 }} />
       <span
+        data-interrupt
         onClick={() => setConfirming(true)}
-        style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms, color 120ms', color: dim, background: 'transparent' }}
-        onMouseEnter={(e: MouseEvent) => { const el = e.currentTarget as HTMLElement; el.style.background = 'var(--warning-3)'; el.style.color = tokens.colors.warning }}
-        onMouseLeave={(e: MouseEvent) => { const el = e.currentTarget as HTMLElement; el.style.background = 'transparent'; el.style.color = dim }}
+        style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 150ms, opacity 150ms', color: dim, background: 'transparent', opacity: 0 }}
+        onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+        onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
       >click to interrupt</span>
     </div>
   );

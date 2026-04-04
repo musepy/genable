@@ -10,7 +10,7 @@ import { ModelService } from '../services/ModelService'
 import { DEFAULT_MODEL, SUPPORTED_MODELS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
 
-type ProviderName = 'gemini' | 'openrouter' | 'dashscope'
+type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude'
 type ApiKeyMap = Record<ProviderName, string>
 type ModelNameMap = Record<string, string>
 
@@ -18,7 +18,7 @@ export function useModelSettings() {
   const { toast } = useToast()
 
   // --- Core state ---
-  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '', dashscope: '' })
+  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '', dashscope: '', claude: '' })
   const [providerName, setProviderName] = useState<ProviderName>('gemini')
   const [modelNames, setModelNames] = useState<ModelNameMap>({})  // per-provider model names
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
@@ -89,6 +89,7 @@ export function useModelSettings() {
         gemini: s.apiKeys?.gemini || '',
         openrouter: s.apiKeys?.openrouter || '',
         dashscope: s.apiKeys?.dashscope || '',
+        claude: s.apiKeys?.claude || '',
       }
       // Legacy single key support
       if (!s.apiKeys && s.apiKey) {

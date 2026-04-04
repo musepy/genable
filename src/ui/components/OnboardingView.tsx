@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { grid } from '../design-system/tokens/layout';
 
-type ProviderName = 'gemini' | 'openrouter' | 'dashscope';
+type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude';
 type OnboardStep = 'idle' | 'connecting' | 'error';
 
 /** Detect provider from API key prefix */
@@ -11,7 +11,7 @@ function detectProvider(key: string): { provider: ProviderName; label: string } 
   const k = key.trim();
   if (k.startsWith('AIzaSy')) return { provider: 'gemini', label: 'Google Gemini' };
   if (k.startsWith('sk-or-v1-')) return { provider: 'openrouter', label: 'OpenRouter' };
-  if (k.startsWith('sk-ant-')) return { provider: 'openrouter', label: 'Anthropic' }; // OpenAI-compatible via proxy
+  if (k.startsWith('sk-ant-')) return { provider: 'claude', label: 'Anthropic Claude' };
   if (k.length > 10) return { provider: 'dashscope', label: 'OpenAI Compatible' }; // fallback
   return null;
 }

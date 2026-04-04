@@ -5,7 +5,7 @@
  */
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
-import { GeminiProvider, OpenRouterProvider, DashScopeProvider } from '../llm-client';
+import { GeminiProvider, OpenRouterProvider, DashScopeProvider, AnthropicProvider, ANTHROPIC_CONFIG } from '../llm-client';
 import { ProxyProvider } from '../llm-client/providers/proxy';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
@@ -330,6 +330,12 @@ export class AgentOrchestrator {
       // workerUrl enables streaming (SSE via /api/dashscope/generate); fetchProxy is sync fallback
       provider = new DashScopeProvider(apiKey, modelName, fetchProxy, workerUrl);
       emit('SEND_LOG', { message: `Using DashScope: ${modelName}`, type: 'ai' });
+    } else if (providerName === 'claude') {
+      // Auto-detect: sk-ant- prefix = native Anthropic, otherwise DashScope-compatible
+      const isNativeKey = apiKey.startsWith('sk-ant-');
+      const baseUrl = isNativeKey ? undefined : ANTHROPIC_CONFIG.DASHSCOPE_BASE_URL;
+      provider = new AnthropicProvider(apiKey, modelName, baseUrl);
+      emit('SEND_LOG', { message: `Using Claude${isNativeKey ? '' : ' (DashScope)'}: ${modelName}`, type: 'ai' });
     } else if (providerName === 'proxy') {
       const workerUrl = this.options.workerUrl;
       const subscriptionToken = this.options.subscriptionToken;

@@ -82,12 +82,12 @@ export function SettingsPanel({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--color-background)' }}>
       {/* ===== CONTENT (Modular Stack) ===== */}
-      <div style={{ 
-        flex: 1, 
-        overflowY: 'auto', 
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        padding: tokens.space[4],
+        padding: `${tokens.space[4]}px ${tokens.space[3]}px`,  // 16px vertical, 12px horizontal (scroll pad)
       }}>
         
         {/* Unified Config Settings */}

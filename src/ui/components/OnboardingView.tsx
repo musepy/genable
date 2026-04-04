@@ -69,7 +69,7 @@ export function OnboardingView({
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      padding: tokens.space[4],
+      padding: `${tokens.space[4]}px ${tokens.space[3]}px`,  // 16px vertical, 12px horizontal (scroll pad)
       background: 'var(--color-background)',
       boxSizing: 'border-box',
     }}>

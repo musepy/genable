@@ -46,9 +46,9 @@ const submitButtonDisabled = {
 const inputAreaContainer = {
   position: 'relative' as const,
   background: tokens.colors.surface,
-  border: 'var(--border-subtle)',
+  border: 'none',
   borderRadius: 'var(--radius-5)',
-  boxShadow: tokens.colors.shadowFocus,
+  boxShadow: `inset 0 0 0 0.5px var(--gray-a4), ${tokens.colors.shadowFocus}`,
 };
 const inputAreaTextarea = {
   width: '100%',
@@ -56,8 +56,8 @@ const inputAreaTextarea = {
   maxHeight: tokens.space[9] + tokens.space[6] + tokens.space[5],
   paddingTop: tokens.space[2],
   paddingBottom: tokens.space[2],
-  paddingLeft: tokens.space[4],
-  paddingRight: tokens.space[4],
+  paddingLeft: tokens.grid.blockPad,   // text at scrollPad(12) + blockPad(10) = 22
+  paddingRight: tokens.grid.blockPad,
   fontSize: tokens.fontSize[1],
   background: 'transparent',
   color: 'var(--gray-12)',

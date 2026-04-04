@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>UI Alignment Preview — Full Chat Layout</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .plugin-frame {
+    width: 340px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.12);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 760px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .plugin-header {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 0.5px solid rgba(0,0,0,.06);
+    flex-shrink: 0;
+  }
+  .plugin-header .title { font-weight: 500; color: #111; font-size: 13px; }
+
+  /* ============================================
+     ALIGNMENT GRID CONSTANTS
+     ============================================
+     Scroll area padding: SCROLL_PAD = 12px
+     Block inner padding: BLOCK_PAD = 10px
+
+     TEXT_LEFT  = SCROLL_PAD + BLOCK_PAD = 22px
+     TEXT_RIGHT = 340 - SCROLL_PAD - BLOCK_PAD = 318px
+
+     Container edges:
+     CONTAINER_LEFT  = SCROLL_PAD = 12px
+     CONTAINER_RIGHT = 340 - SCROLL_PAD = 328px
+     ============================================ */
+
+  .messages-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 12px; /* SCROLL_PAD */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* --- User message --- */
+  .user-msg {
+    padding: 6px 10px;    /* BLOCK_PAD = 10 → text at 12+10=22 */
+    background: #f4f4f4;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #111;
+    line-height: 20px;
+  }
+
+  /* --- Tool block --- */
+  .tool-header {
+    padding: 2px 10px;    /* text at 22 */
+    font-size: 12px;
+    color: #888;
+    line-height: 20px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 120ms;
+  }
+  .tool-header:hover { background: #f4f4f4; }
+  .tool-item {
+    padding: 0 10px 0 10px; /* text at 22 */
+    font-size: 12px;
+    color: #888;
+    line-height: 20px;
+    text-indent: 10px;      /* visual indent for sub-items */
+  }
+
+  /* --- Status block --- */
+  .status-block {
+    padding: 4px 10px;     /* text at 22 */
+    font-size: 12px;
+    color: #888;
+    line-height: 20px;
+    display: flex;
+    align-items: center;
+  }
+  .status-block .action {
+    margin-left: auto;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 6px;
+    transition: background 120ms;
+  }
+  .status-block .action:hover { background: #f4f4f4; }
+
+  /* --- Canvas text block container --- */
+  .canvas-block {
+    /* No padding — canvas handles T0 internally */
+  }
+
+  /* --- Input area --- */
+  .input-area {
+    flex-shrink: 0;
+    padding: 0 12px 12px;  /* SCROLL_PAD */
+  }
+  .input-container {
+    border: none;
+    box-shadow: inset 0 0 0 0.5px rgba(0,0,0,.08);
+    border-radius: 12px;
+    background: #fafafa;
+    position: relative;
+  }
+  .input-textarea {
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 10px;     /* text at 12+10=22 (border compensated by container margin) */
+    font-size: 12px;
+    line-height: 20px;
+    background: transparent;
+    color: #111;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  /* --- Debug overlay --- */
+  .debug-lines {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 999;
+  }
+  .debug-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px dashed;
+    opacity: 0.5;
+  }
+  .debug-line.t-left { left: 22px; border-color: red; }
+  .debug-line.t-right { left: 318px; border-color: red; }
+  .debug-line.c-left { left: 12px; border-color: blue; opacity: 0.3; }
+  .debug-line.c-right { left: 328px; border-color: blue; opacity: 0.3; }
+
+  .page-label {
+    position: absolute;
+    top: 8px;
+    left: 16px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* --- Settings page --- */
+  .settings-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px; /* SCROLL_PAD — same as messages area */
+  }
+  .settings-section {
+    margin-bottom: 16px;
+  }
+  .settings-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 10px;  /* text at 22 */
+    margin-bottom: 4px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;   /* text at 22, right at 318 */
+    font-size: 12px;
+    color: #111;
+    line-height: 20px;
+    border-radius: 6px;
+    transition: background 120ms;
+  }
+  .settings-row:hover { background: #f4f4f4; }
+  .settings-row .value {
+    color: #888;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .settings-input {
+    width: 100%;
+    padding: 8px 10px;   /* text at 22 */
+    font-size: 12px;
+    border: none;         /* no border — use box-shadow for outline */
+    box-shadow: inset 0 0 0 0.5px rgba(0,0,0,.1);
+    border-radius: 8px;
+    background: #fafafa;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .settings-footer {
+    padding: 16px 10px 8px;  /* text at 22 */
+    text-align: center;
+    font-size: 11px;
+    color: #aaa;
+  }
+
+  /* --- Onboarding page --- */
+  .onboarding-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;  /* SCROLL_PAD */
+  }
+  .onboarding-title {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 10px;  /* text at 22 */
+    margin-bottom: 16px;
+  }
+  .onboarding-desc {
+    font-size: 12px;
+    color: #666;
+    padding: 4px 10px;  /* text at 22 */
+    line-height: 20px;
+    margin-bottom: 12px;
+  }
+  .onboarding-label {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    margin-bottom: 4px;
+  }
+  .onboarding-btn {
+    margin: auto 0 0;    /* push to bottom, no horizontal margin */
+    padding: 10px 10px;  /* text at 22 (inside 12px scroll pad) */
+    font-size: 13px;
+    font-weight: 500;
+    background: #111;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  /* --- Developer panel (inside Settings) --- */
+  .dev-panel {
+    margin: 0;
+    padding: 8px 10px;  /* text at 22 — same as all blocks */
+    background: #f8f8f8;
+    border-radius: 8px;
+  }
+  .dev-panel-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    /* no padding — inherits from dev-panel */
+  }
+  .dev-btn {
+    display: block;
+    width: 100%;
+    padding: 6px 0;     /* no horizontal — parent provides it */
+    font-size: 11px;
+    background: transparent;
+    border: none;
+    border-bottom: 0.5px solid rgba(0,0,0,.06);
+    border-radius: 0;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+  }
+  .dev-btn:last-child { border-bottom: none; }
+
+  .controls {
+    position: fixed;
+    top: 12px;
+    right: 20px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+  .controls button {
+    padding: 6px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .controls button:hover { background: #f0f0f0; }
+  .label {
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    font-size: 11px;
+    color: #999;
+    max-width: 200px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <button onclick="toggleDebug()">Toggle Grid</button>
+</div>
+<div class="label" id="label">
+  Red = TEXT edges (22, 318)<br>
+  Blue = CONTAINER edges (12, 328)
+</div>
+
+<div class="plugin-frame" id="frame">
+  <!-- Debug guide lines -->
+  <div class="debug-lines" id="debugLines" style="display:none">
+    <div class="debug-line t-left"></div>
+    <div class="debug-line t-right"></div>
+    <div class="debug-line c-left"></div>
+    <div class="debug-line c-right"></div>
+  </div>
+
+  <div class="plugin-header">
+    <span class="title">Genable (Alignment Test)</span>
+  </div>
+
+  <div class="messages-area">
+    <!-- User message -->
+    <div class="user-msg">设计一个肯德基风格的菜单页面</div>
+
+    <!-- Status: thinking -->
+    <div class="status-block">
+      <span>Thinking · 3s</span>
+      <span class="action" style="color:#e53e3e">stop</span>
+    </div>
+
+    <!-- Tool block -->
+    <div>
+      <div class="tool-header">2 tools</div>
+    </div>
+
+    <!-- Canvas markdown block -->
+    <div class="canvas-block">
+      <canvas id="canvas1"></canvas>
+    </div>
+
+    <!-- Tool block expanded -->
+    <div>
+      <div class="tool-header">14 tools</div>
+      <div class="tool-item">jsx · nodeType: "frame", name: "NavBar"</div>
+      <div class="tool-item">jsx · nodeType: "frame", name: "Hero"</div>
+      <div class="tool-item">inspect · nodeId: "1:42"</div>
+    </div>
+
+    <!-- Another canvas block -->
+    <div class="canvas-block">
+      <canvas id="canvas2"></canvas>
+    </div>
+
+    <!-- User follow-up -->
+    <div class="user-msg">颜色太暗了，换成更明亮的红色</div>
+
+    <!-- Status: completed -->
+    <div class="status-block">
+      <span>Thought · 8s</span>
+    </div>
+
+    <!-- Short canvas response -->
+    <div class="canvas-block">
+      <canvas id="canvas3"></canvas>
+    </div>
+
+    <!-- Error state -->
+    <div class="status-block" style="color:#e53e3e">
+      Error · API rate limit · 2s
+    </div>
+
+    <!-- Canceled with continue -->
+    <div class="status-block">
+      <span>Stopped · 5s</span>
+      <span class="action">continue</span>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-container">
+      <textarea class="input-textarea" placeholder="Describe your design..."></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SETTINGS PAGE                                -->
+<!-- ============================================ -->
+<div class="plugin-frame" id="frame-settings">
+  <div class="page-label">Settings</div>
+  <div class="debug-lines" id="debugLines2" style="display:none">
+    <div class="debug-line t-left"></div>
+    <div class="debug-line t-right"></div>
+    <div class="debug-line c-left"></div>
+    <div class="debug-line c-right"></div>
+  </div>
+
+  <div class="plugin-header">
+    <span class="title">Settings</span>
+  </div>
+
+  <div class="settings-scroll" data-audit="settings">
+    <div class="settings-section">
+      <div class="settings-section-title">Provider</div>
+      <div class="settings-row">
+        <span>Gemini Flash</span>
+        <span class="value">Active</span>
+      </div>
+      <div class="settings-row">
+        <span>OpenRouter</span>
+        <span class="value">—</span>
+      </div>
+      <div class="settings-row">
+        <span>DashScope</span>
+        <span class="value">—</span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">API Key</div>
+      <input class="settings-input" type="password" value="sk-xxxx...xxxx" />
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Model</div>
+      <div class="settings-row">
+        <span>gemini-2.0-flash</span>
+        <span class="value">Free</span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Advanced</div>
+      <div class="settings-row">
+        <span>Visual Quality</span>
+        <span class="value">Standard</span>
+      </div>
+      <div class="settings-row">
+        <span>Design Strategy</span>
+        <span class="value">Create</span>
+      </div>
+      <div class="settings-row">
+        <span>Thinking Level</span>
+        <span class="value">Normal</span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Developer</div>
+      <div class="dev-panel">
+        <div class="dev-panel-title">Developer Tools</div>
+        <button class="dev-btn">Export Session Log</button>
+        <button class="dev-btn">Clear Agent Memory</button>
+        <button class="dev-btn">Restore Last Session</button>
+      </div>
+    </div>
+
+    <div class="settings-footer">
+      Genable v2026.04.04<br/>
+      Built with Gemini + Figma API
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- ONBOARDING PAGE                              -->
+<!-- ============================================ -->
+<div class="plugin-frame" id="frame-onboarding">
+  <div class="page-label">Onboarding</div>
+  <div class="debug-lines" id="debugLines3" style="display:none">
+    <div class="debug-line t-left"></div>
+    <div class="debug-line t-right"></div>
+    <div class="debug-line c-left"></div>
+    <div class="debug-line c-right"></div>
+  </div>
+
+  <div class="plugin-header">
+    <span class="title">Genable</span>
+  </div>
+
+  <div class="onboarding-content" data-audit="onboarding">
+    <div class="onboarding-title">Setup Connection</div>
+    <div class="onboarding-desc">
+      Enter your API key to start generating designs. Your key is stored locally and never sent to our servers.
+    </div>
+
+    <div class="onboarding-label">API Key</div>
+    <input class="settings-input" type="password" placeholder="Enter your Gemini API key..." style="margin-bottom: 12px;" />
+
+    <div class="onboarding-label">Provider</div>
+    <div class="settings-row">
+      <span>Gemini Flash</span>
+      <span class="value">Recommended</span>
+    </div>
+    <div class="settings-row">
+      <span>OpenRouter</span>
+      <span class="value">Multi-model</span>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <button class="onboarding-btn">Get Started</button>
+    <div style="height:12px"></div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// Canvas rendering with alignment grid
+// ============================================
+
+const CANVAS_W = 340;
+// Canvas sits inside scroll area (12px padding), so canvas left = 12 in absolute terms
+// To make text at absolute 22, canvas internal T0 = 22 - 12 = 10
+const SCROLL_PAD = 12;
+const BLOCK_PAD = 10;
+const T0 = BLOCK_PAD;          // 10 — canvas-internal left margin
+const TR = CANVAS_W - SCROLL_PAD - SCROLL_PAD - BLOCK_PAD;  // 340-12-12-10 = 306... wait
+
+// Actually: canvas width = 340 - 2*SCROLL_PAD = 316
+// No — canvas is inside .canvas-block which is inside .messages-area (padding 12px)
+// So canvas actual width = 340 - 2*12 = 316
+// To get text at absolute 22: T0 = 22 - 12 = 10
+// To get text right at absolute 318: TR = 318 - 12 = 306
+
+const CANVAS_INNER_W = CANVAS_W - 2 * SCROLL_PAD; // 316
+const T_LEFT = BLOCK_PAD;      // 10 — text left inside canvas
+const T_RIGHT = CANVAS_INNER_W - BLOCK_PAD; // 306 — text right inside canvas
+
+const LIST_MARKER_W = 20;
+const T1 = T_LEFT + LIST_MARKER_W; // 30 — list text left
+const SUB_INDENT = 16;
+
+const FONT_SANS = 'Inter, -apple-system, sans-serif';
+const FONT_MONO = '"SF Mono", Menlo, monospace';
+
+const STYLES = {
+  h2: { fontSize: 16, fontWeight: 600, lineHeight: 24, mt: 20, mb: 6 },
+  h3: { fontSize: 14, fontWeight: 600, lineHeight: 20, mt: 14, mb: 4 },
+  p:  { fontSize: 13, fontWeight: 400, lineHeight: 20, mt: 4, mb: 4 },
+  li: { fontSize: 12, fontWeight: 400, lineHeight: 20, mt: 2, mb: 2 },
+};
+
+// Simple markdown parser
+function parseBlocks(text) {
+  const blocks = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    if (hm) { blocks.push({ type: `h${hm[1].length}`, text: hm[2] }); continue; }
+    const olm = line.match(/^(\d+)\.\s+(.+)/);
+    if (olm) { blocks.push({ type: 'li', marker: olm[1]+'.', text: olm[2], depth: 0 }); continue; }
+    const ulm = line.match(/^(\s*)[*-]\s+(.+)/);
+    if (ulm) { blocks.push({ type: 'li', marker: '\u2022', text: ulm[2], depth: Math.floor(ulm[1].length/2) + 1 }); continue; }
+    blocks.push({ type: 'p', text: line });
+  }
+  return blocks;
+}
+
+// Color swatch detection
+function splitColors(text) {
+  const parts = [];
+  let last = 0;
+  for (const m of text.matchAll(/#[0-9A-Fa-f]{6}\b/g)) {
+    if (m.index > last) parts.push({ text: text.slice(last, m.index) });
+    parts.push({ text: m[0], swatch: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last) });
+  return parts.length ? parts : [{ text }];
+}
+
+// CJK segmentation
+function segment(text) {
+  const s = []; let b = '';
+  for (const c of text) {
+    const code = c.charCodeAt(0);
+    if ((code >= 0x4E00 && code <= 0x9FFF) || (code >= 0x3000 && code <= 0x303F)) {
+      if (b) { s.push(b); b = ''; }
+      s.push(c);
+    } else if (c === ' ') { b += ' '; s.push(b); b = ''; }
+    else { b += c; }
+  }
+  if (b) s.push(b);
+  return s;
+}
+
+function renderCanvas(canvasEl, markdown) {
+  const blocks = parseBlocks(markdown);
+  const dpr = window.devicePixelRatio || 1;
+  const w = CANVAS_INNER_W;
+  const ctx = canvasEl.getContext('2d');
+
+  // Layout pass
+  let y = 4;
+  const drawn = [];
+
+  for (const block of blocks) {
+    const st = STYLES[block.type] || STYLES.p;
+    const isList = block.type === 'li';
+    const depth = block.depth || 0;
+
+    let textL, markerL;
+    if (isList) {
+      if (depth === 0) { markerL = T_LEFT; textL = T1; }
+      else { markerL = T1 + (depth-1)*SUB_INDENT; textL = T1 + depth*SUB_INDENT; }
+    } else {
+      markerL = T_LEFT; textL = T_LEFT;
+    }
+
+    y += st.mt;
+    const blockY = y;
+
+    // Word wrap
+    const parts = splitColors(block.text);
+    let lx = textL, ly = y;
+    const spans = [];
+
+    for (const part of parts) {
+      const swW = part.swatch ? 12 : 0;
+      const font = `${st.fontWeight} ${st.fontSize}px ${FONT_SANS}`;
+      ctx.font = font;
+
+      for (const seg of segment(part.text)) {
+        const segW = ctx.measureText(seg).width + swW;
+        if (lx + segW > T_RIGHT && lx > textL) { lx = textL; ly += st.lineHeight; }
+        spans.push({ text: seg, x: lx + swW, y: ly + st.fontSize, w: segW - swW,
+                      h: st.lineHeight, font, swatch: part.swatch, swX: lx });
+        lx += segW;
+      }
+    }
+
+    y = ly + st.lineHeight;
+    drawn.push({ block, st, spans, blockY, markerL, textL });
+    y += st.mb;
+  }
+
+  const totalH = y + 4;
+
+  // Size canvas
+  canvasEl.width = w * dpr;
+  canvasEl.height = totalH * dpr;
+  canvasEl.style.width = w + 'px';
+  canvasEl.style.height = totalH + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, totalH);
+
+  // Debug guides inside canvas
+  if (debugOn) {
+    ctx.save();
+    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+    ctx.beginPath(); ctx.moveTo(T_LEFT, 0); ctx.lineTo(T_LEFT, totalH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(T_RIGHT, 0); ctx.lineTo(T_RIGHT, totalH); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,255,0.4)';
+    ctx.beginPath(); ctx.moveTo(T1, 0); ctx.lineTo(T1, totalH); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Render
+  for (const d of drawn) {
+    // Marker
+    if (d.block.marker) {
+      ctx.font = `${d.st.fontWeight} ${d.st.fontSize}px ${FONT_SANS}`;
+      ctx.fillStyle = '#888';
+      const mw = ctx.measureText(d.block.marker).width;
+      ctx.fillText(d.block.marker, d.textL - mw - 4, d.blockY + d.st.fontSize);
+    }
+
+    for (const sp of d.spans) {
+      // Color swatch
+      if (sp.swatch) {
+        const swSz = 8;
+        const swY = sp.y - sp.h * 0.35 - swSz/2 + 1;
+        ctx.fillStyle = sp.swatch;
+        ctx.beginPath();
+        ctx.roundRect(sp.swX + 1, swY, swSz, swSz, 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+      // Text
+      ctx.font = sp.font;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillText(sp.text, sp.x, sp.y);
+    }
+  }
+}
+
+// ============================================
+// Sample content
+// ============================================
+
+const md1 = `## 设计概述
+
+肯德基菜单设计已完成！整体采用经典红色 #E4002B 作为品牌主色，搭配白色 #FFFFFF 背景。
+
+## 页面结构
+
+1. 顶部导航栏 (红色 #E4002B 背景)
+   - 左侧：KFC Logo + "肯德基" 品牌名
+   - 右侧：购物车图标 + 商品数量
+2. 分类标签栏
+3. 商品网格 (4列 x 2行)`;
+
+const md2 = `已完成颜色调整！将导航栏背景色从 #E4002B 更新为更明亮的 #FF1744，商品价格标签同步更新。`;
+
+const md3 = `好的，我来帮你调整。让我先检查一下当前的设计状态。`;
+
+let debugOn = false;
+
+function renderAll() {
+  renderCanvas(document.getElementById('canvas1'), md1);
+  renderCanvas(document.getElementById('canvas2'), md2);
+  renderCanvas(document.getElementById('canvas3'), md3);
+}
+
+function toggleDebug() {
+  debugOn = !debugOn;
+  document.querySelectorAll('.debug-lines').forEach(el => el.style.display = debugOn ? '' : 'none');
+  document.getElementById('label').style.display = debugOn ? '' : 'none';
+  renderAll();
+}
+
+renderAll();
+// Show debug by default
+toggleDebug();
+
+// ============================================
+// Alignment audit — measures all elements
+// ============================================
+function runAudit() {
+  const TARGET_L = 22, TARGET_R = 318;
+  const rows = [];
+
+  function measureInFrame(el, label, frame) {
+    const r = el.getBoundingClientRect();
+    const fr = frame.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    const padL = parseFloat(s.paddingLeft) || 0;
+    const padR = parseFloat(s.paddingRight) || 0;
+    const boxL = Math.round(r.left - fr.left);
+    const boxR = Math.round(r.right - fr.left);
+    const textL = Math.round(boxL + padL);
+    const textR = Math.round(boxR - padR);
+    const okL = textL === TARGET_L ? '✓' : `✗ (${textL - TARGET_L > 0 ? '+' : ''}${textL - TARGET_L})`;
+    const okR = textR === TARGET_R ? '✓' : `✗ (${textR - TARGET_R > 0 ? '+' : ''}${textR - TARGET_R})`;
+    rows.push({ label, boxL, textL, textR, boxR, okL, okR });
+  }
+
+  // === CHAT PAGE ===
+  const chatFrame = document.getElementById('frame');
+  rows.push({ label: '── CHAT ──', boxL:'', textL:'', textR:'', boxR:'', okL:'', okR:'' });
+
+  document.querySelectorAll('#frame .user-msg').forEach((el, i) => measureInFrame(el, `User msg ${i}`, chatFrame));
+  document.querySelectorAll('#frame .status-block').forEach((el, i) => {
+    measureInFrame(el, `Status ${i}`, chatFrame);
+    const action = el.querySelector('.action');
+    if (action) {
+      const r = action.getBoundingClientRect();
+      const fr = chatFrame.getBoundingClientRect();
+      const s = getComputedStyle(action);
+      const boxR = Math.round(r.right - fr.left);
+      const textR = Math.round(boxR - (parseFloat(s.paddingRight) || 0));
+      const parentR = Math.round(el.getBoundingClientRect().right - fr.left - (parseFloat(getComputedStyle(el).paddingRight) || 0));
+      rows.push({ label: `  → "${action.textContent.trim()}"`, boxL: Math.round(r.left - fr.left), textL: '-', textR, boxR, okL: '', okR: boxR <= parentR ? '✓ flush' : `✗ gap` });
+    }
+  });
+  document.querySelectorAll('#frame .tool-header').forEach((el, i) => measureInFrame(el, `Tool hdr ${i}`, chatFrame));
+  document.querySelectorAll('#frame .tool-item').forEach((el, i) => measureInFrame(el, `Tool item ${i}`, chatFrame));
+  document.querySelectorAll('#frame .canvas-block canvas').forEach((el, i) => {
+    const r = el.getBoundingClientRect();
+    const fr = chatFrame.getBoundingClientRect();
+    const boxL = Math.round(r.left - fr.left);
+    const boxR = Math.round(r.right - fr.left);
+    rows.push({ label: `Canvas ${i}`, boxL, textL: boxL + T_LEFT, textR: boxL + T_RIGHT, boxR, okL: (boxL + T_LEFT) === TARGET_L ? '✓' : `✗ (${boxL + T_LEFT - TARGET_L})`, okR: (boxL + T_RIGHT) === TARGET_R ? '✓' : `✗ (${boxL + T_RIGHT - TARGET_R})` });
+  });
+  const input = document.querySelector('#frame .input-textarea');
+  if (input) measureInFrame(input, 'Input textarea', chatFrame);
+
+  // === SETTINGS PAGE ===
+  const settingsFrame = document.getElementById('frame-settings');
+  if (settingsFrame) {
+    rows.push({ label: '── SETTINGS ──', boxL:'', textL:'', textR:'', boxR:'', okL:'', okR:'' });
+    settingsFrame.querySelectorAll('.settings-section-title').forEach((el, i) => measureInFrame(el, `Section title ${i}`, settingsFrame));
+    settingsFrame.querySelectorAll('.settings-row').forEach((el, i) => measureInFrame(el, `Settings row ${i}`, settingsFrame));
+    settingsFrame.querySelectorAll('.settings-input').forEach((el, i) => measureInFrame(el, `Settings input ${i}`, settingsFrame));
+    settingsFrame.querySelectorAll('.dev-panel').forEach((el, i) => measureInFrame(el, `Dev panel ${i}`, settingsFrame));
+    settingsFrame.querySelectorAll('.dev-btn').forEach((el, i) => measureInFrame(el, `Dev btn ${i}`, settingsFrame));
+    const footer = settingsFrame.querySelector('.settings-footer');
+    if (footer) measureInFrame(footer, 'Settings footer', settingsFrame);
+  }
+
+  // === ONBOARDING PAGE ===
+  const onboardFrame = document.getElementById('frame-onboarding');
+  if (onboardFrame) {
+    rows.push({ label: '── ONBOARDING ──', boxL:'', textL:'', textR:'', boxR:'', okL:'', okR:'' });
+    onboardFrame.querySelectorAll('.onboarding-title').forEach((el, i) => measureInFrame(el, `OB title`, onboardFrame));
+    onboardFrame.querySelectorAll('.onboarding-desc').forEach((el, i) => measureInFrame(el, `OB desc`, onboardFrame));
+    onboardFrame.querySelectorAll('.onboarding-label').forEach((el, i) => measureInFrame(el, `OB label ${i}`, onboardFrame));
+    onboardFrame.querySelectorAll('.settings-row').forEach((el, i) => measureInFrame(el, `OB row ${i}`, onboardFrame));
+    onboardFrame.querySelectorAll('.settings-input').forEach((el, i) => measureInFrame(el, `OB input`, onboardFrame));
+    onboardFrame.querySelectorAll('.onboarding-btn').forEach((el, i) => measureInFrame(el, `OB button`, onboardFrame));
+  }
+
+  // Render table
+  let html = '<table style="font:11px/1.4 monospace;border-collapse:collapse;width:100%;margin-top:8px">';
+  html += '<tr style="background:#f4f4f4"><th style="text-align:left;padding:2px 6px">Element</th><th>BoxL</th><th>TextL</th><th>TextR</th><th>BoxR</th><th>L=22?</th><th>R=318?</th></tr>';
+  for (const r of rows) {
+    const bad = (r.okL && r.okL.includes('✗')) || (r.okR && r.okR.includes('✗'));
+    html += `<tr style="${bad?'background:#fff0f0':''}"><td style="padding:2px 6px">${r.label}</td><td style="text-align:center">${r.boxL}</td><td style="text-align:center">${r.textL}</td><td style="text-align:center">${r.textR}</td><td style="text-align:center">${r.boxR}</td><td style="text-align:center">${r.okL}</td><td style="text-align:center">${r.okR}</td></tr>`;
+  }
+  html += '</table>';
+
+  let panel = document.getElementById('audit-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'audit-panel';
+    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid #e53e3e;padding:8px 12px;max-height:300px;overflow:auto;z-index:1000;box-shadow:0 -4px 12px rgba(0,0,0,.1)';
+    document.body.appendChild(panel);
+  }
+  panel.innerHTML = '<div style="font:600 12px sans-serif;margin-bottom:4px">Alignment Audit — Target: TextL=22, TextR=318</div>' + html;
+}
+
+// Auto-run audit after render
+setTimeout(() => {
+  runAudit();
+  // If ?audit in URL, show only audit results at large readable size
+  if (location.search.includes('audit')) {
+    document.querySelectorAll('.plugin-frame').forEach(f => f.style.display = 'none');
+    document.querySelectorAll('.controls, .label').forEach(f => f.style.display = 'none');
+    const panel = document.getElementById('audit-panel');
+    if (panel) {
+      panel.style.cssText = 'font:15px/2 monospace;padding:24px;max-height:none;position:static;border:none;box-shadow:none';
+      // Make table cells bigger
+      panel.querySelectorAll('th,td').forEach(c => c.style.padding = '4px 14px');
+    }
+  }
+}, 300);
+</script>
+</body>
+</html>

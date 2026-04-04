@@ -6,7 +6,7 @@
 import { colors } from './colors';
 import { space } from './spacing';
 import { fontSize, fontWeight, lineHeight, font } from './typography';
-import { radii, size, zIndex } from './layout';
+import { radii, size, zIndex, grid } from './layout';
 
 // Re-export individual token modules
 export * from './css';
@@ -27,6 +27,7 @@ export const tokens = {
   radii,
   font,
   zIndex,
+  grid,
 } as const;
 
 export type Tokens = typeof tokens;

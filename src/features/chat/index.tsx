@@ -9,13 +9,16 @@ import {
 import { PromptChips } from '../../ui/components/PromptChips'
 import { PromptInput } from '../../ui/components/PromptInput'
 import { ToolBlock } from '../../ui/components/ToolBlock'
-import { TextBlock } from '../../ui/components/TextBlock'
+import { CanvasTextBlock as TextBlock } from '../../ui/components/canvas-markdown/CanvasTextBlock'
 import { NodeListPanel } from '../../ui/components/NodeListPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { Button } from '../../ui/components/Button'
 import { on, emit } from '@create-figma-plugin/utilities'
-import { SendSerializedSelectionHandler, SerializeSelectionHandler } from '../../types'
-// useClipboard removed — Copy Digest deleted
+import {
+  SendSelectionHandler, GetSelectionHandler,
+  ContextAttachment,
+} from '../../types'
+import { ContextTag } from '../../ui/components/ContextTag'
 import type { PluginState } from '../../ui/index'
 
 import { useChat, UseChatProps } from './useChat'
@@ -109,9 +112,12 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   const sz = tokens.fontSize[1];
   const dim = tokens.colors.textSecondary;
 
+  // StatusBlock renders OUTSIDE scroll area — needs full outerPad
+  const hPad = `${tokens.grid.outerPad}px`;
+
   if (runState === 'error') {
     return (
-      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: tokens.colors.error, padding: '4px 10px' }}>
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: tokens.colors.error, padding: `4px ${hPad}` }}>
         {error || 'Error'}{elapsed ? ` · ${elapsed}` : ''}
       </div>
     );
@@ -119,7 +125,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
 
   if (runState === 'canceled') {
     return (
-      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: '4px 10px', display: 'flex', alignItems: 'center' }}>
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: `4px ${hPad}`, display: 'flex', alignItems: 'center' }}>
         <span>Stopped{elapsed ? ` · ${elapsed}` : ''}</span>
         <span
           onClick={onContinue}
@@ -131,10 +137,10 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
     );
   }
 
-  // padding = scroll container padding (12px) + block inner padding (10px) = 22px
+  // Outside scroll area → full 22px horizontal padding
   const row: h.JSX.CSSProperties = {
     fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim,
-    padding: `${tokens.space[1]}px ${tokens.space[3] + 10}px`,
+    padding: `${tokens.space[1]}px ${hPad}`,
     display: 'flex', alignItems: 'center',
   };
 
@@ -236,6 +242,13 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
         if (isUserMessage) {
           return (
             <div key={msg.id || `msg-${i}`} style={{ ...userItemStyle, marginTop }}>
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                  {msg.attachments.map((att: ContextAttachment, ai: number) => (
+                    <ContextTag key={ai} icon={attachmentIcon(att)} label={attachmentLabel(att)} />
+                  ))}
+                </div>
+              )}
               <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
                 {typeof msg.text === 'string' ? msg.text : String(msg.text ?? '')}
               </span>
@@ -287,6 +300,38 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
   );
 }
 
+// --- Attachment helpers ---
+
+function selectionSummary(nodes: { name: string; type: string }[]): string {
+  if (nodes.length === 0) return 'Empty'
+  if (nodes.length === 1) return nodes[0].name
+  // Group by type, show first name + count
+  const names = nodes.slice(0, 2).map(n => n.name)
+  const rest = nodes.length - names.length
+  return rest > 0 ? `${names.join(', ')} +${rest}` : names.join(', ')
+}
+
+function attachmentLabel(att: ContextAttachment): string {
+  switch (att.type) {
+    case 'page': return att.pageName
+    case 'selection': return selectionSummary(att.nodes)
+    case 'skill': return att.name
+  }
+}
+
+function attachmentIcon(att: ContextAttachment): h.JSX.Element {
+  const size = 12
+  const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round' as const }
+  switch (att.type) {
+    case 'page':
+      return <svg {...props}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+    case 'selection':
+      return <svg {...props}><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>
+    case 'skill':
+      return <svg {...props}><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+  }
+}
+
 export function ChatFeature(props: UseChatProps) {
   const {
     prompt,
@@ -298,6 +343,8 @@ export function ChatFeature(props: UseChatProps) {
     continueGeneration,
     pendingApproval,
     respondToApproval,
+    pendingQuestion,
+    respondToQuestion,
     modelName,
     setModelName,
     apiKey,
@@ -309,11 +356,34 @@ export function ChatFeature(props: UseChatProps) {
     memoryCount,
   } = useChat(props)
 
+  // --- Context Attachments ---
+  const [attachments, setAttachments] = useState<ContextAttachment[]>([])
+
+  const addAttachment = (att: ContextAttachment) => {
+    setAttachments(prev => {
+      // Deduplicate by type (only one selection, one page at a time)
+      if (att.type === 'selection' || att.type === 'page') {
+        return [...prev.filter(a => a.type !== att.type), att]
+      }
+      // Skills: deduplicate by skillId
+      if (att.type === 'skill' && prev.some(a => a.type === 'skill' && a.skillId === att.skillId)) {
+        return prev
+      }
+      return [...prev, att]
+    })
+  }
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Listen for selection context from main thread (replacing old JSON dump)
   useEffect(() => {
-    return on<SendSerializedSelectionHandler>('SEND_SERIALIZED_SELECTION', (data) => {
-      setPrompt(data.jsonString);
-    });
-  }, [setPrompt]);
+    return on<SendSelectionHandler>('SEND_SELECTION', (data) => {
+      if (data.selection.length === 0) return
+      addAttachment({ type: 'selection', nodes: data.selection })
+    })
+  }, [])
 
   const {
     shouldAutoScroll,
@@ -333,6 +403,12 @@ export function ChatFeature(props: UseChatProps) {
     if (suggestion) {
       setPrompt(suggestion.description)
     }
+  }
+
+  const handleGenerate = () => {
+    const snapshot = [...attachments]
+    setAttachments([]) // Clear after send (selection/skill are one-shot)
+    generate(snapshot.length > 0 ? snapshot : undefined)
   }
 
   const pluginState: PluginState = derivePluginState({
@@ -376,11 +452,11 @@ export function ChatFeature(props: UseChatProps) {
         {/* Scroll anchor for bottom */}
       </div>
 
-      {/* Tool Approval Panel */}
+      {/* Tool Approval Panel — outside scroll, needs outerPad */}
       {pendingApproval && (
         <div style={{
           flexShrink: 0,
-          padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+          padding: `${tokens.space[2]}px ${tokens.grid.outerPad}px`,
           borderTop: `1px solid ${tokens.colors.alpha[3]}`,
           display: 'flex',
           alignItems: 'center',
@@ -391,6 +467,60 @@ export function ChatFeature(props: UseChatProps) {
           </span>
           <Button variant="primary" size="sm" onClick={() => respondToApproval(true)}>Approve</Button>
           <Button variant="ghost" size="sm" onClick={() => respondToApproval(false)}>Deny</Button>
+        </div>
+      )}
+
+      {/* Ask User Question Panel — outside scroll, needs outerPad */}
+      {pendingQuestion && (
+        <div style={{
+          flexShrink: 0,
+          padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
+          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.space[2],
+        }}>
+          <span style={{
+            fontSize: tokens.fontSize[2],
+            color: tokens.colors.textPrimary,
+            fontWeight: 500,
+            lineHeight: tokens.lineHeight[2],
+          }}>
+            {pendingQuestion.question}
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+            {pendingQuestion.options.map(opt => (
+              <button
+                key={opt.label}
+                className="card-interactive"
+                onClick={() => respondToQuestion(opt.label)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 2,
+                  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+                  border: 'var(--border-default)',
+                  borderRadius: 'var(--radius-2)',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                  fontFamily: tokens.font.sans,
+                  transition: 'var(--transition-crisp)',
+                }}
+              >
+                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>
+                  {opt.label}
+                </span>
+                {opt.description && (
+                  <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
+                    {opt.description}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -426,11 +556,23 @@ export function ChatFeature(props: UseChatProps) {
         <PromptInput
           value={prompt}
           onChange={(v) => setPrompt(v)}
-          onSubmit={generate}
+          onSubmit={handleGenerate}
           loading={loading}
           disabled={false}
           placeholder={t.placeholder}
           canSubmit={canSubmit}
+          contextTags={attachments.length > 0 ? (
+            <Fragment>
+              {attachments.map((att, i) => (
+                <ContextTag
+                  key={att.type === 'skill' ? att.skillId : att.type}
+                  icon={attachmentIcon(att)}
+                  label={attachmentLabel(att)}
+                  onRemove={att.type === 'page' ? undefined : () => removeAttachment(i)}
+                />
+              ))}
+            </Fragment>
+          ) : undefined}
           leftElement={
             <ModelPopover
               currentModel={modelName}
@@ -442,16 +584,12 @@ export function ChatFeature(props: UseChatProps) {
               placement="top"
               variant="ghost"
               align="end"
-              providerName={providerName} // [NEW]
+              providerName={providerName}
             />
           }
-          onPlusClick={() => emit<SerializeSelectionHandler>('SERIALIZE_SELECTION')}
+          onPlusClick={() => emit<GetSelectionHandler>('GET_SELECTION')}
           onSkillSelect={(skillId) => {
-            const skillToken = `@${skillId}`
-            if (prompt.includes(skillToken)) return
-            const current = prompt.trim()
-            const next = current ? `${current} ${skillToken} ` : `${skillToken} `
-            setPrompt(next)
+            addAttachment({ type: 'skill', skillId, name: skillId })
           }}
         />
       </div>

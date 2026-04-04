@@ -9,10 +9,11 @@ import { tokens } from '../design-system/tokens';
 const panelStyle: h.JSX.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: tokens.space[4],
-  padding: tokens.space[4],
+  gap: tokens.space[3],
+  padding: `${tokens.space[3]}px ${tokens.grid.blockPad}px`,
   background: tokens.colors.surface,
-  border: 'var(--border-default)',
+  border: 'none',
+  boxShadow: 'inset 0 0 0 1px var(--gray-6)',
   borderRadius: 'var(--radius-4)',
   marginTop: tokens.space[4],
 };

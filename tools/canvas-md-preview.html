@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvas Markdown Rich Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f5f5f5;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+  .plugin-frame {
+    width: 340px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.12);
+    overflow: hidden;
+  }
+  .plugin-header {
+    height: 52px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-bottom: 0.5px solid rgba(0,0,0,.06);
+    font-size: 13px;
+    color: #666;
+  }
+  .plugin-header .title {
+    font-weight: 500;
+    color: #111;
+    font-size: 13px;
+  }
+  .messages-area {
+    padding: 12px 0;
+    max-height: 700px;
+    overflow-y: auto;
+  }
+  .user-msg {
+    margin: 4px 4px;
+    padding: 8px 10px;
+    background: #f4f4f4;
+    border-radius: 10px;
+    font-size: 12px;
+    color: #111;
+    /* text left = margin(4) + padding(10) = 14 = T0 */
+  }
+  .tool-label {
+    margin: 4px 14px;
+    font-size: 11px;
+    color: #999;
+    /* text left = 14 = T0 */
+  }
+  .canvas-block {
+    margin: 4px 0;
+  }
+  canvas { display: block; }
+
+  /* Dark mode toggle */
+  body.dark { background: #1a1a1a; }
+  body.dark .plugin-frame { background: #1e1e1e; }
+  body.dark .plugin-header { border-bottom-color: rgba(255,255,255,.08); }
+  body.dark .plugin-header .title { color: #eee; }
+  body.dark .plugin-header { color: #888; }
+  body.dark .user-msg { background: #2a2a2a; color: #eee; }
+  body.dark .tool-label { color: #666; }
+
+  .controls {
+    position: fixed;
+    top: 12px;
+    right: 20px;
+    display: flex;
+    gap: 8px;
+  }
+  .controls button {
+    padding: 6px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .controls button:hover { background: #f0f0f0; }
+  body.dark .controls button { background: #333; border-color: #555; color: #ddd; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <button onclick="toggleDark()">Light / Dark</button>
+  <button onclick="switchSample()">Next Sample</button>
+</div>
+
+<div class="plugin-frame">
+  <div class="plugin-header">
+    <span class="title">Genable (Preview)</span>
+  </div>
+  <div class="messages-area" id="messages">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<script>
+// ============================================
+// Rich Canvas Markdown Engine (Preview Version)
+// ============================================
+
+const FONT_SANS = 'Inter, -apple-system, sans-serif';
+const FONT_MONO = '"SF Mono", Menlo, Monaco, monospace';
+const CANVAS_W = 340;
+
+// ---- Alignment Grid ----
+// T0=14 (headings, paragraphs, markers)
+// T1=34 (OL/UL text, wireframes left)
+// TR=326 (all right edges)
+const T0 = 14;           // primary left margin
+const TR = 326;           // right margin (CANVAS_W - T0)
+const LIST_MARKER_W = 20; // fixed marker slot width
+const T1 = T0 + LIST_MARKER_W; // 34 — list text, wireframe left
+const SUB_INDENT = 16;   // per nesting level
+
+// --- Theme ---
+function getTheme() {
+  const dark = document.body.classList.contains('dark');
+  return {
+    text: dark ? '#eeeeee' : '#1a1a1a',
+    textSecondary: dark ? '#888888' : '#6b6b6b',
+    accent: dark ? '#6eb0f7' : '#0066cc',
+    accentBg: dark ? 'rgba(110,176,247,0.12)' : 'rgba(0,102,204,0.08)',
+    codeBg: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    codeText: dark ? '#dddddd' : '#1a1a1a',
+    linkColor: dark ? '#6eb0f7' : '#0066cc',
+    wireframeBg: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.025)',
+    wireframeBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+    wireframeText: dark ? '#aaaaaa' : '#666666',
+    swatchBorder: dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+  };
+}
+
+// --- Block styles (4px baseline grid rhythm) ---
+const STYLES = {
+  h1: { fontSize: 18, fontWeight: 700, lineHeight: 28, mt: 28, mb: 8 },
+  h2: { fontSize: 16, fontWeight: 600, lineHeight: 24, mt: 24, mb: 8 },
+  h3: { fontSize: 14, fontWeight: 600, lineHeight: 20, mt: 16, mb: 4 },
+  h4: { fontSize: 13, fontWeight: 600, lineHeight: 20, mt: 12, mb: 4 },
+  p:  { fontSize: 13, fontWeight: 400, lineHeight: 20, mt: 6, mb: 6 },
+  li: { fontSize: 12, fontWeight: 400, lineHeight: 20, mt: 2, mb: 2 },
+};
+
+// --- Color detection ---
+const HEX_RE = /#([0-9A-Fa-f]{3,8})\b/g;
+const RGBA_RE = /rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+(?:\s*,\s*[\d.]+)?\s*\)/g;
+
+function isValidHex(hex) {
+  return [3,4,6,8].includes(hex.length);
+}
+
+function hexToRgb(hex) {
+  let h = hex;
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  if (h.length === 4) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]+h[3]+h[3];
+  return `#${h.slice(0,6)}`;
+}
+
+// --- Wireframe detection ---
+// Detect structural sections like "导航栏", "Hero", "Gallery", "Footer" etc.
+// Only match when section name appears at START of the text (within first 20 chars)
+// This prevents false positives like "品牌色用于CTA按钮" matching CTA
+const SECTION_PATTERNS = [
+  { re: /^.{0,6}(导航栏|Navbar|Nav\b)/i, type: 'navbar' },
+  { re: /^.{0,6}(Hero|英雄区|主视觉)/i, type: 'hero' },
+  { re: /^.{0,6}(功能特性|Features|功能卡片)/i, type: 'features' },
+  { re: /^.{0,6}(页脚|Footer|底部导航)/i, type: 'footer' },
+  { re: /^.{0,6}(Gallery|画廊|作品展示)/i, type: 'gallery' },
+  { re: /^.{0,6}(标签栏|Tab|分类标签)/i, type: 'tabs' },
+  { re: /^.{0,6}(商品网格|商品列表|Product.Grid)/i, type: 'product-grid' },
+];
+
+function detectSection(text) {
+  for (const p of SECTION_PATTERNS) {
+    if (p.re.test(text)) return p.type;
+  }
+  return null;
+}
+
+// --- Wireframe renderers ---
+function drawWireframe(ctx, type, x, y, w, theme, details) {
+  const h_map = {
+    'navbar': 28,
+    'hero': 80,
+    'features': 64,
+    'footer': 24,
+    'cta': 36,
+    'gallery': 64,
+    'tabs': 28,
+    'product-grid': 64,
+  };
+  // No additional inset — wireframe already positioned at T1 by caller
+
+  const h = h_map[type] || 36;
+  const r = 8;
+  const pad = 10;
+
+  // Background (slightly more visible)
+  ctx.fillStyle = theme.wireframeBg;
+  roundRect(ctx, x, y, w, h, r);
+
+  // Border
+  ctx.strokeStyle = theme.wireframeBorder;
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.stroke();
+
+  // Left accent bar
+  ctx.fillStyle = theme.accent;
+  ctx.globalAlpha = 0.2;
+  roundRect(ctx, x, y + 4, 2.5, h - 8, 1.5);
+  ctx.globalAlpha = 1;
+
+  ctx.font = `400 10px ${FONT_SANS}`;
+  ctx.fillStyle = theme.wireframeText;
+
+  switch(type) {
+    case 'navbar': {
+      // Logo + links
+      ctx.font = `600 11px ${FONT_SANS}`;
+      ctx.fillStyle = theme.text;
+      const logo = details.logo || 'LOGO';
+      ctx.fillText(logo, x + pad + 4, y + 18);
+      ctx.font = `400 9px ${FONT_SANS}`;
+      ctx.fillStyle = theme.wireframeText;
+      const links = details.links || ['Home', 'About', 'Contact'];
+      let lx = x + w - pad;
+      for (let i = links.length - 1; i >= 0; i--) {
+        const tw = ctx.measureText(links[i]).width;
+        lx -= tw;
+        ctx.fillText(links[i], lx, y + 18);
+        lx -= 12;
+      }
+      break;
+    }
+    case 'hero': {
+      // Big title + subtitle + CTA — more breathing room with 80px height
+      ctx.font = `700 15px ${FONT_SANS}`;
+      ctx.fillStyle = theme.text;
+      const title = details.title || 'Hero Title';
+      const titleW = ctx.measureText(title).width;
+      ctx.fillText(title, x + (w - titleW)/2, y + 28);
+
+      ctx.font = `400 10px ${FONT_SANS}`;
+      ctx.fillStyle = theme.wireframeText;
+      const sub = details.subtitle || 'Subtitle description text';
+      const subW = ctx.measureText(sub).width;
+      ctx.fillText(sub, x + (w - subW)/2, y + 44);
+
+      // CTA buttons
+      const btns = details.buttons || ['Get Started'];
+      let bx = x + (w - btns.length * 72 - (btns.length-1)*10) / 2;
+      for (const btn of btns) {
+        ctx.fillStyle = theme.accent;
+        roundRect(ctx, bx, y + 56, 66, 18, 6);
+        ctx.fillStyle = '#fff';
+        ctx.font = `500 9px ${FONT_SANS}`;
+        const bw = ctx.measureText(btn).width;
+        ctx.fillText(btn, bx + (66-bw)/2, y + 68);
+        bx += 76;
+      }
+      break;
+    }
+    case 'features': {
+      // 3 cards
+      const cols = details.count || 3;
+      const cardW = (w - pad*2 - (cols-1)*6) / cols;
+      for (let i = 0; i < cols; i++) {
+        const cx = x + pad + i * (cardW + 6);
+        ctx.fillStyle = theme.wireframeBg;
+        roundRect(ctx, cx, y + pad, cardW, h - pad*2, 4);
+        ctx.strokeStyle = theme.wireframeBorder;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        roundRectPath(ctx, cx, y + pad, cardW, h - pad*2, 4);
+        ctx.stroke();
+        // Icon placeholder
+        ctx.fillStyle = theme.wireframeBorder;
+        roundRect(ctx, cx + cardW/2 - 6, y + pad + 6, 12, 12, 2);
+        // Label
+        ctx.font = `400 8px ${FONT_SANS}`;
+        ctx.fillStyle = theme.wireframeText;
+        const label = details.labels?.[i] || `Feature ${i+1}`;
+        const lw = ctx.measureText(label).width;
+        ctx.fillText(label, cx + (cardW-lw)/2, y + pad + 30);
+      }
+      break;
+    }
+    case 'gallery': {
+      // Grid of image placeholders
+      const cols = details.cols || 3;
+      const rows = 2;
+      const cardW = (w - pad*2 - (cols-1)*4) / cols;
+      const cardH = 24;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cx = x + pad + c * (cardW + 4);
+          const cy = y + pad + r * (cardH + 4);
+          ctx.fillStyle = theme.wireframeBorder;
+          ctx.globalAlpha = 0.3;
+          roundRect(ctx, cx, cy, cardW, cardH, 3);
+          ctx.globalAlpha = 1;
+        }
+      }
+      break;
+    }
+    case 'tabs': {
+      const tabs = details.labels || ['All', 'Category 1', 'Category 2'];
+      let tx = x + pad;
+      for (let i = 0; i < tabs.length; i++) {
+        ctx.font = `${i === 0 ? 500 : 400} 9px ${FONT_SANS}`;
+        const tw = ctx.measureText(tabs[i]).width;
+        if (i === 0) {
+          // Active tab
+          ctx.fillStyle = theme.accent;
+          roundRect(ctx, tx - 4, y + 8, tw + 8, 16, 4);
+          ctx.fillStyle = '#fff';
+        } else {
+          ctx.fillStyle = theme.wireframeText;
+        }
+        ctx.fillText(tabs[i], tx, y + 19);
+        tx += tw + 12;
+      }
+      break;
+    }
+    case 'product-grid': {
+      // Show max 3 columns for legibility in 340px, with "..." hint
+      const cols = Math.min(details.cols || 4, 3);
+      const cardW = (w - pad*2 - (cols)*6) / cols;
+      for (let c = 0; c < cols; c++) {
+        const cx = x + pad + 4 + c * (cardW + 6);
+        // Image area
+        ctx.fillStyle = theme.wireframeBorder;
+        ctx.globalAlpha = 0.35;
+        roundRect(ctx, cx, y + pad, cardW, 28, 4);
+        ctx.globalAlpha = 1;
+        // Label
+        ctx.fillStyle = theme.wireframeText;
+        ctx.font = `400 8px ${FONT_SANS}`;
+        const label = `Item ${c+1}`;
+        const lw = ctx.measureText(label).width;
+        ctx.fillText(label, cx + (cardW - lw)/2, y + pad + 42);
+        // Price
+        ctx.font = `500 8px ${FONT_SANS}`;
+        ctx.fillStyle = theme.text;
+        ctx.globalAlpha = 0.5;
+        ctx.fillText('$--', cx + (cardW - ctx.measureText('$--').width)/2, y + pad + 52);
+        ctx.globalAlpha = 1;
+      }
+      // "..." hint if more columns exist
+      if ((details.cols || 4) > 3) {
+        ctx.fillStyle = theme.wireframeText;
+        ctx.font = `400 10px ${FONT_SANS}`;
+        ctx.fillText('...', x + w - pad - 12, y + h/2 + 3);
+      }
+      break;
+    }
+    case 'footer': {
+      ctx.font = `400 9px ${FONT_SANS}`;
+      ctx.fillStyle = theme.wireframeText;
+      const copy = details.text || '2026 Brand. All rights reserved.';
+      const cw = ctx.measureText(copy).width;
+      ctx.fillText(copy, x + (w - cw)/2, y + 16);
+      break;
+    }
+    default: {
+      ctx.font = `400 9px ${FONT_SANS}`;
+      ctx.fillStyle = theme.wireframeText;
+      ctx.fillText(type, x + pad, y + h/2 + 3);
+    }
+  }
+
+  return h;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  roundRectPath(ctx, x, y, w, h, r);
+  ctx.fill();
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// --- CJK segmentation ---
+function isCJK(code) {
+  return (code >= 0x4E00 && code <= 0x9FFF) || (code >= 0x3000 && code <= 0x303F) ||
+         (code >= 0xFF00 && code <= 0xFFEF);
+}
+
+function segmentText(text) {
+  const segs = [];
+  let buf = '';
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (isCJK(code)) {
+      if (buf) { segs.push(buf); buf = ''; }
+      segs.push(text[i]);
+    } else if (text[i] === ' ') {
+      buf += ' '; segs.push(buf); buf = '';
+    } else if (text[i] === '\n') {
+      if (buf) { segs.push(buf); buf = ''; }
+      segs.push('\n');
+    } else {
+      buf += text[i];
+    }
+  }
+  if (buf) segs.push(buf);
+  return segs;
+}
+
+// --- Simple markdown parser (enough for preview) ---
+function parseMarkdown(text) {
+  const lines = text.split('\n');
+  const blocks = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Heading
+    const hm = line.match(/^(#{1,4})\s+(.+)/);
+    if (hm) {
+      blocks.push({ type: `h${hm[1].length}`, text: hm[2], inline: parseInline(hm[2]) });
+      i++; continue;
+    }
+
+    // Ordered list
+    const olm = line.match(/^(\d+)\.\s+(.+)/);
+    if (olm) {
+      blocks.push({ type: 'li', marker: olm[1] + '.', text: olm[2], inline: parseInline(olm[2]), depth: 0 });
+      i++; continue;
+    }
+
+    // Unordered list (with depth)
+    const ulm = line.match(/^(\s*)[*-]\s+(.+)/);
+    if (ulm) {
+      const depth = Math.floor(ulm[1].length / 2);
+      blocks.push({ type: 'li', marker: '\u2022', text: ulm[2], inline: parseInline(ulm[2]), depth });
+      i++; continue;
+    }
+
+    // Empty line
+    if (line.trim() === '') { i++; continue; }
+
+    // Paragraph
+    let ptext = line;
+    while (i + 1 < lines.length && lines[i+1].trim() !== '' && !lines[i+1].match(/^[#*\-\d]/)) {
+      i++;
+      ptext += ' ' + lines[i];
+    }
+    blocks.push({ type: 'p', text: ptext, inline: parseInline(ptext) });
+    i++;
+  }
+
+  return blocks;
+}
+
+function parseInline(text) {
+  const spans = [];
+  // Simple inline parser: bold, code, links, and plain text
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    // Bold
+    const boldM = remaining.match(/^\*\*(.+?)\*\*/);
+    if (boldM) {
+      spans.push({ text: boldM[1], bold: true });
+      remaining = remaining.slice(boldM[0].length);
+      continue;
+    }
+    // Inline code
+    const codeM = remaining.match(/^`(.+?)`/);
+    if (codeM) {
+      spans.push({ text: codeM[1], code: true });
+      remaining = remaining.slice(codeM[0].length);
+      continue;
+    }
+    // Link
+    const linkM = remaining.match(/^\[(.+?)\]\((.+?)\)/);
+    if (linkM) {
+      spans.push({ text: linkM[1], link: linkM[2] });
+      remaining = remaining.slice(linkM[0].length);
+      continue;
+    }
+    // Plain text until next special char
+    const nextSpecial = remaining.search(/[\*`\[]/);
+    if (nextSpecial === -1) {
+      spans.push({ text: remaining });
+      break;
+    } else if (nextSpecial === 0) {
+      // Not a valid pattern, consume one char
+      spans.push({ text: remaining[0] });
+      remaining = remaining.slice(1);
+    } else {
+      spans.push({ text: remaining.slice(0, nextSpecial) });
+      remaining = remaining.slice(nextSpecial);
+    }
+  }
+
+  return spans;
+}
+
+// --- Color swatch detection within spans ---
+function enrichSpansWithColors(spans) {
+  const result = [];
+  for (const span of spans) {
+    if (span.code || span.link) { result.push(span); continue; }
+
+    let text = span.text;
+    let lastIdx = 0;
+    const matches = [...text.matchAll(/#[0-9A-Fa-f]{3,8}\b/g)];
+
+    if (matches.length === 0) { result.push(span); continue; }
+
+    for (const m of matches) {
+      if (m.index > lastIdx) {
+        result.push({ ...span, text: text.slice(lastIdx, m.index) });
+      }
+      result.push({ ...span, text: m[0], colorSwatch: hexToRgb(m[0].slice(1)) });
+      lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < text.length) {
+      result.push({ ...span, text: text.slice(lastIdx) });
+    }
+  }
+  return result;
+}
+
+// --- Main render function ---
+function renderRichMarkdown(container, markdown) {
+  const theme = getTheme();
+  const blocks = parseMarkdown(markdown);
+  const dpr = window.devicePixelRatio || 1;
+  const width = CANVAS_W;
+
+  // First pass: calculate height
+  const canvas = document.createElement('canvas');
+  canvas.style.width = width + 'px';
+  const ctx = canvas.getContext('2d');
+
+  let cursorY = 4;
+
+  // Layout info for second pass
+  const layoutBlocks = [];
+
+  for (const block of blocks) {
+    const style = STYLES[block.type] || STYLES.p;
+    const isList = block.type === 'li';
+    const depth = block.depth || 0;
+
+    // ---- Alignment grid positions ----
+    // Headings/paragraphs: text at T0, right at TR
+    // List depth 0: marker at T0, text at T1
+    // List depth N: marker at T1 + (N-1)*SUB_INDENT, text at T1 + N*SUB_INDENT
+    let textLeft, markerLeft, rightEdge;
+    if (isList) {
+      if (depth === 0) {
+        markerLeft = T0;
+        textLeft = T1;
+      } else {
+        markerLeft = T1 + (depth - 1) * SUB_INDENT;
+        textLeft = T1 + depth * SUB_INDENT;
+      }
+    } else {
+      markerLeft = T0;
+      textLeft = T0;
+    }
+    rightEdge = TR;
+    const textWidth = rightEdge - textLeft;
+
+    cursorY += style.mt;
+    const blockStartY = cursorY;
+
+    // Check for wireframe section
+    const sectionType = (isList && depth === 0) ? detectSection(block.text) : null;
+
+    // Render inline spans with color enrichment
+    const spans = enrichSpansWithColors(block.inline || [{ text: block.text }]);
+
+    // Word wrap
+    let lineX = textLeft;
+    let lineY = cursorY;
+    const renderedSpans = [];
+
+    for (const span of spans) {
+      const isBold = span.bold;
+      const isCode = span.code;
+      const isLink = span.link;
+      const weight = isBold ? 600 : style.fontWeight;
+      const fSize = isCode ? style.fontSize - 1 : style.fontSize;
+      const font = `${weight} ${fSize}px ${isCode ? FONT_MONO : FONT_SANS}`;
+      ctx.font = font;
+
+      let color = theme.text;
+      if (isLink) color = theme.linkColor;
+
+      const swatchW = span.colorSwatch ? 12 : 0;
+
+      const segments = segmentText(span.text);
+      for (const seg of segments) {
+        if (seg === '\n') { lineX = textLeft; lineY += style.lineHeight; continue; }
+        const segW = ctx.measureText(seg).width + swatchW;
+        // Wrap: exceed right edge AND not first word on line
+        if (lineX + segW > rightEdge && lineX > textLeft) {
+          lineX = textLeft;
+          lineY += style.lineHeight;
+        }
+        renderedSpans.push({
+          text: seg, x: lineX + swatchW, y: lineY + style.fontSize,
+          width: segW - swatchW, height: style.lineHeight, font, color,
+          bold: isBold, code: isCode, link: isLink,
+          colorSwatch: span.colorSwatch,
+          swatchX: lineX,
+        });
+        lineX += segW;
+      }
+    }
+
+    cursorY = lineY + style.lineHeight;
+
+    // Wireframe block after the text — aligned to T1...TR
+    let wireframeInfo = null;
+    if (sectionType) {
+      cursorY += 10;
+      wireframeInfo = { type: sectionType, y: cursorY, details: extractDetails(block.text, sectionType) };
+      const wfH = { navbar: 28, hero: 80, features: 64, footer: 24, cta: 36, gallery: 64, tabs: 28, 'product-grid': 64 }[sectionType] || 36;
+      cursorY += wfH + 10;
+    }
+
+    layoutBlocks.push({
+      style, block, renderedSpans, textLeft, markerLeft, rightEdge,
+      startY: blockStartY, wireframe: wireframeInfo,
+    });
+
+    cursorY += style.mb;
+  }
+
+  const totalHeight = cursorY + 4;
+
+  // Size canvas
+  canvas.width = width * dpr;
+  canvas.height = totalHeight * dpr;
+  canvas.style.height = totalHeight + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // --- Render pass ---
+  ctx.clearRect(0, 0, width, totalHeight);
+
+  // DEBUG: draw alignment guides (toggle with ?debug in URL)
+  if (location.search.includes('debug')) {
+    ctx.save();
+    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = 0.5;
+    // T0 guide (red)
+    ctx.strokeStyle = 'rgba(255,0,0,0.4)';
+    ctx.beginPath(); ctx.moveTo(T0, 0); ctx.lineTo(T0, totalHeight); ctx.stroke();
+    // T1 guide (blue)
+    ctx.strokeStyle = 'rgba(0,0,255,0.4)';
+    ctx.beginPath(); ctx.moveTo(T1, 0); ctx.lineTo(T1, totalHeight); ctx.stroke();
+    // T2 guide (green)
+    ctx.strokeStyle = 'rgba(0,180,0,0.3)';
+    ctx.beginPath(); ctx.moveTo(T1 + SUB_INDENT, 0); ctx.lineTo(T1 + SUB_INDENT, totalHeight); ctx.stroke();
+    // TR guide (red)
+    ctx.strokeStyle = 'rgba(255,0,0,0.4)';
+    ctx.beginPath(); ctx.moveTo(TR, 0); ctx.lineTo(TR, totalHeight); ctx.stroke();
+    ctx.restore();
+  }
+
+  for (const lb of layoutBlocks) {
+    // Marker — right-aligned within marker slot [markerLeft ... textLeft]
+    if (lb.block.marker) {
+      ctx.font = `${lb.style.fontWeight} ${lb.style.fontSize}px ${FONT_SANS}`;
+      ctx.fillStyle = theme.textSecondary;
+      const mw = ctx.measureText(lb.block.marker).width;
+      // Right-align marker within the slot, 4px gap before text
+      const markerX = lb.textLeft - mw - 4;
+      ctx.fillText(lb.block.marker, markerX, lb.startY + lb.style.fontSize);
+    }
+
+    // Spans
+    for (const span of lb.renderedSpans) {
+      // Color swatch
+      if (span.colorSwatch) {
+        const swSize = 8;
+        // Vertically center swatch with text: baseline is span.y, ascent ~70% of fontSize
+        const textMidY = span.y - span.height * 0.35;
+        const swY = textMidY - swSize / 2 + 1;
+        // Draw swatch
+        ctx.fillStyle = span.colorSwatch;
+        roundRect(ctx, span.swatchX + 1, swY, swSize, swSize, 2);
+        // Border for light colors
+        ctx.strokeStyle = theme.swatchBorder;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        roundRectPath(ctx, span.swatchX + 1, swY, swSize, swSize, 2);
+        ctx.stroke();
+      }
+
+      // Code background
+      if (span.code) {
+        ctx.fillStyle = theme.codeBg;
+        roundRect(ctx, span.x - 3, span.y - span.height + 3, span.width + 6, span.height, 3);
+      }
+
+      // Text
+      ctx.font = span.font;
+      ctx.fillStyle = span.color;
+      ctx.fillText(span.text, span.x, span.y);
+
+      // Link underline
+      if (span.link) {
+        ctx.strokeStyle = span.color;
+        ctx.lineWidth = 0.6;
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath();
+        ctx.moveTo(span.x, span.y + 2);
+        ctx.lineTo(span.x + span.width, span.y + 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Wireframe — aligned to T1...TR (same as list text)
+    if (lb.wireframe) {
+      drawWireframe(ctx, lb.wireframe.type, T1, lb.wireframe.y,
+        TR - T1, theme, lb.wireframe.details);
+    }
+  }
+
+  container.innerHTML = '';
+  container.appendChild(canvas);
+}
+
+function extractDetails(text, type) {
+  const details = {};
+  switch (type) {
+    case 'navbar': {
+      const logoM = text.match(/Logo\s*["']?(\w+)["']?/i) || text.match(/"([^"]+)"/);
+      details.logo = logoM ? logoM[1] : 'LOGO';
+      const linksM = text.match(/链接[：:]\s*(.+)/);
+      if (linksM) details.links = linksM[1].split(/[,，、\/]/).map(s => s.trim()).filter(Boolean);
+      break;
+    }
+    case 'hero': {
+      const titleM = text.match(/标题[：:「"]\s*(.+?)[」"]/);
+      details.title = titleM ? titleM[1] : 'Hero Title';
+      const btnM = text.match(/(?:按钮|CTA)[：:]\s*(.+)/i);
+      if (btnM) details.buttons = btnM[1].split(/[+＋]/).map(s => s.replace(/[「」""()（）]/g,'').trim()).filter(Boolean);
+      break;
+    }
+    case 'features': {
+      const countM = text.match(/(\d+)\s*个/);
+      details.count = countM ? Math.min(parseInt(countM[1]), 4) : 3;
+      // Extract real feature names: "三个功能卡片：创意写作、代码调试、分析研究"
+      const labelsM = text.match(/[：:]\s*(.+)/);
+      if (labelsM) {
+        details.labels = labelsM[1].split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
+        if (!countM) details.count = Math.min(details.labels.length, 4);
+      }
+      break;
+    }
+    case 'tabs': {
+      const labelsM = text.match(/[：:]\s*(.+)/);
+      if (labelsM) details.labels = labelsM[1].split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
+      break;
+    }
+    case 'gallery': {
+      const colsM = text.match(/(\d+)\s*列/);
+      details.cols = colsM ? parseInt(colsM[1]) : 3;
+      break;
+    }
+    case 'product-grid': {
+      const colsM = text.match(/(\d+)\s*列/);
+      details.cols = colsM ? parseInt(colsM[1]) : 4;
+      break;
+    }
+  }
+  return details;
+}
+
+// ============================================
+// Sample content
+// ============================================
+
+const samples = [
+  {
+    user: '设计一个肯德基风格的菜单',
+    tools: '2 tools',
+    response: `## 设计概述
+
+肯德基菜单设计已完成！整体采用经典红色 #E4002B 作为品牌主色，搭配白色 #FFFFFF 背景和深灰 #333333 文字。
+
+## 页面结构
+
+1. 顶部导航栏 (红色 #E4002B 背景)
+   - 左侧：KFC Logo + "肯德基" 品牌名
+   - 右侧：购物车图标 + 商品数量
+2. 分类标签栏
+   - 6 个分类标签：全部、汉堡、炸鸡、套餐、小食、饮品
+   - "全部" 标签为选中状态（红色背景）
+3. 商品网格 (4列 x 2行)
+   - 每个商品卡片包含：图片区域（暖色调背景 #FFF3E0）、商品名称、价格 #E4002B
+4. 底部导航栏
+   - 首页 / 订单 / 我的
+
+## 设计风格
+
+- 圆角卡片，**12px** 圆角
+- 阴影层次：\`0 2px 8px rgba(0,0,0,0.08)\`
+- 字体：**PingFang SC** 用于中文，14px 正文，24px 标题`,
+  },
+  {
+    user: '设计一个摄影师作品集网站',
+    tools: '3 tools',
+    response: `## 设计概览
+
+**整体风格**：深色背景 #0A0A0A + 白色文字 #F5F5F5，营造专业摄影作品的沉浸式展示氛围
+
+## 页面结构
+
+1. 导航栏 (Navbar) — Logo "LENS" + 导航链接：作品 / 关于 / 联系
+2. Hero 区域 — 主标题「捕捉瞬间」72px 粗体 + 副标题 + 双CTA按钮：「查看作品」+「联系我」
+3. 作品画廊 (Gallery) — 三列卡片布局展示摄影作品
+4. 页脚 — 2026 LENS Studio. All rights reserved.
+
+## 配色方案
+
+| 用途 | 颜色 |
+|------|------|
+| 背景 | #0A0A0A |
+| 文字 | #F5F5F5 |
+| 强调 | #C4A35A |
+| 次要文字 | #888888 |`,
+  },
+  {
+    user: '设计一个Claude风格的Landing Page',
+    tools: '1 tool',
+    response: `## 设计概览
+
+整体风格：温暖、优雅的暖色调设计，采用Claude标志性的陶土色 #CC785C 作为品牌色，搭配奶油色背景 #F5F5F0
+
+## 页面结构
+
+1. 导航栏 (Navbar) — Logo "Claude" + 导航链接：Product, Research, Pricing, Company
+2. Hero 区域 — 主标题「Meet Claude, your AI assistant」+ 副标题 + 双CTA按钮：「Try Claude」+「Learn More」
+3. 功能特性 (Features) — 三个功能卡片：创意写作、代码调试、分析研究
+
+## 设计亮点
+
+- 品牌色 #CC785C 用于CTA按钮和重点元素
+- 背景色 #F5F5F0 营造温暖感
+- 圆角 **16px**，整体柔和
+- 字体使用 **Styrene A** 搭配 **Inter**`,
+  },
+];
+
+let currentSample = 0;
+
+function renderCurrentSample() {
+  const s = samples[currentSample];
+  const area = document.getElementById('messages');
+  area.innerHTML = '';
+
+  // User message
+  const userDiv = document.createElement('div');
+  userDiv.className = 'user-msg';
+  userDiv.textContent = s.user;
+  area.appendChild(userDiv);
+
+  // Tool label
+  const toolDiv = document.createElement('div');
+  toolDiv.className = 'tool-label';
+  toolDiv.textContent = s.tools;
+  area.appendChild(toolDiv);
+
+  // Canvas block
+  const canvasBlock = document.createElement('div');
+  canvasBlock.className = 'canvas-block';
+  area.appendChild(canvasBlock);
+
+  renderRichMarkdown(canvasBlock, s.response);
+}
+
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  renderCurrentSample();
+}
+
+function switchSample() {
+  currentSample = (currentSample + 1) % samples.length;
+  renderCurrentSample();
+}
+
+// Initial render
+renderCurrentSample();
+</script>
+</body>
+</html>

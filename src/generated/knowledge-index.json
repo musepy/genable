@@ -309,6 +309,35 @@
     ]
   },
   {
+    "id": "help:sandbox-sop",
+    "name": "Sandbox Rules & Standard Operating Procedures",
+    "description": "When using the js tool, when converting nodes to components/instances, when encountering sandbox errors (Blocked, parenting cycle, Cannot move node), or when planning multi-step component operations",
+    "category": "help",
+    "keywords": [
+      "js",
+      "sandbox",
+      "blocked",
+      "remove",
+      "insertChild",
+      "component",
+      "instance",
+      "icon",
+      "convert",
+      "swap",
+      "replace",
+      "clone",
+      "ID",
+      "nodeId",
+      "async",
+      "getNodeByIdAsync",
+      "SOP",
+      "workflow",
+      "parenting",
+      "cycle",
+      "nested"
+    ]
+  },
+  {
     "id": "help:style-guide",
     "name": "Style Guide for Visual Direction",
     "description": "When creating a new design from scratch and needing a consistent visual direction or color/type system",

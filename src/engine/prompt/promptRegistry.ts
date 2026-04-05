@@ -20,5 +20,3 @@ export const SYSTEM = (catalog as any).SYSTEM as string;
 /** Standard Operating Procedure — workflows + gates + patterns (HOW) */
 export const SOP = (catalog as any).SOP as string;
 
-/** @deprecated Use SYSTEM + SOP instead. Kept for backward compat. */
-export const CORE = catalog.CORE;

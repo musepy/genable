@@ -312,6 +312,12 @@ export async function handleCompProp(params: any): Promise<ToolResponse> {
             visible: propKey,
           };
           bound = true;
+        } else if (propType === 'INSTANCE_SWAP' && bindNode.type === 'INSTANCE') {
+          (bindNode as InstanceNode).componentPropertyReferences = {
+            ...(bindNode as InstanceNode).componentPropertyReferences,
+            mainComponent: propKey,
+          };
+          bound = true;
         }
         if (bound) {
           boundNodeId = bindNode.id;

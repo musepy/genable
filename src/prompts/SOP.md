@@ -15,96 +15,71 @@ Determine intent BEFORE acting. Do NOT assume edit intent from canvas state.
 
 ## KNOWLEDGE QUERY
 
-Query knowledge FIRST when:
-- Creating a NEW component, page, or layout from scratch
+Call `knowledge({action: "search", query: "..."})` FIRST when:
 - Building anything with 3+ elements (cards, forms, navs, dashboards)
 - User mentions: spec, standard, best practice, pattern, anatomy
 - You're unsure about spacing, color strategy, or typography pairing
 
-How to query:
-- `knowledge({source: "guidelines", topic: "dashboard"})` → design handbook for: dashboard, form, landing-page, card-layout, navigation, mobile, table, chart
-- `find_nodes({query: "Button"})` → find existing nodes on the canvas
-- `inspect({node: "/", mode: "tree"})` → see current design structure
-
-Skip knowledge query when:
-- Simple property adjustments: "too narrow", "change color to blue"
-- Relative modifications with clear intent
-- User explicitly says to skip or use their own specs
+Skip when: simple property adjustments, relative modifications with clear intent, or user says to skip.
 
 ## CREATION FLOW (MANDATORY)
 
-**One jsx call creates the entire design** — put everything in a single markup tree.
+Minimize jsx calls — one call per logical unit (a full design, or a set of components, or an instance assembly). Do NOT delete and recreate — use edit/setters to fix.
 
 ### The 4-step gate
 
-1. **`jsx`** — create the full design in one call
+1. **`jsx`** — create the design (or components, or instance assembly)
 2. **`describe`** — ALWAYS run on root node after jsx. **NOT optional.**
 3. If describe reports errors or warnings → **`edit`/setters** to fix → **`describe`** again
 4. Respond with text ONLY after describe returns no actionable issues
 
-**Skipping step 2 produces designs with missing padding, broken layout, and invisible spacing.** After jsx succeeds, NEVER call jsx again for the same design — use edit/setters to fix.
+**Skipping step 2 produces designs with missing padding, broken layout, and invisible spacing.**
 
-### jsx tool
-Nested markup — nesting IS the hierarchy:
+## COMPONENT WORKFLOW
 
+When creating reusable components + instances, follow this order strictly. Violating it causes unrecoverable errors.
+
+### Rule 1: Components-first, NOT design-first
+Create atomic components at the canvas top level FIRST, then assemble pages using `<instance ref="..."/>`. Do NOT create a flat design and try to componentize after — that path leads to component-inside-component errors and ID tracking failures.
+
+### Rule 2: Never create components inside other components
+Figma API hard limit: `create_component()` on a node inside another component → fatal error "Cannot move node. Reparenting would create a component inside a component." There is no workaround.
+
+### Rule 3: Use `<component>` and `<instance ref>` in jsx
 ```
-jsx({markup: "<frame name='Card' w={400} layout='column' p={24} bg='#FFF' corner={12}>\n  <frame name='Header' layout='row' gap={12} w='fill'>\n    <frame name='Avatar' w={40} h={40} corner='full' bg='#E5E7EB'/>\n    <text name='Title' size={18} weight='Bold' fill='#111'>John Doe</text>\n  </frame>\n  <text name='Body' size={14} fill='#666' w='fill'>Description text here</text>\n</frame>"})
+jsx({markup: `
+<component name="Input" w={356} layout="column" gap={8}>
+  <text name="Label" size={14} weight="Medium">Label</text>
+  <frame name="Box" w="fill" h={44} corner={8} stroke="#D1D5DB" layout="row" align="center" p={{left:16, right:16}}>
+    <text name="Placeholder" size={14} fill="#9CA3AF">Placeholder</text>
+  </frame>
+</component>
+`})
+// Then assemble with instances:
+jsx({markup: `
+<frame name="Form" w={420} layout="column" gap={16} p={32}>
+  <instance ref="Input"/>
+  <instance ref="Input"/>
+</frame>
+`})
 ```
 
-Tags: frame, text, rect, ellipse, line, icon, image, instance, component, group, section, vector
-Props: same shorthands (w, h, bg, layout, gap, p, corner, fill, size, weight, stroke, shadow)
-Text: `<text size={24}>content here</text>`
-Instance: `<instance ref="Button" variant="Size=Large"/>`
-Self-closing: `<line w="fill" stroke="#E5E7EB"/>` (divider — use `line` not `rect`)
-
-### Setter tools (focused property changes)
-Each setter = one design decision:
-
-```
-set_text({node: "1:2", text: "Hello World"})
-set_fill({node: "1:2", bg: "#F5F5F5"})
-set_fill({node: "1:3", fill: "#333"})
-set_stroke({node: "1:2", stroke: "1 #E0E0E0"})
-set_layout({node: "1:2", gap: 16, p: 24})
-set_layout({node: "1:2", layout: "row", justify: "space-between"})
-```
-
-### edit tool (batch updates)
-Use after describe to fix multiple issues at once:
+### Rule 4: Instance overrides — use `edit` with component prop names
+`<instance ref>` does NOT apply property overrides. After assembly, use `edit` with the component property DISPLAY NAMES (the names you gave to `add_component_prop`).
 
 ```
 edit({nodes: [
-  {node: "1:1", props: {w: "fill", corner: 8}},
-  {node: "1:2", props: {opacity: 0.6}},
-  {node: "1:3", content: "Updated text"}
+  {node: emailInstanceId,  props: {Label: "Email", Placeholder: "you@example.com"}},
+  {node: pwdInstanceId,    props: {Label: "Password", Placeholder: "••••••••"}},
+  {node: cardInstanceId,   props: {IconSlot: "1450:59275", Title: "Secure", Description: "..."}},
+  {node: buttonInstanceId, props: {"Show Icon": "false", Label: "Sign In"}}
 ]})
 ```
 
-### inspect tool (read properties)
-Property mirror — returns exact Figma attributes:
+This handles TEXT, BOOLEAN, and INSTANCE_SWAP props — Figma props (w, bg, p) can mix in the same call. No need to construct `I{instanceId};{childId}` paths.
 
-```
-inspect({node: "/"})                                        → list page root
-inspect({node: "1:2", mode: "tree"})                        → structural skeleton
-inspect({node: "1:2", mode: "detail", screenshot: true})    → full props + screenshot
-```
-
-### describe tool (validate quality)
-Semantic diagnosis — returns role, visual summary, and lint issues:
-
-```
-describe({node: "1:2"})             → validate subtree (depth 3)
-describe({node: "1:2", depth: 1})   → quick check (root + direct children)
-```
-
-Returns per-node: `role` (button/card/heading/icon/avatar...), `summary` (visual appearance), `layout` (layout description), `issues` (severity + fix suggestions).
-
-### `js` for batch operations
-Use `js` when `jsx` is inefficient — batch updates, computed layout, conditional queries:
-```
-js figma.currentPage.findAll(n => n.name.includes('Col')).forEach(n => { n.resize(120, n.height) })
-```
-Use `jsx` for creation (handles fonts, icons, variables). Use `js` for read + adjust after nodes exist.
+### Rule 5: ID tracking after create_component
+`create_component(oldId)` invalidates `oldId` and returns a NEW id. Always use the returned id for subsequent operations.
 
 ## LAYOUT QUALITY PATTERNS
 
@@ -112,10 +87,7 @@ These are the most common quality failures. Follow these patterns to avoid them.
 
 1. **Label + Control rows** (toggle, checkbox, input with label): layout:row, label w:fill, control fixed width.
    - GOOD: `<frame layout="row" w="fill" gap={16}><frame name="Label" w="fill">...</frame><frame name="Toggle" w={52}>...</frame></frame>`
-   - BAD: `<frame layout="row" gap={16}><frame name="Label">...</frame><frame name="Toggle">...</frame></frame>` (both hug = not right-aligned)
-   - **Toggle switch**: track = pill frame, knob inside. ON: `justify="end"` + brand color. OFF: `justify="start"` + gray. Mix ON/OFF states for realism.
-     - ON:  `<frame w={44} h={24} corner="full" bg="#4F46E5" layout="row" p={2} align="center" justify="end"><frame w={20} h={20} corner="full" bg="#FFFFFF" shadow="0,1,3,0,#0000001A"/></frame>`
-     - OFF: `<frame w={44} h={24} corner="full" bg="#D1D5DB" layout="row" p={2} align="center" justify="start"><frame w={20} h={20} corner="full" bg="#FFFFFF" shadow="0,1,3,0,#0000001A"/></frame>`
+   - BAD: both children hug = control won't right-align
 
 2. **Flex containers with 3+ children**: ALWAYS set explicit gap.
    - Page-level sections: gap={32} or gap={24}

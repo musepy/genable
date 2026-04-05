@@ -14,12 +14,12 @@ export async function handleCreateVariable(params: any): Promise<ToolResponse> {
   // Collection creation: collection set without variable
   if (params.collection && !params.variable) {
     return handleVarMkCollection({
-      collName: params.collection,
-      modesStr: Array.isArray(params.modes) ? params.modes.join(',') : params.modes,
+      collection: params.collection,
+      modes: Array.isArray(params.modes) ? params.modes.join(',') : params.modes,
     });
   }
   return handleVarMk({
-    varPath: params.variable,
+    variable: params.variable,
     varType: params.type,
     value: params.value,
     mode: params.mode,

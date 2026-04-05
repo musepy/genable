@@ -99,6 +99,22 @@
     ]
   },
   {
+    "id": "help:componentization",
+    "name": "Componentization — Create Components & Assemble with Instances",
+    "description": "Creating reusable components, converting frames to components, using instances, component properties",
+    "category": "help",
+    "keywords": [
+      "component",
+      "instance",
+      "componentize",
+      "reusable",
+      "component prop",
+      "TEXT prop",
+      "BOOLEAN prop",
+      "instance ref"
+    ]
+  },
+  {
     "id": "help:components",
     "name": "Component-First Workflow",
     "description": "When creating 2+ similar elements that share structure but differ in content",
@@ -390,7 +406,7 @@
   {
     "id": "skill:component-set",
     "name": "Component Set Creation",
-    "description": "Efficiently create Figma ComponentSets with variant matrices using clone cascading",
+    "description": "Create Figma ComponentSets with variant matrices using clone cascading and combine_components",
     "category": "skill"
   },
   {

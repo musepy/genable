@@ -14,6 +14,7 @@
 import { ToolDefinition } from '../../agent/tools/types';
 import { SYSTEM, SOP } from '../../prompt/promptRegistry';
 import { serializeTools } from './toolSerializer';
+import { LOCALE_FULL_NAMES, type Locale } from '../../../ui/i18n';
 
 /**
  * Build the static system prompt that is set once and never changes.
@@ -24,6 +25,7 @@ import { serializeTools } from './toolSerializer';
 export function buildStaticSystemPrompt(
     tools: ToolDefinition[],
     provider: { getToolSystemInstruction: (tools: ToolDefinition[]) => string },
+    locale?: Locale,
 ): string {
     const parts: string[] = [];
 
@@ -60,21 +62,7 @@ On warm start (when memory is pre-loaded into context): briefly acknowledge what
   BAD: "Loading memory... Found 5 entries... Entry 1: brand-colors..."`
     );
 
-    // 4. Scratchpad hint (session-scoped working memory)
-    parts.push(
-`## SCRATCHPAD (Session Working Memory)
-Session-scoped notepad at \`/.agent/scratch/\`. Use it to store intermediate data during complex tasks:
-- \`mk /.agent/scratch/plan text -- Step 1: create card frame...\` — save a note
-- \`cat /.agent/scratch/plan\` — read it back
-- \`ls /.agent/scratch/\` — list all notes
-- \`rm /.agent/scratch/plan\` — delete a note
-Unlike persistent memory, scratchpad is cleared when the session ends. Use it for:
-- Node ID mappings (tempId → realId)
-- Design plans for multi-step work
-- Color palettes or spacing values to reuse`
-    );
-
-    // 5. Subtask delegation hint
+    // 4. Subtask delegation hint
     parts.push(
 `## SUBTASK DELEGATION
 For complex multi-part designs, delegate independent sections to focused sub-agents:
@@ -97,6 +85,12 @@ Do NOT use subtask for simple operations (1-2 tool calls) or dependent work.`
     const providerInstructions = provider.getToolSystemInstruction(tools);
     if (providerInstructions) {
         parts.push(providerInstructions.trim());
+    }
+
+    // 8. Communication language (user preference)
+    if (locale && locale !== 'en') {
+        const langName = LOCALE_FULL_NAMES[locale]?.split(' ')[0] || locale;
+        parts.push(`## COMMUNICATION LANGUAGE\nAlways respond to the user in ${langName}. All text output, explanations, and descriptions must be in ${langName}. Tool parameters (node names, property values) remain in the user's design language.`);
     }
 
     const finalPrompt = parts.filter(Boolean).join('\n\n');

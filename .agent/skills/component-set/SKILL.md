@@ -1,7 +1,7 @@
 ---
 id: component-set
 name: Component Set Creation
-description: Efficiently create Figma ComponentSets with variant matrices using clone cascading
+description: Create Figma ComponentSets with variant matrices using clone cascading and combine_components
 category: figma
 priority: 3
 enabledByDefault: true
@@ -11,17 +11,9 @@ enabledByDefault: true
 
 When creating a ComponentSet (multiple variants of one component), follow this workflow. It minimizes tool calls and avoids known pitfalls.
 
-### Phase 1: Inspect Target (2 calls max)
+### Phase 1: Identify Variant Dimensions
 
-Do NOT inspect every variant individually. Instead:
-
-1. **Structure**: `tree /Component/ -d 2` — get variant names, dimensions, child structure
-2. **Colors**: `grep /Component/ fill,stroke` — get ALL unique colors in one call
-3. **Detail**: `cat /Component/PrimaryDefault/ -s` — inspect only **1 representative per Variant dimension** — infer other states from the color palette
-
-### Phase 2: Identify Variant Dimensions
-
-ComponentSets are Cartesian products. Decompose variant names into dimensions:
+ComponentSets are Cartesian products. Decompose into dimensions:
 
 ```
 "Variant=Primary, State=Default, Size=Medium"
@@ -33,91 +25,77 @@ Find **identical style groups** to minimize clone overrides:
 - All Disabled variants often share the same fill/stroke/text colors
 - Hover variants often only change 1 prop from Default
 
-### Phase 3: Create with Clone Cascading
+### Phase 2: Create Base + Clone Cascade
 
-**Step 1 — Base component** (frame + children):
+**Step 1 — Create base variant** (1 jsx call):
 ```
-mk /Base/ frame layout:row gap:8 corner:8 w:hug h:hug alignMain:center alignCross:center overflow:hidden p:12 bg:#2C2C2C stroke:'1 #2C2C2C'
-mk /Base/Label text size:16 font:Inter leading:16 fill:#F5F5F5 -- Button
-```
-
-**Step 2 — Clone cascade** (group by similarity):
-```
-# Hover only changes bg → clone from Default
-cp /Base/ /Hover/ bg:#1E1E1E
-
-# Disabled has unique style → clone from base with overrides
-cp /Base/ /Disabled/ bg:#D9D9D9 stroke:'1 #B3B3B3'
-
-# Neutral has different colors
-cp /Base/ /Neutral/ bg:#E3E3E3 stroke:'1 #767676'
-
-# Size only changes padding → clone from corresponding style variant
-cp /Base/ /Small/ p:8
+jsx({markup: `
+<component name="Variant=Primary, State=Default, Size=Medium"
+  layout="row" gap={8} corner={8} w="hug" h="hug"
+  align="center" p={12} bg="#2C2C2C" stroke="#2C2C2C">
+  <text name="Label" size={16} weight="Medium" fill="#F5F5F5">Button</text>
+</component>
+`})
 ```
 
-**Step 3 — Combine into ComponentSet**:
+**Step 2 — Clone cascade** (clone_node + edit, group by similarity):
 ```
-comp combine /Base/ /Hover/ /Disabled/ /Neutral/ /Small/ --name Button
+// Hover only changes bg → clone from Default, edit one prop
+clone_node({node: baseId})  → hoverId
+edit({node: hoverId, name: "Variant=Primary, State=Hover, Size=Medium", bg: "#1E1E1E"})
+
+// Disabled has unique style → clone + more overrides
+clone_node({node: baseId})  → disabledId
+edit({node: disabledId, name: "Variant=Primary, State=Disabled, Size=Medium",
+      bg: "#D9D9D9", stroke: "#B3B3B3"})
+
+// Size variant only changes padding
+clone_node({node: baseId})  → smallId
+edit({node: smallId, name: "Variant=Primary, State=Default, Size=Small", padding: 8})
+```
+
+**Step 3 — Combine into ComponentSet** (1 combine_components call):
+```
+combine_components({nodes: [baseId, hoverId, disabledId, smallId], name: "Button"})
+```
+
+### Phase 3: Add Component Properties
+
+```
+// After combining, add text props
+add_component_prop({node: setId, name: "Label", type: "TEXT", default: "Button", bind: labelId})
 ```
 
 ### Phase 4: Verify (1 call)
 
-Take a screenshot of the ComponentSet and compare dimensions with target:
 ```
-cat /Button/ -s
+inspect({node: setId, screenshot: true})
 ```
 
-### Batching Strategy
+### Call Count
 
-- Use sequential `mk` + `cp` calls for all variants
-- `cp` inherits everything from source, override only what changes
-- Button (18 variants): 1 frame + 1 text + 17 cp + 1 comp combine = ~20 calls
-- Use paths for all references — no ID tracking needed
+Button (18 variants): 1 jsx + 17 clone_node + 17 edit + 1 combine_components + props ≈ 38 calls
+Button (6 variants): 1 jsx + 5 clone_node + 5 edit + 1 combine_components + props ≈ 14 calls
 
 ### KNOWN PITFALLS
 
-#### Text nodes
-
 | Wrong | Right | Why |
 |-------|-------|-----|
-| `leading:100` | `leading:16` | `leading` is pixels, not %. 100 = 100px line height |
-| `mk /X text w:hug h:hug` | `mk /X text` (omit sizing) | Setting sizing on text blocks `textAutoResize` auto-fill |
-| `leading:'100%'` | `leading:16` (for 16px font) | String percentages not supported |
+| `create_component` inside another component | Create at top level, then `combine_components` | Figma blocks component-inside-component |
+| Use old ID after `create_component` | Use the NEW ID from response | Old ID is invalidated |
+| `js({code: "node.remove()"})` | `delete_node({node: id})` | JS sandbox blocks .remove() |
+| `fill: "transparent"` to clear | `fill: "none"` | `none` clears the fills array |
+| Name frames without variant format | `"Variant=X, State=Y"` before combine | Variant axes come from frame names |
 
-#### Icon nodes
+### Icon Nodes
 
-The `icon` type creates `frame(name) > vector('Vector')`. Clone overrides on icon frames **auto-propagate fills/strokes to vector children** (same as icon creation). Use the icon node's name directly — no need to target the internal `Vector` node.
+The `icon` type in jsx creates a frame with vector child. Use the `<icon>` element:
 
-```
-mk /Base/MyIcon icon icon:lucide:star w:20 h:20 stroke:#F5F5F5
+```jsx
+<icon name="Star" icon="lucide:star" w={20} h={20} stroke="#F5F5F5"/>
 ```
 
 | Icon library | Color prop | Example |
 |-------------|-----------|---------|
-| Lucide / Tabler (outline) | `stroke` | `stroke:#1E1E1E` |
-| MDI / Phosphor (filled) | `fill` | `fill:#1E1E1E` |
-
-#### comp combine
-
-| Wrong | Right | Why |
-|-------|-------|-----|
-| Expect wrap/gap to work automatically | Update the set after combining | comp combine doesn't pass wrap/gap/padding to ComponentSet |
-| Forget to name variants | Name frames `Variant=X, State=Y` before combine | Variant axes come from frame names |
-
-#### Clone overrides (cp)
-
-| Wrong | Right | Why |
-|-------|-------|-----|
-| `fill:transparent` to clear fills | `fill:none` | `none` clears the fills array |
-
-### Reference: Common Button Specs
-
-```
-Button frame:     layout:row, gap:8, corner:8, w:hug, h:hug,
-                  alignMain:center, alignCross:center, overflow:hidden, strokeW:1
-Button text:      size:16, font:Inter, leading:16
-Icon Button:      same as Button but corner:32, child is icon not text
-Medium padding:   p:12
-Small padding:    p:8
-```
+| Lucide / Tabler (outline) | `stroke` | `stroke="#1E1E1E"` |
+| MDI / Phosphor (filled) | `fill` | `fill="#1E1E1E"` |

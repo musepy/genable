@@ -23,6 +23,38 @@ interface EditEntry {
   content?: string;
 }
 
+/**
+ * Split props into component props (by display name) and regular props,
+ * BEFORE normalization. Component props bypass normalizeProps' unknown-prop filter.
+ */
+function splitComponentProps(
+  node: SceneNode,
+  props: Record<string, any> | undefined,
+): { componentPropsRaw: Record<string, any>; remainingProps: Record<string, any> } {
+  if (!props || node.type !== 'INSTANCE') {
+    return { componentPropsRaw: {}, remainingProps: props || {} };
+  }
+  const instProps = (node as InstanceNode).componentProperties;
+  const keyMap = new Set<string>();
+  if (instProps) {
+    for (const internalKey of Object.keys(instProps)) {
+      const idx = internalKey.indexOf('#');
+      const name = idx >= 0 ? internalKey.slice(0, idx) : internalKey;
+      keyMap.add(name.toLowerCase());
+    }
+  }
+  const componentPropsRaw: Record<string, any> = {};
+  const remainingProps: Record<string, any> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (keyMap.has(key.toLowerCase())) {
+      componentPropsRaw[key] = value;
+    } else {
+      remainingProps[key] = value;
+    }
+  }
+  return { componentPropsRaw, remainingProps };
+}
+
 /** Build normalized props from raw input. */
 function buildNormalizedProps(props?: Record<string, any>, content?: string): Record<string, any> | null {
   const rawProps: Record<string, any> = {};
@@ -147,10 +179,12 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       }
       if (resolved.isPage) { errors.push(`Cannot edit page root (ref: "${ref}")`); continue; }
 
-      const normalized = buildNormalizedProps(entry.props, entry.content);
-      if (!normalized) { errors.push(`No props or content for "${ref}"`); continue; }
+      const { componentPropsRaw, remainingProps } = splitComponentProps(resolved.node, entry.props);
+      const normalized = buildNormalizedProps(remainingProps, entry.content);
+      const merged = { ...(normalized || {}), ...componentPropsRaw };
+      if (Object.keys(merged).length === 0) { errors.push(`No props or content for "${ref}"`); continue; }
 
-      const { warnings } = await applyEdit(resolved.node, normalized);
+      const { warnings } = await applyEdit(resolved.node, merged);
       allWarnings.push(...warnings);
       const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
       const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
@@ -195,14 +229,16 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     return { error: 'Cannot edit the page root. Specify a node ref.' };
   }
 
-  const normalized = buildNormalizedProps(props, content);
-  if (!normalized) {
+  const { componentPropsRaw, remainingProps } = splitComponentProps(resolved.node, props);
+  const normalized = buildNormalizedProps(remainingProps, content);
+  const merged = { ...(normalized || {}), ...componentPropsRaw };
+  if (Object.keys(merged).length === 0) {
     return { error: 'No props or content provided.' };
   }
 
   tracer.exit({ count: 1 });
 
-  const { warnings } = await applyEdit(resolved.node, normalized);
+  const { warnings } = await applyEdit(resolved.node, merged);
   const _stderr = warnings.length > 0
     ? warnings.map(w => `[warn] ${w}`).join('\n')
     : undefined;

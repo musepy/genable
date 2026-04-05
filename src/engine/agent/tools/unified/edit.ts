@@ -22,11 +22,15 @@ For single-property changes, prefer focused setters:
 
 Use edit for batch fixes or properties not covered by setters (sizing, radius, opacity, effects, component props):
   edit({nodes: [
-    {node: "1:1", props: {w: "fill", corner: 8}},
+    {node: "1:1", props: {w: "fill", corner: 8}},        // Figma native props
     {node: "1:2", props: {opacity: 0.6}},
     {node: "1:3", content: "Updated text"},
-    {node: "1:4", props: {Name: "Alex", Role: "Engineer"}}
-  ]})`,
+    {node: "1:4", props: {Label: "Sign In"}},             // instance TEXT prop (by display name)
+    {node: "1:5", props: {"Show Icon": "false"}},         // instance BOOLEAN prop
+    {node: "1:6", props: {IconSlot: "1450:59275"}}        // instance INSTANCE_SWAP (value = component ID)
+  ]})
+
+For instances, use component property DISPLAY NAMES (e.g. "Label") — edit resolves them to Figma's internal keys automatically. Component props can be mixed with Figma props in the same call.`,
   parameters: {
     type: 'object',
     properties: {

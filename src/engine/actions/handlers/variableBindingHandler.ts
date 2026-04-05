@@ -19,10 +19,18 @@ let varCache: Map<string, VariableValue> | null = null;
 async function ensureCache(): Promise<Map<string, VariableValue>> {
   if (varCache) return varCache;
   varCache = new Map();
+  // Build collection id → name lookup
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const collById = new Map<string, string>();
+  for (const c of collections) collById.set(c.id, c.name);
   // getLocalVariablesAsync() with no filter returns all types
   const all = await figma.variables.getLocalVariablesAsync();
   for (const v of all) {
-    varCache.set(v.name, v as unknown as VariableValue);
+    const collName = collById.get(v.variableCollectionId) || '';
+    // Primary key: "Collection/name" (disambiguates duplicates across collections)
+    if (collName) varCache.set(`${collName}/${v.name}`, v as unknown as VariableValue);
+    // Fallback key: just "name" (backward compat when unambiguous)
+    if (!varCache.has(v.name)) varCache.set(v.name, v as unknown as VariableValue);
   }
   return varCache;
 }

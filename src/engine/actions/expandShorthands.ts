@@ -118,12 +118,13 @@ const EXPANDERS: Record<string, Expander> = {
     if (Array.isArray(v)) return expandPaddingParts(v.map(Number));
     // Object syntax: p={{top:12, bottom:12, left:16, right:16}} or {t:12, b:12, l:16, r:16}
     if (typeof v === 'object' && v !== null) {
-      const result: Record<string, number> = {};
-      if (v.top != null || v.t != null) result.paddingTop = Number(v.top ?? v.t);
-      if (v.right != null || v.r != null) result.paddingRight = Number(v.right ?? v.r);
-      if (v.bottom != null || v.b != null) result.paddingBottom = Number(v.bottom ?? v.b);
-      if (v.left != null || v.l != null) result.paddingLeft = Number(v.left ?? v.l);
-      return result;
+      const result: Record<string, number | string> = {};
+      const coerce = (x: any) => isVarRef(x) ? x : Number(x);
+      if (v.top != null || v.t != null) result.paddingTop = coerce(v.top ?? v.t);
+      if (v.right != null || v.r != null) result.paddingRight = coerce(v.right ?? v.r);
+      if (v.bottom != null || v.b != null) result.paddingBottom = coerce(v.bottom ?? v.b);
+      if (v.left != null || v.l != null) result.paddingLeft = coerce(v.left ?? v.l);
+      return result as Record<string, number>;
     }
     return {};
   },

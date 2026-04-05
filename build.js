@@ -81,11 +81,8 @@ if (isWatch) {
 
     console.log(`🔨 Generating Agent Registries...`);
     execSync(`node scripts/generate-skills-registry.js`, { stdio: 'inherit' });
-    execSync(`node scripts/generate-knowledge.js`, { stdio: 'inherit' });
+    execSync(`node scripts/generate-knowledge-index.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-prompt-catalog.js`, { stdio: 'inherit' });
-    execSync(`node scripts/generate-help-catalog.js`, { stdio: 'inherit' });
-    execSync(`node scripts/generate-guidelines-catalog.js`, { stdio: 'inherit' });
-    execSync(`node scripts/generate-style-catalog.js`, { stdio: 'inherit' });
 
     console.log(`🔨 Running Figma Plugin Build...`);
     execSync(`npx ${buildArgs.join(' ')}`, { stdio: 'inherit' });

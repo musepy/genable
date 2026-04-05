@@ -1,0 +1,948 @@
+[
+  {
+    "id": "guideline:card-layout",
+    "name": "card layout design guideline",
+    "description": "Card grid layouts, spacing, responsive behavior, and visual hierarchy",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:chart",
+    "name": "chart design guideline",
+    "description": "Data visualization: chart types, color encoding, axes, and accessibility",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:dashboard",
+    "name": "dashboard design guideline",
+    "description": "Dashboard layouts, widget grids, KPI cards, and data-dense interfaces",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:form",
+    "name": "form design guideline",
+    "description": "Form design: field layout, validation, input groups, and error states",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:landing-page",
+    "name": "landing page design guideline",
+    "description": "Landing page sections, hero layouts, CTAs, and conversion patterns",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:mobile",
+    "name": "mobile design guideline",
+    "description": "Mobile UI patterns, touch targets, bottom sheets, and responsive sizing",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:navigation",
+    "name": "navigation design guideline",
+    "description": "Navigation patterns: sidebars, tab bars, breadcrumbs, and menus",
+    "category": "guideline"
+  },
+  {
+    "id": "guideline:table",
+    "name": "table design guideline",
+    "description": "Data tables: column sizing, sorting, pagination, and row actions",
+    "category": "guideline"
+  },
+  {
+    "id": "help:batch-replace",
+    "name": "Batch Replace (Bulk Property Changes)",
+    "description": "When making bulk style changes across a subtree like rebranding or theme switching",
+    "category": "help",
+    "keywords": [
+      "replace",
+      "batch",
+      "bulk",
+      "search",
+      "rebranding",
+      "theme",
+      "switching",
+      "fillColor",
+      "textColor",
+      "strokeColor",
+      "fontSize",
+      "fontFamily",
+      "fontWeight",
+      "cornerRadius",
+      "gap",
+      "from-to",
+      "sed",
+      "grep"
+    ]
+  },
+  {
+    "id": "help:canvas-reading",
+    "name": "Canvas Reading (ls/tree/cat Progressive Pattern)",
+    "description": "When reading the canvas to understand what exists before making edits",
+    "category": "help",
+    "keywords": [
+      "ls",
+      "tree",
+      "cat",
+      "read",
+      "canvas",
+      "page",
+      "structure",
+      "skeleton",
+      "styles",
+      "screenshot",
+      "suggestedReads",
+      "XML",
+      "progressive-read",
+      "overview",
+      "navigation",
+      "path",
+      "filesystem"
+    ]
+  },
+  {
+    "id": "help:components",
+    "name": "Component-First Workflow",
+    "description": "When creating 2+ similar elements that share structure but differ in content",
+    "category": "help",
+    "keywords": [
+      "component",
+      "comp",
+      "create",
+      "instance",
+      "stamp",
+      "similar",
+      "duplicate",
+      "card",
+      "list-item",
+      "nav-item",
+      "stat",
+      "tile",
+      "override"
+    ]
+  },
+  {
+    "id": "help:error-catalog",
+    "name": "Error Catalog (Known Error Patterns)",
+    "description": "When debugging a tool error or unexpected behavior that might match a known pattern",
+    "category": "help",
+    "keywords": [
+      "error",
+      "catalog",
+      "debug",
+      "pattern",
+      "XML_PARSE_ERROR",
+      "object-Object",
+      "truncation",
+      "gradient",
+      "TRUNC",
+      "TYPE",
+      "metadata",
+      "scalar",
+      "LLM",
+      "retry",
+      "workaround"
+    ]
+  },
+  {
+    "id": "help:error-handling",
+    "name": "Error Handling (Escalation Strategy)",
+    "description": "When a tool call fails or returns an error code and you need to decide how to recover",
+    "category": "help",
+    "keywords": [
+      "error",
+      "failure",
+      "retry",
+      "escalate",
+      "NOT_FOUND",
+      "INVALID_TARGET",
+      "UNKNOWN_COMMAND",
+      "FONT_FALLBACK",
+      "warning",
+      "fix",
+      "diagnose"
+    ]
+  },
+  {
+    "id": "help:examples",
+    "name": "Tool Usage Examples",
+    "description": "When you need concrete examples of how to use design tools for various scenarios",
+    "category": "help",
+    "keywords": [
+      "example",
+      "card",
+      "login",
+      "progressive",
+      "read",
+      "ls",
+      "tree",
+      "cat",
+      "path",
+      "component",
+      "instance",
+      "variant",
+      "clone",
+      "cp",
+      "comp",
+      "edit",
+      "update",
+      "FONT_FALLBACK",
+      "completion",
+      "button-group"
+    ]
+  },
+  {
+    "id": "help:modification",
+    "name": "Modification (Update and Delete Operations)",
+    "description": "When modifying, updating, or deleting existing nodes on the canvas",
+    "category": "help",
+    "keywords": [
+      "update",
+      "delete",
+      "modify",
+      "edit",
+      "change",
+      "existing",
+      "nodeId",
+      "batch-edit",
+      "mixed",
+      "create-edit",
+      "remove"
+    ]
+  },
+  {
+    "id": "help:parent-child",
+    "name": "Parent-Child Creation",
+    "description": "When inserting children into existing frames or using idMap from previous design calls",
+    "category": "help",
+    "keywords": [
+      "parent",
+      "child",
+      "idMap",
+      "cross-call",
+      "reference",
+      "insert",
+      "parentId",
+      "nested",
+      "hierarchy",
+      "existing-tree"
+    ]
+  },
+  {
+    "id": "help:progressive-creation",
+    "name": "Progressive Creation Strategy",
+    "description": "When deciding how many mk calls to use based on design complexity",
+    "category": "help",
+    "keywords": [
+      "progressive",
+      "step-by-step",
+      "skeleton",
+      "complexity",
+      "multi-step",
+      "region",
+      "design-strategy",
+      "iteration",
+      "node-count",
+      "medium",
+      "complex",
+      "simple",
+      "grow"
+    ]
+  },
+  {
+    "id": "help:properties",
+    "name": "Property Reference (mk command)",
+    "description": "When you need to know available property names for mk create/update commands",
+    "category": "help",
+    "keywords": [
+      "mk",
+      "properties",
+      "props",
+      "property",
+      "reference",
+      "attribute",
+      "shorthand",
+      "fill",
+      "bg",
+      "layout",
+      "padding",
+      "width",
+      "height",
+      "font",
+      "size",
+      "weight",
+      "corner",
+      "radius",
+      "shadow",
+      "blur",
+      "stroke",
+      "align",
+      "gap",
+      "opacity",
+      "clip",
+      "wrap",
+      "border",
+      "text",
+      "color",
+      "create",
+      "update",
+      "icon",
+      "iconify",
+      "iconName",
+      "lucide",
+      "mdi"
+    ]
+  },
+  {
+    "id": "help:response-style",
+    "name": "Response Style Guide (CLI, not chatbot)",
+    "description": "When you need guidance on how to format your text responses",
+    "category": "help",
+    "keywords": [
+      "response",
+      "reply",
+      "summary",
+      "output",
+      "verbose",
+      "terse",
+      "format",
+      "style",
+      "text"
+    ]
+  },
+  {
+    "id": "help:style-guide",
+    "name": "Style Guide for Visual Direction",
+    "description": "When creating a new design from scratch and needing a consistent visual direction or color/type system",
+    "category": "help",
+    "keywords": [
+      "style",
+      "style-guide",
+      "visual-direction",
+      "palette",
+      "color",
+      "typography",
+      "spacing",
+      "theme",
+      "dark-mode",
+      "accent",
+      "mood",
+      "tags",
+      "style-tags",
+      "man"
+    ]
+  },
+  {
+    "id": "help:variants",
+    "name": "Clone for Variant Matrices",
+    "description": "When creating a ComponentSet with multiple variants across axes like style, state, and size",
+    "category": "help",
+    "keywords": [
+      "clone",
+      "variant",
+      "comp",
+      "combine",
+      "ComponentSet",
+      "matrix",
+      "state",
+      "size",
+      "style",
+      "cascade",
+      "override",
+      "cp",
+      "base",
+      "diff"
+    ]
+  },
+  {
+    "id": "skill:agent-page",
+    "name": "Agent Page — Visual Design System Dashboard",
+    "description": "Initialize and manage the .agent page with Palette (color/spacing/typography) and Guide (usage documentation), using component templates for layout",
+    "category": "skill"
+  },
+  {
+    "id": "skill:component-set",
+    "name": "Component Set Creation",
+    "description": "Efficiently create Figma ComponentSets with variant matrices using clone cascading",
+    "category": "skill"
+  },
+  {
+    "id": "skill:design-system",
+    "name": "Design System Creation",
+    "description": "Create and manage Figma design systems with variables, collections, modes, component variants, and bindings",
+    "category": "skill"
+  },
+  {
+    "id": "skill:design-knowledge",
+    "name": "Design Knowledge",
+    "description": "Search design patterns, component anatomy, and layout rules",
+    "category": "skill"
+  },
+  {
+    "id": "skill:rich-text",
+    "name": "Rich Text Styling",
+    "description": "Apply mixed styles within a single text node using markdown markup",
+    "category": "skill"
+  },
+  {
+    "id": "style:bold-editorial",
+    "name": "bold editorial style guide",
+    "description": "High-impact editorial design for content platforms and magazine-style layouts. Strong typographic hierarchy with large d",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "bold",
+      "editorial",
+      "high-contrast",
+      "bold-typography",
+      "sharp-corners",
+      "landing-page"
+    ]
+  },
+  {
+    "id": "style:corporate-blue-light",
+    "name": "corporate blue light style guide",
+    "description": "Professional enterprise SaaS aesthetic with a trustworthy blue palette. Clean white backgrounds with subtle gray surface",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "corporate",
+      "clean",
+      "blue-accent",
+      "webapp",
+      "shadows",
+      "rounded"
+    ]
+  },
+  {
+    "id": "style:fintech-dark",
+    "name": "fintech dark style guide",
+    "description": "Sleek dark interface for financial technology and data-dense dashboards. Deep blue-gray palette with electric blue accen",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "fintech",
+      "dashboard",
+      "crisp",
+      "blue-accent",
+      "monochrome",
+      "webapp"
+    ]
+  },
+  {
+    "id": "style:terminal-dark",
+    "name": "terminal dark style guide",
+    "description": "Developer-focused dark interface inspired by terminal aesthetics. Monospace typography, zero border radius, and a green ",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "developer",
+      "monospace",
+      "sharp-corners",
+      "green-accent",
+      "minimal",
+      "dashboard"
+    ]
+  },
+  {
+    "id": "style:warm-organic",
+    "name": "warm organic style guide",
+    "description": "Warm, inviting aesthetic for health, lifestyle, and wellness applications. Earth tones with terracotta accents, generous",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "warm",
+      "organic",
+      "earth-tones",
+      "rounded",
+      "soft",
+      "wellness"
+    ]
+  },
+  {
+    "id": "style:amber-crt",
+    "name": "amber crt style guide",
+    "description": "致敬 80 年代阴极射线管显示器的复古终端风格。琥珀色文字投射在纯黑底上，配合等宽字体和零圆角重现早期计算机的粗粝质感。适合复古主题工具、命令行界面美化、极客向产品。",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "developer",
+      "monospace",
+      "sharp-corners",
+      "orange-accent",
+      "industrial",
+      "warm",
+      "flat"
+    ]
+  },
+  {
+    "id": "style:arctic-minimal",
+    "name": "arctic minimal style guide",
+    "description": "极致克制的冰川灰蓝方案，几乎无彩色，靠留白和排版节奏建立层级。大量呼吸空间配合低饱和度色彩传递宁静专注感。适合写作工具、笔记应用、生产力工具等需要沉浸感的场景。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "minimal",
+      "cool",
+      "calm",
+      "monochrome",
+      "crisp",
+      "webapp",
+      "flat"
+    ]
+  },
+  {
+    "id": "style:bubblegum-pop",
+    "name": "bubblegum pop style guide",
+    "description": "泡泡糖般的活力撞色风格，玫红为主色大胆出击，配合超大圆角和彩色阴影制造玩乐感。适合教育游戏化、儿童应用、签到打卡、社交互动等需要激发参与度和愉悦感的年轻化产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "playful",
+      "vibrant",
+      "bold",
+      "pill-shaped",
+      "rounded",
+      "warm",
+      "red-accent"
+    ]
+  },
+  {
+    "id": "style:candy-pastel",
+    "name": "candy pastel style guide",
+    "description": "糖果色柔和方案，薰衣草紫为主调配合粉色系渐变感。大圆角与 pill 造型传递可爱亲和力，适合年轻化社交、个人理财、习惯追踪等面向 Z 世代用户的移动应用。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "playful",
+      "soft",
+      "pastel",
+      "purple-accent",
+      "rounded",
+      "pill-shaped",
+      "warm"
+    ]
+  },
+  {
+    "id": "style:clinical-teal",
+    "name": "clinical teal style guide",
+    "description": "清洁的医疗级青绿色方案，用纯净的白底和冷静的青色传递专业可信赖感。宽松间距和 pill 造型柔化严肃感，让数据呈现不显压迫。适合医疗健康、在线问诊、健身追踪、保险科技等对信任度要求极高的产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "clean",
+      "calm",
+      "cool",
+      "rounded",
+      "wellness",
+      "webapp",
+      "flat"
+    ]
+  },
+  {
+    "id": "style:coral-commerce",
+    "name": "coral commerce style guide",
+    "description": "珊瑚色为主调的温暖电商方案，柔和的红橙色传递购物愉悦感而不显廉价。圆润造型配合明亮配色营造友好的浏览体验。适合生活好物电商、订阅盒子、礼品推荐、美食配送等面向消费者的购物类产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "warm",
+      "vibrant",
+      "red-accent",
+      "rounded",
+      "soft",
+      "webapp",
+      "landing-page"
+    ]
+  },
+  {
+    "id": "style:cream-literary",
+    "name": "cream literary style guide",
+    "description": "旧书页般的暖奶油底色配合深褐色文字，营造安静的阅读氛围。字体层级清晰但装饰极少，用留白代替分割线。适合阅读器、个人博客、写作工具、独立出版平台等文字密集的产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "warm",
+      "elegant",
+      "earth-tones",
+      "minimal",
+      "serif",
+      "soft",
+      "editorial"
+    ]
+  },
+  {
+    "id": "style:electric-cobalt",
+    "name": "electric cobalt style guide",
+    "description": "高饱和钴蓝色主导的大胆科技方案，在浅蓝灰底上用强烈的蓝色块制造视觉锚点。比 Corporate Blue 更激进、更年轻，适合 AI 产品、云平台、新锐 SaaS、开发者工具营销站等需要\"未来科技感\"的场景。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "bold",
+      "blue-accent",
+      "vibrant",
+      "geometric",
+      "shadows",
+      "webapp",
+      "crisp"
+    ]
+  },
+  {
+    "id": "style:forest-calm",
+    "name": "forest calm style guide",
+    "description": "深林绿与奶油白的沉静组合，灵感来自北欧森林。低饱和绿色系配合宽松间距营造缓慢呼吸的节奏感。适合冥想应用、自然教育、园艺工具、慢生活社区等与自然连接的产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "organic",
+      "calm",
+      "green-accent",
+      "soft",
+      "earth-tones",
+      "wellness",
+      "rounded"
+    ]
+  },
+  {
+    "id": "style:glassmorphism-violet",
+    "name": "glassmorphism violet style guide",
+    "description": "紫色系毛玻璃风格，深色基底上叠加半透明层次感。色彩饱和且通透，适合现代移动端应用、音乐播放器、社交产品等追求视觉冲击力的年轻化产品。",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "vibrant",
+      "purple-accent",
+      "rounded",
+      "gradient",
+      "mobile",
+      "soft",
+      "webapp"
+    ]
+  },
+  {
+    "id": "style:material-ocean",
+    "name": "material ocean style guide",
+    "description": "深海蓝底色配合青色强调的 Material Design 变体。分层阴影系统建立清晰的 Z 轴层级，圆角统一为 8px。适合工具型 SaaS、项目管理、云服务控制台等需要信息密度和视觉清晰度并重的产品。",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "cool",
+      "crisp",
+      "blue-accent",
+      "rounded",
+      "shadows",
+      "webapp",
+      "dashboard"
+    ]
+  },
+  {
+    "id": "style:midnight-gold",
+    "name": "midnight gold style guide",
+    "description": "纯黑基底配合金色强调的奢华方案。克制的装饰、精确的间距和低调的金属感传递高端质感。适合奢侈品电商、高端会员体系、精品酒店预订等追求 premium 感的产品。",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "luxury",
+      "elegant",
+      "gold-accent",
+      "minimal",
+      "sharp",
+      "monochrome",
+      "webapp"
+    ]
+  },
+  {
+    "id": "style:monochrome-ink",
+    "name": "monochrome ink style guide",
+    "description": "纯灰阶无彩色方案，用描边代替填充、用层次代替色彩来建立视觉节奏。连成功/错误状态都用灰度表达，极致的去色让内容（尤其是图片和视频）成为唯一色彩来源。适合摄影作品集、设计师 portfolio、画廊官网。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "monochrome",
+      "minimal",
+      "stroke-based",
+      "sharp",
+      "elegant",
+      "geometric",
+      "flat"
+    ]
+  },
+  {
+    "id": "style:neo-brutalist",
+    "name": "neo brutalist style guide",
+    "description": "新粗犷主义风格，用厚实黑色边框、纯色块和偏移阴影制造原始冲击力。拒绝圆滑渐变，拥抱粗糙直接。适合独立产品、创意工具、个人网站等希望打破常规视觉语言的场景。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "brutalist",
+      "bold",
+      "sharp-corners",
+      "high-contrast",
+      "playful",
+      "stroke-based",
+      "geometric"
+    ]
+  },
+  {
+    "id": "style:neon-cyber",
+    "name": "neon cyber style guide",
+    "description": "赛博朋克霓虹风格，纯黑底上用品红和青色制造电子化的视觉张力。高饱和度撞色配合几何造型和微弱发光阴影，适合游戏面板、电竞社区、音乐可视化、科幻主题产品。",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "vibrant",
+      "neon",
+      "red-accent",
+      "geometric",
+      "sharp",
+      "bold",
+      "gradient"
+    ]
+  },
+  {
+    "id": "style:notion-zen",
+    "name": "notion zen style guide",
+    "description": "极致去色的禅意风格，几乎只有黑白灰三色，靠微妙的灰度层次和精致的排版建立秩序。无阴影、无渐变、无装饰——内容就是界面。适合笔记工具、知识管理、文档协作等以文字为核心的生产力产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "minimal",
+      "flat",
+      "monochrome",
+      "calm",
+      "webapp",
+      "stroke-based",
+      "crisp"
+    ]
+  },
+  {
+    "id": "style:rose-gold-elegant",
+    "name": "rose gold elegant style guide",
+    "description": "玫瑰金与深灰的优雅搭配，用低饱和暖粉色调传递精致感而不显甜腻。温润的金属质感配合适度圆角和细腻的阴影，适合美妆电商、女性社区、婚礼策划、精品咖啡等追求格调的产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "elegant",
+      "warm",
+      "soft",
+      "rounded",
+      "dual-tone",
+      "luxury",
+      "webapp"
+    ]
+  },
+  {
+    "id": "style:slate-data",
+    "name": "slate data style guide",
+    "description": "深灰蓝基底的数据分析师方案，低饱和天蓝色强调在深色中提供刚好够的色彩指引。正文用无衬线、数值用等宽的双字体系统为数据密集界面优化可读性。适合 BI 工具、数据可视化、监控大屏、DevOps 面板。",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "dashboard",
+      "monochrome",
+      "blue-accent",
+      "dual-font",
+      "crisp",
+      "minimal",
+      "dark-sidebar"
+    ]
+  },
+  {
+    "id": "style:sunset-warm",
+    "name": "sunset warm style guide",
+    "description": "日落橙红色系，在暖白底上铺开活力与热情。柔和圆角和温暖色调避免攻击性，用色彩梯度引导视觉流向。适合社交平台、美食应用、旅行预订、活动推广等需要情绪感染力的产品。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "warm",
+      "vibrant",
+      "orange-accent",
+      "rounded",
+      "soft",
+      "playful",
+      "landing-page"
+    ]
+  },
+  {
+    "id": "style:swiss-grid",
+    "name": "swiss grid style guide",
+    "description": "瑞士国际主义设计风格，严格网格、零装饰、红色强调。用极端的排版对比（大标题 + 小正文）和负空间建立视觉张力。适合建筑事务所、设计工作室、博物馆官网等追求理性美学的场景。",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "geometric",
+      "sharp-corners",
+      "red-accent",
+      "high-contrast",
+      "minimal",
+      "condensed",
+      "corporate"
+    ]
+  },
+  {
+    "id": "anatomy:avatar",
+    "name": "Avatar",
+    "description": "Component anatomy: avatar",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:badge",
+    "name": "Badge",
+    "description": "A small tag for status, labels, or counts",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:bar-chart",
+    "name": "Bar Chart",
+    "description": "Component anatomy: bar-chart",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:button",
+    "name": "Button",
+    "description": "Interactive element for actions",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:card",
+    "name": "Card",
+    "description": "Component anatomy: card",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:checkbox",
+    "name": "Checkbox",
+    "description": "Component anatomy: checkbox",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:dialog",
+    "name": "Dialog",
+    "description": "Component anatomy: dialog",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:divider",
+    "name": "Divider",
+    "description": "Component anatomy: divider",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:dropdown",
+    "name": "Dropdown Menu",
+    "description": "Component anatomy: dropdown",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:feature-grid",
+    "name": "Feature Grid",
+    "description": "Component anatomy: feature-grid",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:form",
+    "name": "Form",
+    "description": "Component anatomy: form",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:form-field",
+    "name": "Form Field",
+    "description": "Component anatomy: form-field",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:hero-section",
+    "name": "Hero Section",
+    "description": "Component anatomy: hero-section",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:input",
+    "name": "Input Field",
+    "description": "Component anatomy: input",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:line-chart",
+    "name": "Line Chart",
+    "description": "Component anatomy: line-chart",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:list",
+    "name": "List",
+    "description": "Component anatomy: list",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:list-item",
+    "name": "List Item",
+    "description": "Component anatomy: list-item",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:modal",
+    "name": "Modal",
+    "description": "Component anatomy: modal",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:nav-bar",
+    "name": "Navigation Bar",
+    "description": "Component anatomy: nav-bar",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:pie-chart",
+    "name": "Pie Chart",
+    "description": "Component anatomy: pie-chart",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:pricing-table",
+    "name": "Pricing Table",
+    "description": "Component anatomy: pricing-table",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:radio",
+    "name": "Radio",
+    "description": "Component anatomy: radio",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:sidebar",
+    "name": "Sidebar",
+    "description": "Component anatomy: sidebar",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:switch",
+    "name": "Switch",
+    "description": "Component anatomy: switch",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:tab-list",
+    "name": "Tab List",
+    "description": "Component anatomy: tab-list",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:table",
+    "name": "Table",
+    "description": "Component anatomy: table",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:tabs",
+    "name": "Tabs",
+    "description": "Component anatomy: tabs",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:toast",
+    "name": "Toast",
+    "description": "Component anatomy: toast",
+    "category": "anatomy"
+  }
+]

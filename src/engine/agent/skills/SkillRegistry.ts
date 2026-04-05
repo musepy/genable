@@ -80,7 +80,7 @@ class SkillRegistryImpl implements ISkillRegistry {
     }));
   }
 
-  /** Get full skill body (used by knowledgeHub indexing). */
+  /** Get full skill body for runtime retrieval. */
   getSkillBody(skillId: string): string | null {
     const skill = this.skills.get(skillId);
     if (!skill) return null;

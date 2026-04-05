@@ -1,9 +1,17 @@
 /**
  * @file knowledgeTool.ts
- * @description Query design guidelines, style guides, and help documentation.
+ * @description Unified knowledge retrieval tool — search/read over all knowledge sources.
  *
- * Replaces: man (from `run` CLI).
- * Executes locally in sandbox — no IPC.
+ * Two actions:
+ *   search — keyword search, returns [{id, name, description}] (lightweight)
+ *   read   — full content by id
+ *
+ * Knowledge categories:
+ *   guideline:*  — UI pattern design guidelines (form, dashboard, table, etc.)
+ *   help:*       — tool usage guides and best practices
+ *   skill:*      — advanced workflows (component sets, design systems, etc.)
+ *   style:*      — visual style guides with color/typography tokens
+ *   anatomy:*    — component structure blueprints (button, card, modal, etc.)
  */
 
 import { ToolDefinition } from '../types';
@@ -11,39 +19,38 @@ import { ToolDefinition } from '../types';
 export const knowledgeDefinition: ToolDefinition = {
   name: 'knowledge',
   executionStrategy: 'parallel',
-  description: `Query design guidelines, style guides, and help documentation.
+  description: `Search and read design knowledge, guidelines, and reference documentation.
 
-Sources:
-  help       — help articles and skill documentation (default)
-  guidelines — design guidelines by topic
-  style-tags — list available visual style tags
-  style      — get a style guide by tags
+Actions:
+  search — find knowledge entries by keyword (returns name + description)
+  read   — get full content by ID
+
+Categories: guideline, help, skill, style, anatomy
 
 Examples:
-  knowledge({topic: "components"})
-  knowledge({topic: "variants"})
-  knowledge({source: "guidelines", topic: "dashboard"})
-  knowledge({source: "guidelines", topic: "form"})
-  knowledge({source: "style-tags"})
-  knowledge({source: "style", tags: "dark-mode,minimal"})
-
-Guidelines topics: dashboard, form, landing-page, card-layout, navigation, mobile, table, chart.`,
+  knowledge({action: "search", query: "form"})
+  knowledge({action: "search", query: "button component"})
+  knowledge({action: "search", query: "dark mode style"})
+  knowledge({action: "read", id: "guideline:form"})
+  knowledge({action: "read", id: "anatomy:button"})
+  knowledge({action: "read", id: "style:terminal-dark"})`,
   parameters: {
     type: 'object',
     properties: {
-      source: {
+      action: {
         type: 'string',
-        description: '"help" (default), "guidelines", "style-tags", or "style"',
-        enum: ['help', 'guidelines', 'style-tags', 'style'],
+        enum: ['search', 'read'],
+        description: '"search" to find entries, "read" to get full content',
       },
-      topic: {
+      query: {
         type: 'string',
-        description: 'Help topic or guidelines context',
+        description: 'Search keywords (for search action)',
       },
-      tags: {
+      id: {
         type: 'string',
-        description: 'Comma-separated style tags (style source only)',
+        description: 'Knowledge entry ID like "guideline:form" (for read action)',
       },
     },
+    required: ['action'],
   },
 };

@@ -3,32 +3,8 @@ import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ContentBlock, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
 import type { ContextAttachment } from '../../types'
 import { PluginData } from '../../hooks/usePluginData'
-import guidelinesCatalog from '../../generated/guidelines-catalog.json'
-import styleCatalog from '../../generated/style-catalog.json'
-import { matchStyleGuide, normalizeStyleTags, StyleGuideEntry } from './styleGuideMatcher'
-import { helpIndex } from '../../engine/agent/tools/helpIndex'
+import { knowledgeSearch } from '../../engine/agent/tools/knowledgeSearch'
 import { agentTools } from '../../engine/agent/tools'
-import skillsRegistry from '../../generated/skills-registry.json'
-
-// ==========================================
-// Skill lookup helpers (from build-time skills-registry.json)
-// ==========================================
-
-type SkillRegistryEntry = { id: string; name: string; description: string; body: string }
-
-function getSkillById(id: string): SkillRegistryEntry | null {
-  const entry = (skillsRegistry as Record<string, any>)[id]
-  if (!entry) return null
-  return { id: entry.id, name: entry.name, description: entry.description, body: entry.body }
-}
-
-function getSkillTopics(): { id: string; title: string; whenToUse: string }[] {
-  return Object.values(skillsRegistry as Record<string, any>).map((s: any) => ({
-    id: s.id,
-    title: s.name,
-    whenToUse: s.description,
-  }))
-}
 import {
   AgentRuntimeContextUsage,
   AgentRuntimeEvent,
@@ -457,113 +433,46 @@ export function useChat({
 
     try {
       const localExecutors = {
-        query: async (params: any) => {
-          if (params.source === 'guidelines') {
-            const topic = (params.query || '').toLowerCase().trim()
-            const content = (guidelinesCatalog as Record<string, string>)[topic]
-            if (!content) {
-              return { success: false, error: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` }
+        knowledge: async (params: any) => {
+          const action = params.action || 'search'
+
+          if (action === 'search') {
+            // Legacy compat: map old source/topic params to query
+            const query = params.query || params.topic || params.tags || ''
+            const results = knowledgeSearch.search(query)
+            if (results.length === 0) {
+              return { success: true, data: { message: `No entries matched "${query}".`, ids: knowledgeSearch.listIds() } }
             }
-            return { success: true, data: { topic, content } }
+            return { success: true, data: { results } }
+          }
+
+          if (action === 'read') {
+            // Legacy compat: accept old source:topic as id
+            let id = params.id || ''
+            if (!id && params.source && params.topic) {
+              id = `guideline:${params.topic}`
+            }
+            const content = knowledgeSearch.read(id)
+            if (!content) {
+              return { success: false, error: `Unknown id "${id}". Use knowledge({action: "search"}) to find available entries.` }
+            }
+            return { success: true, data: { id, content } }
+          }
+
+          // Legacy fallback: old source-based calls → map to search/read
+          if (params.source === 'guidelines' && params.topic) {
+            const id = `guideline:${params.topic.toLowerCase().trim()}`
+            const content = knowledgeSearch.read(id)
+            if (!content) {
+              return { success: false, error: `Unknown guideline "${params.topic}". Use knowledge({action: "search", query: "${params.topic}"}) to find entries.` }
+            }
+            return { success: true, data: { topic: params.topic, content } }
           }
           if (params.source === 'style-tags') {
-            return { success: true, data: { tags: (styleCatalog as any).tags } }
+            return { success: true, data: { results: knowledgeSearch.search('style') } }
           }
-          if (params.source === 'style') {
-            const queryTags = normalizeStyleTags(params.query || '')
-            const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
-            const match = matchStyleGuide(queryTags, guides)
-            if (!match) {
-              return { success: false, error: `No style guide matched tags "${queryTags.join(', ')}". Use query(source="style-tags") to see available tags.` }
-            }
-            return {
-              success: true,
-              data: { name: match.name, tags: match.guide.tags, content: match.guide.content }
-            }
-          }
-          if (params.source === 'help') {
-            const query = (params.query || '').trim()
-            if (!query) {
-              return { success: true, data: { topics: [...helpIndex.listTopics(), ...getSkillTopics()] } }
-            }
-            // 1. Exact match helpIndex
-            const exact = helpIndex.getById(query)
-            if (exact) {
-              return { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } }
-            }
-            // 2. Exact match skill ID
-            const skill = getSkillById(query)
-            if (skill) {
-              return { success: true, data: { topic: skill.id, title: skill.name, content: skill.body } }
-            }
-            // 3. BM25 fuzzy search helpIndex
-            const results = helpIndex.search(query, 2)
-            if (results.length > 0) {
-              return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
-            }
-            // 4. No match
-            return { success: true, data: {
-              message: `No help article matched "${query}".`,
-              availableTopics: [...helpIndex.listTopics(), ...getSkillTopics()]
-            } }
-          }
-          return null
-        },
-        knowledge: async (params: any) => {
-          // knowledge tool — local knowledge sources (guidelines, style, help)
-          const source = params.source || 'help'
-          // Accept both 'topic' (new schema) and 'query' (legacy) for the lookup key
-          const topicOrQuery = params.topic || params.tags || params.query || ''
-          if (source === 'guidelines') {
-            const topic = topicOrQuery.toLowerCase().trim()
-            const content = (guidelinesCatalog as Record<string, string>)[topic]
-            if (!content) {
-              return { success: false, error: `Unknown topic "${topic}". Available: ${Object.keys(guidelinesCatalog).join(', ')}` }
-            }
-            return { success: true, data: { topic, content } }
-          }
-          if (source === 'style-tags') {
-            return { success: true, data: { tags: (styleCatalog as any).tags } }
-          }
-          if (source === 'style') {
-            const queryTags = normalizeStyleTags(topicOrQuery)
-            const guides = (styleCatalog as any).guides as Record<string, StyleGuideEntry>
-            const match = matchStyleGuide(queryTags, guides)
-            if (!match) {
-              return { success: false, error: `No style guide matched tags "${queryTags.join(', ')}". Use knowledge({source: "style-tags"}) to see available tags.` }
-            }
-            return {
-              success: true,
-              data: { name: match.name, tags: match.guide.tags, content: match.guide.content }
-            }
-          }
-          if (source === 'help') {
-            const query = topicOrQuery.trim()
-            if (!query) {
-              return { success: true, data: { topics: [...helpIndex.listTopics(), ...getSkillTopics()] } }
-            }
-            // 1. Exact match helpIndex
-            const exact = helpIndex.getById(query)
-            if (exact) {
-              return { success: true, data: { topic: exact.id, title: exact.title, content: exact.content } }
-            }
-            // 2. Exact match skill ID
-            const skill = getSkillById(query)
-            if (skill) {
-              return { success: true, data: { topic: skill.id, title: skill.name, content: skill.body } }
-            }
-            // 3. BM25 fuzzy search helpIndex
-            const results = helpIndex.search(query, 2)
-            if (results.length > 0) {
-              return { success: true, data: { results: results.map(r => ({ topic: r.id, title: r.title, content: r.content })) } }
-            }
-            // 4. No match
-            return { success: true, data: {
-              message: `No help article matched "${query}".`,
-              availableTopics: [...helpIndex.listTopics(), ...getSkillTopics()]
-            } }
-          }
-          return null
+
+          return { success: false, error: `Unknown action "${action}". Use "search" or "read".` }
         },
       }
 

@@ -944,5 +944,131 @@
     "name": "Toast",
     "description": "Component anatomy: toast",
     "category": "anatomy"
+  },
+  {
+    "id": "ref:colors",
+    "name": "Color palettes by product type",
+    "description": "Color palettes (primary, secondary, CTA, background, text, border) for 95 product types — SaaS, e-commerce, health, fintech, etc.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:typography",
+    "name": "Font pairings and typography",
+    "description": "Typography pairings (heading + body fonts) with mood keywords, best-for guidance, and Google Fonts URLs",
+    "category": "reference"
+  },
+  {
+    "id": "ref:styles",
+    "name": "Visual style definitions",
+    "description": "Design styles (minimalism, neumorphism, glassmorphism, etc.) with colors, effects, accessibility, and complexity ratings",
+    "category": "reference"
+  },
+  {
+    "id": "ref:charts",
+    "name": "Chart type recommendations",
+    "description": "Best chart types for different data patterns — trend, comparison, distribution, composition, relationship",
+    "category": "reference"
+  },
+  {
+    "id": "ref:landing",
+    "name": "Landing page patterns",
+    "description": "Landing page section patterns with CTA placement, color strategy, and conversion optimization tactics",
+    "category": "reference"
+  },
+  {
+    "id": "ref:products",
+    "name": "Product type design trends",
+    "description": "Design recommendations by product type — primary style, landing pattern, dashboard style, color palette focus",
+    "category": "reference"
+  },
+  {
+    "id": "ref:reasoning",
+    "name": "UI design reasoning rules",
+    "description": "Design decision rules by UI category — recommended patterns, style priority, color/typography mood, anti-patterns",
+    "category": "reference"
+  },
+  {
+    "id": "ref:ux-guidelines",
+    "name": "UX design guidelines",
+    "description": "UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, error handling",
+    "category": "reference"
+  },
+  {
+    "id": "ref:web-interface",
+    "name": "Web interface guidelines",
+    "description": "Web interface patterns — layout, spacing, interaction, responsive breakpoints, performance",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-flutter",
+    "name": "flutter design guidelines",
+    "description": "Framework-specific design rules for flutter — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-html-tailwind",
+    "name": "html-tailwind design guidelines",
+    "description": "Framework-specific design rules for html-tailwind — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-jetpack-compose",
+    "name": "jetpack-compose design guidelines",
+    "description": "Framework-specific design rules for jetpack-compose — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-nextjs",
+    "name": "nextjs design guidelines",
+    "description": "Framework-specific design rules for nextjs — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-nuxt-ui",
+    "name": "nuxt-ui design guidelines",
+    "description": "Framework-specific design rules for nuxt-ui — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-nuxtjs",
+    "name": "nuxtjs design guidelines",
+    "description": "Framework-specific design rules for nuxtjs — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-react-native",
+    "name": "react-native design guidelines",
+    "description": "Framework-specific design rules for react-native — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-react",
+    "name": "react design guidelines",
+    "description": "Framework-specific design rules for react — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-shadcn",
+    "name": "shadcn design guidelines",
+    "description": "Framework-specific design rules for shadcn — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-svelte",
+    "name": "svelte design guidelines",
+    "description": "Framework-specific design rules for svelte — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-swiftui",
+    "name": "swiftui design guidelines",
+    "description": "Framework-specific design rules for swiftui — do/dont, code examples, best practices",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-vue",
+    "name": "vue design guidelines",
+    "description": "Framework-specific design rules for vue — do/dont, code examples, best practices",
+    "category": "reference"
   }
 ]

@@ -205,6 +205,152 @@ function scanAnatomy() {
 }
 
 // ==========================================
+// Source 6: UI Pro Max CSV reference data
+// ==========================================
+
+const UIPROMAX_DATA_DIR = path.join(PROJECT_ROOT, '..', 'ui-ux-pro-max-skill', '.shared', 'ui-ux-pro-max', 'data');
+
+/** Lightweight CSV parser — handles quoted fields and newlines */
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += ch;
+    } else if (ch === '"') { inQuotes = true; }
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field); field = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }
+    else if (ch !== '\r') { field += ch; }
+  }
+  row.push(field);
+  if (row.length > 1 || row[0] !== '') rows.push(row);
+  if (rows.length < 2) return [];
+  const headers = rows[0];
+  return rows.slice(1).map(r => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h.trim()] = (r[i] || '').trim(); });
+    return obj;
+  });
+}
+
+/** Convert CSV rows to readable markdown table */
+function csvToMarkdown(records, columns) {
+  if (!records.length) return '';
+  const cols = columns || Object.keys(records[0]);
+  const header = '| ' + cols.join(' | ') + ' |';
+  const sep = '| ' + cols.map(() => '---').join(' | ') + ' |';
+  const rows = records.map(r => '| ' + cols.map(c => (r[c] || '').replace(/\|/g, '/').replace(/\n/g, ' ')).join(' | ') + ' |');
+  return [header, sep, ...rows].join('\n');
+}
+
+const CSV_SOURCES = {
+  'colors': {
+    file: 'colors.csv',
+    name: 'Color palettes by product type',
+    description: 'Color palettes (primary, secondary, CTA, background, text, border) for 95 product types — SaaS, e-commerce, health, fintech, etc.',
+    columns: ['Product Type', 'Keywords', 'Primary (Hex)', 'Secondary (Hex)', 'CTA (Hex)', 'Background (Hex)', 'Text (Hex)', 'Notes'],
+  },
+  'typography': {
+    file: 'typography.csv',
+    name: 'Font pairings and typography',
+    description: 'Typography pairings (heading + body fonts) with mood keywords, best-for guidance, and Google Fonts URLs',
+    columns: ['Font Pairing Name', 'Category', 'Heading Font', 'Body Font', 'Mood/Style Keywords', 'Best For', 'Notes'],
+  },
+  'styles': {
+    file: 'styles.csv',
+    name: 'Visual style definitions',
+    description: 'Design styles (minimalism, neumorphism, glassmorphism, etc.) with colors, effects, accessibility, and complexity ratings',
+    columns: ['Style Category', 'Type', 'Keywords', 'Primary Colors', 'Effects & Animation', 'Best For', 'Complexity'],
+  },
+  'charts': {
+    file: 'charts.csv',
+    name: 'Chart type recommendations',
+    description: 'Best chart types for different data patterns — trend, comparison, distribution, composition, relationship',
+    columns: ['Data Type', 'Keywords', 'Best Chart Type', 'Secondary Options', 'Color Guidance', 'Accessibility Notes'],
+  },
+  'landing': {
+    file: 'landing.csv',
+    name: 'Landing page patterns',
+    description: 'Landing page section patterns with CTA placement, color strategy, and conversion optimization tactics',
+    columns: ['Pattern Name', 'Keywords', 'Section Order', 'Primary CTA Placement', 'Color Strategy', 'Conversion Optimization'],
+  },
+  'products': {
+    file: 'products.csv',
+    name: 'Product type design trends',
+    description: 'Design recommendations by product type — primary style, landing pattern, dashboard style, color palette focus',
+    columns: ['Product Type', 'Keywords', 'Primary Style Recommendation', 'Landing Page Pattern', 'Color Palette Focus', 'Key Considerations'],
+  },
+  'reasoning': {
+    file: 'ui-reasoning.csv',
+    name: 'UI design reasoning rules',
+    description: 'Design decision rules by UI category — recommended patterns, style priority, color/typography mood, anti-patterns',
+    columns: ['UI_Category', 'Recommended_Pattern', 'Style_Priority', 'Color_Mood', 'Typography_Mood', 'Anti_Patterns', 'Severity'],
+  },
+  'ux-guidelines': {
+    file: 'ux-guidelines.csv',
+    name: 'UX design guidelines',
+    description: 'UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, error handling',
+    columns: null, // use all
+  },
+  'web-interface': {
+    file: 'web-interface.csv',
+    name: 'Web interface guidelines',
+    description: 'Web interface patterns — layout, spacing, interaction, responsive breakpoints, performance',
+    columns: null,
+  },
+};
+
+function scanUIProMax() {
+  const entries = [];
+  if (!fs.existsSync(UIPROMAX_DATA_DIR)) {
+    console.log('   (UI Pro Max data dir not found, skipping)');
+    return entries;
+  }
+
+  for (const [id, config] of Object.entries(CSV_SOURCES)) {
+    const filePath = path.join(UIPROMAX_DATA_DIR, config.file);
+    if (!fs.existsSync(filePath)) continue;
+
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const records = parseCSV(raw);
+    const md = csvToMarkdown(records, config.columns);
+
+    entries.push({
+      id: `ref:${id}`,
+      name: config.name,
+      description: config.description,
+      category: 'reference',
+      content: `# ${config.name}\n\n${config.description}\n\n${md}`,
+    });
+  }
+
+  // Stacks — one entry per framework
+  const stacksDir = path.join(UIPROMAX_DATA_DIR, 'stacks');
+  if (fs.existsSync(stacksDir)) {
+    for (const file of fs.readdirSync(stacksDir)) {
+      if (!file.endsWith('.csv')) continue;
+      const stack = path.parse(file).name;
+      const filePath = path.join(stacksDir, file);
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const records = parseCSV(raw);
+      const md = csvToMarkdown(records);
+
+      entries.push({
+        id: `ref:stack-${stack}`,
+        name: `${stack} design guidelines`,
+        description: `Framework-specific design rules for ${stack} — do/dont, code examples, best practices`,
+        category: 'reference',
+        content: `# ${stack} Design Guidelines\n\n${md}`,
+      });
+    }
+  }
+
+  return entries;
+}
+
+// ==========================================
 // Figma Sandbox Safe Writer
 // ==========================================
 
@@ -235,6 +381,7 @@ function main() {
     ...scanSkills(),
     ...scanStyles(),
     ...scanAnatomy(),
+    ...scanUIProMax(),
   ];
 
   // Build index (lightweight, for search)

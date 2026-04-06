@@ -13,7 +13,8 @@ import {
   ToolCallHandler,
   SelectNodeHandler,
   GetSelectionHandler,
-  SendSelectionHandler
+  SendSelectionHandler,
+  SendFileInfoHandler
 } from './types'
 import { WINDOW_WIDTH, getIdealHeight } from './ui/constants/layout'
 
@@ -229,4 +230,14 @@ export default async function () {
   
   // Pass editor mode to UI
   emit('SET_EDITOR_MODE', { editorType: figma.editorType });
+
+  // File info: respond to UI request (avoids race condition with showUI)
+  function sendFileInfo() {
+    const isDraft = !figma.fileKey;
+    emit<SendFileInfoHandler>('SEND_FILE_INFO', {
+      fileKey: figma.fileKey ?? `draft_${Date.now().toString(36)}`,
+      fileName: isDraft ? `[Draft] ${figma.root.name}` : figma.root.name,
+    });
+  }
+  on('REQUEST_FILE_INFO', sendFileInfo);
 }

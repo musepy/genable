@@ -185,6 +185,11 @@ export interface SendSelectionHandler extends EventHandler {
   handler: (data: { selection: Array<{ id: string; name: string; type: string }> }) => void;
 }
 
+export interface SendFileInfoHandler extends EventHandler {
+  name: 'SEND_FILE_INFO';
+  handler: (data: { fileKey: string; fileName: string }) => void;
+}
+
 export interface ImportTokensHandler extends EventHandler {
   name: 'IMPORT_TOKENS';
   handler: (data: { cssString: string, jsonString?: string }) => void;

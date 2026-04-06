@@ -43,11 +43,18 @@ module.exports = function (buildOptions) {
   // Resolve preact/compat paths for aliasing React → Preact
   const preactCompat = path.dirname(require.resolve('preact/compat/package.json'))
 
+  // Inject environment variables for multi-port MCP support
+  const envDefines = {
+    'process.env.MCP_WS_PORTS': JSON.stringify(process.env.MCP_WS_PORTS || '3458,3459,3461'),
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
+  }
+
   return {
     ...buildOptions,
     define: {
       global: 'window',
-      __DEV__: JSON.stringify(buildOptions.dev || false)
+      __DEV__: JSON.stringify(buildOptions.dev || false),
+      ...envDefines
     },
     // Ensure ALL react imports (including jsx-runtime) are aliased to preact/compat
     // The built-in preact-compat plugin only handles "react" and "react-dom",

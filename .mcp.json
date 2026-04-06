@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "figma-plugin": {
+    "genable": {
       "command": "npx",
       "args": ["tsx", "tools/mcp-server/index.ts"],
       "cwd": "/Users/daxiaoxiao/Projects/figma gen plugin/figma-ai-generator-dogfood"

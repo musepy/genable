@@ -13,14 +13,16 @@ import { SettingsPanel } from './ui/SettingsPanel'
 import { OnboardingView } from './ui/components/OnboardingView'
 import { Button } from './ui/components/Button'
 import { PromptInput } from './ui/components/PromptInput'
-import { MessageRenderer } from './ui/components/MessageRenderer'
 import { DeveloperPanel } from './ui/components/DeveloperPanel'
+
+// i18n
+import { LocaleContext } from './ui/i18n'
 
 // Global UI Layout & Styles
 import { Header } from './ui/components/Header'
 import { Iso } from './ui/components/layout/Iso'
 import { tokens, cssTokens, globalStyles } from './ui/design-system/tokens'
-import { thinkingStreamCss } from './ui/components/ThinkingStream'
+// ThinkingStream CSS moved to globalStyles.ts
 import { ToastProvider } from './ui/components/ui'
 import uiRegistry from './generated/ui-registry.json'
 import { on, emit } from '@create-figma-plugin/utilities'
@@ -55,8 +57,9 @@ function PluginContent() {
   
   // 2. Settings & Auth
   const settings = useModelSettings()
-  const { 
-    apiKey, setApiKey, modelName, setModelName, 
+  const {
+    locale, localePref, setLocalePref,
+    apiKey, setApiKey, modelName, setModelName,
     providerName, setProviderName,
     suggestedModels, fetchStatus, settingsError,
     hasConfig, isInitialized, showSettings, setShowSettings,
@@ -86,7 +89,7 @@ function PluginContent() {
   // Inject CSS
   useEffect(() => {
     const styleEl = document.createElement('style')
-    styleEl.textContent = cssTokens + globalStyles + thinkingStreamCss
+    styleEl.textContent = cssTokens + globalStyles
     document.head.appendChild(styleEl)
     return () => { document.head.removeChild(styleEl) }
   }, [])
@@ -221,13 +224,6 @@ function PluginContent() {
           canSubmit={true} 
         />
       );
-    } else if (captureTarget === 'chat-message') {
-      content = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <MessageRenderer content="Hello!" />
-          <MessageRenderer content="Hi there, I am Genable." />
-        </div>
-      );
     }
     // Add more components as needed
 
@@ -323,6 +319,7 @@ function PluginContent() {
   }
 
   return (
+    <LocaleContext.Provider value={locale}>
     <div style={containerStyle}>
       <Header
         theme={theme}
@@ -376,12 +373,15 @@ function PluginContent() {
               }, 200);
             }}
             localComponents={pluginData.localComponents}
+            localePref={localePref}
+            setLocalePref={setLocalePref}
           />
         </div>
       )}
 
       {renderCaptureSandbox()}
     </div>
+    </LocaleContext.Provider>
   )
 }
 

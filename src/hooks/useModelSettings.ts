@@ -9,6 +9,7 @@ import {
 import { ModelService } from '../services/ModelService'
 import { DEFAULT_MODEL, SUPPORTED_MODELS } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
+import { resolveLocale, type Locale, type LocalePreference } from '../ui/i18n'
 
 type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude'
 type ApiKeyMap = Record<ProviderName, string>
@@ -22,6 +23,10 @@ export function useModelSettings() {
   const [providerName, setProviderName] = useState<ProviderName>('gemini')
   const [modelNames, setModelNames] = useState<ModelNameMap>({})  // per-provider model names
   const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
+
+  // --- Locale state ---
+  const [localePref, setLocalePref] = useState<LocalePreference>('auto')
+  const locale: Locale = resolveLocale(localePref)
 
   // --- UI state ---
   const [hasConfig, setHasConfig] = useState<boolean>(false)
@@ -73,8 +78,9 @@ export function useModelSettings() {
       apiKeys,
       modelName,
       providerName,
+      locale: localePref,
     })
-  }, [apiKeys, modelName, providerName])
+  }, [apiKeys, modelName, providerName, localePref])
 
   // --- Settings load ---
 
@@ -100,6 +106,11 @@ export function useModelSettings() {
       const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || nextApiKeys.dashscope)
 
       setApiKeys(nextApiKeys)
+
+      // Locale from storage (only on first load)
+      if (!isInitialized && s.locale) {
+        setLocalePref(s.locale as LocalePreference)
+      }
 
       if (!isInitialized || !hasAnyKey) {
         setProviderName(nextProvider)
@@ -211,6 +222,9 @@ export function useModelSettings() {
   }, [toast])
 
   return {
+    locale,
+    localePref,
+    setLocalePref,
     apiKey,
     setApiKey: updateApiKey,
     apiKeys,

@@ -9,7 +9,7 @@
 import { h } from 'preact';
 import { AlignJustify, Sun, Moon, X } from 'lucide-preact';
 import { tokens, motion } from '../design-system/tokens';
-import { t } from '../i18n';
+import { useTranslations } from '../i18n';
 
 export interface HeaderProps {
   // Theme
@@ -34,6 +34,7 @@ export function Header({
   isSettingsOpen = false,
 }: HeaderProps) {
   
+  const t = useTranslations();
   // Derive CSS class for new chat button
   const getIconBtnClass = (visible: boolean, enabled: boolean): string => {
     let base = 'header-icon-btn';
@@ -52,7 +53,7 @@ export function Header({
           color: 'var(--gray-11)',
           paddingLeft: tokens.grid.blockPad
         }}>
-          Settings
+          {t.settings}
         </div>
       )}
 
@@ -86,8 +87,8 @@ export function Header({
       <button
         className={`header-icon-btn ${isSettingsOpen ? 'is-active' : ''}`}
         onClick={onSettingsClick}
-        title={isSettingsOpen ? "Close Settings" : "Settings"}
-        aria-label={isSettingsOpen ? "Close Settings" : "Settings"}
+        title={isSettingsOpen ? t.closeSettings : t.settings}
+        aria-label={isSettingsOpen ? t.closeSettings : t.settings}
         style={{ transition: 'transform 0.3s ease' }}
       >
         <div style={{ 

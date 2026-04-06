@@ -19,6 +19,7 @@ const K = {
   MODEL_CLAUDE:     'MODEL_CLAUDE',
   MODEL_LEGACY:     'GEMINI_MODEL_NAME',
   PROVIDER:   'GEMINI_PROVIDER_NAME',
+  LOCALE:     'USER_LOCALE',
 } as const;
 
 const MODEL_KEY_FOR_PROVIDER: Record<string, string> = {
@@ -45,7 +46,7 @@ export async function handleLoadSettings(): Promise<void> {
   try {
     const [legacy, gemini, openrouter, dashscope, claude,
            modelGemini, modelOpenrouter, modelDashscope, modelClaude, modelLegacy,
-           provider] = await Promise.all([
+           provider, locale] = await Promise.all([
       figma.clientStorage.getAsync(K.LEGACY),
       figma.clientStorage.getAsync(K.GEMINI),
       figma.clientStorage.getAsync(K.OPENROUTER),
@@ -57,6 +58,7 @@ export async function handleLoadSettings(): Promise<void> {
       figma.clientStorage.getAsync(K.MODEL_CLAUDE),
       figma.clientStorage.getAsync(K.MODEL_LEGACY),
       figma.clientStorage.getAsync(K.PROVIDER),
+      figma.clientStorage.getAsync(K.LOCALE),
     ]);
 
     const providerName = provider ?? 'gemini';
@@ -83,6 +85,7 @@ export async function handleLoadSettings(): Promise<void> {
       modelName: modelNames[providerName] || DEFAULT_MODEL,
       modelNames,
       providerName,
+      locale: locale || undefined,
     });
   } catch (e: any) {
     console.error('Error loading settings', e);
@@ -113,6 +116,8 @@ export async function handleSaveSettings(settings: Settings): Promise<void> {
       modelKey ? upsert(modelKey, settings.modelName) : Promise.resolve(),
       // Active provider
       upsert(K.PROVIDER, provider),
+      // Locale
+      settings.locale ? upsert(K.LOCALE, settings.locale) : Promise.resolve(),
     ]);
   } catch (e: any) {
     console.error('Error saving settings', e);

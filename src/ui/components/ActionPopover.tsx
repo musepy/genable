@@ -7,6 +7,7 @@ import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { Code, Plus, Search } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
+import { useTranslations } from '../i18n';
 import skillRegistry from '../../generated/skills-registry.json';
 
 interface ActionPopoverProps {
@@ -41,6 +42,7 @@ function searchSkills(query: string): SkillSummary[] {
 }
 
 export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }: ActionPopoverProps) {
+  const t = useTranslations();
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [skillQuery, setSkillQuery] = useState('');
@@ -99,7 +101,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
         onMouseLeave={(e) => {
           e.currentTarget.style.background = 'transparent';
         }}
-        aria-label="More actions"
+        aria-label={t.moreActions}
         aria-expanded={isOpen}
       >
         <Plus size={20} strokeWidth={1.5} />
@@ -123,7 +125,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
               onClick={() => handleAction(onSerializeSelection)}
             >
               <Code size={14} />
-              <span>Copy Selection as JSON</span>
+              <span>{t.copySelectionJson}</span>
             </div>
 
             {onInsertSkill && (
@@ -148,7 +150,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
                   <input
                     value={skillQuery}
                     onInput={(e) => setSkillQuery((e.currentTarget as HTMLInputElement).value)}
-                    placeholder="Search skills..."
+                    placeholder={t.searchSkills}
                     style={{
                       width: '100%',
                       height: 30,
@@ -170,7 +172,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
                       fontSize: tokens.fontSize[1],
                       padding: `${tokens.space[2]}px ${tokens.space[2]}px`,
                     }}>
-                      No matching skills.
+                      {t.noMatchingSkills}
                     </div>
                   ) : (
                     skillResults.map(skill => (

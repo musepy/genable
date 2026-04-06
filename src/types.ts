@@ -10,6 +10,8 @@ export interface Settings {
   /** Per-provider model names (loaded from storage, used for provider switch restore) */
   modelNames?: Record<string, string>;
   providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
+  /** User's preferred UI + LLM communication language */
+  locale?: 'auto' | 'en' | 'zh' | 'fr';
 }
 
 export interface CreateLayersHandler extends EventHandler {

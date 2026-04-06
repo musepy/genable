@@ -5,6 +5,7 @@
 
 import { h } from 'preact';
 import { tokens } from '../design-system/tokens';
+import { useTranslations } from '../i18n';
 
 const panelStyle: h.JSX.CSSProperties = {
   display: 'flex',
@@ -41,28 +42,29 @@ export function DeveloperPanel({
   onLogout,
   onRestoreSession
 }: DeveloperPanelProps) {
+  const t = useTranslations();
   return (
     <div style={panelStyle}>
       <div style={{ fontWeight: tokens.fontWeight.semibold, fontSize: tokens.fontSize[2], marginBottom: -tokens.space[2], color: tokens.colors.textPrimary }}>
-        Developer
+        {t.developer}
       </div>
 
       <button
         style={{ ...buttonStyle, color: tokens.colors.accent }}
         onClick={() => {
-          if (confirm('Clear all API keys and return to onboarding?')) {
+          if (confirm(t.clearKeysConfirm)) {
             onLogout?.();
           }
         }}
       >
-        Logout (Clear Keys)
+        {t.logoutClearKeys}
       </button>
 
       <button
         style={{ ...buttonStyle, borderBottom: 'none', color: tokens.colors.accent }}
         onClick={() => onRestoreSession?.()}
       >
-        Restore Saved Session
+        {t.restoreSession}
       </button>
     </div>
   );

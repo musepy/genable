@@ -17,8 +17,9 @@ import { ModelSelector } from './components/ModelSelector';
 import { useDebounce } from './hooks/useDebounce';
 import { LocalComponent } from '../types';
 import { DeveloperPanel } from './components/DeveloperPanel';
-import { ChevronDown, Github, ExternalLink, ChevronRight } from 'lucide-preact';
-import { useState } from 'preact/hooks';
+import { ChevronDown, Github, ExternalLink, ChevronRight, Check } from 'lucide-preact';
+import { useState, useRef } from 'preact/hooks';
+import { useTranslations, LOCALE_PREFS, LOCALE_PREF_LABELS, type LocalePreference } from './i18n';
 
 export interface SettingsPanelProps {
   apiKey: string;
@@ -36,6 +37,8 @@ export interface SettingsPanelProps {
   onRestoreSession?: () => void;
   onClose?: () => void;
   localComponents?: LocalComponent[];
+  localePref?: LocalePreference;
+  setLocalePref?: (pref: LocalePreference) => void;
 }
 
 export function SettingsPanel({
@@ -53,14 +56,29 @@ export function SettingsPanel({
   onLogout,
   onRestoreSession,
   onClose,
-  localComponents = []
+  localComponents = [],
+  localePref,
+  setLocalePref,
 }: SettingsPanelProps) {
+  const t = useTranslations();
   
   const [expandedProvider, setExpandedProvider] = useState<'gemini' | 'openrouter' | 'dashscope' | 'claude' | null>(providerName);
   const [showDeveloper, setShowDeveloper] = useState(false);
   const [showFreeOnly, setShowFreeOnly] = useState(providerName === 'gemini');
+  const [localeOpen, setLocaleOpen] = useState(false);
+  const localeRef = useRef<HTMLDivElement>(null);
   
   const debouncedApiKey = useDebounce(apiKey, 800);
+
+  // Close locale popover on click outside
+  useEffect(() => {
+    if (!localeOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (localeRef.current && !localeRef.current.contains(e.target as Node)) setLocaleOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [localeOpen]);
   
   useEffect(() => {
     setShowFreeOnly(providerName === 'gemini');
@@ -143,14 +161,14 @@ export function SettingsPanel({
             {/* Input & Link */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[1], padding: `0 ${tokens.grid.blockPad}px` }}>
-                <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>API Key</span>
-                <a 
-                  href={providerMeta.keyUrl} 
-                  target="_blank" 
+                <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>{t.apiKey}</span>
+                <a
+                  href={providerMeta.keyUrl}
+                  target="_blank"
                   rel="noopener noreferrer"
                   style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-9)', textDecoration: 'none' }}
                 >
-                  Get from {providerMeta.keyLabel}
+                  {t.getFrom(providerMeta.keyLabel)}
                 </a>
               </div>
               <Input 
@@ -159,7 +177,7 @@ export function SettingsPanel({
                 onInput={(e: h.JSX.TargetedEvent<HTMLInputElement>) => {
                   setApiKey(e.currentTarget.value);
                 }}
-                placeholder={`Enter your ${providerMeta.label} API key`}
+                placeholder={t.enterApiKey(providerMeta.label)}
                 fullWidth
               />
             </div>
@@ -174,7 +192,7 @@ export function SettingsPanel({
                     display: 'block',
                     fontWeight: tokens.fontWeight.regular
                   }}>
-                    available models
+                    {t.availableModels}
                   </label>
                   <button
                     type="button"
@@ -193,7 +211,7 @@ export function SettingsPanel({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    Free
+                    {t.free}
                   </button>
                 </div>
                 <ModelSelector 
@@ -207,6 +225,58 @@ export function SettingsPanel({
             )}
           </div>
         </div>
+
+        {/* Language Selector */}
+        {setLocalePref && (
+          <div ref={localeRef} style={{ marginTop: tokens.space[6], padding: `0 ${tokens.grid.blockPad}px`, position: 'relative' }}>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              onClick={() => setLocaleOpen(v => !v)}
+            >
+              <span style={{ fontSize: tokens.fontSize[1], color: 'var(--gray-9)' }}>{t.language}</span>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: tokens.space[1],
+                fontSize: tokens.fontSize[1],
+                color: 'var(--gray-11)',
+              }}>
+                {LOCALE_PREF_LABELS[localePref || 'auto']}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  style={{ transition: 'var(--transition-normal)', transform: localeOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+            </div>
+            {localeOpen && (
+              <div
+                className="popover-content"
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: `calc(100% + ${tokens.space[1]}px)`,
+                  width: 160,
+                  zIndex: tokens.zIndex.popover,
+                  padding: tokens.space[1],
+                }}
+              >
+                {LOCALE_PREFS.map(p => {
+                  const isSelected = (localePref || 'auto') === p;
+                  return (
+                    <div
+                      key={p}
+                      className={`popover-item ${isSelected ? 'is-selected' : ''}`}
+                      onClick={() => { setLocalePref(p); setLocaleOpen(false); }}
+                    >
+                      <span style={{ flex: 1 }}>{LOCALE_PREF_LABELS[p]}</span>
+                      {isSelected && <Check size={14} strokeWidth={2.5} />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Developer Tools (Dogfood) */}
         <div style={{ marginTop: tokens.space[6], padding: `0 ${tokens.grid.blockPad}px` }}>
@@ -223,7 +293,7 @@ export function SettingsPanel({
             }}
           >
             <span style={motion.rotate(showDeveloper)}><ChevronDown size={12} /></span>
-            Developer Tools
+            {t.developerTools}
           </div>
           <div style={motion.disclosure(showDeveloper)}>
             <div style={motion.disclosureContent}>

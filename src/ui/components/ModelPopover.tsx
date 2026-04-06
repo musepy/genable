@@ -11,6 +11,7 @@ import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { Settings, ChevronRight, Check } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
+import { useTranslations } from '../i18n';
 
 const modelSelectorGhost = {
   display: 'inline-flex' as const,
@@ -86,6 +87,7 @@ export function ModelPopover({
   align = 'start',
   providerName = 'gemini', // [NEW]
 }: ModelPopoverProps) {
+  const t = useTranslations();
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(apiKey);
@@ -132,7 +134,7 @@ export function ModelPopover({
 
   // Determine thinking level label for Gemini 3.0+ models using SSOT utility
   const isGemini3 = isGemini3Family(currentModel);
-  const baseText = displayName || currentModel.split('/').pop()?.replace(/-/g, ' ') || 'Select Model';
+  const baseText = displayName || currentModel.split('/').pop()?.replace(/-/g, ' ') || t.selectModel;
   
   // Concise naming override for Gemini 3.0 Flash
   const conciseBaseText = baseText.toLowerCase().includes('gemini 3.0 flash') ? 'gemini 3.0 flash' : baseText;
@@ -229,7 +231,7 @@ export function ModelPopover({
           {hasApiKey && (
             <div
               role="listbox"
-              aria-label="Select model"
+              aria-label={t.selectModel}
               style={{
                 padding: tokens.space[1],
                 overflowY: 'auto',
@@ -291,14 +293,14 @@ export function ModelPopover({
                 style={{ height: tokens.space[6] }} // Ensure base height
               >
                 <Settings size={14} strokeWidth={2} />
-                <span>API Key Settings</span>
+                <span>{t.apiKeySettings}</span>
                 <ChevronRight size={10} strokeWidth={2} style={{ marginLeft: 'auto' }} />
               </div>
             ) : (
               // API Key Input (if not configured)
               <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1], padding: tokens.space[1] }}>
                 <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-                  Enter API Key to start
+                  {t.enterApiKeyToStart}
                 </span>
                 <div style={{ display: 'flex', gap: tokens.space[1] }}>
                   <input
@@ -306,7 +308,7 @@ export function ModelPopover({
                     value={localApiKey}
                     onInput={(e) => setLocalApiKey((e.target as HTMLInputElement).value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-                    placeholder={providerName === 'openrouter' ? "OpenRouter API Key" : "Gemini API Key"}
+                    placeholder={t.enterApiKey(providerName)}
                     style={{
                       flex: 1,
                       padding: tokens.space[1],
@@ -331,7 +333,7 @@ export function ModelPopover({
                       cursor: localApiKey.length >= 20 ? 'pointer' : 'default',
                     }}
                   >
-                    Save
+                    {t.save}
                   </button>
                 </div>
               </div>

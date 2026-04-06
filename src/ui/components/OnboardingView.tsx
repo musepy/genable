@@ -2,6 +2,7 @@ import { h, Fragment } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { grid } from '../design-system/tokens/layout';
+import { useTranslations } from '../i18n';
 
 type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude';
 type OnboardStep = 'idle' | 'connecting' | 'error';
@@ -43,6 +44,7 @@ export function OnboardingView({
   isLoading = false,
   error,
 }: OnboardingViewProps) {
+  const t = useTranslations();
   const [step, setStep] = useState<OnboardStep>('idle');
   const [localError, setLocalError] = useState<string | null>(null);
   const [detectedLabel, setDetectedLabel] = useState<string | null>(null);
@@ -115,7 +117,7 @@ export function OnboardingView({
           lineHeight: 1.25,
           letterSpacing: '-0.2px',
         }}>
-          Build something<br />great.
+          {t.buildSomething}<br />{t.great}
         </div>
 
         {/* Subtitle — changes per state */}
@@ -128,27 +130,27 @@ export function OnboardingView({
         }}>
           {step === 'idle' && (
             <Fragment>
-              Paste your API key to connect.{' '}
+              {t.pasteApiKeyToConnect}{' '}
               <a
                 href="https://aistudio.google.com/apikey"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
-              >Get one free</a>
+              >{t.getOneFree}</a>
             </Fragment>
           )}
           {step === 'connecting' && (
-            <span className="thinking-shimmer">Connecting...</span>
+            <span className="thinking-shimmer">{t.connecting}</span>
           )}
           {step === 'error' && (
             <Fragment>
-              <span style={{ color: 'var(--error-11)' }}>Invalid key.</span>{' '}
+              <span style={{ color: 'var(--error-11)' }}>{t.invalidKey}</span>{' '}
               <a
                 href="https://aistudio.google.com/apikey"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
-              >Get a new one</a>
+              >{t.getNewOne}</a>
             </Fragment>
           )}
         </div>
@@ -179,7 +181,7 @@ export function OnboardingView({
               marginLeft: 'auto',
               flexShrink: 0,
             }}>
-              {step === 'error' ? 'Failed' : detectedLabel || 'Detecting...'}
+              {step === 'error' ? t.failed : detectedLabel || t.detecting}
             </span>
           </div>
         )}
@@ -197,7 +199,7 @@ export function OnboardingView({
               <input
                 ref={inputRef}
                 type="text"
-                placeholder="Paste API key..."
+                placeholder={t.pasteApiKey}
                 value={apiKey}
                 onInput={(e) => setApiKey((e.target as HTMLInputElement).value)}
                 onKeyDown={(e) => {
@@ -250,7 +252,7 @@ export function OnboardingView({
               marginTop: tokens.space[2],
               paddingLeft: pad,
             }}>
-              Stored locally in Figma.
+              {t.storedLocally}
             </div>
           </div>
         )}

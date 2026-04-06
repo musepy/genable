@@ -180,6 +180,23 @@ export const globalStyles = `
     corner-shape: var(--corner-shape);
   }
 
+  /* --- Thinking Shimmer (moved from ThinkingStream.tsx) --- */
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .thinking-shimmer {
+    background: linear-gradient(90deg, var(--accent-11), var(--accent-8), var(--accent-11));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 2s ease-in-out infinite;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'Inter', var(--font-sans, system-ui, sans-serif);
+  }
+
   /* --- Motion & Animations --- */
   @keyframes tool-slide-up {
     from { transform: translateY(100%); opacity: 0; }

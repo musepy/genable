@@ -56,6 +56,7 @@ export interface OrchestratorOptions {
   loopPolicy?: Partial<AgentLoopPolicy>;
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
   requireToolApproval?: boolean;
+  locale?: 'en' | 'zh' | 'fr';
 }
 
 import { buildStaticSystemPrompt } from '../llm-client/context/system';
@@ -246,7 +247,7 @@ export class AgentOrchestrator {
         promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
 
-      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' });
+      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, this.options.locale);
 
       // Dump to console
       console.log('\n' + '='.repeat(80));

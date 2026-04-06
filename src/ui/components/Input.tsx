@@ -34,7 +34,7 @@ export function Input({
     boxShadow: 'inset 0 0 0 0.5px var(--border-default)',
     borderRadius: 'var(--radius-3)', // Flatter design
     outline: 'none',
-    transition: 'border-color var(--duration-normal) var(--ease-default), box-shadow var(--duration-normal) var(--ease-default)',
+    transition: 'border-color 200ms var(--ease-in-out), box-shadow 200ms var(--ease-in-out)',
     ...(style as any),
   };
 

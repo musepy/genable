@@ -47,6 +47,10 @@ npx tsc --noEmit && node build.js
 | `preview/main.tsx` | Preview entry — Figma API mocks, simulation controls |
 | `preview/index.html` | Preview shell — 320x600 plugin frame |
 | `tools/ui-preview/index.html` | Static 4-screen reference (update when UI changes significantly) |
+| `tools/ui-preview/component-audit.html` | Visual catalog of all active components (19) with rendered mockups |
+| `tools/ui-preview/transition-audit-v2.html` | Animation/transition audit with live interactive demos |
+| `tools/ui-preview/i18n-audit.html` | i18n string coverage across EN/ZH/FR with rendered screens |
+| `tools/ui-preview/locale-dropdown.html` | Before/After for locale selector redesign |
 | `src/ui/design-system/tokens/` | Design tokens — colors, spacing, typography |
 | `src/ui/design-system/tokens/css.ts` | CSS custom properties (Radix scales, light/dark) |
 | `src/ui/design-system/tokens/globalStyles.ts` | Global CSS classes (hover, animation, keyframes) |

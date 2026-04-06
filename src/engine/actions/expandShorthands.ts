@@ -249,6 +249,14 @@ const EXPANDERS: Record<string, Expander> = {
   pr: (v) => ({ paddingRight: isVarRef(v) ? v : Number(v) }),
   pb: (v) => ({ paddingBottom: isVarRef(v) ? v : Number(v) }),
   pl: (v) => ({ paddingLeft: isVarRef(v) ? v : Number(v) }),
+  px: (v) => {
+    const val = isVarRef(v) ? v : Number(v);
+    return { paddingLeft: val, paddingRight: val };
+  },
+  py: (v) => {
+    const val = isVarRef(v) ? v : Number(v);
+    return { paddingTop: val, paddingBottom: val };
+  },
   size: (v) => ({ fontSize: isVarRef(v) ? v : Number(v) }),
   weight: (v) => {
     // Support hyphenated aliases: semi-bold → Semi Bold, extra-bold → Extra Bold

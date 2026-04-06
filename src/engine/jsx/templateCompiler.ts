@@ -323,7 +323,9 @@ export async function walkTree(
         }
         instanceProps[key] = value;
       }
-      if (!instanceProps.name) instanceProps.name = name;
+      // Don't default instance name to "instance" — Figma's createInstance()
+      // already names it after the component (e.g. "LP-v3/Button").
+      // Only override if user explicitly wrote name="..." in jsx.
 
       const normalized = normalizeProps(instanceProps, {}, pushWarn);
       result = await createInstance(

@@ -33,6 +33,21 @@ Icon frames originally had NO fill. My global scan bound `#FFFFFF → bg` global
 
 **Fix**: scope color binding to known-intentional fills. Skip frames with `overflow: hidden` + no prior fill.
 
+### 6. Instance 全部命名为 "instance" — 用户无法分辨
+jsx `<instance ref="LP-v3/Button"/>` 创建的实例 Figma 默认命名 "instance"。层面板里 30+ 个 "instance" 无法区分。
+
+**影响**：用户在 Figma 里无法识别哪个 instance 是哪个。手动修改设计时找不到目标节点。
+
+**应该做的**：
+- jsx 创建后，用 `edit({node: id, props: {name: "Nav: Product"}})` 批量重命名
+- 或在 jsx 里用 `name` 属性：`<instance ref="Button" name="CTA Primary"/>`
+- 命名规则：`{Section}: {Content}` 如 "Nav: Product", "Feature: Lightning Fast", "Pricing: Pro"
+
+**根因**：`<instance>` 元素不自动从 component 名或 ref 推导 instance 名。Figma API 的 `createInstance()` 默认用 component 名，但 jsx parser 的 `createInstance` 可能覆盖为 "instance"。
+
+**根因已查**：templateCompiler.ts line 326 `instanceProps.name = name` 把 Figma 默认的组件名（如 "LP-v3/Button"）覆盖为 "instance"。
+**已修复**：删除该行，让 Figma `createInstance()` 的默认命名（= 组件名）保留。用户显式写 `name="..."` 时才覆盖。
+
 ## Figma Realities Discovered
 
 ### Silent default #000000 stroke

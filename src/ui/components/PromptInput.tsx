@@ -139,8 +139,6 @@ export function PromptInput({
   const runningBorder = loading ? {
     border: '1px solid transparent',
     boxShadow: '0 0 0 2px var(--accent-a2), 0 0 12px var(--accent-a3)',
-    background: 'linear-gradient(var(--color-surface), var(--color-surface)) padding-box, conic-gradient(from var(--angle), var(--accent-a2) 0%, var(--accent-a3) 10%, var(--accent-a5) 20%, var(--accent-a3) 30%, var(--accent-a2) 50%, var(--accent-a3) 60%, var(--accent-a5) 70%, var(--accent-a3) 80%, var(--accent-a2) 100%) border-box',
-    animation: 'spin-border 4s linear infinite',
   } : undefined;
 
   return (

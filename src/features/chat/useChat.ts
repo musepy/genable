@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from 'preact/hooks'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
-import { ChatMessage, ContentBlock, ToolCallRecord, IterationRecord, LLMCallRecord } from '../../types/chat'
+import { ChatMessage, ContentBlock, ToolCallRecord, IterationRecord } from '../../types/chat'
 import type { ContextAttachment } from '../../types'
 import { PluginData } from '../../hooks/usePluginData'
 import { knowledgeSearch } from '../../engine/agent/tools/knowledgeSearch'
 import { agentTools } from '../../engine/agent/tools'
-import {
-  AgentRuntimeContextUsage,
+import type {
   AgentRuntimeEvent,
 } from '../../shared/protocol/agentRuntimeEvents'
 import { useDevBridge, GenerateOptions } from '../../dev/useDevBridge'
+import { useLocale } from '../../ui/i18n'
 import { useMcpBridge } from '../../dev/useMcpBridge'
 
 interface UseChatProps {
@@ -44,6 +44,7 @@ export function useChat({
   onOpenSettings,
   providerName,
 }: UseChatProps) {
+  const locale = useLocale()
   const [prompt, setPrompt] = useState<string>('')
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState<boolean>(false)
@@ -51,9 +52,6 @@ export function useChat({
   const [error, setError] = useState<string | null>(null)
   const [thinkingText, setThinkingText] = useState<string>('')
   const [runtimeState, setRuntimeState] = useState<RunState>('idle')
-  const [runtimePhase, setRuntimePhase] = useState<'execution' | 'idle'>('idle')
-  const [runtimeProgress, setRuntimeProgress] = useState<{ iteration: number; maxIterations: number } | null>(null)
-  const [runtimeContextUsage, setRuntimeContextUsage] = useState<AgentRuntimeContextUsage | null>(null)
   const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null)
   const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null)
   const [memoryCount, setMemoryCount] = useState<number>(0)
@@ -153,9 +151,7 @@ export function useChat({
 
     switch (event.type) {
       case 'iteration_start': {
-        setRuntimePhase(event.phase)
         setRuntimeState('running')
-        setRuntimeProgress({ iteration: event.iteration, maxIterations: event.maxIterations })
         const newIteration: IterationRecord = {
           iteration: event.iteration,
           thinking: '',
@@ -201,48 +197,8 @@ export function useChat({
         }))
         break
       }
-      case 'llm_request': {
-        const record: LLMCallRecord = {
-          llmCallId: event.llmCallId,
-          iteration: event.iteration,
-          startTime: event.timestamp,
-          messageCount: event.messageCount,
-          toolNames: event.toolNames,
-          config: event.config,
-        }
-        updateStreamingMessage(msg => ({
-          ...msg,
-          llmCalls: [...(msg.llmCalls || []), record],
-        }))
-        break
-      }
-      case 'llm_response': {
-        updateStreamingMessage(msg => ({
-          ...msg,
-          llmCalls: (msg.llmCalls || []).map(rec => {
-            if (rec.llmCallId !== event.llmCallId) return rec
-            return {
-              ...rec,
-              endTime: event.timestamp,
-              durationMs: event.durationMs,
-              usage: event.usage,
-              responseShape: event.responseShape,
-              success: event.success,
-            }
-          }),
-        }))
-        break
-      }
-      case 'context_usage': {
-        setRuntimeContextUsage(event.usage)
-        break
-      }
       case 'status': {
-        setRuntimePhase(event.phase)
         setLoadingStatus(event.message)
-        if (event.iteration && event.maxIterations) {
-          setRuntimeProgress({ iteration: event.iteration, maxIterations: event.maxIterations })
-        }
         if ((event as any).memoryCount !== undefined) {
           setMemoryCount((event as any).memoryCount)
         }
@@ -273,17 +229,10 @@ export function useChat({
         setPendingQuestion({ question: event.question, options: event.options })
         break
       }
-      case 'budget_exhausted': {
-        updateStreamingMessage(msg => ({
-          ...msg,
-          budgetExhausted: true,
-        }))
-        break
-      }
       case 'turn_end': {
         setLoading(false)
         setRuntimeState('idle')
-        setRuntimePhase(event.phase)
+        
         setLoadingStatus('')
         updateStreamingMessage(msg => {
           const finalText = event.summary || msg.text || ''
@@ -313,7 +262,7 @@ export function useChat({
         setLoading(false)
         setRuntimeState('canceled')
         setLoadingStatus('Canceled by user')
-        setRuntimePhase(event.phase)
+        
         setPendingApproval(null)
     setPendingQuestion(null)
         updateStreamingMessage(msg => ({
@@ -332,7 +281,7 @@ export function useChat({
       case 'error': {
         setLoading(false)
         setRuntimeState('error')
-        setRuntimePhase(event.phase)
+        
         setError(event.message)
         setPendingApproval(null)
     setPendingQuestion(null)
@@ -341,7 +290,6 @@ export function useChat({
           streaming: false,
           runState: 'error',
           runError: event.message,
-          runErrorCode: event.code,
           endTime: Date.now(),
         }))
         break
@@ -377,9 +325,6 @@ export function useChat({
     setLoading(true)
     setError(null)
     setRuntimeState('running')
-    setRuntimePhase('idle')
-    setRuntimeProgress(null)
-    setRuntimeContextUsage(null)
     setLoadingStatus('Agent starting...')
     setThinkingText('')
     setPendingApproval(null)
@@ -424,6 +369,7 @@ export function useChat({
         modelName,
         providerName,
         thinkingLevel,
+        locale,
         workerUrl: 'https://figma-ai-generator.muse40007.workers.dev',
         requireToolApproval: false,
         onRuntimeEvent: handleRuntimeEvent,
@@ -518,9 +464,6 @@ export function useChat({
     setPrompt('')
     setError(null)
     setRuntimeState('idle')
-    setRuntimePhase('idle')
-    setRuntimeProgress(null)
-    setRuntimeContextUsage(null)
     setLoadingStatus('')
     setThinkingText('')
     setPendingApproval(null)
@@ -601,9 +544,6 @@ export function useChat({
       const calls: ToolCallRecord[] = []
       setPrompt('Refine the flow, reduce visual noise.')
       setRuntimeState('running')
-      setRuntimePhase('execution')
-      setRuntimeProgress({ iteration: 1, maxIterations: 40 })
-      setRuntimeContextUsage({ current: 11872, max: 200000, percent: 6, visibleMessages: 2, hiddenMessages: 0 })
       setLoadingStatus('Planning interaction flow')
       setThinkingText('Analyzing current UI and identifying layout repetition.')
       setLoading(true)
@@ -614,25 +554,20 @@ export function useChat({
       ])
 
       queue(500, () => {
-        setRuntimePhase('execution')
-        setRuntimeProgress({ iteration: 8, maxIterations: 40 })
         setLoadingStatus('Applying design patch')
         calls.unshift(buildCall('tc-1', 'edit', 'success', 29))
         setFlowCalls([...calls])
       })
 
       queue(950, () => {
-        setRuntimeProgress({ iteration: 10, maxIterations: 40 })
         setLoadingStatus('Reading hierarchy')
-        calls.unshift(buildCall('tc-2', 'outline', 'success', 91))
+        calls.unshift(buildCall('tc-2', 'inspect', 'success', 91))
         setFlowCalls([...calls])
       })
 
       queue(1400, () => {
-        setRuntimeProgress({ iteration: 12, maxIterations: 40 })
-        setRuntimeContextUsage({ current: 54410, max: 200000, percent: 27, visibleMessages: 2, hiddenMessages: 3 })
         setLoadingStatus('Building design')
-        calls.unshift(buildCall('tc-3', 'create', 'success', 370))
+        calls.unshift(buildCall('tc-3', 'jsx', 'success', 370))
         setFlowCalls([...calls])
       })
 
@@ -651,7 +586,6 @@ export function useChat({
         setLoading(false)
         setThinkingText('')
         setRuntimeState('idle')
-        setRuntimePhase('idle')
         setLoadingStatus('')
         setFlowCalls(
           [...calls],
@@ -666,16 +600,13 @@ export function useChat({
       resetPreview()
 
       const calls: ToolCallRecord[] = [
-        buildCall('err-1', 'outline', 'success', 68),
-        buildCall('err-2', 'create', 'error', 2100, 'Validation failed on 2 nodes'),
+        buildCall('err-1', 'inspect', 'success', 68),
+        buildCall('err-2', 'jsx', 'error', 2100, 'Validation failed on 2 nodes'),
       ]
 
       setPrompt('@design-knowledge improve validation')
       setLoading(true)
       setRuntimeState('running')
-      setRuntimePhase('execution')
-      setRuntimeProgress({ iteration: 4, maxIterations: 12 })
-      setRuntimeContextUsage({ current: 45200, max: 200000, percent: 22, visibleMessages: 2, hiddenMessages: 2 })
       setLoadingStatus('Executing changes')
       setHistory([
         { role: 'user', text: 'Run validation-heavy rewrite', id: `${userId}-error` },
@@ -693,7 +624,6 @@ export function useChat({
       queue(1800, () => {
         setLoading(false)
         setRuntimeState('error')
-        setRuntimePhase('idle')
         setLoadingStatus('Error')
         setError('Validation failed. Please revise the latest instruction.')
         setHistory(prev =>
@@ -811,9 +741,6 @@ export function useChat({
     pendingQuestion,
     respondToQuestion,
     runtimeState,
-    runtimePhase,
-    runtimeProgress,
-    runtimeContextUsage,
     memoryCount,
     // Pass-through props
     apiKey,

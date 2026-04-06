@@ -9,7 +9,6 @@ import { PromptChips } from '../../ui/components/PromptChips'
 import { PromptInput } from '../../ui/components/PromptInput'
 import { ToolBlock } from '../../ui/components/ToolBlock'
 import { CanvasTextBlock as TextBlock } from '../../ui/components/canvas-markdown/CanvasTextBlock'
-import { NodeListPanel } from '../../ui/components/NodeListPanel'
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { Button } from '../../ui/components/Button'
 import { on, emit } from '@create-figma-plugin/utilities'
@@ -22,7 +21,7 @@ import type { PluginState } from '../../ui/index'
 
 import { useChat, UseChatProps } from './useChat'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
-import { t } from '../../ui/i18n'
+import { useTranslations } from '../../ui/i18n'
 // ErrorActionType removed — error handling moved to StatusBlock
 import type { ContentBlock } from '../../types/chat'
 
@@ -58,14 +57,6 @@ const messagesContainerStyle = {
   paddingBottom: tokens.space[1],
 };
 
-// Assistant messages: plain left-aligned text, no background
-const messageItemStyle = {
-  padding: `4px 10px`,
-  width: '100%',
-  userSelect: 'text' as const,
-  WebkitUserSelect: 'text' as const,
-};
-
 // User messages: gray background, same padding as other blocks
 const userItemStyle = {
   padding: '4px 10px',
@@ -88,6 +79,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   onStop: () => void;
   onContinue: () => void;
 }) {
+  const t = useTranslations();
   const [confirming, setConfirming] = useState(false);
   const [elapsed, setElapsed] = useState('');
 
@@ -117,7 +109,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   if (runState === 'error') {
     return (
       <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: tokens.colors.error, padding: `4px ${hPad}` }}>
-        {error || 'Error'}{elapsed ? ` · ${elapsed}` : ''}
+        {error || t.statusError}{elapsed ? ` · ${elapsed}` : ''}
       </div>
     );
   }
@@ -125,13 +117,13 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   if (runState === 'canceled') {
     return (
       <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: `4px ${hPad}`, display: 'flex', alignItems: 'center' }}>
-        <span>Stopped{elapsed ? ` · ${elapsed}` : ''}</span>
+        <span>{t.statusStopped}{elapsed ? ` · ${elapsed}` : ''}</span>
         <span
           onClick={onContinue}
           style={{ marginLeft: 'auto', cursor: 'pointer', padding: '2px 8px', borderRadius: '6px', transition: 'background 120ms', color: dim }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
-        >continue</span>
+        >{t.continueAction}</span>
       </div>
     );
   }
@@ -148,9 +140,9 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   // Completed / canceled / error — same word, ed form
   if (!isRunning) {
     if (!elapsed) return null;
-    const label = runState === 'error' ? `Error · ${elapsed}`
-      : runState === 'canceled' ? `Stopped · ${elapsed}`
-      : `Thought · ${elapsed}`;
+    const label = runState === 'error' ? `${t.statusError} · ${elapsed}`
+      : runState === 'canceled' ? `${t.statusStopped} · ${elapsed}`
+      : `${t.statusThought} · ${elapsed}`;
     return <div style={row}>{label}</div>;
   }
 
@@ -158,20 +150,20 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
   if (confirming) {
     return (
       <div style={row}>
-        <span className="thinking-shimmer">Thinking · {elapsed || '0s'}</span>
+        <span className="thinking-shimmer">{t.statusThinking} · {elapsed || '0s'}</span>
         <span style={{ flex: 1 }} />
         <span
           onClick={() => { setConfirming(false); onStop(); }}
           style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms', color: tokens.colors.error }}
           onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--error-3)' }}
           onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' }}
-        >stop</span>
+        >{t.stopAction}</span>
         <span
           onClick={() => setConfirming(false)}
           style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms', marginLeft: tokens.space[1] }}
           onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
           onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' }}
-        >continue</span>
+        >{t.continueAction}</span>
       </div>
     );
   }
@@ -182,7 +174,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
       onMouseEnter={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
       onMouseLeave={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '0'; }}
     >
-      <span className="thinking-shimmer">Thinking · {elapsed || '0s'}</span>
+      <span className="thinking-shimmer">{t.statusThinking} · {elapsed || '0s'}</span>
       <span style={{ flex: 1 }} />
       <span
         data-interrupt
@@ -190,7 +182,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
         style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 150ms, opacity 150ms', color: dim, background: 'transparent', opacity: 0 }}
         onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
         onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-      >click to interrupt</span>
+      >{t.clickToInterrupt}</span>
     </div>
   );
 }
@@ -217,6 +209,7 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
 }) {
   const isEmpty = history.length === 0 && !loading;
 
+  const t = useTranslations();
   if (isEmpty) {
     const pad = tokens.grid.blockPad; // 10px
     return (
@@ -228,7 +221,7 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
           color: 'var(--gray-12)',
           lineHeight: 1.25,
           letterSpacing: '-0.2px',
-        }}>Build something<br />great.</div>
+        }}>{t.buildSomething}<br />{t.great}</div>
         <div style={{
           fontSize: tokens.fontSize[1],
           color: 'var(--gray-9)',
@@ -240,7 +233,7 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
             fontSize: 11,
             color: tokens.colors.textSecondary,
             marginTop: tokens.space[1],
-          }}>{memoryCount} item{memoryCount !== 1 ? 's' : ''} remembered</span>
+          }}>{t.itemsRemembered(memoryCount)}</span>
         )}
       </div>
     );
@@ -248,7 +241,7 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
 
   return (
     <Fragment>
-      {history.filter(msg => !msg.id?.startsWith('recovery_')).map((msg, i) => {
+      {history.map((msg, i) => {
         const isUserMessage = msg.role === 'user';
         const prevRole = i > 0 ? history[i - 1].role : null;
         const marginTop = i === 0 ? 0 : tokens.space[1];
@@ -300,11 +293,6 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
               return null;
             })}
 
-            {/* Node chips — after completion */}
-            {!isStreaming && !isError && (msg.toolCalls?.length ?? 0) > 0 && (
-              <NodeListPanel toolCalls={msg.toolCalls || []} />
-            )}
-
           </Fragment>
         );
       })}
@@ -347,6 +335,7 @@ function attachmentIcon(att: ContextAttachment): h.JSX.Element {
 }
 
 export function ChatFeature(props: UseChatProps) {
+  const t = useTranslations();
   const {
     prompt,
     setPrompt,
@@ -479,8 +468,8 @@ export function ChatFeature(props: UseChatProps) {
           <span style={{ flex: 1, fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontFamily: 'var(--font-family-mono)' }}>
             {pendingApproval.toolCalls.map(tc => tc.name).join(', ')}
           </span>
-          <Button variant="primary" size="sm" onClick={() => respondToApproval(true)}>Approve</Button>
-          <Button variant="ghost" size="sm" onClick={() => respondToApproval(false)}>Deny</Button>
+          <Button variant="primary" size="sm" onClick={() => respondToApproval(true)}>{t.approve}</Button>
+          <Button variant="ghost" size="sm" onClick={() => respondToApproval(false)}>{t.deny}</Button>
         </div>
       )}
 

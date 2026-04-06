@@ -21,12 +21,12 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'create',
-            parameters: { xml: '<frame name="Card" w="300" h="200"><text>Hello</text></frame>' },
+            name: 'jsx',
+            parameters: { jsx: '<Frame name="Card" w="300" h="200"><Text>Hello</Text></Frame>' },
             status: 'success',
             startTime: 1000,
             endTime: 1200,
-            result: { data: { idMap: { Card: '1:1' } } }
+            result: { data: { id: '1:1', name: 'Card', created: 1 } }
           }
         ],
         iterations: [{ iteration: 1, thinking: 'Thinking...', startTime: 1000 }]
@@ -36,11 +36,11 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Prompt: "Hello"');
     expect(result).toContain('Tools: 1 ok, 0 err');
-    expect(result).toContain('#1 [create] 200ms OK');
-    expect(result).toContain('xml:');
+    expect(result).toContain('#1 [jsx] 200ms OK');
+    expect(result).toContain('jsx:');
   });
 
-  it('should handle create with idMap in results', () => {
+  it('should handle jsx with node info in results', () => {
     const history: ChatMessage[] = [
       { role: 'user', text: 'Create stuff', id: '1' },
       {
@@ -50,17 +50,15 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'create',
+            name: 'jsx',
             parameters: {
-              xml: '<frame name="Header" w="400" h="60"/><frame name="Footer" w="400" h="40"/>'
+              jsx: '<Frame name="Header" w="400" h="60"/>'
             },
             status: 'success',
             startTime: 1000,
             endTime: 2000,
             result: {
-              data: {
-                idMap: { 'Header': '3:1', 'Footer': '3:2' }
-              }
+              data: { id: '3:1', name: 'Header', created: 2 }
             }
           }
         ]
@@ -68,7 +66,9 @@ describe('generateLogDigest', () => {
     ];
 
     const result = generateLogDigest(history);
-    expect(result).toContain('ids: Header→3:1, Footer→3:2');
+    expect(result).toContain('id: 3:1');
+    expect(result).toContain('name: Header');
+    expect(result).toContain('created: 2');
   });
 
   it('should summarize errors correctly', () => {
@@ -81,12 +81,12 @@ describe('generateLogDigest', () => {
         toolCalls: [
           {
             id: 'tc1',
-            name: 'create',
-            parameters: { xml: '' },
+            name: 'jsx',
+            parameters: { jsx: '' },
             status: 'error',
             startTime: 1000,
             endTime: 1100,
-            error: 'Invalid XML\nStack trace...'
+            error: 'Invalid JSX\nStack trace...'
           }
         ]
       }
@@ -95,7 +95,7 @@ describe('generateLogDigest', () => {
     const result = generateLogDigest(history);
     expect(result).toContain('Tools: 0 ok, 1 err');
     expect(result).toContain('--- ERRORS ---');
-    expect(result).toContain('#1 create: "Invalid XML"');
+    expect(result).toContain('#1 jsx: "Invalid JSX"');
   });
 
   it('should truncate long prompts', () => {
@@ -110,7 +110,7 @@ describe('generateLogDigest', () => {
           {
             id: 'tc1',
             name: 'edit',
-            parameters: { xml: '<delete id="1:1"/>' },
+            parameters: { target: 'Card#1:1', props: { w: 400 } },
             status: 'success',
             startTime: 1000,
             endTime: 1100
@@ -121,59 +121,31 @@ describe('generateLogDigest', () => {
 
     const result = generateLogDigest(history);
     expect(result).toContain('Prompt: "' + 'A'.repeat(100) + '..."');
-    expect(result).toContain('xml:');
+    expect(result).toContain('target:');
   });
 
-  it('should include design receipt details in the digest', () => {
+  it('should handle inspect tool in the digest', () => {
     const history: ChatMessage[] = [
-      { role: 'user', text: 'Build settings panel', id: '1' },
+      { role: 'user', text: 'Check the layout', id: '1' },
       {
         role: 'model',
-        text: 'Working...',
+        text: 'Inspecting...',
         id: '2',
         toolCalls: [
           {
             id: 'tc1',
-            name: 'design',
-            parameters: { parentId: '200:1', xml: '<frame name="Panel"/>' },
+            name: 'inspect',
+            parameters: { target: 'Panel#200:1', depth: 2 },
             status: 'success',
             startTime: 1000,
             endTime: 1500,
-            result: {
-              data: {
-                created: 4,
-                edited: 2,
-                idMap: {
-                  panel: '10:1',
-                  title: '10:2',
-                  subtitle: '10:3',
-                  toggle: '10:4',
-                  colorSwatch: '10:5',
-                },
-                defaultsAppliedCount: 6,
-                defaultsApplied: [
-                  { property: 'textAutoResize' },
-                  { property: 'layoutSizingHorizontal' },
-                ],
-                violations: [
-                  { code: 'TEXT_OVERFLOW', severity: 'warning' },
-                  { code: 'SIZING_REVERTED', severity: 'error' },
-                ],
-                nodeLimitWarning: 'Large batch',
-              },
-            },
           }
         ]
       }
     ];
 
     const result = generateLogDigest(history);
-    expect(result).toContain('#1 [design] 500ms OK');
-    expect(result).toContain('parentId: 200:1');
-    expect(result).toContain('created 4, edited 2');
-    expect(result).toContain('ids: panel→10:1, title→10:2, subtitle→10:3, toggle→10:4');
-    expect(result).toContain('defaults(6): textAutoResize, layoutSizingHorizontal');
-    expect(result).toContain('violations(2): TEXT_OVERFLOW:warning, SIZING_REVERTED:error');
-    expect(result).toContain('nodeLimitWarning');
+    expect(result).toContain('#1 [inspect] 500ms OK');
+    expect(result).toContain('target: Panel#200:1, depth: 2');
   });
 });

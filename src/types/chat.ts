@@ -3,29 +3,6 @@
  * @description Type definitions for the chat feature.
  */
 
-export interface ThinkingData {
-    designSystem: string;
-    style: string;
-    iconSource: string;
-    constraints: string[];
-    rationale?: string;
-}
-
-/**
- * Represents a single correction made by the post-processing layer.
- * Used to provide feedback to the LLM about why certain values were changed.
- */
-export interface CorrectionLog {
-    /** The property that was corrected (e.g., "layoutSizingHorizontal") */
-    field: string;
-    /** The original value from LLM output */
-    original: string | undefined;
-    /** The corrected value applied by post-processing */
-    corrected: string;
-    /** Human-readable explanation of why the correction was made */
-    reason: string;
-}
-
 export interface ToolCallRecord {
     id: string;
     name: string;
@@ -35,33 +12,6 @@ export interface ToolCallRecord {
     endTime?: number;
     result?: any;
     error?: string;
-}
-
-export interface LLMCallRecord {
-    llmCallId: string;
-    iteration: number;
-    startTime: number;
-    endTime?: number;
-    durationMs?: number;
-    messageCount: number;
-    toolNames: string[];
-    config: {
-        maxOutputTokens: number;
-        thinkingLevel: string;
-        toolMode: string;
-    };
-    usage?: {
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
-    };
-    responseShape?: {
-        textLength: number;
-        thoughtsLength: number;
-        toolCallCount: number;
-        toolCallNames: string[];
-    };
-    success?: boolean;
 }
 
 export interface IterationRecord {
@@ -91,15 +41,9 @@ export interface ChatMessage {
     attachments?: import('../types').ContextAttachment[];
     /** Chronological stream of text and tool blocks (new rendering model) */
     blocks?: ContentBlock[];
-    thinking?: ThinkingData;
-    rawOutput?: string;
-    /** Post-processing corrections applied to LLM output (P2 feature) */
-    corrections?: CorrectionLog[];
-    /** Tool execution records for this response (Phase 1) */
+    /** Tool execution records for this response */
     toolCalls?: ToolCallRecord[];
-    /** LLM call records for this response */
-    llmCalls?: LLMCallRecord[];
-    /** Reasoning iterations for this response (Phase 2) */
+    /** Reasoning iterations for this response */
     iterations?: IterationRecord[];
     /** Whether the message is currently being streamed/generated */
     streaming?: boolean;
@@ -111,10 +55,6 @@ export interface ChatMessage {
     runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting';
     /** Error message, if any */
     runError?: string;
-    /** Error code for routing (e.g. 'RATE_LIMIT_EXHAUSTED') */
-    runErrorCode?: string;
-    /** Whether the agent exhausted its iteration budget (elastic iterations) */
-    budgetExhausted?: boolean;
     /** Post-run agent debrief (collected after difficult runs) */
     debrief?: {
         exitReason: string;

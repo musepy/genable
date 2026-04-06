@@ -8,85 +8,39 @@ interface DigestMeta {
  * Tool-specific parameter extractors to keep only essential info.
  */
 const parameterExtractors: Record<string, (params: any) => string> = {
-  create: (params) => {
+  jsx: (params) => {
     const parts: string[] = [];
-    if (typeof params.xml === 'string') parts.push(`xml: ${params.xml.length} chars`);
+    if (typeof params.jsx === 'string') parts.push(`jsx: ${params.jsx.length} chars`);
     if (params.parentId) parts.push(`parentId: ${params.parentId}`);
     return parts.join(', ') || 'empty';
   },
   edit: (params) => {
-    if (typeof params.xml === 'string') return `xml: ${params.xml.length} chars`;
-    return params.nodeId ? `nodeId: ${params.nodeId}` : 'empty';
+    if (typeof params.jsx === 'string') return `jsx: ${params.jsx.length} chars`;
+    return params.target ? `target: ${params.target}` : 'empty';
   },
-  design: (params) => {
-    const parts: string[] = [];
-    if (typeof params.xml === 'string') parts.push(`xml: ${params.xml.length} chars`);
-    if (params.parentId) parts.push(`parentId: ${params.parentId}`);
-    return parts.join(', ') || 'empty';
-  },
-  read: (params) => {
+  inspect: (params) => {
     const depthStr = params.depth !== undefined ? `, depth: ${params.depth}` : '';
-    return `nodeId: ${params.nodeId || '?'}${depthStr}`;
+    return `target: ${params.target || '?'}${depthStr}`;
   },
-  query: (params) => `source: ${params.source || '?'}, query: ${(params.query || '').slice(0, 60)}`,
+  knowledge: (params) => `action: ${params.action || '?'}, ${params.query ? `query: ${params.query.slice(0, 60)}` : params.id ? `id: ${params.id}` : ''}`,
 };
 
 /**
  * Extracts key information from tool results.
  */
 function extractResultInfo(tool: ToolCallRecord): string {
-  const idMap = tool.result?.data?.idMap || tool.result?.idMap;
-  if (tool.name === 'create' && idMap) {
-    const mappings = Object.entries(idMap)
-      .map(([key, id]) => `${key}→${id}`)
-      .join(', ');
-    return mappings ? `ids: ${mappings}` : '';
-  }
-  if (tool.name === 'design') {
-    const data = tool.result?.data;
-    if (!data || typeof data !== 'object') return '';
+  const data = tool.result?.data;
+  if (!data || typeof data !== 'object') return '';
 
+  // jsx tool returns node tree info
+  if (tool.name === 'jsx') {
     const parts: string[] = [];
-    const counts = [
-      typeof data.created === 'number' && data.created > 0 ? `created ${data.created}` : '',
-      typeof data.edited === 'number' && data.edited > 0 ? `edited ${data.edited}` : '',
-      typeof data.deleted === 'number' && data.deleted > 0 ? `deleted ${data.deleted}` : '',
-      typeof data.failed === 'number' && data.failed > 0 ? `failed ${data.failed}` : '',
-    ].filter(Boolean);
-    if (counts.length > 0) parts.push(counts.join(', '));
-
-    if (idMap && typeof idMap === 'object') {
-      const mappings = Object.entries(idMap)
-        .slice(0, 4)
-        .map(([key, id]) => `${key}→${id}`)
-        .join(', ');
-      if (mappings) parts.push(`ids: ${mappings}`);
-    }
-
-    const defaultsAppliedCount = typeof data.defaultsAppliedCount === 'number'
-      ? data.defaultsAppliedCount
-      : (Array.isArray(data.defaultsApplied) ? data.defaultsApplied.length : 0);
-    if (defaultsAppliedCount > 0) {
-      const defaultProps = Array.isArray(data.defaultsApplied)
-        ? data.defaultsApplied.slice(0, 3).map((entry: any) => entry?.property).filter(Boolean)
-        : [];
-      parts.push(defaultProps.length > 0
-        ? `defaults(${defaultsAppliedCount}): ${defaultProps.join(', ')}`
-        : `defaults(${defaultsAppliedCount})`);
-    }
-
-    if (Array.isArray(data.violations) && data.violations.length > 0) {
-      const violations = data.violations
-        .slice(0, 3)
-        .map((violation: any) => `${violation?.code || 'UNKNOWN'}:${violation?.severity || '?'}`)
-        .join(', ');
-      parts.push(`violations(${data.violations.length}): ${violations}`);
-    }
-
-    if (data.nodeLimitWarning) parts.push('nodeLimitWarning');
-
-    return parts.join(' | ');
+    if (data.id) parts.push(`id: ${data.id}`);
+    if (data.name) parts.push(`name: ${data.name}`);
+    if (typeof data.created === 'number') parts.push(`created: ${data.created}`);
+    return parts.join(', ');
   }
+
   return '';
 }
 

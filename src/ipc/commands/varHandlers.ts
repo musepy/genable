@@ -361,6 +361,54 @@ export async function handleVarAlias(params: any): Promise<ToolResponse> {
   };
 }
 
+// ── var set-mode ──
+
+export async function handleVarSetMode(params: any): Promise<ToolResponse> {
+  const nodePath = params.nodePath as string;
+  const collectionName = params.collection as string;
+  const modeName = params.mode as string;
+
+  if (!nodePath || !collectionName || !modeName) {
+    return { error: 'Required: node, collection, mode' };
+  }
+
+  // Resolve node
+  const resolved = await resolvePathToNode(nodePath);
+  if (!resolved.ok) return resolved.response;
+  if (resolved.isPage) {
+    return { error: 'Cannot set variable mode on a page node.' };
+  }
+  const node = resolved.node;
+
+  // Find collection
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const collection = collections.find(c => c.name.toLowerCase() === collectionName.toLowerCase());
+  if (!collection) {
+    return { error: `Collection "${collectionName}" not found. Available: ${collections.map(c => c.name).join(', ')}` };
+  }
+
+  // Find mode
+  const mode = collection.modes.find(m => m.name.toLowerCase() === modeName.toLowerCase());
+  if (!mode) {
+    return { error: `Mode "${modeName}" not found in "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` };
+  }
+
+  // Set explicit variable mode
+  try {
+    (node as SceneNode).setExplicitVariableModeForCollection(collection, mode.modeId);
+    return {
+      data: {
+        message: `Set "${node.name}" to use "${mode.name}" mode of "${collection.name}"`,
+        nodeId: node.id,
+        collection: collection.name,
+        mode: mode.name,
+      },
+    };
+  } catch (e: any) {
+    return { error: `Failed to set mode: ${e?.message ?? e}` };
+  }
+}
+
 // ── Helpers ──
 
 function invalidateCaches(): void {

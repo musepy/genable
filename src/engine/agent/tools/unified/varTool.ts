@@ -104,6 +104,38 @@ Examples:
   },
 };
 
+export const setVariableModeDefinition: ToolDefinition = {
+  name: 'set_variable_mode',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Set a node to use a specific mode of a variable collection.
+
+This controls which variable values the node displays. For example, set a frame
+to use "Dark" mode of the "Theme" collection so all bound variables show dark values.
+
+Examples:
+  set_variable_mode({node: "1:2", collection: "Theme", mode: "Dark"})
+  set_variable_mode({node: "1:5", collection: "Device", mode: "Mobile"})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      node: {
+        type: 'string',
+        description: 'Node ID or name#id (e.g. "1:2" or "Card#1:2")',
+      },
+      collection: {
+        type: 'string',
+        description: 'Variable collection name (e.g. "Theme")',
+      },
+      mode: {
+        type: 'string',
+        description: 'Mode name to activate (e.g. "Dark")',
+      },
+    },
+    required: ['node', 'collection', 'mode'],
+  },
+};
+
 export const aliasVariableDefinition: ToolDefinition = {
   name: 'alias_variable',
   executionStrategy: 'sequential',

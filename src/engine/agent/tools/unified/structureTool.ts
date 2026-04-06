@@ -68,7 +68,10 @@ export const cloneNodeDefinition: ToolDefinition = {
   description: `Deep-copy a node with optional property overrides.
 
 Examples:
-  clone_node({node: "1:2", dest: "1:4"})
+  clone_node({node: "1:2"})                              — clone to page root, same name
+  clone_node({node: "1:2", dest: "/"})                   — clone to page root explicitly
+  clone_node({node: "1:2", dest: "/", name: "Hero Copy"})— clone to root with custom name
+  clone_node({node: "1:2", dest: "1:4"})                 — clone into parent node 1:4
   clone_node({node: "1:2", dest: "1:4", overrides: {"bg": "#D9D9D9"}})`,
   parameters: {
     type: 'object',
@@ -79,13 +82,17 @@ Examples:
       },
       dest: {
         type: 'string',
-        description: 'Destination parent node ID',
+        description: 'Destination parent node ID or "/" for page root. Defaults to page root.',
+      },
+      name: {
+        type: 'string',
+        description: 'Name for the cloned node. Defaults to source node name.',
       },
       overrides: {
         type: 'object',
         description: 'Property overrides. Use "Child.prop" for child overrides.',
       },
     },
-    required: ['node', 'dest'],
+    required: ['node'],
   },
 };

@@ -16,6 +16,7 @@ import { updateNode, normalizeSizingInProps } from '../../engine/actions/nodeFac
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { PipelineTracer } from './pipelineTracer';
+import { snapshotProps, verifyWrites, formatWriteWarnings } from './writeVerifier';
 
 interface EditEntry {
   node: string;
@@ -146,8 +147,11 @@ async function applyEdit(
     const parentNode = node.parent as SceneNode | null;
     const isText = node.type === 'TEXT';
     normalizeSizingInProps(regularProps, node, parentNode, isText);
+    const snapBefore = snapshotProps(node, Object.keys(regularProps));
     const result = await updateNode(node, regularProps);
     allWarnings.push(...result.warnings.map(w => w.message || String(w)));
+    const failures = verifyWrites(node, regularProps, snapBefore);
+    allWarnings.push(...formatWriteWarnings(node, failures));
   }
 
   return { warnings: allWarnings };

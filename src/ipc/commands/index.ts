@@ -11,7 +11,7 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 // Command handler groups
 import { registerSessionNodes } from './pathResolver';
 import { handleTree, handleCat } from './readHandlers';
-import { handleMk, handleRm, handleMv, handleCp } from './writeHandlers';
+import { handleRm, handleMv, handleCp } from './writeHandlers';
 // grep/sed removed — no callers after verb_noun migration
 import { handleJs } from './jsHandler';
 import { handleJsx } from './jsxHandler';
@@ -80,10 +80,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   // Legacy command names — internal use only (adapters + scratchpad routing)
   tree: handleTree,
   cat: handleCat,
-  mk: handleMk,
-  rm: handleRm,
-  mv: handleMv,
-  cp: handleCp,
   'scan-tokens': handleScanTokens,
 };
 

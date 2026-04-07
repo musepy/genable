@@ -37,58 +37,28 @@ export async function handleCloneNode(params: any): Promise<ToolResponse> {
     propsRaw = params.overrides;
   }
 
-  // Resolve destPath for handleCp.
-  // handleCp uses splitPath(destPath) expecting "/ParentRef/CloneName" format.
-  // We resolve the dest parent ref here so we can supply a proper path.
+  // Resolve source node
+  const sourceResolved = await resolvePathToNode(params.node);
+  if (!sourceResolved.ok) return sourceResolved.response;
+  if (sourceResolved.isPage) return { error: 'Cannot clone page root.' };
+
+  const cloneName = params.name || sourceResolved.node.name;
+
+  // Resolve parent (dest)
+  let parentId: string | undefined;
   const dest: string = params.dest ?? '/';
-  const isPageRoot = dest === '/' || dest === '';
-
-  let destPath: string;
-
-  if (isPageRoot) {
-    // Clone to page root — determine clone name and use "/<cloneName>"
-    const cloneName = await resolveCloneName(params.node, params.name);
-    if (!cloneName) {
-      return { error: `Cannot resolve source node "${params.node}" to determine clone name.` };
-    }
-    destPath = `/${cloneName}`;
-  } else if (dest.includes('/')) {
-    // Legacy path format like "/SomeParent/CloneName" — pass through as-is
-    destPath = dest;
-  } else {
-    // Node ref (bare id "1:4" or "Name#1:4") — build "/<parentRef>/<cloneName>"
-    // Encode as "name#id" so the legacy path segment resolver handles it correctly.
-    const parentResolved = await resolvePathToNode(dest);
-    if (!parentResolved.ok) return parentResolved.response;
-    if (parentResolved.isPage) {
-      // dest resolved to page root
-      const cloneName = await resolveCloneName(params.node, params.name);
-      if (!cloneName) {
-        return { error: `Cannot resolve source node "${params.node}" to determine clone name.` };
-      }
-      destPath = `/${cloneName}`;
-    } else {
-      const parentNode = parentResolved.node;
-      const cloneName = params.name ?? (await resolveCloneName(params.node, undefined));
-      if (!cloneName) {
-        return { error: `Cannot resolve source node "${params.node}" to determine clone name.` };
-      }
-      // Use "name#id" segment so the legacy path resolver finds it by ID
-      destPath = `/${parentNode.name}#${parentNode.id}/${cloneName}`;
-    }
+  if (dest && dest !== '/' && dest !== '') {
+    const destResolved = await resolvePathToNode(dest);
+    if (!destResolved.ok) return destResolved.response;
+    if (!destResolved.isPage) parentId = destResolved.node.id;
+    // else: dest resolved to page root → parentId remains undefined
   }
+  // parentId undefined = page root
 
   return handleCp({
-    sourcePath: params.node,
-    destPath,
+    sourceId: sourceResolved.node.id,
+    parentId,
+    cloneName,
     propsRaw,
   });
-}
-
-/** Resolve the name to use for the clone. Falls back to source node's name. */
-async function resolveCloneName(sourceRef: string, explicitName?: string): Promise<string | null> {
-  if (explicitName) return explicitName;
-  const resolved = await resolvePathToNode(sourceRef);
-  if (!resolved.ok || resolved.isPage) return null;
-  return resolved.node.name;
 }

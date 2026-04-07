@@ -715,33 +715,34 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
 // cp
 // ═══════════════════════════════════════════════════════════════════════════
 
-export async function handleCp(parameters: any): Promise<ToolResponse> {
+export async function handleCp(parameters: {
+  sourceId: string;
+  parentId?: string;
+  cloneName: string;
+  propsRaw?: string;
+}): Promise<ToolResponse> {
   const _t0 = Date.now();
-  const { sourcePath: cpSourcePath, destPath: cpDestPath, propsRaw: cpPropsRaw } = parameters;
+  const { sourceId: cpSourceId, parentId: cpParentId, cloneName: cpCloneName, propsRaw: cpPropsRaw } = parameters;
 
-  if (!cpSourcePath) {
-    return { error: 'cp requires a source path. Usage: cp /Source/ /Dest/ {overrides}' };
+  if (!cpSourceId) {
+    return { error: 'cp requires a sourceId.' };
   }
-  if (!cpDestPath) {
-    return { error: 'cp requires a destination path. Usage: cp /Source/ /Dest/ {overrides}' };
-  }
-
-  const cpSourceResolved = await resolvePathToNode(cpSourcePath);
-  if (!cpSourceResolved.ok) return cpSourceResolved.response;
-  if (cpSourceResolved.isPage) {
-    return { error: 'Cannot clone page root.' };
-  }
-  const cpSourceId = cpSourceResolved.node.id;
-
-  const { parentPath: cpParentPath, nodeName: cpCloneName } = splitPath(cpDestPath);
   if (!cpCloneName) {
-    return { error: 'Destination path must include a name, e.g. /Card/Hover/' };
+    return { error: 'cp requires a cloneName.' };
   }
 
-  const cpParentResolved = await resolvePathToNode(cpParentPath);
-  if (!cpParentResolved.ok) return cpParentResolved.response;
-
-  const cpParentNode = cpParentResolved.isPage ? null : cpParentResolved.node;
+  // Resolve parent node (null = page root)
+  let cpParentNode: SceneNode | null = null;
+  if (cpParentId) {
+    const parentNode = await figma.getNodeByIdAsync(cpParentId);
+    if (!parentNode) {
+      return { error: `Parent node not found: ${cpParentId}` };
+    }
+    if (parentNode.type === 'PAGE' || parentNode.type === 'DOCUMENT') {
+      return { error: `Parent node "${cpParentId}" cannot contain children.` };
+    }
+    cpParentNode = parentNode as SceneNode;
+  }
 
   // Parse raw props string
   const rawProps = parsePropString(cpPropsRaw || '');

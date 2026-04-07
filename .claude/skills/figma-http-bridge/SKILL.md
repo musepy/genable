@@ -24,7 +24,10 @@ curl -X POST "http://localhost:3460/tool/inspect?file=myproject" ...
 curl -X POST "http://localhost:3460/tool/inspect?file=ExvSLYAdjmpnKrmFeh5fsS" ...
 ```
 
-**IMPORTANT**: Always check `/clients` first to know which files are connected, then use `?file=` to avoid operating on the wrong file. Without `?file=`, the first connected client receives the call.
+**IMPORTANT**: Always check `/clients` first to know which files are connected, then use `?file=` to avoid operating on the wrong file.
+
+- **Multi-file mode** (2+ files connected): `?file=` is **mandatory** — requests without it return `400` with a list of available files.
+- **Single-file mode** (1 file connected): `?file=` is optional (backward compatible); omitting it targets the only connected file.
 
 Draft files show as `[Draft] filename` with a temporary session ID.
 
@@ -89,8 +92,19 @@ Error:   `{ "error": "message" }`
 
 ## Workflow
 
-1. `/clients` → identify which file to work on
-2. `get_selection` or `find_nodes` with `?file=` → get node references
-3. `inspect` → understand current structure
-4. `jsx` → create new nodes / `edit` → modify existing
-5. `inspect` with `screenshot: true` → verify result
+```bash
+# 1. Always start here — identify connected files
+curl http://localhost:3460/clients
+
+# 2. Get node references (always include ?file= from here on)
+curl -X POST "http://localhost:3460/tool/get_selection?file=myfile" -H "Content-Type: application/json" -d '{}'
+
+# 3. Understand structure
+curl -X POST "http://localhost:3460/tool/inspect?file=myfile" -H "Content-Type: application/json" -d '{"node": "Card#1:2", "mode": "detail"}'
+
+# 4. Create or modify
+# jsx → new nodes, edit → modify existing
+
+# 5. Verify
+curl -X POST "http://localhost:3460/tool/inspect?file=myfile" -H "Content-Type: application/json" -d '{"node": "Card#1:2", "screenshot": true}'
+```

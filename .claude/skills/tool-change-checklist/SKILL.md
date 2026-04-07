@@ -110,3 +110,4 @@ After any tool change:
 5. Check `system.ts` — old CLI-style docs replaced with tool call examples?
 6. Check `agentRuntime.ts` — any `callTool('oldName')` still present?
 7. E2E via dev bridge: `curl -X POST localhost:3456/trigger` + SSE stream
+8. If `mutates: true`: confirm the tool's write path calls `snapshotProps`/`verifyWrites`/`formatWriteWarnings` (from `writeVerifier.ts`). Tools that delegate to `handleEdit`/`applyEdit` are covered via `editHandler` — only custom write paths need explicit integration.

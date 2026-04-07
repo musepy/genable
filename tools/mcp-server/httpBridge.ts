@@ -109,6 +109,16 @@ async function main() {
         return;
       }
 
+      // Require ?file= when multiple clients are connected
+      const clients = relay.listClients();
+      if (!fileKey && clients.length > 1) {
+        const fileList = clients.map(c => `  "${c.fileName}" (?file=${encodeURIComponent(c.fileName.replace('[Draft] ', ''))})`).join('\n');
+        jsonResponse(res, 400, {
+          error: `Multiple Figma files connected. Add ?file=<name> to target one:\n${fileList}`,
+        });
+        return;
+      }
+
       if (!relay.isPluginConnected()) {
         jsonResponse(res, 503, {
           error: 'Figma plugin is not connected. Open Figma and run the plugin first.',

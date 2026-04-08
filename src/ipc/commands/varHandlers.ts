@@ -344,17 +344,25 @@ export async function handleVarAlias(params: any): Promise<ToolResponse> {
     sourceVar = figma.variables.createVariable(variableName, collection, targetVar.resolvedType);
   }
 
-  // Set alias for all modes
-  const alias = figma.variables.createVariableAlias(targetVar);
-  for (const mode of collection.modes) {
-    sourceVar.setValueForMode(mode.modeId, alias);
+  // Set alias for specified mode (required) — per-mode aliasing is the intended use case
+  const modeName = params.mode as string | undefined;
+  if (!modeName) {
+    return { error: 'mode is required. Specify which mode to alias (e.g. "Light" or "Dark"). Call once per mode.' };
   }
+  const targetMode = collection.modes.find(m => m.name === modeName);
+  if (!targetMode) {
+    const available = collection.modes.map(m => m.name).join(', ');
+    return { error: `Mode "${modeName}" not found in collection "${collectionName}". Available: ${available}` };
+  }
+
+  const alias = figma.variables.createVariableAlias(targetVar);
+  sourceVar.setValueForMode(targetMode.modeId, alias);
 
   invalidateCaches();
 
   return {
     data: {
-      message: `Created alias: ${sourceVarPath} → ${targetVarPath}`,
+      message: `Aliased: ${sourceVarPath} [${modeName}] → ${targetVarPath}`,
       sourceId: sourceVar.id,
       targetId: targetVar.id,
     },

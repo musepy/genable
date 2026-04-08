@@ -81,6 +81,10 @@ export const bindVariableDefinition: ToolDefinition = {
   mutates: true,
   description: `Bind a variable to a node property.
 
+When selecting which variable to bind: if the node is a Tablet or Mobile variant
+(name or variant property contains "Tablet"/"Mobile"), match the node's property
+value against the Tablet/Mobile mode column from list_variables — not Desktop.
+
 Examples:
   bind_variable({node: "1:2", prop: "fills", variable: "Theme/bg"})
   bind_variable({node: "1:3", prop: "fontSize", variable: "sizing/heading"})`,
@@ -140,10 +144,13 @@ export const aliasVariableDefinition: ToolDefinition = {
   name: 'alias_variable',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Create a variable alias (semantic → primitive).
+  description: `Create a per-mode variable alias (semantic → primitive).
+
+mode is required. Call once per mode to set different aliases per mode.
 
 Examples:
-  alias_variable({variable: "semantic/text-primary", target: "colors/primary"})`,
+  alias_variable({variable: "Theme/bg", target: "colors/white", mode: "Light"})
+  alias_variable({variable: "Theme/bg", target: "colors/gray-900", mode: "Dark"})`,
   parameters: {
     type: 'object',
     properties: {
@@ -155,7 +162,11 @@ Examples:
         type: 'string',
         description: 'Target variable path "collection/name"',
       },
+      mode: {
+        type: 'string',
+        description: 'Mode name to set this alias for (e.g. "Light", "Dark"). Required.',
+      },
     },
-    required: ['variable', 'target'],
+    required: ['variable', 'target', 'mode'],
   },
 };

@@ -121,6 +121,103 @@ var mk Theme/text-primary COLOR #FFFFFF --mode Dark
 4. Add configurable properties: `comp prop /Set/ PropName TYPE default`
 5. Create instances: `comp instance /Set/ --parent /target/`
 
+### STRING Variable Binding (i18n / Language Switching)
+
+STRING variables bound to text `characters` **auto-render on mode switch** — confirmed working.
+
+```
+// Bind text node to a STRING variable
+var bind /Hero/H1 characters Lang/hero-title
+
+// When LP-Lang mode switches EN→CN, text auto-updates
+```
+
+**CRITICAL — 覆盖式互斥 (Override Exclusivity)**:
+- `setBoundVariable('characters', var)` binds text to variable → auto-renders ✓
+- `node.characters = "text"` sets manual text → CLEARS variable binding ✗
+- **Last write wins.** For variable-driven text, NEVER call `.characters` after binding.
+- If you need to "fix" text content, update the VARIABLE value (`var.setValueForMode()`), not the node's characters.
+
+### Expose Nested Instance Properties
+
+Use `isExposedInstance = true` on instance nodes inside a component to expose their TEXT properties at the parent level:
+
+```javascript
+// Inside a Section component variant:
+pricingCardInstance.isExposedInstance = true;
+// → PricingCard's Tier, Price, F1, F2, F3 TEXT props appear in Section's property panel
+```
+
+**Depth rule**: Works on instances at any level in the component tree. Does NOT work on instances inside OTHER instances (inherited, read-only — expose at the inner component level instead).
+
+**Verification gotcha**: `componentPropertyDefinitions` JS query does NOT reflect newly exposed props. Verify via Figma UI screenshot, not programmatic query.
+
+### i18n Edge Case Testing
+
+After binding STRING variables for multi-language support, **test all mode combinations for text overflow**:
+
+1. Narrowest breakpoint (Mobile 375px) × each language
+2. Widest breakpoint (Desktop 1440px) × each language
+3. Cross with Light/Dark theme
+
+**Rules for overflow-safe text:**
+- Paragraph text: `layoutSizingHorizontal: "FILL"` + `textAutoResize: "HEIGHT"` (fills parent width, wraps as needed)
+- Inline text (buttons, badges): `layoutSizingHorizontal: "HUG"` (auto-width, parent must accommodate)
+- Numbers/metrics: keep format consistent across languages (use "10M+" not "1000万+")
+- Avatar initials: single letter in ALL languages
+- Never use FIXED width on text that changes with language
+
+### Multi-Dimension Variable Architecture
+
+For systems with responsive + theme + language:
+
+```
+Collections (3):
+├─ Responsive (Desktop/Tablet/Mobile): FLOAT + BOOLEAN
+│  └─ layout/pageWidth, layout/containerPad, typo/heroTitle, visibility/navLinks
+├─ Theme (Light/Dark): COLOR
+│  └─ bg, surface, primary, text-primary, text-secondary, border
+└─ Lang (EN/CN): STRING
+   └─ hero-title, hero-subtitle, nav/features, pricing/tier1, ...
+
+Binding Flow:
+Atom Components → bind FLOAT/COLOR/BOOLEAN vars at component level
+  └─ Molecules (use atom instances) → inherit bindings
+    └─ Sections (ComponentSet: Breakpoint=Desktop/Mobile)
+       └─ isExposedInstance=true on nested instances
+       └─ Section titles: componentPropertyReferences = { characters: propKey }
+         └─ Page (section instances stacked) → set collection modes on root
+```
+
+### Mass Binding Protocol
+
+When binding tokens to multiple nodes (mass bind):
+
+**① Dry-run before binding**
+Before calling `bind_variable`, print the planned mapping and verify each match:
+```
+node: "Hero/paddingTop" = 64  →  token: "LP-Spacing/3xl" (Tablet mode value = 64, diff = 0%)  ✓
+node: "Hero/fontSize"   = 32  →  token: "LP-Type/h2"     (Tablet mode value = 36, diff = 11%) ⚠
+```
+Rule: `|token_mode_value - node_value| / node_value < 20%` → safe to bind. Exceeds threshold → pause, confirm with user before proceeding.
+
+**② Mode-aware matching**
+When the node is a Tablet or Mobile variant (name/variant property contains "Tablet"/"Mobile"), match against the **Tablet/Mobile mode column** from `list_variables` — not Desktop.
+
+**③ Verify immediately after binding**
+After binding, read the property back with `inspect`. Do not trust "should be OK". Binding overwrites the original value permanently — there is no undo.
+
+### One-Way Flow: Token → Component → Binding
+
+**Token design → Component design → Binding is strictly one-directional.**
+
+Once nodes are bound to a token, changing that token's scale causes cascade pollution across all bound nodes. After binding begins:
+- ✓ Fix: update the binding to point to a different token
+- ✓ Fix: create a new token with the correct value and rebind
+- ✗ Never: change an existing token's value after it has been bound — all nodes referencing it will shift
+
+If a mismatch is discovered post-binding: **warn and pause**. Do not silently adjust token values. Ask the user to decide: rebind the node, or create a new token.
+
 ### Key Rules
 
 - **Variables before nodes**: Create all variables FIRST, then create design nodes, then bind
@@ -128,3 +225,5 @@ var mk Theme/text-primary COLOR #FFFFFF --mode Dark
 - **Verify with `var ls`**: Check created variables are correct before binding
 - **Verify with `comp ls`**: Check component properties after creation
 - **Collections organize by concern**: Colors, Spacing, Typography, Theme (not by component)
+- **Test worst case**: Always test narrowest width × longest text × all themes after completing bindings
+- **Never mix .characters with setBoundVariable**: Last write wins, they are mutually exclusive

@@ -5,23 +5,30 @@
  */
 
 import { ToolDefinition } from '../types';
+import { getAgentTypeDescriptions } from '../../subtask/agentTypes';
 
 export const subtaskDefinition: ToolDefinition = {
   name: 'subtask',
   executionStrategy: 'sequential',
-  description: 'Delegate a focused sub-task to a child agent. Usage: subtask <prompt>. The child agent shares your tools and canvas but has its own iteration budget. Use for independent pieces of complex designs (e.g., sidebar, header, form section).',
+  description: `Delegate a focused sub-task to a typed child agent. Each type has its own tools, iteration budget, and behavioral constraints.
+
+Available agent types:
+${getAgentTypeDescriptions()}
+
+Use when a design has 3+ independent sections or when you need specialized behavior (audit, token ops). Do NOT use for simple operations (1-2 tool calls).`,
   parameters: {
     type: 'object',
     properties: {
       prompt: {
         type: 'string',
-        description: 'Description of the sub-task to delegate. Be specific about what to create/modify.',
+        description: 'Description of the sub-task to delegate. Be specific about what to create/modify/audit.',
       },
-      input: {
+      type: {
         type: 'string',
-        description: 'Alternative to prompt — same effect.',
+        enum: ['create', 'audit', 'token'],
+        description: 'Agent type. Defaults to "create" if omitted.',
       },
     },
-    required: [],
+    required: ['prompt'],
   },
 };

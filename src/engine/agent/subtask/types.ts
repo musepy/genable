@@ -7,6 +7,7 @@ import { LLMProvider } from '../../llm-client/providers/types';
 import { ToolDefinition } from '../tools/types';
 import type { IpcBridge } from '../ipcBridge';
 import type { AgentRuntimeEvent } from '../../../shared/protocol/agentRuntimeEvents';
+import type { AgentTypeDefinition } from './agentTypes';
 
 export interface SubtaskContext {
   /** LLM provider (shared with parent). */
@@ -29,4 +30,8 @@ export interface SubtaskContext {
   isParentCanceled: () => boolean;
   /** Event handler — child events are forwarded to parent. */
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
+  /** Agent type definition (controls tools, prompt, budget). */
+  agentType?: AgentTypeDefinition;
+  /** LLM provider reference for rebuilding system prompt with filtered tools. */
+  providerRef?: { getToolSystemInstruction: (tools: ToolDefinition[]) => string };
 }

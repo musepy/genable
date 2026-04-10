@@ -12,8 +12,9 @@
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agentRuntime';
 import { SubtaskContext } from './types';
-
-const MAX_CHILD_ITERATIONS = 20;
+import { resolveAgentType } from './agentTypes';
+import type { AgentTypeDefinition } from './agentTypes';
+import { buildStaticSystemPrompt } from '../../llm-client/context/system';
 
 export async function executeSubtask(
   prompt: string,
@@ -32,14 +33,27 @@ export async function executeSubtask(
     };
   }
 
+  const agentType = context.agentType ?? resolveAgentType('create');
+
+  // Filter tools by agent type whitelist
+  const allowedToolSet = new Set(agentType.tools);
+  const filteredTools = context.tools.filter(t => allowedToolSet.has(t.name));
+
+  // Build agent-type-specific system prompt:
+  // rolePreamble (identity anchoring) + base system prompt (with filtered tools)
+  const basePrompt = context.providerRef
+    ? buildStaticSystemPrompt(filteredTools, context.providerRef)
+    : context.systemPrompt;
+  const childSystemPrompt = agentType.rolePreamble + '\n\n' + basePrompt;
+
   // Create child runtime
   const childDepth = context.depth + 1;
-  const childMaxIterations = Math.min(context.maxIterations, MAX_CHILD_ITERATIONS);
+  const childMaxIterations = Math.min(context.maxIterations, agentType.maxIterations);
 
   const childRuntime = new AgentRuntime({
     provider: context.provider,
-    tools: context.tools,
-    systemPrompt: context.systemPrompt,
+    tools: filteredTools,
+    systemPrompt: childSystemPrompt,
     ipcBridge: context.ipcBridge,
     toolExecutors: context.toolExecutors,
     maxIterations: childMaxIterations,
@@ -50,10 +64,12 @@ export async function executeSubtask(
   if (childDepth < context.maxDepth) {
     childRuntime.mergeToolExecutors({
       subtask: async (args: any) => {
+        const nestedType = resolveAgentType(args?.type);
         const childContext: SubtaskContext = {
           ...context,
           depth: childDepth,
-          maxIterations: Math.min(Math.floor(childMaxIterations / 2), MAX_CHILD_ITERATIONS),
+          agentType: nestedType,
+          maxIterations: Math.min(Math.floor(childMaxIterations / 2), nestedType.maxIterations),
           isParentCanceled: () => context.isParentCanceled(),
         };
         return executeSubtask(args?.prompt || args?.input || '', childContext);

@@ -26,6 +26,14 @@ import { DASHSCOPE_CONFIG } from '../config';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
+import { normalizeFinishReason } from './types';
+import {
+  StreamIdleTimeoutError,
+  ConnectTimeoutError,
+  TransportError,
+  APIError,
+  EmptyResponseError,
+} from './shared/providerErrors';
 
 export type FetchProxy = (
   url: string,
@@ -151,21 +159,40 @@ export class DashScopeProvider implements LLMProvider {
     if (this.fetchProxy) {
       const result = await this.fetchProxy(url, init);
       if (!result.ok) {
-        throw new Error(`[DashScope] API error ${result.status}: ${result.body}`);
+        throw new APIError(this.name, result.status, result.body);
       }
-      return this.mapToLLMResponse(JSON.parse(result.body));
+      return this.assertNonEmpty(this.mapToLLMResponse(JSON.parse(result.body)));
     }
 
     // Direct fetch fallback (works in environments without CORS restrictions)
-    const res = await fetch(url, init);
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (e: any) {
+      throw new TransportError(this.name, e?.message || 'fetch failed', e);
+    }
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`[DashScope] API error ${res.status}: ${errText}`);
+      throw new APIError(this.name, res.status, errText);
     }
-    return this.mapToLLMResponse(await res.json());
+    return this.assertNonEmpty(this.mapToLLMResponse(await res.json()));
   }
 
-  /** Fetch with retry for transient 5xx errors (e.g. Cloudflare 520). */
+  /** Final empty-response gate. Throws EmptyResponseError if nothing usable. */
+  private assertNonEmpty(response: LLMResponse): LLMResponse {
+    const hasText = !!response.text && response.text.length > 0;
+    const hasToolCalls = !!response.toolCalls && response.toolCalls.length > 0;
+    if (!hasText && !hasToolCalls) {
+      throw new EmptyResponseError(this.name);
+    }
+    return response;
+  }
+
+  /**
+   * Fetch with retry for transient 5xx errors (e.g. Cloudflare 520).
+   * Throws typed ProviderError on exhaustion. The runtime never retries
+   * above this layer — this is the only retry layer in the system.
+   */
   private async fetchWithRetry(body: Record<string, any>, abortSignal?: AbortSignal): Promise<Response> {
     let lastError: Error | undefined;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -173,7 +200,7 @@ export class DashScopeProvider implements LLMProvider {
         const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
         console.warn(`[DashScope] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
-        if (abortSignal?.aborted) throw new Error('[DashScope] Aborted during retry wait');
+        if (abortSignal?.aborted) throw new TransportError(this.name, 'Aborted during retry wait');
       }
 
       try {
@@ -190,22 +217,33 @@ export class DashScopeProvider implements LLMProvider {
         // Only retry on 5xx (server/infra errors). 4xx = client error, don't retry.
         if (res.status >= 500 && attempt < MAX_RETRIES) {
           console.warn(`[DashScope] ${res.status} error, will retry: ${errText.slice(0, 200)}`);
-          lastError = new Error(`[DashScope] Streaming error ${res.status}: ${errText}`);
+          lastError = new APIError(this.name, res.status, errText);
           continue;
         }
-        throw new Error(`[DashScope] Streaming error ${res.status}: ${errText}`);
+        throw new APIError(this.name, res.status, errText);
       } catch (e: any) {
-        // Network errors (fetch threw) are also retryable
-        if (e.name === 'AbortError') throw e;
-        if (attempt < MAX_RETRIES && !e.message?.includes('Streaming error 4')) {
-          console.warn(`[DashScope] Fetch failed, will retry: ${e.message?.slice(0, 200)}`);
-          lastError = e;
+        if (e?.name === 'AbortError') throw new TransportError(this.name, 'Aborted', e);
+        // Connect timeout from withConnectTimeout
+        if (typeof e?.message === 'string' && e.message.includes('Connection timed out')) {
+          if (attempt < MAX_RETRIES) {
+            console.warn(`[DashScope] Connect timeout, will retry: ${e.message?.slice(0, 200)}`);
+            lastError = new ConnectTimeoutError(this.name, CONNECT_TIMEOUT_MS);
+            continue;
+          }
+          throw new ConnectTimeoutError(this.name, CONNECT_TIMEOUT_MS);
+        }
+        // Don't re-retry typed APIError 4xx
+        if (e instanceof APIError && e.statusCode < 500) throw e;
+        if (attempt < MAX_RETRIES) {
+          console.warn(`[DashScope] Fetch failed, will retry: ${e?.message?.slice(0, 200)}`);
+          lastError = e instanceof Error ? e : new TransportError(this.name, String(e));
           continue;
         }
-        throw e;
+        if (e instanceof Error) throw new TransportError(this.name, e.message, e);
+        throw new TransportError(this.name, String(e));
       }
     }
-    throw lastError ?? new Error('[DashScope] All retries exhausted');
+    throw lastError ?? new TransportError(this.name, 'All retries exhausted');
   }
 
   private async generateStreaming(
@@ -221,6 +259,7 @@ export class DashScopeProvider implements LLMProvider {
     // Accumulate incremental tool calls across SSE chunks
     const toolCallAccumulator = new Map<number, { id: string; name: string; args: string }>();
 
+    let streamTimedOut = false;
     try {
       const { timedOut } = await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
         const chunk = this.mapStreamChunkToLLMResponse(parsed, toolCallAccumulator);
@@ -228,13 +267,14 @@ export class DashScopeProvider implements LLMProvider {
         if (chunk.thoughts) onThinking?.(chunk.thoughts);
         accumulator.append(chunk);
       }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
-
-      if (timedOut) {
-        console.warn('[DashScope] Stream idle timeout. Returning partial result.');
-        accumulator.append({ text: '', finishReason: 'timeout' });
-      }
+      streamTimedOut = timedOut;
     } finally {
       reader.cancel().catch(() => {});
+    }
+
+    // Fail-fast on idle timeout. Pass partial text upstream for diagnostics.
+    if (streamTimedOut) {
+      throw new StreamIdleTimeoutError(this.name, STREAM_IDLE_TIMEOUT_MS, accumulator.getText());
     }
 
     // Finalize accumulated tool calls → inject into accumulator
@@ -264,7 +304,7 @@ export class DashScopeProvider implements LLMProvider {
       if (finalResponse.toolCalls.length === 0) finalResponse.toolCalls = undefined;
     }
 
-    return finalResponse;
+    return this.assertNonEmpty(finalResponse);
   }
 
   /** Converts raw SSE byte stream to parsed JSON objects */
@@ -361,7 +401,7 @@ export class DashScopeProvider implements LLMProvider {
         cachedTokens: data.usage.prompt_tokens_details?.cached_tokens || undefined,
       } : undefined,
       // finish_reason arrives in the final chunk (e.g. 'stop', 'length', 'tool_calls')
-      finishReason: choice?.finish_reason || undefined,
+      finishReason: normalizeFinishReason(choice?.finish_reason),
     };
   }
 

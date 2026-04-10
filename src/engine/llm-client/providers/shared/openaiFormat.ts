@@ -6,7 +6,8 @@
  * Eliminates ~110 lines of duplicated mapMessages/mapToLLMResponse code per provider.
  */
 
-import type { LLMMessage, LLMToolCall, Part } from '../types';
+import type { LLMMessage, LLMToolCall, Part, FinishReason } from '../types';
+import { normalizeFinishReason } from '../types';
 
 // ═══════════════════════════════════════════════════════════════
 // Request direction: LLMMessage[] → OpenAI messages
@@ -82,7 +83,7 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
 export function mapOpenAIToLLMResponse(data: any): {
   text: string;
   toolCalls?: LLMToolCall[];
-  finishReason?: string;
+  finishReason?: FinishReason;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number };
 } {
   const choice = data.choices?.[0];
@@ -97,7 +98,7 @@ export function mapOpenAIToLLMResponse(data: any): {
   return {
     text: message?.content || '',
     toolCalls: rawToolCalls && rawToolCalls.length > 0 ? rawToolCalls : undefined,
-    finishReason: choice?.finish_reason || undefined,
+    finishReason: normalizeFinishReason(choice?.finish_reason),
     usage: data.usage ? {
       promptTokens: data.usage.prompt_tokens || 0,
       completionTokens: data.usage.completion_tokens || 0,

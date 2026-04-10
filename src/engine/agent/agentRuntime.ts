@@ -29,6 +29,8 @@ import { TOOL_NAMES } from './tools/unified';
 import { clearOverflows } from './overflowStore';
 import { executeSubtask } from './subtask/executor';
 import type { SubtaskContext } from './subtask/types';
+import { resolveAgentType } from './subtask/agentTypes';
+import { OutputTooLongError } from '../llm-client/providers/shared/providerErrors';
 import { ContextManager } from './context/contextManager';
 
 // ---------------------------------------------------------------------------
@@ -57,7 +59,6 @@ export interface AgentRuntimeOptions {
   loopPolicy?: Partial<AgentLoopPolicy>;
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
   hooks?: HookRegistration[];
-  requireToolApproval?: boolean;
   /** Model's context window in tokens. Used for lazy compression budget. */
   contextWindow?: number;
 }
@@ -103,7 +104,6 @@ export class AgentRuntime {
   private currentRunId = '';
   private eventSequence = 0;
   private canceledEventEmitted = false;
-  private pendingApproval: { resolve: (approved: boolean) => void } | null = null;
   private pendingQuestion: { resolve: (answer: string) => void } | null = null;
   private chatPanelId: string | null = null;
   private turnCreatedNodeIds: string[] = [];
@@ -205,20 +205,26 @@ export class AgentRuntime {
       },
     );
 
-    // Register subtask executor (bounded self-recursion)
+    // Register subtask executor (bounded self-recursion, typed agents)
     this.toolDispatcher.mergeExecutors({
       subtask: async (args: any) => {
+        const agentType = resolveAgentType(args?.type);
         const childContext: SubtaskContext = {
           provider: this.options.provider,
           ipcBridge: this.options.ipcBridge,
           systemPrompt: this.contextManager.getSystemPrompt(),
           tools: this.options.tools,
           toolExecutors: this.options.toolExecutors,
-          maxIterations: Math.min(Math.floor((this.maxIterations - this.currentIteration) / 2), 20),
+          maxIterations: Math.min(
+            Math.floor((this.maxIterations - this.currentIteration) / 2),
+            agentType.maxIterations,
+          ),
           depth: 0,
           maxDepth: 2,
           isParentCanceled: () => this.canceled,
           onRuntimeEvent: this.options.onRuntimeEvent,
+          agentType,
+          providerRef: this.options.provider,
         };
         return executeSubtask(args?.prompt || args?.input || '', childContext);
       },
@@ -258,10 +264,6 @@ export class AgentRuntime {
   public cancel(reason: string = 'Canceled by user'): void {
     this.canceled = true;
     this.cancelReason = reason;
-    if (this.pendingApproval) {
-      this.pendingApproval.resolve(false);
-      this.pendingApproval = null;
-    }
     if (this.pendingQuestion) {
       this.pendingQuestion.resolve('');
       this.pendingQuestion = null;
@@ -270,11 +272,6 @@ export class AgentRuntime {
       this.activeAbortController.abort();
     }
     this.emitCanceledEvent();
-  }
-
-  public resolveApproval(approved: boolean): void {
-    this.pendingApproval?.resolve(approved);
-    this.pendingApproval = null;
   }
 
   public resolveQuestion(answer: string): void {
@@ -471,7 +468,6 @@ export class AgentRuntime {
     });
 
     let iteration = 0;
-    let truncationCount = 0;
     let askUserNudged = false;
     this.resetBuiltinState?.();
     this.llmCoordinator.reset();
@@ -491,39 +487,8 @@ export class AgentRuntime {
       maxIterations: this.maxIterations,
     });
 
-    // ── Load persistent memory on first turn ──
+    // ── Token scan: Onboarding ──
     if (this.contextManager.isFirstTurn() && this.options.ipcBridge) {
-      try {
-        const memResult = await Promise.race([
-          this.options.ipcBridge.callTool('list_memories', {}),
-          new Promise<null>(r => setTimeout(() => r(null), 2000)),
-        ]);
-        if (memResult && !memResult.error && memResult.data?.memories) {
-          const memories = memResult.data.memories as Record<string, string>;
-          const keys = Object.keys(memories);
-          if (keys.length > 0) {
-            const memoryText = keys.map(k => `- ${k}: ${memories[k]}`).join('\n');
-            this.contextManager.unshiftToTurn({
-              id: this.generateId('mem'),
-              role: 'user',
-              content: `[System: Loaded ${keys.length} persistent memories from previous sessions]\n${memoryText}`,
-              hidden: true,
-            });
-            this.emitRuntimeEvent({
-              type: 'status',
-              phase: 'execution',
-              message: `Memory loaded (${keys.length} items)`,
-              iteration: 0,
-              maxIterations: this.maxIterations,
-              memoryCount: keys.length,
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('[Memory] Failed to load persistent memory (non-fatal):', e);
-      }
-
-      // ── Token scan: Memory Diff + Onboarding ──
       try {
         const scanResult = await Promise.race([
           this.options.ipcBridge.callTool('scan-tokens', {}),
@@ -532,37 +497,12 @@ export class AgentRuntime {
         if (scanResult && !scanResult.error && scanResult.data) {
           const { snapshot, summary, tokenCount } = scanResult.data;
           if (tokenCount > 0) {
-            // Try to load previous snapshot for diff
-            const prevSnapshotResult = await Promise.race([
-              this.options.ipcBridge.callTool('list_memories', { key: '_token_snapshot' }),
-              new Promise<null>(r => setTimeout(() => r(null), 1000)),
-            ]);
-
-            let diffText = '';
-            if (prevSnapshotResult && !prevSnapshotResult.error && prevSnapshotResult.data?.value) {
-              try {
-                const { diffTokenSnapshots } = await import('./context/tokenDiffer');
-                const prevSnapshot = JSON.parse(prevSnapshotResult.data.value);
-                const diff = diffTokenSnapshots(prevSnapshot, snapshot);
-                if (diff && diff.hasChanges) {
-                  diffText = `\n\n[Design system changes since last session]\n${diff.summary}`;
-                }
-              } catch { /* ignore parse errors */ }
-            }
-
-            // Inject token context (onboarding or diff)
             this.contextManager.unshiftToTurn({
               id: this.generateId('tok'),
               role: 'user',
-              content: `[System: Design tokens detected — ${summary}]${diffText}`,
+              content: `[System: Design tokens detected — ${summary}]`,
               hidden: true,
             });
-
-            // Save current snapshot for next session's diff
-            this.options.ipcBridge.callTool('save_memory', {
-              key: '_token_snapshot',
-              value: JSON.stringify(snapshot),
-            }).catch(() => { /* non-fatal */ });
           }
         }
       } catch (e) {
@@ -762,26 +702,17 @@ export class AgentRuntime {
         this.runStats.tokenUsage.callCount++;
       }
 
-      // ──── TRUNCATION GUARD (with tool calls) ────
-      // When finishReason='length' AND tool calls exist, the calls are likely truncated
-      // (e.g., incomplete JSX → "Unterminated JSX contents" errors).
-      // Discard truncated calls and ask LLM to retry with simpler output.
-      if (toolCallsForExecution.length > 0 && response.finishReason === 'length') {
-        truncationCount++;
-        const truncatedNames = toolCallsForExecution.map(tc => tc.name).join(', ');
-        console.warn(`[AgentRuntime] Tool calls truncated (finishReason=length, tools=[${truncatedNames}], ${truncationCount}/3). Discarding.`);
-        if (truncationCount <= 3) {
-          this.contextManager.pushToTurn({
-            id: this.generateId('cont'),
-            role: 'user',
-            content: `Your previous response was truncated mid-tool-call (finishReason=length). The tool calls were discarded because they contain incomplete parameters. To fix this: break your design into smaller parts — create fewer nodes per tool call, or split into multiple sequential calls.`,
-            synthetic: true,
-          });
-          continue;
-        }
-        // After 3 truncation retries, let tool calls through (they'll fail with parse errors,
-        // but loop detection will eventually abort).
-        console.warn(`[AgentRuntime] Truncation limit reached (3) with tool calls. Proceeding with truncated calls.`);
+      // ──── REAL TRUNCATION FAIL-FAST ────
+      // The model genuinely hit max_tokens (finishReason='length'). If there
+      // are no usable tool calls, the partial text is the only output and it
+      // was cut off mid-thought. Surface this as an actionable user error.
+      // (If tool calls survived sanitization, they're complete — let them through.)
+      if (response.finishReason === 'length' && toolCallsForExecution.length === 0) {
+        throw new OutputTooLongError(
+          this.options.provider.name,
+          this.loopPolicy.maxOutputTokens,
+          response.text || '',
+        );
       }
 
       // ──── TOOL EXECUTION ────
@@ -789,22 +720,6 @@ export class AgentRuntime {
       //   emptyArgsCounter (afterLLMResponse) → counts/aborts/injects hint
       //   emptyArgsSkip (beforeToolExec) → skips individual empty-args calls
       if (toolCallsForExecution.length > 0) {
-        if (this.options.requireToolApproval) {
-          this.emitRuntimeEvent({
-            type: 'tool_approval_request',
-            phase: 'execution',
-            iteration: iteration + 1,
-            toolCalls: toolCallsForExecution.map(tc => ({ id: tc.id!, name: tc.name, args: tc.args })),
-          });
-          const approved = await new Promise<boolean>(r => { this.pendingApproval = { resolve: r } });
-          this.pendingApproval = null;
-          this.throwIfCanceled(iteration + 1);
-          if (!approved) {
-            this.contextManager.pushToTurn({ id: this.generateId('usr'), role: 'user', content: 'Tools denied by user. Try a different approach.', synthetic: true });
-            iteration++;
-            continue;
-          }
-        }
         this.runStats.toolCallCount += toolCallsForExecution.length;
         const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
         const content = dispatchResult.toolResultsMessage.content;
@@ -852,26 +767,6 @@ export class AgentRuntime {
         iteration++;
         continue;
       } else {
-        // ──── TRUNCATION GUARD ────
-        // If finishReason is present and NOT 'stop', the response was truncated.
-        // Bounded: max 3 continuations before forcing turn end.
-        const fr = response.finishReason;
-        if (fr && fr !== 'stop' && fr !== 'tool_calls') {
-          truncationCount++;
-          if (truncationCount <= 3) {
-            console.warn(`[AgentRuntime] Response truncated (finishReason=${fr}, ${truncationCount}/3). Injecting continuation.`);
-            this.contextManager.pushToTurn({
-              id: this.generateId('cont'),
-              role: 'user',
-              content: 'Your previous response was truncated. Continue where you left off.',
-              synthetic: true,
-            });
-            // Don't increment iteration — truncation continuation is the same logical step
-            continue;
-          }
-          console.warn(`[AgentRuntime] Truncation limit reached (3). Forcing turn end.`);
-        }
-
         // ──── ASK_USER NUDGE ────
         // If text-only response contains multiple question marks, the LLM is trying
         // to ask questions via plain text instead of using ask_user. Nudge once per run.

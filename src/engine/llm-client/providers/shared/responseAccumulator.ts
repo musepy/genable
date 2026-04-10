@@ -4,7 +4,7 @@
  * Provider-agnostic — operates on the common LLMResponse/LLMToolCall/Part types.
  */
 
-import { LLMResponse, LLMToolCall, Part } from '../types';
+import { LLMResponse, LLMToolCall, Part, FinishReason } from '../types';
 
 /**
  * Accumulates streaming response chunks (text, thoughts, tool calls, fullParts).
@@ -19,7 +19,7 @@ export class ResponseAccumulator {
   private toolCalls: LLMToolCall[] = [];
   private fullParts: Part[] = [];
   private usage?: LLMResponse['usage'];
-  private finishReason?: string;
+  private finishReason?: FinishReason;
 
   append(chunk: LLMResponse): void {
     if (chunk.text) this.text += chunk.text;

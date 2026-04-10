@@ -209,13 +209,12 @@ describe('HookRunner', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('createBuiltinHooks', () => {
-  it('should create 2 builtin hook registrations', () => {
+  it('should create 1 builtin hook registration (loopDetection only)', () => {
+    // Empty-response handling moved to provider layer (throws EmptyResponseError).
+    // createBuiltinHooks now returns only loopDetection.
     const hooks = createBuiltinHooks();
-    expect(hooks).toHaveLength(2);
-    expect(hooks.map(h => h.id)).toEqual([
-      'builtin:emptyResponse',
-      'builtin:loopDetection',
-    ]);
+    expect(hooks).toHaveLength(1);
+    expect(hooks.map(h => h.id)).toEqual(['builtin:loopDetection']);
   });
 
   it('should all subscribe to afterLLMResponse', () => {
@@ -234,41 +233,12 @@ describe('createBuiltinHooks', () => {
 describe('createBuiltinHooksWithState', () => {
   it('should provide a reset function', () => {
     const { hooks, reset } = createBuiltinHooksWithState();
-    // 2 original (emptyResponse, loopDetection) + 5 guard hooks
-    // (emptyArgsCounter, emptyArgsSkip, consecutiveFailure, partialFailure, budget)
-    // + 1 stepWarning hook
-    expect(hooks).toHaveLength(8);
+    // 1 loopDetection + 6 guard hooks
+    // (emptyArgsCounter, emptyArgsSkip, consecutiveFailure, partialFailure, budget, stepWarning)
+    expect(hooks).toHaveLength(7);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();
-  });
-});
-
-describe('Builtin: emptyResponseHook', () => {
-  it('should return skip on first empty response', async () => {
-    const { hooks } = createBuiltinHooksWithState();
-    const registry = new HookRegistry();
-    registry.registerAll(hooks);
-    const runner = new HookRunner(registry);
-
-    const ctx = makeCtx({ responseText: '', toolCalls: [] });
-    const result = await runner.run('afterLLMResponse', ctx);
-    expect(result.action).toBe('skip');
-  });
-
-  it('should abort after max empty retries', async () => {
-    const { hooks } = createBuiltinHooksWithState();
-    const registry = new HookRegistry();
-    registry.registerAll(hooks);
-    const runner = new HookRunner(registry);
-
-    const ctx = makeCtx({ responseText: '', toolCalls: [] });
-    // 3 attempts: skip, skip, abort
-    await runner.run('afterLLMResponse', ctx);
-    await runner.run('afterLLMResponse', ctx);
-    const result = await runner.run('afterLLMResponse', ctx);
-    expect(result.action).toBe('abort');
-    expect(result.reason).toContain('empty response');
   });
 });
 

@@ -9,10 +9,15 @@
 import {
   LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolResult,
   formatResponseDefault, formatToolResultsDefault, getToolSystemInstructionDefault,
-  Part,
+  Part, normalizeFinishReason,
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { ANTHROPIC_CONFIG } from '../config';
+import {
+  APIError,
+  TransportError,
+  EmptyResponseError,
+} from './shared/providerErrors';
 
 // ═══════════════════════════════════════════════════════════════
 // Wire format: LLMMessage[] → Anthropic Messages API
@@ -142,9 +147,9 @@ function mapAnthropicToLLMResponse(data: any): LLMResponse {
   return {
     text: textParts.join(''),
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    finishReason: data.stop_reason === 'end_turn' ? 'stop'
-      : data.stop_reason === 'tool_use' ? 'tool_calls'
-      : data.stop_reason || undefined,
+    // Anthropic stop_reason aliases handled by normalizeFinishReason:
+    // end_turn → stop, max_tokens → length, tool_use → tool_calls
+    finishReason: normalizeFinishReason(data.stop_reason),
     usage: data.usage ? {
       promptTokens: data.usage.input_tokens || 0,
       completionTokens: data.usage.output_tokens || 0,
@@ -222,22 +227,32 @@ export class AnthropicProvider implements LLMProvider {
       headers['anthropic-dangerous-direct-browser-access'] = 'true';
     }
 
-    const response = await fetch(`${this.baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: abortSignal,
+      });
+    } catch (e: any) {
+      if (e?.name === 'AbortError') throw new TransportError(this.name, 'Aborted', e);
+      throw new TransportError(this.name, e?.message || 'fetch failed', e);
+    }
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
-      const errorType = errorJson.error?.type || response.status;
-      const errorMessage = errorJson.error?.message || response.statusText;
-      throw new Error(`Anthropic API Error [${errorType}]: ${errorMessage}`);
+      const errText = await response.text();
+      throw new APIError(this.name, response.status, errText);
     }
 
     const data = await response.json();
-    return mapAnthropicToLLMResponse(data);
+    const mapped = mapAnthropicToLLMResponse(data);
+    const hasText = !!mapped.text && mapped.text.length > 0;
+    const hasToolCalls = !!mapped.toolCalls && mapped.toolCalls.length > 0;
+    if (!hasText && !hasToolCalls) {
+      throw new EmptyResponseError(this.name);
+    }
+    return mapped;
   }
 
   getToolSystemInstruction(tools: ToolDefinition[]): string {

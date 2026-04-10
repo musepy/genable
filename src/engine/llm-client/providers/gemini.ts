@@ -11,6 +11,10 @@ import { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiG
 import { GeminiLogger } from './gemini/geminiLogger';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
+import {
+  StreamIdleTimeoutError,
+  EmptyResponseError,
+} from './shared/providerErrors';
 
 /** Idle timeout: max silence between chunks (ms) */
 const STREAM_IDLE_TIMEOUT_MS = 30000;
@@ -60,7 +64,17 @@ export class GeminiProvider implements LLMProvider {
     } catch (error: any) {
       GeminiErrorHandler.handleSdkError(error);
     }
-    return this.mapToLLMResponse(response);
+    return this.assertNonEmpty(this.mapToLLMResponse(response));
+  }
+
+  /** Final empty-response gate. Throws EmptyResponseError if nothing usable. */
+  private assertNonEmpty(response: LLMResponse): LLMResponse {
+    const hasText = !!response.text && response.text.length > 0;
+    const hasToolCalls = !!response.toolCalls && response.toolCalls.length > 0;
+    if (!hasText && !hasToolCalls) {
+      throw new EmptyResponseError(this.name);
+    }
+    return response;
   }
 
   getToolSystemInstruction(tools: ToolDefinition[]): string {
@@ -138,8 +152,9 @@ export class GeminiProvider implements LLMProvider {
     }
 
     const accumulator = new ResponseAccumulator();
-    let streamTruncated = false;
 
+    let streamTimedOut = false;
+    let streamAborted = false;
     try {
       const { timedOut, aborted } = await consumeStream(stream, (response: any) => {
         const mapped = this.mapToLLMResponse(response);
@@ -147,23 +162,27 @@ export class GeminiProvider implements LLMProvider {
         if (mapped.thoughts) onThinking?.(mapped.thoughts);
         accumulator.append(mapped);
       }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
-
-      if (!timedOut && !aborted) {
-        GeminiErrorHandler.validateResponseContent(accumulator.getText(), accumulator.getToolCalls(), accumulator.getThoughts());
-      } else {
-        const reason = timedOut ? 'timed out' : 'aborted';
-        GeminiLogger.warn(`Stream ${reason}. Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
-      }
+      streamTimedOut = timedOut;
+      streamAborted = aborted;
     } catch (streamError: any) {
+      // SDK SSE truncation — retain whatever was already accumulated, then fall through
+      // to validation/empty-response checks. If nothing usable, assertNonEmpty throws.
       if (streamError?.message?.includes('Incomplete JSON segment')) {
         GeminiLogger.warn(`Stream truncated (SDK SSE buffer not empty). Accumulated: ${accumulator.getText().length} chars text, ${accumulator.getToolCalls().length} tool calls`);
-        streamTruncated = true;
       } else {
-        throw streamError;
+        GeminiErrorHandler.handleSdkError(streamError);
       }
     }
 
-    return accumulator.finalize();
+    if (streamTimedOut) {
+      throw new StreamIdleTimeoutError(this.name, STREAM_IDLE_TIMEOUT_MS, accumulator.getText());
+    }
+
+    if (!streamAborted) {
+      GeminiErrorHandler.validateResponseContent(accumulator.getText(), accumulator.getToolCalls(), accumulator.getThoughts());
+    }
+
+    return this.assertNonEmpty(accumulator.finalize());
   }
 
   // ── Response Mapping (Gemini API format) ─────────────────────────────────────

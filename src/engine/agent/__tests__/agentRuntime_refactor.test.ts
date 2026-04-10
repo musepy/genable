@@ -83,16 +83,15 @@ describe('AgentRuntime Refactor Verification', () => {
     };
   });
 
-  it('should retry on transient errors using RetryPolicy', async () => {
+  it('should NOT retry transient errors above the provider layer (fail-fast)', async () => {
+    // The retryPolicy + retryWithBackoff layer was deleted in the fail-fast
+    // refactor. Only fetchWithRetry inside the provider retries 5xx, and that
+    // happens BEFORE the runtime sees anything. From the runtime's perspective,
+    // any provider error is final.
     let callCount = 0;
     (mockProvider.generate as any).mockImplementation(() => {
       callCount++;
-      if (callCount === 1) {
-        const err = new Error('503: Service Overloaded');
-        (err as any).type = 'OVERLOADED';
-        throw err;
-      }
-      return Promise.resolve({ text: 'Done', toolCalls: [] });
+      throw new Error('503: Service Overloaded');
     });
 
     const runtime = new AgentRuntime({
@@ -101,9 +100,8 @@ describe('AgentRuntime Refactor Verification', () => {
       tools: []
     });
 
-    const result = await runtime.run('test retry');
-    expect(result).toBe('Done');
-    expect(callCount).toBe(2);
+    await expect(runtime.run('test retry')).rejects.toThrow(/Service Overloaded/);
+    expect(callCount).toBe(1);
   });
 
 });

@@ -73,6 +73,49 @@ export interface LLMToolResult {
   };
 }
 
+/**
+ * Reason the LLM stopped generating.
+ *
+ * Strict union — only LLM API "real" finish reasons are allowed. Providers
+ * MUST NOT fabricate values like 'timeout' to signal transport errors —
+ * those are thrown as `StreamIdleTimeoutError` from `providerErrors.ts`.
+ *
+ * - 'stop'           — model finished naturally
+ * - 'length'         — model hit max_tokens (real LLM-level truncation)
+ * - 'tool_calls'     — model emitted tool calls and stopped
+ * - 'content_filter' — provider-side safety filter blocked output
+ */
+export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter';
+
+/**
+ * Normalize a raw upstream finish_reason string to our strict FinishReason
+ * union. Returns undefined for unknown/missing values (the runtime then
+ * treats it as "natural stop").
+ *
+ * Maps legacy and provider-specific aliases:
+ * - OpenAI legacy: 'function_call' → 'tool_calls'
+ * - Anthropic:    'end_turn' → 'stop', 'max_tokens' → 'length', 'tool_use' → 'tool_calls'
+ */
+export function normalizeFinishReason(raw: string | null | undefined): FinishReason | undefined {
+  if (!raw) return undefined;
+  switch (raw) {
+    case 'stop':
+    case 'end_turn':
+      return 'stop';
+    case 'length':
+    case 'max_tokens':
+      return 'length';
+    case 'tool_calls':
+    case 'tool_use':
+    case 'function_call':
+      return 'tool_calls';
+    case 'content_filter':
+      return 'content_filter';
+    default:
+      return undefined;
+  }
+}
+
 export interface LLMResponse {
   text: string;
   toolCalls?: LLMToolCall[];
@@ -86,8 +129,8 @@ export interface LLMResponse {
   thoughts?: string;
   /** Full original parts from the provider to ensure exact history reconstruction */
   fullParts?: Part[];
-  /** Why the model stopped: 'stop' (natural), 'length' (truncated), 'tool_calls', etc. */
-  finishReason?: string;
+  /** Why the model stopped. See FinishReason. */
+  finishReason?: FinishReason;
 }
 
 export interface LLMGenerateOptions {

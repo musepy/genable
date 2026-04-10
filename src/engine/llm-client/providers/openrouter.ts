@@ -7,6 +7,11 @@ import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolResult
 import { ToolDefinition } from '../../agent/tools/types';
 import { OPENROUTER_CONFIG } from '../config';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
+import {
+  APIError,
+  TransportError,
+  EmptyResponseError,
+} from './shared/providerErrors';
 
 export class OpenRouterProvider implements LLMProvider {
   public readonly name = 'openrouter';
@@ -61,34 +66,39 @@ export class OpenRouterProvider implements LLMProvider {
       body.response_format = { type: 'json_object' };
     }
 
-    const response = await fetch(`${OPENROUTER_CONFIG.BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'HTTP-Referer': OPENROUTER_CONFIG.SITE_URL,
-        'X-Title': OPENROUTER_CONFIG.SITE_NAME,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: abortSignal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${OPENROUTER_CONFIG.BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'HTTP-Referer': OPENROUTER_CONFIG.SITE_URL,
+          'X-Title': OPENROUTER_CONFIG.SITE_NAME,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: abortSignal,
+      });
+    } catch (e: any) {
+      if (e?.name === 'AbortError') throw new TransportError(this.name, 'Aborted', e);
+      throw new TransportError(this.name, e?.message || 'fetch failed', e);
+    }
 
     if (!response.ok) {
-      const errorJson = await response.json().catch(() => ({}));
-      const error = errorJson.error || {};
-      let errorMessage = error.message || response.statusText;
-      const errorCode = error.code || response.status;
-
-      if (response.status === 402) {
-          const contextMsg = error.metadata?.provider_name ? ` (Provider: ${error.metadata.provider_name})` : '';
-          errorMessage = `Insufficient Credits: ${errorMessage}${contextMsg}. TIP: Try a free model like 'google/gemini-2.0-flash-lite-preview-02-05:free' or top up your balance.`;
-      }
-
-      throw new Error(`OpenRouter API Error [${errorCode}]: ${errorMessage}${error.metadata && response.status !== 402 ? ` (Context: ${JSON.stringify(error.metadata)})` : ''}`);
+      const errText = await response.text();
+      throw new APIError(this.name, response.status, errText);
     }
 
     const data = await response.json();
-    return mapOpenAIToLLMResponse(data);
+    const mapped = mapOpenAIToLLMResponse(data);
+    // OpenRouter returns LLMResponse-shaped object — narrow to typed shape
+    const result: LLMResponse = mapped as LLMResponse;
+    const hasText = !!result.text && result.text.length > 0;
+    const hasToolCalls = !!result.toolCalls && result.toolCalls.length > 0;
+    if (!hasText && !hasToolCalls) {
+      throw new EmptyResponseError(this.name);
+    }
+    return result;
   }
 
   getToolSystemInstruction(tools: ToolDefinition[]): string {

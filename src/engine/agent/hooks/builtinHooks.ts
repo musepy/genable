@@ -2,17 +2,18 @@
  * @file builtinHooks.ts
  * @description Built-in safety-guardrail hooks extracted from AgentRuntime.
  *
- * These hooks replicate the inline safety logic that was previously hard-coded
- * in agentRuntime.ts. They are registered by default unless the caller provides
- * custom hooks.
+ * These hooks are NOT for error recovery — they are cross-cutting guardrails.
+ * Empty / truncated responses are now handled by the provider layer throwing
+ * typed `ProviderError`s; runtime surfaces those directly. The old
+ * `emptyResponseHook` retry-and-mask layer was deleted in the fail-fast refactor.
  *
  * Hooks:
- *  1. emptyResponseHook      — retries on empty LLM responses (afterLLMResponse)
- *  2. loopDetectionHook      — calls LoopDetector on tool calls (afterLLMResponse)
- *  3. emptyArgsGuard         — blocks tool calls with empty args (afterLLMResponse + beforeToolExec)
- *  4. partialFailureGuard    — injects repair directive on PARTIAL_FAILURE (afterIteration)
- *  5. consecutiveFailureGuard— strategy change after N all-fail iterations (afterIteration)
- *  6. budgetGuard            — warns when iteration budget is low (afterIteration)
+ *  1. loopDetectionHook       — calls LoopDetector on tool calls (afterLLMResponse)
+ *  2. emptyArgsGuard          — blocks tool calls with empty args (afterLLMResponse + beforeToolExec)
+ *  3. partialFailureGuard     — injects repair directive on PARTIAL_FAILURE (afterIteration)
+ *  4. consecutiveFailureGuard — strategy change after N all-fail iterations (afterIteration)
+ *  5. budgetGuard             — warns when iteration budget is low (afterIteration)
+ *  6. stepWarning             — warns when steps remaining are low (afterToolExec)
  */
 
 import { HookRegistration, HookContext, HookResult } from './hookTypes';
@@ -31,7 +32,6 @@ import { createStepWarningHook } from './stepWarningHook';
 
 interface BuiltinHookState {
   loopDetector: LoopDetector;
-  emptyResponseRetries: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,50 +45,15 @@ interface BuiltinHookState {
 export function createBuiltinHooks(): HookRegistration[] {
   const state: BuiltinHookState = {
     loopDetector: new LoopDetector(),
-    emptyResponseRetries: 0,
   };
 
   return [
-    createEmptyResponseHook(state),
     createLoopDetectionHook(state),
   ];
 }
 
 // ---------------------------------------------------------------------------
-// 1. Empty Response Hook
-// ---------------------------------------------------------------------------
-
-function createEmptyResponseHook(state: BuiltinHookState): HookRegistration {
-  const MAX_EMPTY_RETRIES = 2;
-
-  return {
-    id: 'builtin:emptyResponse',
-    event: 'afterLLMResponse',
-    priority: 10, // run first — no point checking loops on an empty response
-    fn: async (ctx: HookContext): Promise<HookResult | void> => {
-      const hasToolCalls = ctx.toolCalls && ctx.toolCalls.length > 0;
-      const hasText = !!ctx.responseText;
-
-      if (!hasText && !hasToolCalls) {
-        state.emptyResponseRetries++;
-        if (state.emptyResponseRetries <= MAX_EMPTY_RETRIES) {
-          console.warn(`[Hook:emptyResponse] Empty response (retry ${state.emptyResponseRetries}/${MAX_EMPTY_RETRIES})`);
-          return { action: 'skip' }; // skip this iteration, retry
-        }
-        return {
-          action: 'abort',
-          reason: 'LLM Provider returned an empty response',
-        };
-      }
-
-      // Reset on non-empty response
-      state.emptyResponseRetries = 0;
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 2. Loop Detection Hook
+// 1. Loop Detection Hook
 // ---------------------------------------------------------------------------
 
 function createLoopDetectionHook(state: BuiltinHookState): HookRegistration {
@@ -124,7 +89,6 @@ export function createBuiltinHooksWithState(): {
 } {
   const state: BuiltinHookState = {
     loopDetector: new LoopDetector(),
-    emptyResponseRetries: 0,
   };
 
   const emptyArgsGuard = createEmptyArgsGuard();
@@ -134,7 +98,6 @@ export function createBuiltinHooksWithState(): {
   const stepWarning = createStepWarningHook();
 
   const hooks = [
-    createEmptyResponseHook(state),
     createLoopDetectionHook(state),
     ...emptyArgsGuard.hooks,
     ...consecutiveFailureGuard.hooks,
@@ -147,7 +110,6 @@ export function createBuiltinHooksWithState(): {
     hooks,
     reset: () => {
       state.loopDetector.reset();
-      state.emptyResponseRetries = 0;
       emptyArgsGuard.reset();
       consecutiveFailureGuard.reset();
       partialFailureGuard.reset();

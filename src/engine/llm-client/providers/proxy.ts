@@ -21,6 +21,13 @@ import { ToolDefinition } from '../../agent/tools/types';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload, formatResponseGemini, formatToolResultsGemini } from './gemini/geminiFormat';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
+import {
+  StreamIdleTimeoutError,
+  ConnectTimeoutError,
+  TransportError,
+  APIError,
+  EmptyResponseError,
+} from './shared/providerErrors';
 
 /** Idle timeout: max silence between chunks (ms). Longer than direct Gemini due to network hop. */
 const STREAM_IDLE_TIMEOUT_MS = 45000;
@@ -113,14 +120,19 @@ export class ProxyProvider implements LLMProvider {
   }
 
   private async generateSync(body: Record<string, any>): Promise<LLMResponse> {
-    const res = await fetch(`${this.workerUrl}/api/generate-sync`, {
-      method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.workerUrl}/api/generate-sync`, {
+        method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body),
+      });
+    } catch (e: any) {
+      throw new TransportError(this.name, e?.message || 'fetch failed', e);
+    }
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`[ProxyProvider] Upstream error ${res.status}: ${errText}`);
+      throw new APIError(this.name, res.status, errText);
     }
-    return this.mapToLLMResponse(await res.json());
+    return this.assertNonEmpty(this.mapToLLMResponse(await res.json()));
   }
 
   private async generateStreaming(
@@ -129,21 +141,31 @@ export class ProxyProvider implements LLMProvider {
     onThinking?: (thought: string) => void,
     abortSignal?: AbortSignal,
   ): Promise<LLMResponse> {
-    const res = await withConnectTimeout(
-      () => fetch(`${this.workerUrl}/api/generate`, {
-        method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body), signal: abortSignal,
-      }),
-      CONNECT_TIMEOUT_MS,
-    );
+    let res: Response;
+    try {
+      res = await withConnectTimeout(
+        () => fetch(`${this.workerUrl}/api/generate`, {
+          method: 'POST', headers: this.authHeaders(), body: JSON.stringify(body), signal: abortSignal,
+        }),
+        CONNECT_TIMEOUT_MS,
+      );
+    } catch (e: any) {
+      if (typeof e?.message === 'string' && e.message.includes('Connection timed out')) {
+        throw new ConnectTimeoutError(this.name, CONNECT_TIMEOUT_MS);
+      }
+      if (e?.name === 'AbortError') throw new TransportError(this.name, 'Aborted', e);
+      throw new TransportError(this.name, e?.message || 'fetch failed', e);
+    }
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`[ProxyProvider] Upstream error ${res.status}: ${errText}`);
+      throw new APIError(this.name, res.status, errText);
     }
 
     const reader = res.body!.getReader();
     const accumulator = new ResponseAccumulator();
 
+    let streamTimedOut = false;
     try {
       const { timedOut } = await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
         const chunk = this.mapToLLMResponse(parsed);
@@ -151,13 +173,26 @@ export class ProxyProvider implements LLMProvider {
         if (chunk.thoughts) onThinking?.(chunk.thoughts);
         accumulator.append(chunk);
       }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
-
-      if (timedOut) console.warn('[ProxyProvider] Stream idle timeout. Returning partial result.');
+      streamTimedOut = timedOut;
     } finally {
       reader.cancel().catch(() => {});
     }
 
-    return accumulator.finalize();
+    if (streamTimedOut) {
+      throw new StreamIdleTimeoutError(this.name, STREAM_IDLE_TIMEOUT_MS, accumulator.getText());
+    }
+
+    return this.assertNonEmpty(accumulator.finalize());
+  }
+
+  /** Final empty-response gate. */
+  private assertNonEmpty(response: LLMResponse): LLMResponse {
+    const hasText = !!response.text && response.text.length > 0;
+    const hasToolCalls = !!response.toolCalls && response.toolCalls.length > 0;
+    if (!hasText && !hasToolCalls) {
+      throw new EmptyResponseError(this.name);
+    }
+    return response;
   }
 
   /** Converts raw SSE byte stream to parsed JSON objects */
@@ -182,7 +217,9 @@ export class ProxyProvider implements LLMProvider {
   // ── Response Mapping (Gemini API format) ─────────────────────────────────────
 
   private mapToLLMResponse(response: any): LLMResponse {
-    if (response?.error) throw new Error(`[ProxyProvider] Gemini error: ${JSON.stringify(response.error)}`);
+    if (response?.error) {
+      throw new APIError(this.name, response.error?.code ?? 0, JSON.stringify(response.error));
+    }
     const parts: any[] = response?.candidates?.[0]?.content?.parts || [];
     return mapGeminiPartsToLLMResponse(parts, response.usageMetadata);
   }

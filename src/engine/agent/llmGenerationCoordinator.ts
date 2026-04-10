@@ -8,9 +8,8 @@
 import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
 import { ToolDefinition } from './tools';
 import { ToolCallMode } from './agentLoopPolicy';
-import { classifyError, isRetryableError, AgentErrorCategory } from './retryPolicy';
-import { retryWithBackoff } from './retry';
 import { ToolResultCleaner } from './context/toolResultCleaner';
+import { EmptyResponseError } from '../llm-client/providers/shared/providerErrors';
 
 
 
@@ -130,101 +129,67 @@ export class LLMGenerationCoordinator {
     });
 
     try {
-      response = await retryWithBackoff(
-        () => this.provider.generate({
-          messages: request.messages,
-          tools: request.tools,
-          toolConfig: request.toolConfig,
-          maxTokens: request.maxOutputTokens,
-          abortSignal: abortController.signal,
-          onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
-            this.config.notifyIterationStart?.();
-            // Stream text chunks to UI for progressive "grow" effect
-            if (chunk) {
-              const now = Date.now();
-              if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
-                // Flush any buffered text BEFORE the current chunk to preserve order
-                const text = this.pendingTextDelta + chunk;
-                this.pendingTextDelta = '';
-                this.config.emitRuntimeEvent({
-                  type: 'text_delta',
-                  phase: 'execution',
+      // Single direct call. Provider layer (fetchWithRetry) is the ONLY retry
+      // layer in the system. Any error here is final → throw to AgentRuntime.
+      response = await this.provider.generate({
+        messages: request.messages,
+        tools: request.tools,
+        toolConfig: request.toolConfig,
+        maxTokens: request.maxOutputTokens,
+        abortSignal: abortController.signal,
+        onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
+          this.config.notifyIterationStart?.();
+          // Stream text chunks to UI for progressive "grow" effect
+          if (chunk) {
+            const now = Date.now();
+            if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
+              // Flush any buffered text BEFORE the current chunk to preserve order
+              const text = this.pendingTextDelta + chunk;
+              this.pendingTextDelta = '';
+              this.config.emitRuntimeEvent({
+                type: 'text_delta',
+                phase: 'execution',
 
-                  iteration: iteration + 1,
-                  text,
-                });
-                this.lastTextNotificationTime = now;
-              } else {
-                this.pendingTextDelta += chunk;
-              }
-            }
-          } : undefined,
-          onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
-            if (thought && thought !== this.lastThinkingText) {
-              this.config.notifyIterationStart?.();
-              const now = Date.now();
-              if (now - this.lastNotificationTime >= this.config.throttleMs) {
-                this.config.emitRuntimeEvent({
-                  type: 'status',
-                  phase: 'execution',
-            
-                  iteration: iteration + 1,
-                  maxIterations,
-                  message: 'Working...',
-                });
-                this.config.emitRuntimeEvent({
-                  type: 'reasoning_delta',
-                  phase: 'execution',
-            
-                  iteration: iteration + 1,
-                  text: thought,
-                });
-                this.lastNotificationTime = now;
-              }
-              this.lastThinkingText = thought;
-            }
-          } : undefined,
-          thinkingLevel: request.thinkingLevel,
-        }),
-        {
-          maxAttempts: 5,
-          initialDelayMs: 2000,
-          maxDelayMs: 15000,
-          jitterFactor: 0.3,
-          backoffMultiplier: 2,
-          shouldRetry: (err) => isRetryableError(err),
-          signal: abortController.signal,
-          onBeforeRetry: (attempt, err) => {
-            const category = classifyError(err);
-            if (category === AgentErrorCategory.RETRYABLE_MALFORMED) {
-              // Inject a malformed-hint message into the context so the LLM self-corrects.
-              request.messages.push({
-                id: this.config.generateId('mf_hint'),
-                role: 'user',
-                content: 'Your previous tool call had invalid syntax. Please emit a simpler, single tool call with valid JSON arguments.',
+                iteration: iteration + 1,
+                text,
               });
+              this.lastTextNotificationTime = now;
+            } else {
+              this.pendingTextDelta += chunk;
             }
-          },
-          onRetry: (attempt, err, delayMs) => {
-            const category = classifyError(err);
-            const errorMessage = err instanceof Error ? err.message : String(err);
-            console.warn(`[LLMGenCoordinator] ${category} error (attempt ${attempt}). Retrying after ${delayMs}ms...`);
-            this.config.emitRuntimeEvent({
-              type: 'retry',
-              phase: 'execution',
-              iteration: iteration + 1,
-              attempt,
-              maxAttempts: 5,
-              delayMs,
-              errorCategory: category,
-              errorMessage,
-            });
-          },
-        },
-      );
+          }
+        } : undefined,
+        onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
+          if (thought && thought !== this.lastThinkingText) {
+            this.config.notifyIterationStart?.();
+            const now = Date.now();
+            if (now - this.lastNotificationTime >= this.config.throttleMs) {
+              this.config.emitRuntimeEvent({
+                type: 'status',
+                phase: 'execution',
 
+                iteration: iteration + 1,
+                maxIterations,
+                message: 'Working...',
+              });
+              this.config.emitRuntimeEvent({
+                type: 'reasoning_delta',
+                phase: 'execution',
+
+                iteration: iteration + 1,
+                text: thought,
+              });
+              this.lastNotificationTime = now;
+            }
+            this.lastThinkingText = thought;
+          }
+        } : undefined,
+        thinkingLevel: request.thinkingLevel,
+      });
+
+      // Fail-fast: provider should never return undefined. If it does, that's a bug.
       if (!response) {
-        response = { text: '', toolCalls: [] };
+        throw new EmptyResponseError(this.provider.name, 'Provider returned undefined');
       }
 
       // Flush any buffered text delta

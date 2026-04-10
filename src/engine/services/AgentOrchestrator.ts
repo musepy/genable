@@ -23,8 +23,12 @@ import { scratchClear } from '../agent/scratchpad/store';
 import { clearSessionNodes } from '../../ipc/commands/pathResolver';
 import { clearComponentRegistry } from '../actions/nodeFactory';
 import { LLMProvider } from '../llm-client/providers/types';
-import { GeminiError, GeminiErrorType } from '../llm-client/providers/gemini/geminiErrorHandler';
-import { classifyError, AgentErrorCategory } from '../agent/retryPolicy';
+import {
+  ProviderError,
+  isProviderError,
+  providerErrorToCode,
+  APIError,
+} from '../llm-client/providers/shared/providerErrors';
 
 type RuntimeEventPayload = AgentRuntimeEvent extends infer E
   ? E extends any
@@ -55,7 +59,6 @@ export interface OrchestratorOptions {
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string, taskTitle: string }) => void;
   loopPolicy?: Partial<AgentLoopPolicy>;
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
-  requireToolApproval?: boolean;
   locale?: 'en' | 'zh' | 'fr';
 }
 
@@ -110,10 +113,6 @@ export class AgentOrchestrator {
     clearSessionNodes();
     clearComponentRegistry();
     scratchClear();
-  }
-
-  public approveTools(approved: boolean): void {
-    this.activeAgent?.resolveApproval(approved);
   }
 
   public answerQuestion(answer: string): void {
@@ -175,22 +174,10 @@ export class AgentOrchestrator {
           ? 'abort' as const
           : 'error' as const;
 
-      const errorCat = classifyError(error);
-      if (errorCat === AgentErrorCategory.RETRYABLE_RATE_LIMIT) {
-        this.emitFallbackRuntimeEvent({
-          type: 'error',
-          phase: 'idle',
-          message: error?.message || 'Rate limit exceeded after retries',
-          code: 'RATE_LIMIT_EXHAUSTED',
-        });
-        this.options.onError?.(error.message || 'Rate limit exceeded after retries');
-      } else if (AgentOrchestrator.isUserActionable(error)) {
-        this.emitFallbackRuntimeEvent({
-          type: 'error',
-          phase: 'idle',
-          message: error?.message || 'Unknown agent error',
-        });
-        this.options.onError?.(error.message || 'Unknown agent error');
+      // Provider errors carry user-actionable flag + Chinese userMessage from
+      // the typed-error layer. Surface those directly to the UI banner.
+      if (isProviderError(error)) {
+        this.handleProviderError(error);
       } else {
         const reason = error?.message || 'Generation stopped unexpectedly';
         this.emitFallbackRuntimeEvent({
@@ -388,7 +375,6 @@ export class AgentOrchestrator {
       onToolResult: this.handleToolResult.bind(this),
       onIterationStart: (iteration: number, taskInfo?: any) => this.options.onIterationStart?.(iteration, taskInfo),
       onRuntimeEvent: (event) => this.options.onRuntimeEvent?.(event),
-      requireToolApproval: this.options.requireToolApproval,
     });
   }
 
@@ -525,23 +511,39 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
   // ==========================================
 
   /**
-   * Only errors that require the USER to take action (fix API key, check billing)
-   * should show as ErrorBanner. Everything else is agent-internal — the agent
-   * communicates it as part of its normal status flow.
+   * Surface a typed ProviderError. The error itself decides whether the UI
+   * should show an actionable banner — `userActionable` + `userMessage` are
+   * set at the source and propagate unchanged.
    */
-  private static isUserActionable(error: any): boolean {
-    // Rate-limit errors are handled separately — don't treat as user-actionable
-    const cat = classifyError(error);
-    if (cat === AgentErrorCategory.RETRYABLE_RATE_LIMIT) return false;
+  private handleProviderError(error: ProviderError): void {
+    const code = providerErrorToCode(error);
+    const technicalMessage = error.message;
+    const userMessage = error.userMessage;
 
-    // GeminiError has typed categories
-    if (error instanceof GeminiError) {
-      return error.type === GeminiErrorType.INVALID_ARGUMENT
-          || error.type === GeminiErrorType.QUOTA_EXCEEDED;
+    if (error.userActionable) {
+      this.emitFallbackRuntimeEvent({
+        type: 'error',
+        phase: 'idle',
+        message: userMessage,
+        code,
+      });
+      this.options.onError?.(userMessage);
+      console.warn(`[AgentOrchestrator] ${code}: ${technicalMessage}`);
+    } else {
+      this.emitFallbackRuntimeEvent({
+        type: 'status',
+        phase: 'idle',
+        message: userMessage,
+      });
+      this.emitFallbackRuntimeEvent({
+        type: 'turn_end',
+        phase: 'idle',
+        iteration: 0,
+        totalIterations: 0,
+        summary: `I encountered an issue and couldn't continue: ${userMessage}`,
+      });
+      console.warn(`[AgentOrchestrator] ${code} (non-actionable): ${technicalMessage}`);
     }
-    // Fallback: regex match on raw message for non-Gemini providers
-    const msg = (error?.message || '').toLowerCase();
-    return /api.?key|401|unauthorized|quota|billing/.test(msg);
   }
 
   // ==========================================

@@ -86,7 +86,7 @@ const DEFAULTS: Record<string, any> = {
   strokeBottomWeight: 0,
   strokeLeftWeight: 0,
   letterSpacing: 0,
-  clipsContent: false,
+  clipsContent: true,
   layoutWrap: 'NO_WRAP',
   strokesIncludedInLayout: false,
   itemReverseZIndex: false,

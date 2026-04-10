@@ -229,13 +229,18 @@ const EXPANDERS: Record<string, Expander> = {
 
   overflow: (v) => {
     const s = String(v).toLowerCase();
-    return { clipsContent: s === 'true' || s === 'hidden' || s === 'clip' };
+    return { clipsContent: v === true || s === 'true' || s === 'hidden' || s === 'clip' };
+  },
+  // `clips` is an alias for `overflow` — both map to clipsContent
+  clips: (v) => {
+    const s = String(v).toLowerCase();
+    return { clipsContent: v === true || s === 'true' || s === 'hidden' || s === 'clip' };
   },
 
   wrap: (v) => {
     const s = String(v).toLowerCase();
-    if (s === 'wrap') return { layoutWrap: 'WRAP' };
-    if (s === 'nowrap' || s === 'no-wrap') return { layoutWrap: 'NO_WRAP' };
+    if (v === true || s === 'true' || s === '1' || s === 'wrap') return { layoutWrap: 'WRAP' };
+    if (v === false || s === 'false' || s === '0' || s === 'nowrap' || s === 'no-wrap') return { layoutWrap: 'NO_WRAP' };
     return { layoutWrap: String(v).toUpperCase() };
   },
 

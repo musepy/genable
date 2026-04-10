@@ -1176,7 +1176,7 @@ export const PROPERTY_META: Record<string, PropMeta> = {
     EXCLUSION: 'EXCLUSION', HUE: 'HUE', SATURATION: 'SATURATION', COLOR: 'COLOR', LUMINOSITY: 'LUMINOSITY',
   }, defaultValue: 'PASS_THROUGH' },
   cornerSmoothing: { type: 'scalar', defaultValue: 0, min: 0, max: 1 },
-  clipsContent: { type: 'enum', enumMap: { 'true': 'true', 'false': 'false' }, defaultValue: false },
+  clipsContent: { type: 'enum', enumMap: { 'true': 'true', 'false': 'false' }, defaultValue: true },
   layoutWrap: { type: 'enum', enumMap: { WRAP: 'WRAP', NO_WRAP: 'NO_WRAP' }, defaultValue: 'NO_WRAP' },
   strokesIncludedInLayout: { type: 'scalar', defaultValue: false },
   itemReverseZIndex: { type: 'scalar', defaultValue: false },

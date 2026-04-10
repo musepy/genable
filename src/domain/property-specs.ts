@@ -245,10 +245,30 @@ export function parseEffectToFigma(input: string): any {
   const bgBlurMatch = trimmed.match(/^bgblur\((\d+(?:\.\d+)?)\)$/);
   if (bgBlurMatch) return { type: 'BACKGROUND_BLUR', radius: parseFloat(bgBlurMatch[1]), visible: true };
 
-  // Shadow: [inset,]ox,oy,blur,spread,color
-  const isInner = trimmed.toLowerCase().startsWith('inset,');
-  const params = isInner ? trimmed.substring(6) : trimmed;
-  const [oxStr, oyStr, blurStr, spreadStr, colorStr] = params.split(',').map(s => s.trim());
+  // Shadow: [inset,]ox,oy,blur,spread,color — accept comma OR space separators
+  const isInner = trimmed.toLowerCase().startsWith('inset,') || trimmed.toLowerCase().startsWith('inset ');
+  const params = isInner ? trimmed.substring(trimmed.indexOf(isInner ? ',' : ' ') + 1).trim() : trimmed;
+  // Split on commas first; if only 1 token, fall back to space-splitting (but keep #color intact)
+  let parts = params.split(',').map(s => s.trim());
+  if (parts.length < 3) {
+    // Space-separated: split on spaces but rejoin the color token (starts with #)
+    const spaceTokens = params.split(/\s+/);
+    parts = [];
+    for (const t of spaceTokens) {
+      if (t.startsWith('#') && parts.length >= 3) {
+        // Color token — join remaining as color
+        parts.push(spaceTokens.slice(spaceTokens.indexOf(t)).join(''));
+        break;
+      }
+      parts.push(t);
+    }
+  }
+  let [oxStr, oyStr, blurStr, spreadStr, colorStr] = parts;
+  // If spreadStr looks like a color (no explicit spread), shift it
+  if (spreadStr && spreadStr.startsWith('#') && !colorStr) {
+    colorStr = spreadStr;
+    spreadStr = '0';
+  }
 
   return {
     type: isInner ? 'INNER_SHADOW' : 'DROP_SHADOW',

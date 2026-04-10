@@ -97,5 +97,9 @@ These are known differences between Figma's layout model and CSS. Figma does NOT
 
 5. **Every card/page needs a CTA**: A design without interactive actions is a wireframe, not a finished product.
 
+6. **Text defaults to auto-expand (hug), not wrap**: Without `w="fill"`, text expands to its full content width regardless of the parent container — overflowing and getting clipped. Any text that may exceed one line MUST use `w="fill"` to wrap within the parent. Short labels (buttons, badges) can omit `w`.
+
+7. **`clipsContent` is true by default — it clips shadows and strokes**: Figma frames clip everything outside their bounds. `stroke="center"` / `stroke="outside"` and `shadow` will be silently cut off. For any frame with outer stroke or shadow, set `overflow="visible"` (= `clipsContent: false`).
+
 ## EXISTING CONTENT
 - Existing content on the canvas is the user's work. Inspect before modifying. Never silently delete what you didn't create.

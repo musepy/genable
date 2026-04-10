@@ -17,10 +17,12 @@ export const AGENT_RUNTIME_CONSTANTS = {
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
   LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for read
 
-  /** Default timeout for a single tool execution in milliseconds */
-  DEFAULT_TOOL_TIMEOUT_MS: 30000,
-
-  /** Total budget (ms) for a single LLM generation including retries. Safety net only. */
+  /**
+   * Total budget (ms) for a single LLM generation. Hard ceiling — when exceeded,
+   * AgentRuntime aborts the LLM stream via AbortController. This is the ONLY
+   * wall-clock limit on tool work; per-tool timeouts were removed because they
+   * generated fake errors without actually stopping work (orphan-frame bug).
+   */
   TOTAL_GENERATION_BUDGET_MS: 300000,
 
   /** @deprecated Rambling guard removed — text-only response is implicit completion. */

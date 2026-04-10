@@ -86,9 +86,15 @@ export async function executeSubtask(
 
   try {
     const result = await childRuntime.run(prompt);
+    // Convenience field: rootNodeIds lets the parent agent reference the
+    // child's creations directly without parsing the natural-language summary.
+    // Failure path intentionally has no partialNodes — we don't try to
+    // hand back half-completed work; the parent retries cleanly or surfaces
+    // the error to the user.
     return {
       data: {
         result,
+        rootNodeIds: childRuntime.getTurnCreatedNodeIds(),
         stats: childRuntime.getRunStats(),
       },
     };

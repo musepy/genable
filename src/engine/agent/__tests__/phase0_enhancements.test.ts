@@ -36,7 +36,6 @@ function makeDispatcher(overrides: Partial<any> = {}): {
 } {
   const events: any[] = [];
   const config = {
-    toolTimeoutMs: 30000,
     generateId: (prefix: string) => `${prefix}_1`,
     normalizeToolCallId: (tc: LLMToolCall, fallback: string) => tc.id || `${fallback}_1`,
     emitRuntimeEvent: (event: any) => events.push(event),
@@ -240,7 +239,6 @@ describe('Noop detection', () => {
   it('should detect noop via generic checks (deleted: 0)', async () => {
     const events: any[] = [];
     const config = {
-      toolTimeoutMs: 30000,
       generateId: (prefix: string) => `${prefix}_1`,
       normalizeToolCallId: (tc: LLMToolCall, fallback: string) => tc.id || `${fallback}_1`,
       emitRuntimeEvent: (event: any) => events.push(event),

@@ -57,7 +57,6 @@ export interface ToolInterceptResult {
 }
 
 export interface ToolDispatcherConfig {
-  toolTimeoutMs: number;
   generateId: (prefix: string) => string;
   normalizeToolCallId: (tc: LLMToolCall, fallbackPrefix: string) => string;
   emitRuntimeEvent: (event: RuntimeEventPayload) => void;
@@ -274,26 +273,30 @@ export class ToolDispatcher {
 
   // ─── Private helpers ────────────────────────────────────────
 
+  /**
+   * Execute a tool. No per-tool wall-clock timeout.
+   *
+   * Why no timeout: Tool-level timeout was a fake error generator — it
+   * rejected the Promise.race after N seconds but the underlying work
+   * (Figma IPC, child runtime, etc.) kept running. The LLM saw a fake
+   * "timed out" failure while the canvas actually had the work completed.
+   * This caused the orphan-frame bug in the subtask flow.
+   *
+   * Real safety nets that ARE in place:
+   *   - User cancel (AgentRuntimeCanceledError, immediate)
+   *   - TOTAL_GENERATION_BUDGET_MS (5min, AgentRuntime aborts the LLM stream)
+   *   - IPC bridge deadlock backstop (ipcBridge.ts internal request timeout)
+   */
   private async executeToolWithTimeout(tc: LLMToolCall): Promise<any> {
-    // ask_user waits for user input — exempt from standard timeout
-    if (tc.name === 'ask_user') return this.executeTool(tc);
-
-    const timeout = this.config.toolTimeoutMs;
-
-    return Promise.race([
-      this.executeTool(tc),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`"${tc.name}" timed out after ${timeout}ms. Try a simpler operation or retry.`)), timeout);
-      }),
-    ]).catch(e => {
+    try {
+      return await this.executeTool(tc);
+    } catch (e: any) {
       if (e?.code === 'AGENT_CANCELED' || e?.name === 'AgentRuntimeCanceledError') {
         throw e;
       }
       console.error(`[ToolDispatcher] Tool execution failed: ${tc.name}`, e);
-      return {
-        error: e.message,
-      };
-    });
+      return { error: e.message };
+    }
   }
 
   private async executeTool(tc: LLMToolCall): Promise<any> {

@@ -163,7 +163,6 @@ export class AgentRuntime {
       options.ipcBridge,
       this.allowedExecutionToolNames,
       {
-        toolTimeoutMs: AGENT_RUNTIME_CONSTANTS.DEFAULT_TOOL_TIMEOUT_MS,
         generateId: (prefix) => this.generateId(prefix),
         normalizeToolCallId: (tc, fallbackPrefix) => this.normalizeToolCallId(tc, fallbackPrefix),
         emitRuntimeEvent: (event) => this.emitRuntimeEvent(event as RuntimeEventPayload),
@@ -831,6 +830,11 @@ export class AgentRuntime {
   /** Returns current turn messages (for debrief/diagnostics). */
   public getMessages(): LLMMessage[] {
     return this.contextManager.getTurnMessages();
+  }
+
+  /** Node IDs created during the current turn (cleared at endTurn). */
+  public getTurnCreatedNodeIds(): string[] {
+    return [...this.turnCreatedNodeIds];
   }
 
   public getRunStats() {

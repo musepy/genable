@@ -17,6 +17,7 @@
 
 import { HookRegistration, HookContext, HookResult } from './hookTypes';
 import { LoopDetector } from '../loopDetector';
+import { buildLoopFingerprint } from '../loopFingerprint';
 import { AGENT_RUNTIME_CONSTANTS } from '../constants';
 import { createEmptyArgsGuard } from './emptyArgsGuard';
 import { createConsecutiveFailureGuard } from './consecutiveFailureGuard';
@@ -51,16 +52,6 @@ export function createBuiltinHooks(): HookRegistration[] {
     createEmptyResponseHook(state),
     createLoopDetectionHook(state),
   ];
-}
-
-/**
- * Reset builtin hook state. Called at the start of each run().
- */
-export function resetBuiltinHookState(hooks: HookRegistration[]): void {
-  // The hooks share closure state via createBuiltinHooks.
-  // We need a separate mechanism — so we expose a reset on the detector.
-  // This is handled by the runtime calling loopDetector.reset() directly
-  // through the hook state. For simplicity, the runtime also resets counters.
 }
 
 // ---------------------------------------------------------------------------
@@ -108,39 +99,20 @@ function createLoopDetectionHook(state: BuiltinHookState): HookRegistration {
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       if (!ctx.toolCalls || ctx.toolCalls.length === 0) return;
 
-      const loopResult = state.loopDetector.detect(ctx.toolCalls, {
+      const fingerprint = buildLoopFingerprint(ctx.toolCalls);
+      const loopResult = state.loopDetector.detect(fingerprint, {
         identical: AGENT_RUNTIME_CONSTANTS.LOOP_DETECTION_THRESHOLD,
         monotone: ctx.loopPolicy.monotoneLoopThreshold,
       });
 
       if (!loopResult) return;
 
-      if (loopResult.fatal) {
-        return {
-          action: 'abort',
-          reason: loopResult.message,
-        };
-      }
-
-      // Non-fatal: inject a hint message
       return {
         action: 'continue',
-        injectMessage: loopResult.hint || loopResult.message,
+        injectMessage: loopResult.hint,
       };
     },
   };
-}
-
-/**
- * Get the LoopDetector instance from builtin hooks for reset purposes.
- * This is used by AgentRuntime.run() to call reset() at the start.
- */
-export function getBuiltinLoopDetector(hooks: HookRegistration[]): LoopDetector | null {
-  const loopHook = hooks.find(h => h.id === 'builtin:loopDetection');
-  if (!loopHook) return null;
-  // Access through closure — we need a different approach.
-  // Instead, we'll expose reset capability through a helper.
-  return null;
 }
 
 /**

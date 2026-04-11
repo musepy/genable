@@ -1,4 +1,5 @@
 name: Hero Section
+description: Use when creating the above-the-fold banner of a landing page — composed of content block (headline, subhead, CTA) and optional visual or image area.
 structure:
   type: FRAME
   layoutMode: VERTICAL

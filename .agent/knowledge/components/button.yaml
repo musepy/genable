@@ -1,6 +1,6 @@
 name: Button
 category: Inputs
-description: Interactive element for actions
+description: Use when offering a clickable action trigger such as submit, continue, or cancel — composed of an optional leading icon, a label, and an optional trailing icon aligned center.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

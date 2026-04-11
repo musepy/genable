@@ -28,7 +28,6 @@ import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
 import { normalizeFinishReason } from './types';
 import {
-  StreamIdleTimeoutError,
   ConnectTimeoutError,
   TransportError,
   APIError,
@@ -40,8 +39,6 @@ export type FetchProxy = (
   init: { method: string; headers: Record<string, string>; body?: string },
 ) => Promise<{ ok: boolean; status: number; body: string }>;
 
-/** Idle timeout: max silence between chunks (ms). Extra hop through Worker. */
-const STREAM_IDLE_TIMEOUT_MS = 45000;
 /** Connect timeout: max time until first byte from Worker proxy (ms).
  * DashScope TTFB through Worker can be 10-30s+ due to cross-border latency
  * (Cloudflare edge → China datacenter) plus model reasoning time. */
@@ -259,22 +256,15 @@ export class DashScopeProvider implements LLMProvider {
     // Accumulate incremental tool calls across SSE chunks
     const toolCallAccumulator = new Map<number, { id: string; name: string; args: string }>();
 
-    let streamTimedOut = false;
     try {
-      const { timedOut } = await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
+      await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
         const chunk = this.mapStreamChunkToLLMResponse(parsed, toolCallAccumulator);
         if (chunk.text) onProgress?.(chunk.text);
         if (chunk.thoughts) onThinking?.(chunk.thoughts);
         accumulator.append(chunk);
-      }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
-      streamTimedOut = timedOut;
+      }, { abortSignal });
     } finally {
       reader.cancel().catch(() => {});
-    }
-
-    // Fail-fast on idle timeout. Pass partial text upstream for diagnostics.
-    if (streamTimedOut) {
-      throw new StreamIdleTimeoutError(this.name, STREAM_IDLE_TIMEOUT_MS, accumulator.getText());
     }
 
     // Finalize accumulated tool calls → inject into accumulator

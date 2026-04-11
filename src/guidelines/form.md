@@ -1,3 +1,11 @@
+---
+id: guideline:form
+name: Form Design Guideline
+description: Use when designing login, signup, checkout, settings, contact, or multi-step wizard forms — covers field layout, labels, validation, error states, button hierarchy, and card spacing.
+category: guideline
+tags: [form, input, validation, login, signup, settings, layout]
+---
+
 # Form Design Guidelines
 
 ## 1. Purpose & Scope

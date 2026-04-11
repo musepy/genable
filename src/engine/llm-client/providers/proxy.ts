@@ -22,15 +22,12 @@ import { ResponseAccumulator } from './shared/responseAccumulator';
 import { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload, formatResponseGemini, formatToolResultsGemini } from './gemini/geminiFormat';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import {
-  StreamIdleTimeoutError,
   ConnectTimeoutError,
   TransportError,
   APIError,
   EmptyResponseError,
 } from './shared/providerErrors';
 
-/** Idle timeout: max silence between chunks (ms). Longer than direct Gemini due to network hop. */
-const STREAM_IDLE_TIMEOUT_MS = 45000;
 /** Connect timeout: max time to establish HTTP connection (ms) */
 const CONNECT_TIMEOUT_MS = 15000;
 
@@ -165,21 +162,15 @@ export class ProxyProvider implements LLMProvider {
     const reader = res.body!.getReader();
     const accumulator = new ResponseAccumulator();
 
-    let streamTimedOut = false;
     try {
-      const { timedOut } = await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
+      await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
         const chunk = this.mapToLLMResponse(parsed);
         if (chunk.text) onProgress?.(chunk.text);
         if (chunk.thoughts) onThinking?.(chunk.thoughts);
         accumulator.append(chunk);
-      }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
-      streamTimedOut = timedOut;
+      }, { abortSignal });
     } finally {
       reader.cancel().catch(() => {});
-    }
-
-    if (streamTimedOut) {
-      throw new StreamIdleTimeoutError(this.name, STREAM_IDLE_TIMEOUT_MS, accumulator.getText());
     }
 
     return this.assertNonEmpty(accumulator.finalize());

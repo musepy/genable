@@ -1,6 +1,12 @@
-# Warm Organic — Style Guide
+---
+id: style:warm-organic
+name: Warm Organic Style Guide
+description: Use when designing health, lifestyle, or wellness apps — warm earth tones with terracotta accents, generous rounded corners, and soft shadows create a calming approachable feel with DM Sans readability.
+category: style
+tags: [light-mode, wellness, warm, earth-tone, terracotta, rounded, lifestyle, organic]
+---
 
-tags: light-mode, warm, organic, earth-tones, rounded, soft, wellness
+# Warm Organic — Style Guide
 
 ## Description
 Warm, inviting aesthetic for health, lifestyle, and wellness applications. Earth tones with terracotta accents, generous rounded corners, and soft shadows create a calming, approachable feel. DM Sans provides friendly readability.

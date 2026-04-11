@@ -1,6 +1,12 @@
-# Cream Literary — Style Guide
+---
+id: style:cream-literary
+name: Cream Literary Style Guide
+description: Use when designing reading apps, personal blogs, writing tools, or indie publishing UI — warm cream background with deep brown text mimics old book pages, uses whitespace instead of dividers.
+category: style
+tags: [light-mode, cream, reading, blog, serif, editorial, warm, writing]
+---
 
-tags: light-mode, warm, elegant, earth-tones, minimal, serif, soft, editorial
+# Cream Literary — Style Guide
 
 ## Description
 旧书页般的暖奶油底色配合深褐色文字，营造安静的阅读氛围。字体层级清晰但装饰极少，用留白代替分割线。适合阅读器、个人博客、写作工具、独立出版平台等文字密集的产品。

@@ -1,4 +1,5 @@
 name: Switch
+description: Use when offering an instant on/off toggle in settings — a fixed-size pill track with a sliding thumb indicating state.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

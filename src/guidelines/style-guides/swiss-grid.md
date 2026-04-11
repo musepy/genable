@@ -1,6 +1,12 @@
-# Swiss Grid — Style Guide
+---
+id: style:swiss-grid
+name: Swiss Grid Style Guide
+description: Use when designing architecture firms, design studios, or museum sites chasing rational aesthetics — strict Swiss International Style grid with red accents, extreme type contrast, and negative space.
+category: style
+tags: [light-mode, swiss, grid, geometric, architecture, museum, red-accent, minimal]
+---
 
-tags: light-mode, geometric, sharp-corners, red-accent, high-contrast, minimal, condensed, corporate
+# Swiss Grid — Style Guide
 
 ## Description
 瑞士国际主义设计风格，严格网格、零装饰、红色强调。用极端的排版对比（大标题 + 小正文）和负空间建立视觉张力。适合建筑事务所、设计工作室、博物馆官网等追求理性美学的场景。

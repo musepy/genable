@@ -6,14 +6,17 @@
  * The result never changes between iterations, enabling KV-cache
  * reuse at the LLM provider layer.
  *
- * Prompt content comes from two catalog files:
+ * Prompt content comes from one catalog file:
  *   SYSTEM — Identity, environment, scene graph, design thinking, conventions (WHAT & WHY)
- *   SOP    — Workflows, creation flow, verification gate, quality patterns (HOW)
+ *
+ * Procedures (HOW) live in src/prompts/help/*.md and are retrieved on demand
+ * via the `knowledge` tool.
  */
 
 import { ToolDefinition } from '../../agent/tools/types';
-import { SYSTEM, SOP } from '../../prompt/promptRegistry';
+import { SYSTEM } from '../../prompt/promptRegistry';
 import { serializeTools } from './toolSerializer';
+import { KNOWLEDGE_LIBRARY_SECTION } from './knowledgeLibrarySection';
 import { LOCALE_FULL_NAMES, type Locale } from '../../../ui/i18n';
 
 /**
@@ -32,8 +35,9 @@ export function buildStaticSystemPrompt(
     // 1. System prompt (WHAT & WHY: identity + environment + scene graph + design thinking + conventions)
     parts.push(SYSTEM.trim());
 
-    // 2. SOP (HOW: workflows + creation flow + verification gate + quality patterns)
-    parts.push(SOP.trim());
+    // 2. Knowledge library menu (full id + description list — lets the LLM pick
+    // entries directly via knowledge.read instead of guessing keywords with search)
+    parts.push(KNOWLEDGE_LIBRARY_SECTION.trim());
 
     // 3. Subtask delegation hint (typed agents)
     parts.push(

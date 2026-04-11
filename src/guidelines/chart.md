@@ -1,3 +1,11 @@
+---
+id: guideline:chart
+name: Chart Design Guideline
+description: Use when designing data visualization containers — bar charts, line charts, pie/donut charts, or area charts built from basic Figma shapes with axes, legends, and color encoding.
+category: guideline
+tags: [chart, data-viz, bar, line, pie, visualization, axes]
+---
+
 # Chart Design Guidelines
 
 ## 1. Purpose & Scope

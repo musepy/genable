@@ -1,6 +1,12 @@
-# Terminal Dark — Style Guide
+---
+id: style:terminal-dark
+name: Terminal Dark Style Guide
+description: Use when designing CLI tooling, API docs, code editors, or DevOps panels — dark IDE-inspired UI with zero corner radius, monospace fonts, and green accents for precise technical feel.
+category: style
+tags: [dark-mode, terminal, developer, monospace, cli, api, devops, green]
+---
 
-tags: dark-mode, developer, monospace, sharp-corners, green-accent, minimal, crisp
+# Terminal Dark — Style Guide
 
 ## Description
 面向开发者的暗色工具界面，灵感来自终端和 IDE。零圆角、monospace 字体、绿色强调色营造精确的技术感。适合 CLI 工具、API 文档、代码编辑器、DevOps 面板等开发者产品。

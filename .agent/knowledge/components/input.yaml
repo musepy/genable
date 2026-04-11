@@ -1,4 +1,5 @@
 name: Input Field
+description: Use when collecting text input from the user — composed of a label and an input container with placeholder text or value.
 structure:
   type: FRAME
   layoutMode: VERTICAL

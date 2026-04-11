@@ -1,6 +1,12 @@
-# Amber CRT — Style Guide
+---
+id: style:amber-crt
+name: Amber CRT Style Guide
+description: Use when designing retro terminal, CLI beautifier, developer nostalgia, or geek-oriented tooling UI — pure black background with amber monospace text and zero corner radius channeling 80s cathode-ray monitors.
+category: style
+tags: [dark-mode, retro, terminal, monospace, amber, developer, industrial]
+---
 
-tags: dark-mode, developer, monospace, sharp-corners, orange-accent, industrial, warm, flat
+# Amber CRT — Style Guide
 
 ## Description
 致敬 80 年代阴极射线管显示器的复古终端风格。琥珀色文字投射在纯黑底上，配合等宽字体和零圆角重现早期计算机的粗粝质感。适合复古主题工具、命令行界面美化、极客向产品。

@@ -1,6 +1,12 @@
-# Sunset Warm — Style Guide
+---
+id: style:sunset-warm
+name: Sunset Warm Style Guide
+description: Use when designing social platforms, food apps, travel booking, or event promotion UI needing emotional warmth — sunset orange-red on warm white base with gradients guiding visual flow.
+category: style
+tags: [light-mode, sunset, orange, warm, social, food, travel, playful]
+---
 
-tags: light-mode, warm, vibrant, orange-accent, rounded, soft, playful, landing-page
+# Sunset Warm — Style Guide
 
 ## Description
 日落橙红色系，在暖白底上铺开活力与热情。柔和圆角和温暖色调避免攻击性，用色彩梯度引导视觉流向。适合社交平台、美食应用、旅行预订、活动推广等需要情绪感染力的产品。

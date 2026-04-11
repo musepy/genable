@@ -1,4 +1,5 @@
 name: Pricing Table
+description: Use when presenting multiple SaaS pricing tiers side by side — composed of 3 pricing cards (basic, pro, enterprise) arranged horizontally and centered.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

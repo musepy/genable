@@ -1,6 +1,12 @@
-# Corporate Blue Light — Style Guide
+---
+id: style:corporate-blue-light
+name: Corporate Blue Light Style Guide
+description: Use when designing enterprise SaaS, CRM, project management, or admin tools — blue primary with light backgrounds, clear hierarchy, and subtle shadows for trustworthy long-session workhorse UI.
+category: style
+tags: [light-mode, corporate, saas, blue, crm, admin, enterprise, clean]
+---
 
-tags: light-mode, corporate, clean, blue-accent, webapp, shadows, rounded
+# Corporate Blue Light — Style Guide
 
 ## Description
 专业企业级 SaaS 视觉方案，以蓝色为主调传递可信赖感。浅色背景配合清晰的层级关系和微妙阴影，适合后台管理、CRM、项目管理等需要长时间使用的工具型产品。

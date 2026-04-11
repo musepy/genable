@@ -1,6 +1,12 @@
-# Corporate Blue Light — Style Guide
+---
+id: style:corporate-blue-light
+name: Corporate Blue Light Style Guide
+description: Use when designing enterprise SaaS, B2B dashboards, CRM, or admin panels needing trust and clarity — clean white backgrounds with subtle grey surfaces and blue accents for primary actions.
+category: style
+tags: [light-mode, corporate, saas, blue, crm, admin, enterprise, b2b]
+---
 
-tags: light-mode, corporate, clean, blue-accent, webapp, shadows, rounded
+# Corporate Blue Light — Style Guide
 
 ## Description
 Professional enterprise SaaS aesthetic with a trustworthy blue palette. Clean white backgrounds with subtle gray surfaces, blue accent for primary actions. Designed for data-heavy B2B applications where clarity and hierarchy matter most.

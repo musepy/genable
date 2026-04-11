@@ -78,7 +78,7 @@ export interface LLMToolResult {
  *
  * Strict union — only LLM API "real" finish reasons are allowed. Providers
  * MUST NOT fabricate values like 'timeout' to signal transport errors —
- * those are thrown as `StreamIdleTimeoutError` from `providerErrors.ts`.
+ * those are thrown as typed ProviderErrors from `providerErrors.ts`.
  *
  * - 'stop'           — model finished naturally
  * - 'length'         — model hit max_tokens (real LLM-level truncation)
@@ -150,8 +150,6 @@ export interface LLMGenerateOptions {
   toolConfig?: LLMToolConfig;
   /** AbortSignal for cancelling streaming requests */
   abortSignal?: AbortSignal;
-  /** Stream timeout in milliseconds (optional, provider-specific default if not set) */
-  streamTimeoutMs?: number;
 }
 
 /**

@@ -1,3 +1,11 @@
+---
+id: guideline:mobile
+name: Mobile App Design Guideline
+description: Use when designing iOS or Android app screens, mobile web views, or phone-size UI mockups — covers 390x844 viewport, touch targets, status bars, bottom sheets, and responsive sizing.
+category: guideline
+tags: [mobile, ios, android, app, touch, viewport, phone]
+---
+
 # Mobile App Design Guidelines
 
 ## 1. Purpose & Scope

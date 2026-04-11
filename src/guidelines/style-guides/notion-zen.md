@@ -1,6 +1,12 @@
-# Notion Zen — Style Guide
+---
+id: style:notion-zen
+name: Notion Zen Style Guide
+description: Use when designing note-taking, knowledge management, or document collaboration tools where content is the interface — near-monochrome black/white/grey with zero shadows, gradients, or decoration.
+category: style
+tags: [light-mode, notion, zen, monochrome, notes, knowledge, productivity, flat]
+---
 
-tags: light-mode, minimal, flat, monochrome, calm, webapp, stroke-based, crisp
+# Notion Zen — Style Guide
 
 ## Description
 极致去色的禅意风格，几乎只有黑白灰三色，靠微妙的灰度层次和精致的排版建立秩序。无阴影、无渐变、无装饰——内容就是界面。适合笔记工具、知识管理、文档协作等以文字为核心的生产力产品。

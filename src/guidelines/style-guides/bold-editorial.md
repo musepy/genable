@@ -1,6 +1,12 @@
-# Bold Editorial — Style Guide
+---
+id: style:bold-editorial
+name: Bold Editorial Style Guide
+description: Use when designing content platforms, blogs, news readers, or portfolio sites — oversized serif headlines and high-contrast black-on-white base create magazine-style visual impact.
+category: style
+tags: [light-mode, editorial, serif, high-contrast, typography, blog, portfolio, bold]
+---
 
-tags: light-mode, bold, editorial, serif, high-contrast, bold-typography, sharp, geometric
+# Bold Editorial — Style Guide
 
 ## Description
 杂志风格的大胆排版方案，用超大 serif 标题和高对比度黑白基底制造视觉冲击。适合内容平台、博客、新闻阅读、作品集等以文字和图片为核心的产品。

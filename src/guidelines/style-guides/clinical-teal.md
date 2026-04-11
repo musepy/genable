@@ -1,6 +1,12 @@
-# Clinical Teal — Style Guide
+---
+id: style:clinical-teal
+name: Clinical Teal Style Guide
+description: Use when designing healthcare, telemedicine, fitness tracking, or insurtech UI — clean white base with calm teal accents, generous spacing, and pill shapes conveying professional trust without feeling sterile.
+category: style
+tags: [light-mode, healthcare, teal, wellness, clean, trust, telemedicine, calm]
+---
 
-tags: light-mode, clean, calm, cool, rounded, wellness, webapp, flat
+# Clinical Teal — Style Guide
 
 ## Description
 清洁的医疗级青绿色方案，用纯净的白底和冷静的青色传递专业可信赖感。宽松间距和 pill 造型柔化严肃感，让数据呈现不显压迫。适合医疗健康、在线问诊、健身追踪、保险科技等对信任度要求极高的产品。

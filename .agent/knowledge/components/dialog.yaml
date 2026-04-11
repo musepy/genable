@@ -1,4 +1,5 @@
 name: Dialog
+description: Use when requesting user confirmation or showing a focused modal message — composed of optional icon, title, message body, and action button row.
 structure:
   type: FRAME
   layoutMode: VERTICAL

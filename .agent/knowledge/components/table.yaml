@@ -1,4 +1,5 @@
 name: Table
+description: Use when displaying structured tabular data with columns and rows — composed of a header row and a body of data rows, filling container width.
 structure:
   type: FRAME
   layoutMode: VERTICAL

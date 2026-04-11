@@ -1,6 +1,12 @@
-# Neon Cyber — Style Guide
+---
+id: style:neon-cyber
+name: Neon Cyber Style Guide
+description: Use when designing cyberpunk, gaming, esports, music visualization, or sci-fi product UI — black background with magenta and cyan accents, geometric shapes, subtle neon glow.
+category: style
+tags: [dark-mode, neon, cyberpunk, gaming, magenta, cyan, geometric, vibrant]
+---
 
-tags: dark-mode, vibrant, neon, red-accent, geometric, sharp, bold, gradient
+# Neon Cyber — Style Guide
 
 ## Description
 赛博朋克霓虹风格，纯黑底上用品红和青色制造电子化的视觉张力。高饱和度撞色配合几何造型和微弱发光阴影，适合游戏面板、电竞社区、音乐可视化、科幻主题产品。

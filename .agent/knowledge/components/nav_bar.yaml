@@ -1,4 +1,5 @@
 name: Navigation Bar
+description: Use when building the top-level app navigation row — composed of logo, navigation links, and actions with space-between distribution.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

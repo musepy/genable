@@ -1,6 +1,12 @@
-# Slate Data — Style Guide
+---
+id: style:slate-data
+name: Slate Data Style Guide
+description: Use when designing BI tools, data viz platforms, monitoring walls, or DevOps dashboards — dark slate base with just-enough sky blue accents and sans-for-UI mono-for-numbers dual-font system.
+category: style
+tags: [dark-mode, slate, data, dashboard, bi, devops, monospace, analyst]
+---
 
-tags: dark-mode, dashboard, monochrome, blue-accent, dual-font, crisp, minimal, dark-sidebar
+# Slate Data — Style Guide
 
 ## Description
 深灰蓝基底的数据分析师方案，低饱和天蓝色强调在深色中提供刚好够的色彩指引。正文用无衬线、数值用等宽的双字体系统为数据密集界面优化可读性。适合 BI 工具、数据可视化、监控大屏、DevOps 面板。

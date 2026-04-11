@@ -1,6 +1,12 @@
-# Coral Commerce — Style Guide
+---
+id: style:coral-commerce
+name: Coral Commerce Style Guide
+description: Use when designing lifestyle e-commerce, subscription boxes, gift marketplaces, or food delivery UI — soft coral red-orange conveys shopping joy without feeling cheap, rounded shapes for friendly browsing.
+category: style
+tags: [light-mode, ecommerce, coral, warm, rounded, consumer, shopping, friendly]
+---
 
-tags: light-mode, warm, vibrant, red-accent, rounded, soft, webapp, landing-page
+# Coral Commerce — Style Guide
 
 ## Description
 珊瑚色为主调的温暖电商方案，柔和的红橙色传递购物愉悦感而不显廉价。圆润造型配合明亮配色营造友好的浏览体验。适合生活好物电商、订阅盒子、礼品推荐、美食配送等面向消费者的购物类产品。

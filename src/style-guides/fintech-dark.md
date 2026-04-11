@@ -1,6 +1,12 @@
-# Fintech Dark — Style Guide
+---
+id: style:fintech-dark
+name: Fintech Dark Style Guide
+description: Use when designing trading terminals, asset management, risk dashboards, or data-dense fintech UI — deep blue-grey palette with electric blue accents and Space Grotesk for precise numerical data readability.
+category: style
+tags: [dark-mode, fintech, trading, dashboard, blue, finance, data-dense, monochrome]
+---
 
-tags: dark-mode, fintech, dashboard, crisp, blue-accent, monochrome, webapp
+# Fintech Dark — Style Guide
 
 ## Description
 Sleek dark interface for financial technology and data-dense dashboards. Deep blue-gray palette with electric blue accents conveys precision and trust. Space Grotesk provides a modern, technical feel while remaining highly legible for numerical data.

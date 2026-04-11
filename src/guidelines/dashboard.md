@@ -1,3 +1,11 @@
+---
+id: guideline:dashboard
+name: Dashboard Design Guideline
+description: Use when designing admin panels, analytics dashboards, SaaS dashboards, or data-dense monitoring screens — covers sidebar, top bar, KPI cards, widget grids, and 1440x900 desktop layout.
+category: guideline
+tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
+---
+
 # Dashboard Design Guidelines
 
 ## 1. Purpose & Scope

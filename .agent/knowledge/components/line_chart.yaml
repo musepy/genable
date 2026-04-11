@@ -1,4 +1,5 @@
 name: Line Chart
+description: Use when visualizing trends over time or continuous series — composed of header, chart canvas with line strokes and axes, and legend.
 structure:
   type: FRAME
   layoutMode: VERTICAL

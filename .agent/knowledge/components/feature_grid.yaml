@@ -1,4 +1,5 @@
 name: Feature Grid
+description: Use when showcasing product features in a marketing or landing page section — composed of a section header and a grid container of feature tiles.
 structure:
   type: FRAME
   layoutMode: VERTICAL

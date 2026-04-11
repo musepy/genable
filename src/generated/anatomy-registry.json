@@ -1,6 +1,7 @@
 {
   "avatar": {
     "name": "Avatar",
+    "description": "Use when showing a user profile picture, initials circle, or entity identity marker — typically circular with fixed dimensions and a single child image.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "NONE",
@@ -17,7 +18,7 @@
   "badge": {
     "name": "Badge",
     "category": "Data Display",
-    "description": "A small tag for status, labels, or counts",
+    "description": "Use when labeling a status, count, or category next to another element — a small pill-shaped tag with a single label child centered inside.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -35,6 +36,7 @@
   },
   "bar chart": {
     "name": "Bar Chart",
+    "description": "Use when visualizing comparative categorical data — composed of header, chart canvas with rect bars, and legend.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -49,7 +51,7 @@
   "button": {
     "name": "Button",
     "category": "Inputs",
-    "description": "Interactive element for actions",
+    "description": "Use when offering a clickable action trigger such as submit, continue, or cancel — composed of an optional leading icon, a label, and an optional trailing icon aligned center.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -69,6 +71,7 @@
   },
   "card": {
     "name": "Card",
+    "description": "Use when grouping related content into a surface container — composed of optional header, content area, and footer with vertical stacking.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -84,6 +87,7 @@
   },
   "checkbox": {
     "name": "Checkbox",
+    "description": "Use when offering a binary on/off toggle for a single option in forms or settings — composed of a box and adjacent label aligned center.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -99,6 +103,7 @@
   },
   "dialog": {
     "name": "Dialog",
+    "description": "Use when requesting user confirmation or showing a focused modal message — composed of optional icon, title, message body, and action button row.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -116,6 +121,7 @@
   },
   "divider": {
     "name": "Divider",
+    "description": "Use when separating sections or groups with a thin horizontal or vertical line — a fill-width rule with no children.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "NONE",
@@ -129,6 +135,7 @@
   },
   "dropdown": {
     "name": "Dropdown Menu",
+    "description": "Use when showing a popover list of options triggered by a button or input — composed of a container frame holding stacked menu items.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -142,6 +149,7 @@
   },
   "feature grid": {
     "name": "Feature Grid",
+    "description": "Use when showcasing product features in a marketing or landing page section — composed of a section header and a grid container of feature tiles.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -154,6 +162,7 @@
   },
   "form": {
     "name": "Form",
+    "description": "Use when building a complete form layout with multiple input fields — composed of a stacked fields section and a submit action row.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -169,6 +178,7 @@
   },
   "form field": {
     "name": "Form Field",
+    "description": "Use when assembling a complete form input group — composed of a label, an input control, and optional helper or error text stacked vertically.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -184,6 +194,7 @@
   },
   "hero section": {
     "name": "Hero Section",
+    "description": "Use when creating the above-the-fold banner of a landing page — composed of content block (headline, subhead, CTA) and optional visual or image area.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -199,6 +210,7 @@
   },
   "input": {
     "name": "Input Field",
+    "description": "Use when collecting text input from the user — composed of a label and an input container with placeholder text or value.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -214,6 +226,7 @@
   },
   "line chart": {
     "name": "Line Chart",
+    "description": "Use when visualizing trends over time or continuous series — composed of header, chart canvas with line strokes and axes, and legend.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -227,6 +240,7 @@
   },
   "list": {
     "name": "List",
+    "description": "Use when displaying a stacked vertical collection of similar items — a fill-width container that holds multiple list items.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -239,6 +253,7 @@
   },
   "list item": {
     "name": "List Item",
+    "description": "Use when rendering one row inside a list — composed of optional leading icon, content block, and trailing action aligned center in a horizontal row.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -256,6 +271,7 @@
   },
   "modal": {
     "name": "Modal",
+    "description": "Use when overlaying a focused task container on top of the page — composed of header, content body, and footer with action buttons.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -271,6 +287,7 @@
   },
   "nav bar": {
     "name": "Navigation Bar",
+    "description": "Use when building the top-level app navigation row — composed of logo, navigation links, and actions with space-between distribution.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -289,6 +306,7 @@
   },
   "pie chart": {
     "name": "Pie Chart",
+    "description": "Use when visualizing proportions as parts of a whole — composed of a circular canvas with slices and a vertical legend alongside.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -301,6 +319,7 @@
   },
   "pricing table": {
     "name": "Pricing Table",
+    "description": "Use when presenting multiple SaaS pricing tiers side by side — composed of 3 pricing cards (basic, pro, enterprise) arranged horizontally and centered.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -316,6 +335,7 @@
   },
   "radio": {
     "name": "Radio",
+    "description": "Use when offering a single-choice selection from a group of mutually exclusive options — composed of a circle marker and adjacent label.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -331,6 +351,7 @@
   },
   "sidebar": {
     "name": "Sidebar",
+    "description": "Use when building the vertical side navigation for a dashboard or app shell — composed of header (logo), nav links, and footer (user profile) filling full height.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -347,6 +368,7 @@
   },
   "switch": {
     "name": "Switch",
+    "description": "Use when offering an instant on/off toggle in settings — a fixed-size pill track with a sliding thumb indicating state.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -362,6 +384,7 @@
   },
   "tab list": {
     "name": "Tab List",
+    "description": "Use when rendering just the horizontal row of tab headers without content — a fill-width row of tab buttons.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",
@@ -373,6 +396,7 @@
   },
   "table": {
     "name": "Table",
+    "description": "Use when displaying structured tabular data with columns and rows — composed of a header row and a body of data rows, filling container width.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -388,6 +412,7 @@
   },
   "tabs": {
     "name": "Tabs",
+    "description": "Use when switching between multiple content panes that share the same space — composed of a tab list row and the active tab content area stacked below.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "VERTICAL",
@@ -403,6 +428,7 @@
   },
   "toast": {
     "name": "Toast",
+    "description": "Use when showing a transient notification message after a user action — composed of optional icon, content text, and close button in a horizontal row.",
     "structure": {
       "type": "FRAME",
       "layoutMode": "HORIZONTAL",

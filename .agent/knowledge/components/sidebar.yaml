@@ -1,4 +1,5 @@
 name: Sidebar
+description: Use when building the vertical side navigation for a dashboard or app shell — composed of header (logo), nav links, and footer (user profile) filling full height.
 structure:
   type: FRAME
   layoutMode: VERTICAL

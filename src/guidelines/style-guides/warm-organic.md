@@ -1,6 +1,12 @@
-# Warm Organic — Style Guide
+---
+id: style:warm-organic
+name: Warm Organic Style Guide
+description: Use when designing wellness, meditation, recipe, or lifestyle apps emphasizing body-mind experience — warm earth tones with rounded soft shapes avoiding cold technical feel.
+category: style
+tags: [light-mode, warm, earth-tone, wellness, meditation, recipe, organic, rounded]
+---
 
-tags: light-mode, warm, organic, earth-tones, rounded, soft, wellness, pill-shaped
+# Warm Organic — Style Guide
 
 ## Description
 温暖柔和的自然风格，使用大地色系和圆润造型传递亲和与放松感。适合健康、冥想、食谱、生活方式等注重身心体验的应用，避免冷硬的科技感。

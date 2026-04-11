@@ -1,4 +1,5 @@
 name: Avatar
+description: Use when showing a user profile picture, initials circle, or entity identity marker — typically circular with fixed dimensions and a single child image.
 structure:
   type: FRAME
   layoutMode: NONE

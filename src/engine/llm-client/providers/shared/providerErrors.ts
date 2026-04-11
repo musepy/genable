@@ -35,25 +35,6 @@ export abstract class ProviderError extends Error {
 // fetchWithRetry already exhausted its budget. We fail fast here.
 // ---------------------------------------------------------------------------
 
-/**
- * The SSE/HTTP stream went silent for longer than idleTimeoutMs.
- * partialText holds whatever the model managed to emit before the stall —
- * useful for diagnostics and for surfacing partial results to the user.
- */
-export class StreamIdleTimeoutError extends ProviderError {
-  readonly category = 'transport';
-  readonly userActionable = true;
-  readonly userMessage = '网络流中断（长时间无响应）。可能是跨境延迟或模型过载。建议：换一个 provider 后重试，或检查网络。';
-
-  constructor(
-    providerName: string,
-    public readonly idleMs: number,
-    public readonly partialText: string,
-  ) {
-    super(providerName, `Stream idle for ${idleMs}ms (partial=${partialText.length} chars)`);
-  }
-}
-
 export class ConnectTimeoutError extends ProviderError {
   readonly category = 'transport';
   readonly userActionable = true;
@@ -176,7 +157,6 @@ export function isProviderError(e: unknown): e is ProviderError {
  * payloads and analytics. Replaces categoryToErrorCode from retryPolicy.ts.
  */
 export function providerErrorToCode(e: ProviderError): string {
-  if (e instanceof StreamIdleTimeoutError) return 'STREAM_IDLE_TIMEOUT';
   if (e instanceof ConnectTimeoutError) return 'CONNECT_TIMEOUT';
   if (e instanceof TransportError) return 'TRANSPORT_ERROR';
   if (e instanceof APIError) return `API_ERROR_${e.statusCode}`;

@@ -1,6 +1,12 @@
-# Electric Cobalt — Style Guide
+---
+id: style:electric-cobalt
+name: Electric Cobalt Style Guide
+description: Use when designing AI products, cloud platforms, developer marketing sites, or new-wave SaaS — saturated cobalt blue blocks on pale blue-grey base for aggressive young "future tech" feel.
+category: style
+tags: [light-mode, cobalt, blue, ai, cloud, developer, saas, bold]
+---
 
-tags: light-mode, bold, blue-accent, vibrant, geometric, shadows, webapp, crisp
+# Electric Cobalt — Style Guide
 
 ## Description
 高饱和钴蓝色主导的大胆科技方案，在浅蓝灰底上用强烈的蓝色块制造视觉锚点。比 Corporate Blue 更激进、更年轻，适合 AI 产品、云平台、新锐 SaaS、开发者工具营销站等需要"未来科技感"的场景。

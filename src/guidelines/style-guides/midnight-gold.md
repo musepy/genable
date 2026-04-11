@@ -1,6 +1,12 @@
-# Midnight Gold — Style Guide
+---
+id: style:midnight-gold
+name: Midnight Gold Style Guide
+description: Use when designing luxury e-commerce, high-end membership, or boutique hotel booking UI chasing premium feel — pure black base with restrained gold accents, precise spacing, subtle metallic texture.
+category: style
+tags: [dark-mode, luxury, gold, black, elegant, ecommerce, premium, minimal]
+---
 
-tags: dark-mode, luxury, elegant, gold-accent, minimal, sharp, monochrome, webapp
+# Midnight Gold — Style Guide
 
 ## Description
 纯黑基底配合金色强调的奢华方案。克制的装饰、精确的间距和低调的金属感传递高端质感。适合奢侈品电商、高端会员体系、精品酒店预订等追求 premium 感的产品。

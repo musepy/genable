@@ -1,6 +1,12 @@
-# Fintech Dark — Style Guide
+---
+id: style:fintech-dark
+name: Fintech Dark Style Guide
+description: Use when designing trading terminals, asset management, risk dashboards, or data-dense financial UI — dark grey with blue-violet accents, tight spacing, dual-font system (sans for UI, mono for numbers).
+category: style
+tags: [dark-mode, fintech, trading, dashboard, blue-violet, monospace, finance, data-dense]
+---
 
-tags: dark-mode, fintech, dashboard, crisp, blue-accent, monochrome, shadows, dual-font
+# Fintech Dark — Style Guide
 
 ## Description
 金融科技暗色界面，深灰底色配合蓝紫色强调营造精密专业感。紧凑间距和双字体系统（UI 用无衬线、数据用等宽）适合数据密集的交易面板、资产管理、风控仪表盘等金融场景。

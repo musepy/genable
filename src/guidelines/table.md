@@ -1,3 +1,11 @@
+---
+id: guideline:table
+name: Table Design Guideline
+description: Use when designing data tables, spreadsheet views, admin lists, transaction logs, or inventory tables — covers column sizing, headers, row actions, sorting, and pagination.
+category: guideline
+tags: [table, data, admin, list, row, column, sorting]
+---
+
 # Table Design Guidelines
 
 ## 1. Purpose & Scope

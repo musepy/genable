@@ -1,6 +1,12 @@
-# Terminal Dark — Style Guide
+---
+id: style:terminal-dark
+name: Terminal Dark Style Guide
+description: Use when designing CLI tooling, API docs, code editors, or DevOps panels — near-black backgrounds with monospace type, zero border radius, and green accents evoking terminal and IDE aesthetics.
+category: style
+tags: [dark-mode, terminal, developer, monospace, cli, api, devops, green-accent]
+---
 
-tags: dark-mode, developer, monospace, sharp-corners, green-accent, minimal, dashboard
+# Terminal Dark — Style Guide
 
 ## Description
 Developer-focused dark interface inspired by terminal aesthetics. Monospace typography, zero border radius, and a green accent evoke a code editor feel. High contrast text on near-black backgrounds for extended use comfort.

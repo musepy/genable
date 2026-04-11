@@ -1,6 +1,12 @@
-# Neo Brutalist — Style Guide
+---
+id: style:neo-brutalist
+name: Neo Brutalist Style Guide
+description: Use when designing indie products, creative tools, or personal sites breaking conventional visual language — thick black borders, solid color blocks, offset drop shadows for raw direct impact.
+category: style
+tags: [light-mode, brutalist, bold, sharp-corners, indie, creative, high-contrast]
+---
 
-tags: light-mode, brutalist, bold, sharp-corners, high-contrast, playful, stroke-based, geometric
+# Neo Brutalist — Style Guide
 
 ## Description
 新粗犷主义风格，用厚实黑色边框、纯色块和偏移阴影制造原始冲击力。拒绝圆滑渐变，拥抱粗糙直接。适合独立产品、创意工具、个人网站等希望打破常规视觉语言的场景。

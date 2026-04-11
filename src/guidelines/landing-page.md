@@ -1,3 +1,11 @@
+---
+id: guideline:landing-page
+name: Landing Page Design Guideline
+description: Use when designing marketing pages, SaaS homepages, product launches, service pages, or waitlist screens — covers hero, features, CTA sections, 1440px layout, and conversion patterns.
+category: guideline
+tags: [landing-page, marketing, hero, cta, saas, homepage]
+---
+
 # Landing Page Design Guidelines
 
 ## 1. Purpose & Scope

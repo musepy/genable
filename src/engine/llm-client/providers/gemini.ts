@@ -12,12 +12,9 @@ import { GeminiLogger } from './gemini/geminiLogger';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import {
-  StreamIdleTimeoutError,
   EmptyResponseError,
 } from './shared/providerErrors';
 
-/** Idle timeout: max silence between chunks (ms) */
-const STREAM_IDLE_TIMEOUT_MS = 30000;
 /** Connect timeout: max time to establish the streaming connection (ms) */
 const CONNECT_TIMEOUT_MS = 60000;
 
@@ -153,16 +150,14 @@ export class GeminiProvider implements LLMProvider {
 
     const accumulator = new ResponseAccumulator();
 
-    let streamTimedOut = false;
     let streamAborted = false;
     try {
-      const { timedOut, aborted } = await consumeStream(stream, (response: any) => {
+      const { aborted } = await consumeStream(stream, (response: any) => {
         const mapped = this.mapToLLMResponse(response);
         if (mapped.text) onProgress?.(mapped.text);
         if (mapped.thoughts) onThinking?.(mapped.thoughts);
         accumulator.append(mapped);
-      }, { idleTimeoutMs: STREAM_IDLE_TIMEOUT_MS, abortSignal });
-      streamTimedOut = timedOut;
+      }, { abortSignal });
       streamAborted = aborted;
     } catch (streamError: any) {
       // SDK SSE truncation — retain whatever was already accumulated, then fall through
@@ -172,10 +167,6 @@ export class GeminiProvider implements LLMProvider {
       } else {
         GeminiErrorHandler.handleSdkError(streamError);
       }
-    }
-
-    if (streamTimedOut) {
-      throw new StreamIdleTimeoutError(this.name, STREAM_IDLE_TIMEOUT_MS, accumulator.getText());
     }
 
     if (!streamAborted) {

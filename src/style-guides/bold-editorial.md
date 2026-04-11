@@ -1,6 +1,12 @@
-# Bold Editorial — Style Guide
+---
+id: style:bold-editorial
+name: Bold Editorial Style Guide
+description: Use when designing content platforms, magazine layouts, blogs, or portfolio sites — high-contrast black-on-white base with oversized Sora display, vibrant red accents, and minimal decoration so content speaks.
+category: style
+tags: [light-mode, editorial, high-contrast, serif, blog, portfolio, red-accent, typography]
+---
 
-tags: light-mode, bold, editorial, high-contrast, bold-typography, sharp-corners, landing-page
+# Bold Editorial — Style Guide
 
 ## Description
 High-impact editorial design for content platforms and magazine-style layouts. Strong typographic hierarchy with large display sizes, high contrast black-on-white base, and a vibrant red accent. Minimal decoration lets content speak.

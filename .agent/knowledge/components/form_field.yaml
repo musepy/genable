@@ -1,4 +1,5 @@
 name: Form Field
+description: Use when assembling a complete form input group — composed of a label, an input control, and optional helper or error text stacked vertically.
 structure:
   type: FRAME
   layoutMode: VERTICAL

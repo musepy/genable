@@ -1,3 +1,11 @@
+---
+id: guideline:navigation
+name: Navigation Design Guideline
+description: Use when designing top navbars, sidebars, tab bars, breadcrumbs, or mobile bottom navigation — covers wayfinding structure, fill sizing, active states, and menu patterns.
+category: guideline
+tags: [navigation, navbar, sidebar, tabs, breadcrumb, wayfinding, menu]
+---
+
 # Navigation Design Guidelines
 
 ## 1. Purpose & Scope

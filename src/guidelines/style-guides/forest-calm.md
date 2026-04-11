@@ -1,6 +1,12 @@
-# Forest Calm — Style Guide
+---
+id: style:forest-calm
+name: Forest Calm Style Guide
+description: Use when designing meditation apps, nature education, gardening tools, or slow-living community UI — deep forest green with cream white base and low-saturation tones for a slow-breathing Nordic calm.
+category: style
+tags: [light-mode, nature, green, wellness, meditation, earth-tone, calm, organic]
+---
 
-tags: light-mode, organic, calm, green-accent, soft, earth-tones, wellness, rounded
+# Forest Calm — Style Guide
 
 ## Description
 深林绿与奶油白的沉静组合，灵感来自北欧森林。低饱和绿色系配合宽松间距营造缓慢呼吸的节奏感。适合冥想应用、自然教育、园艺工具、慢生活社区等与自然连接的产品。

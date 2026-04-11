@@ -1,6 +1,12 @@
-# Rose Gold Elegant — Style Guide
+---
+id: style:rose-gold-elegant
+name: Rose Gold Elegant Style Guide
+description: Use when designing beauty e-commerce, women-focused communities, wedding planning, or boutique coffee UI chasing refinement — rose gold paired with deep grey, low-saturation warmth, no cloying sweetness.
+category: style
+tags: [light-mode, rose-gold, elegant, beauty, ecommerce, wedding, warm, luxury]
+---
 
-tags: light-mode, elegant, warm, soft, rounded, dual-tone, luxury, webapp
+# Rose Gold Elegant — Style Guide
 
 ## Description
 玫瑰金与深灰的优雅搭配，用低饱和暖粉色调传递精致感而不显甜腻。温润的金属质感配合适度圆角和细腻的阴影，适合美妆电商、女性社区、婚礼策划、精品咖啡等追求格调的产品。

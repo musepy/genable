@@ -1,6 +1,12 @@
-# Monochrome Ink — Style Guide
+---
+id: style:monochrome-ink
+name: Monochrome Ink Style Guide
+description: Use when designing photography portfolios, designer showcases, or gallery sites — pure grayscale with stroke-based hierarchy and no color (even states) so images become the only color source.
+category: style
+tags: [light-mode, monochrome, grayscale, portfolio, gallery, photography, minimal]
+---
 
-tags: light-mode, monochrome, minimal, stroke-based, sharp, elegant, geometric, flat
+# Monochrome Ink — Style Guide
 
 ## Description
 纯灰阶无彩色方案，用描边代替填充、用层次代替色彩来建立视觉节奏。连成功/错误状态都用灰度表达，极致的去色让内容（尤其是图片和视频）成为唯一色彩来源。适合摄影作品集、设计师 portfolio、画廊官网。

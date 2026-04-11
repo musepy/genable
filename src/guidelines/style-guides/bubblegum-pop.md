@@ -1,6 +1,12 @@
-# Bubblegum Pop — Style Guide
+---
+id: style:bubblegum-pop
+name: Bubblegum Pop Style Guide
+description: Use when designing gamified learning, kids apps, check-in streaks, or Gen-Z social UI — bold rose-red primary with oversized pill shapes and colored drop shadows for playful energy.
+category: style
+tags: [light-mode, playful, vibrant, rose-red, pill, rounded, gamification, social]
+---
 
-tags: light-mode, playful, vibrant, bold, pill-shaped, rounded, warm, red-accent
+# Bubblegum Pop — Style Guide
 
 ## Description
 泡泡糖般的活力撞色风格，玫红为主色大胆出击，配合超大圆角和彩色阴影制造玩乐感。适合教育游戏化、儿童应用、签到打卡、社交互动等需要激发参与度和愉悦感的年轻化产品。

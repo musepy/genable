@@ -1,6 +1,12 @@
-# Arctic Minimal — Style Guide
+---
+id: style:arctic-minimal
+name: Arctic Minimal Style Guide
+description: Use when designing writing tools, note-taking apps, or focus-oriented productivity UI — near-monochrome glacial grey-blue with heavy whitespace and typographic rhythm conveying calm focus.
+category: style
+tags: [light-mode, minimal, monochrome, writing, productivity, calm, cool]
+---
 
-tags: light-mode, minimal, cool, calm, monochrome, crisp, webapp, flat
+# Arctic Minimal — Style Guide
 
 ## Description
 极致克制的冰川灰蓝方案，几乎无彩色，靠留白和排版节奏建立层级。大量呼吸空间配合低饱和度色彩传递宁静专注感。适合写作工具、笔记应用、生产力工具等需要沉浸感的场景。

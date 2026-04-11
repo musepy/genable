@@ -1,3 +1,11 @@
+---
+id: guideline:card-layout
+name: Card Layout Design Guideline
+description: Use when designing product grids, blog post lists, team grids, pricing cards, feature showcases, or gallery layouts — covers card spacing, wrap layout, responsive grid, and visual hierarchy.
+category: guideline
+tags: [card, grid, layout, product, gallery, pricing, responsive]
+---
+
 # Card Layout Design Guidelines
 
 ## 1. Purpose & Scope

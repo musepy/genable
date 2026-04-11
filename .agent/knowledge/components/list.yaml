@@ -1,4 +1,5 @@
 name: List
+description: Use when displaying a stacked vertical collection of similar items — a fill-width container that holds multiple list items.
 structure:
   type: FRAME
   layoutMode: VERTICAL

@@ -1,6 +1,12 @@
-# Material Ocean — Style Guide
+---
+id: style:material-ocean
+name: Material Ocean Style Guide
+description: Use when designing tooling SaaS, project management, or cloud consoles needing high info density and clarity — deep ocean blue base with cyan accents, layered shadows, uniform 8px corners in Material Design style.
+category: style
+tags: [dark-mode, material, ocean, blue, cyan, saas, dashboard, cloud]
+---
 
-tags: dark-mode, cool, crisp, blue-accent, rounded, shadows, webapp, dashboard
+# Material Ocean — Style Guide
 
 ## Description
 深海蓝底色配合青色强调的 Material Design 变体。分层阴影系统建立清晰的 Z 轴层级，圆角统一为 8px。适合工具型 SaaS、项目管理、云服务控制台等需要信息密度和视觉清晰度并重的产品。

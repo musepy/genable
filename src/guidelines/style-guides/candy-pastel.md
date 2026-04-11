@@ -1,6 +1,12 @@
-# Candy Pastel — Style Guide
+---
+id: style:candy-pastel
+name: Candy Pastel Style Guide
+description: Use when designing Gen-Z social apps, personal finance, or habit-tracking mobile UI — lavender purple main tone with pink gradients and pill-shaped rounded corners for friendly approachability.
+category: style
+tags: [light-mode, pastel, lavender, rounded, pill, mobile, gen-z, playful]
+---
 
-tags: light-mode, playful, soft, pastel, purple-accent, rounded, pill-shaped, warm
+# Candy Pastel — Style Guide
 
 ## Description
 糖果色柔和方案，薰衣草紫为主调配合粉色系渐变感。大圆角与 pill 造型传递可爱亲和力，适合年轻化社交、个人理财、习惯追踪等面向 Z 世代用户的移动应用。

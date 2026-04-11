@@ -2,16 +2,22 @@
  * @file generate-knowledge-index.js
  * @description Build-time script to generate a unified knowledge index from all sources.
  *
- * Scans 5 knowledge sources → generates 2 files:
+ * Scans 6 knowledge sources → generates 2 files:
  *   - knowledge-index.json: lightweight catalog [{id, name, description, category}]
  *   - knowledge-content.json: full content keyed by id {[id]: string}
  *
  * Sources:
- *   1. src/guidelines/.md             -> guideline:*
- *   2. src/prompts/help/.md          -> help:*
- *   3. .agent/skills/[name]/SKILL.md -> skill:*
- *   4. src/style-guides/.md          -> style:*
- *   5. .agent/knowledge/components/  -> anatomy:*
+ *   1. src/guidelines/*.md             -> guideline:*   (frontmatter required)
+ *   2. src/prompts/help/*.md           -> help:*        (frontmatter required)
+ *   3. .agent/skills/[name]/SKILL.md   -> skill:*       (frontmatter required)
+ *   4. src/style-guides/*.md + src/guidelines/style-guides/*.md
+ *                                      -> style:*       (frontmatter required)
+ *   5. .agent/knowledge/components/    -> anatomy:*     (YAML with name + description required)
+ *   6. UI Pro Max CSV data             -> reference:*   (inline configs)
+ *
+ * FAIL FAST: every source file must declare a unified frontmatter (id, name, description,
+ * category). The generator throws with file path when required fields are missing — no
+ * silent fallbacks, no filename→title case inference, no regex scraping of ## Description.
  */
 
 const fs = require('fs');
@@ -22,34 +28,43 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const OUTPUT_DIR = path.join(PROJECT_ROOT, 'src', 'generated');
 
 // ==========================================
-// Parsers
+// Frontmatter Parser + Validator
 // ==========================================
 
 function parseYamlFrontmatter(markdown) {
   const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!match) return { data: {}, body: markdown.trim() };
+  if (!match) return { data: null, body: markdown.trim() };
   try {
     const data = yaml.load(match[1]) || {};
     return { data, body: match[2].trim() };
-  } catch {
-    return { data: {}, body: markdown.trim() };
+  } catch (err) {
+    throw new Error(`YAML frontmatter parse error in frontmatter block: ${err.message}`);
   }
 }
 
-function extractStyleTags(content) {
-  const match = content.match(/^tags:\s*(.+)$/m);
-  if (!match) return [];
-  return match[1].split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-}
-
-function extractStyleDescription(content) {
-  // Try to extract the ## Description section's first paragraph
-  const match = content.match(/## Description\s*\n+([\s\S]*?)(?:\n##|\n\n\n|$)/);
-  if (match) {
-    const firstPara = match[1].trim().split('\n\n')[0].trim();
-    if (firstPara.length > 10) return firstPara.slice(0, 120);
+/**
+ * Validate a source file's frontmatter. Throws with file path on missing fields.
+ * Required: id, name, description, category.
+ * Enforced: description must start with "Use when" (case-insensitive).
+ */
+function assertFrontmatter(filePath, data, expectedCategory) {
+  if (!data) {
+    throw new Error(`[knowledge-index] Missing frontmatter block in ${filePath} — add --- id/name/description/category --- at top of file`);
   }
-  return '';
+  const missing = [];
+  if (!data.id) missing.push('id');
+  if (!data.name) missing.push('name');
+  if (!data.description) missing.push('description');
+  if (!data.category) missing.push('category');
+  if (missing.length) {
+    throw new Error(`[knowledge-index] ${filePath} frontmatter missing required field(s): ${missing.join(', ')}`);
+  }
+  if (data.category !== expectedCategory) {
+    throw new Error(`[knowledge-index] ${filePath} frontmatter category "${data.category}" does not match expected "${expectedCategory}"`);
+  }
+  if (!/^use when/i.test(String(data.description).trim())) {
+    throw new Error(`[knowledge-index] ${filePath} description must start with "Use when ..." — got: "${String(data.description).slice(0, 60)}..."`);
+  }
 }
 
 // ==========================================
@@ -61,31 +76,22 @@ function scanGuidelines() {
   const entries = [];
   if (!fs.existsSync(dir)) return entries;
 
-  const DESCRIPTIONS = {
-    'card-layout': 'Card grid layouts, spacing, responsive behavior, and visual hierarchy',
-    'chart': 'Data visualization: chart types, color encoding, axes, and accessibility',
-    'dashboard': 'Dashboard layouts, widget grids, KPI cards, and data-dense interfaces',
-    'form': 'Form design: field layout, validation, input groups, and error states',
-    'landing-page': 'Landing page sections, hero layouts, CTAs, and conversion patterns',
-    'mobile': 'Mobile UI patterns, touch targets, bottom sheets, and responsive sizing',
-    'navigation': 'Navigation patterns: sidebars, tab bars, breadcrumbs, and menus',
-    'table': 'Data tables: column sizing, sorting, pagination, and row actions',
-  };
-
   for (const item of fs.readdirSync(dir)) {
     if (!item.endsWith('.md')) continue;
     const fullPath = path.join(dir, item);
     if (!fs.statSync(fullPath).isFile()) continue;
 
-    const key = path.parse(item).name;
-    const content = fs.readFileSync(fullPath, 'utf-8').trim();
+    const raw = fs.readFileSync(fullPath, 'utf-8');
+    const { data, body } = parseYamlFrontmatter(raw);
+    assertFrontmatter(fullPath, data, 'guideline');
 
     entries.push({
-      id: `guideline:${key}`,
-      name: `${key.replace(/-/g, ' ')} design guideline`,
-      description: DESCRIPTIONS[key] || `Design guidelines for ${key} UI pattern`,
+      id: data.id,
+      name: data.name,
+      description: data.description,
       category: 'guideline',
-      content,
+      tags: Array.isArray(data.tags) ? data.tags : undefined,
+      content: body,
     });
   }
   return entries;
@@ -103,14 +109,14 @@ function scanHelp() {
 
     const raw = fs.readFileSync(fullPath, 'utf-8');
     const { data, body } = parseYamlFrontmatter(raw);
-    if (!data.id) continue;
+    assertFrontmatter(fullPath, data, 'help');
 
     entries.push({
-      id: `help:${data.id}`,
-      name: data.title || data.id,
-      description: data.whenToUse || `Help article: ${data.id}`,
+      id: data.id,
+      name: data.name,
+      description: data.description,
       category: 'help',
-      keywords: Array.isArray(data.keywords) ? data.keywords : [],
+      tags: Array.isArray(data.tags) ? data.tags : undefined,
       content: body,
     });
   }
@@ -129,12 +135,25 @@ function scanSkills() {
 
     const raw = fs.readFileSync(skillPath, 'utf-8');
     const { data, body } = parseYamlFrontmatter(raw);
-    const skillId = data.id || folder;
+    // Skills use their own id (not prefixed). Normalize to skill:<id>.
+    if (!data) {
+      throw new Error(`[knowledge-index] Missing frontmatter block in ${skillPath}`);
+    }
+    const missing = [];
+    if (!data.id) missing.push('id');
+    if (!data.name) missing.push('name');
+    if (!data.description) missing.push('description');
+    if (missing.length) {
+      throw new Error(`[knowledge-index] ${skillPath} frontmatter missing required field(s): ${missing.join(', ')}`);
+    }
+    if (!/^use when/i.test(String(data.description).trim())) {
+      throw new Error(`[knowledge-index] ${skillPath} description must start with "Use when ..." — got: "${String(data.description).slice(0, 60)}..."`);
+    }
 
     entries.push({
-      id: `skill:${skillId}`,
-      name: data.name || skillId,
-      description: data.description || `Skill: ${skillId}`,
+      id: `skill:${data.id}`,
+      name: data.name,
+      description: data.description,
       category: 'skill',
       content: body,
     });
@@ -143,6 +162,7 @@ function scanSkills() {
 }
 
 function scanStyles() {
+  // Both dirs scanned; src/style-guides/ wins dedup when both declare the same id.
   const dirs = [
     path.join(PROJECT_ROOT, 'src', 'style-guides'),
     path.join(PROJECT_ROOT, 'src', 'guidelines', 'style-guides'),
@@ -157,21 +177,20 @@ function scanStyles() {
       const fullPath = path.join(dir, item);
       if (!fs.statSync(fullPath).isFile()) continue;
 
-      const key = path.parse(item).name;
-      if (seen.has(key)) continue; // deduplicate (src/style-guides/ wins)
-      seen.add(key);
+      const raw = fs.readFileSync(fullPath, 'utf-8');
+      const { data, body } = parseYamlFrontmatter(raw);
+      assertFrontmatter(fullPath, data, 'style');
 
-      const content = fs.readFileSync(fullPath, 'utf-8').trim();
-      const tags = extractStyleTags(content);
-      const desc = extractStyleDescription(content);
+      if (seen.has(data.id)) continue; // src/style-guides/ wins (scanned first)
+      seen.add(data.id);
 
       entries.push({
-        id: `style:${key}`,
-        name: `${key.replace(/-/g, ' ')} style guide`,
-        description: desc || `Visual style: ${tags.join(', ')}`,
+        id: data.id,
+        name: data.name,
+        description: data.description,
         category: 'style',
-        tags,
-        content,
+        tags: Array.isArray(data.tags) ? data.tags : undefined,
+        content: body,
       });
     }
   }
@@ -189,14 +208,28 @@ function scanAnatomy() {
     const raw = fs.readFileSync(fullPath, 'utf-8');
 
     let data;
-    try { data = yaml.load(raw); } catch { continue; }
+    try { data = yaml.load(raw); } catch (err) {
+      throw new Error(`[knowledge-index] ${fullPath} YAML parse error: ${err.message}`);
+    }
+    if (!data || typeof data !== 'object') {
+      throw new Error(`[knowledge-index] ${fullPath} is empty or not a YAML mapping`);
+    }
+    if (!data.name) {
+      throw new Error(`[knowledge-index] ${fullPath} missing "name" field`);
+    }
+    if (!data.description) {
+      throw new Error(`[knowledge-index] ${fullPath} missing "description" field`);
+    }
+    if (!/^use when/i.test(String(data.description).trim())) {
+      throw new Error(`[knowledge-index] ${fullPath} description must start with "Use when ..." — got: "${String(data.description).slice(0, 60)}..."`);
+    }
 
     const key = path.parse(item).name.replace(/_/g, '-');
 
     entries.push({
       id: `anatomy:${key}`,
-      name: data.name || key,
-      description: data.description || `Component anatomy: ${key}`,
+      name: data.name,
+      description: data.description,
       category: 'anatomy',
       content: raw,
     });
@@ -248,56 +281,56 @@ function csvToMarkdown(records, columns) {
 const CSV_SOURCES = {
   'colors': {
     file: 'colors.csv',
-    name: 'Color palettes by product type',
-    description: 'Color palettes (primary, secondary, CTA, background, text, border) for 95 product types — SaaS, e-commerce, health, fintech, etc.',
+    name: 'Color Palettes by Product Type',
+    description: 'Use when picking a starting color palette for a specific product type (SaaS, e-commerce, health, fintech, etc.) — primary/secondary/CTA/background/text/border hex values for 95 product types.',
     columns: ['Product Type', 'Keywords', 'Primary (Hex)', 'Secondary (Hex)', 'CTA (Hex)', 'Background (Hex)', 'Text (Hex)', 'Notes'],
   },
   'typography': {
     file: 'typography.csv',
-    name: 'Font pairings and typography',
-    description: 'Typography pairings (heading + body fonts) with mood keywords, best-for guidance, and Google Fonts URLs',
+    name: 'Font Pairings and Typography',
+    description: 'Use when choosing heading and body font pairings for a new design — mood-tagged Google Fonts combinations with best-for guidance and category labels.',
     columns: ['Font Pairing Name', 'Category', 'Heading Font', 'Body Font', 'Mood/Style Keywords', 'Best For', 'Notes'],
   },
   'styles': {
     file: 'styles.csv',
-    name: 'Visual style definitions',
-    description: 'Design styles (minimalism, neumorphism, glassmorphism, etc.) with colors, effects, accessibility, and complexity ratings',
+    name: 'Visual Style Definitions',
+    description: 'Use when choosing a visual style direction (minimalism, neumorphism, glassmorphism, etc.) — color palettes, effects, accessibility ratings, and complexity for each style.',
     columns: ['Style Category', 'Type', 'Keywords', 'Primary Colors', 'Effects & Animation', 'Best For', 'Complexity'],
   },
   'charts': {
     file: 'charts.csv',
-    name: 'Chart type recommendations',
-    description: 'Best chart types for different data patterns — trend, comparison, distribution, composition, relationship',
+    name: 'Chart Type Recommendations',
+    description: 'Use when picking the right chart type for a data pattern — trend, comparison, distribution, composition, or relationship — with secondary options and accessibility notes.',
     columns: ['Data Type', 'Keywords', 'Best Chart Type', 'Secondary Options', 'Color Guidance', 'Accessibility Notes'],
   },
   'landing': {
     file: 'landing.csv',
-    name: 'Landing page patterns',
-    description: 'Landing page section patterns with CTA placement, color strategy, and conversion optimization tactics',
+    name: 'Landing Page Patterns',
+    description: 'Use when structuring a landing page — section order patterns, primary CTA placement, color strategy, and conversion optimization tactics for common page archetypes.',
     columns: ['Pattern Name', 'Keywords', 'Section Order', 'Primary CTA Placement', 'Color Strategy', 'Conversion Optimization'],
   },
   'products': {
     file: 'products.csv',
-    name: 'Product type design trends',
-    description: 'Design recommendations by product type — primary style, landing pattern, dashboard style, color palette focus',
+    name: 'Product Type Design Trends',
+    description: 'Use when you know a product type (CRM, social app, fitness tracker, etc.) and need starting design recommendations — primary style, landing pattern, dashboard style, color focus.',
     columns: ['Product Type', 'Keywords', 'Primary Style Recommendation', 'Landing Page Pattern', 'Color Palette Focus', 'Key Considerations'],
   },
   'reasoning': {
     file: 'ui-reasoning.csv',
-    name: 'UI design reasoning rules',
-    description: 'Design decision rules by UI category — recommended patterns, style priority, color/typography mood, anti-patterns',
+    name: 'UI Design Reasoning Rules',
+    description: 'Use when deciding design patterns and anti-patterns for a specific UI category — recommended pattern, style priority, color/typography mood, and pitfalls to avoid.',
     columns: ['UI_Category', 'Recommended_Pattern', 'Style_Priority', 'Color_Mood', 'Typography_Mood', 'Anti_Patterns', 'Severity'],
   },
   'ux-guidelines': {
     file: 'ux-guidelines.csv',
-    name: 'UX design guidelines',
-    description: 'UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, error handling',
+    name: 'UX Design Guidelines',
+    description: 'Use when you need UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, and error handling.',
     columns: null, // use all
   },
   'web-interface': {
     file: 'web-interface.csv',
-    name: 'Web interface guidelines',
-    description: 'Web interface patterns — layout, spacing, interaction, responsive breakpoints, performance',
+    name: 'Web Interface Guidelines',
+    description: 'Use when designing web-specific layouts — interaction patterns, responsive breakpoints, spacing systems, and performance conventions for browser UI.',
     columns: null,
   },
 };
@@ -339,8 +372,8 @@ function scanUIProMax() {
 
       entries.push({
         id: `ref:stack-${stack}`,
-        name: `${stack} design guidelines`,
-        description: `Framework-specific design rules for ${stack} — do/dont, code examples, best practices`,
+        name: `${stack} Design Guidelines`,
+        description: `Use when building UI in the ${stack} framework — framework-specific do/dont rules, code examples, and best practices.`,
         category: 'reference',
         content: `# ${stack} Design Guidelines\n\n${md}`,
       });
@@ -384,6 +417,15 @@ function main() {
     ...scanUIProMax(),
   ];
 
+  // Duplicate id detection — fail fast if ids collide across sources
+  const idSeen = new Map();
+  for (const e of allEntries) {
+    if (idSeen.has(e.id)) {
+      throw new Error(`[knowledge-index] duplicate id "${e.id}" detected in ${e.category} — ids must be globally unique`);
+    }
+    idSeen.set(e.id, e.category);
+  }
+
   // Build index (lightweight, for search)
   const index = allEntries.map(e => {
     const entry = {
@@ -392,7 +434,6 @@ function main() {
       description: e.description,
       category: e.category,
     };
-    if (e.keywords?.length) entry.keywords = e.keywords;
     if (e.tags?.length) entry.tags = e.tags;
     return entry;
   });

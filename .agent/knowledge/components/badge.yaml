@@ -1,6 +1,6 @@
 name: Badge
 category: Data Display
-description: A small tag for status, labels, or counts
+description: Use when labeling a status, count, or category next to another element — a small pill-shaped tag with a single label child centered inside.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

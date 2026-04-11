@@ -1,6 +1,12 @@
-# Glassmorphism Violet — Style Guide
+---
+id: style:glassmorphism-violet
+name: Glassmorphism Violet Style Guide
+description: Use when designing modern mobile apps, music players, or social products chasing visual impact — purple glassmorphism with semi-transparent layering over dark base for young vibrant feel.
+category: style
+tags: [dark-mode, glassmorphism, purple, violet, mobile, music, social, vibrant]
+---
 
-tags: dark-mode, vibrant, purple-accent, rounded, gradient, mobile, soft, webapp
+# Glassmorphism Violet — Style Guide
 
 ## Description
 紫色系毛玻璃风格，深色基底上叠加半透明层次感。色彩饱和且通透，适合现代移动端应用、音乐播放器、社交产品等追求视觉冲击力的年轻化产品。

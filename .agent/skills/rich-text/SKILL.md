@@ -1,7 +1,7 @@
 ---
 id: rich-text
 name: Rich Text Styling
-description: Apply mixed styles within a single text node using markdown markup
+description: Use when applying mixed inline styles (bold, color, weight) within a single text node via markdown markup — the runtime parses it and applies per-character ranges.
 category: core
 priority: 4
 enabledByDefault: true

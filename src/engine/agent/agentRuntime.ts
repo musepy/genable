@@ -15,7 +15,7 @@
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
-import { ToolDefinition, ToolParameter, allToolDefinitions } from './tools';
+import { ToolDefinition, allToolDefinitions, ToolExecutor } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
@@ -27,9 +27,6 @@ import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { ToolDispatcher } from './toolDispatcher';
 import { TOOL_NAMES } from './tools/unified';
 import { clearOverflows } from './overflowStore';
-import { executeSubtask } from './subtask/executor';
-import type { SubtaskContext } from './subtask/types';
-import { resolveAgentType } from './subtask/agentTypes';
 import { OutputTooLongError } from '../llm-client/providers/shared/providerErrors';
 import { ContextManager } from './context/contextManager';
 
@@ -102,12 +99,13 @@ export class AgentRuntime {
   private currentIteration = 0;
   private cancelReason = 'Canceled by user';
   private activeAbortController: AbortController | null = null;
+  private runAbortController: AbortController | null = null;
   private currentRunId = '';
   private eventSequence = 0;
   private canceledEventEmitted = false;
   private pendingQuestion: { resolve: (answer: string) => void } | null = null;
   private chatPanelId: string | null = null;
-  private turnCreatedNodeIds: string[] = [];
+  private turnCreatedNodes: Array<{ id: string; name?: string; type?: string }> = [];
   private designRootId: string | null = null;  // persists across turns for edit-turn links
   private runStats = {
     toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
@@ -205,51 +203,10 @@ export class AgentRuntime {
       },
     );
 
-    // Register subtask executor (bounded self-recursion, typed agents)
-    this.toolDispatcher.mergeExecutors({
-      subtask: async (args: any) => {
-        const agentType = resolveAgentType(args?.type);
-        const childContext: SubtaskContext = {
-          provider: this.options.provider,
-          ipcBridge: this.options.ipcBridge,
-          systemPrompt: this.contextManager.getSystemPrompt(),
-          tools: this.options.tools,
-          toolExecutors: this.options.toolExecutors,
-          maxIterations: agentType.maxIterations,
-          depth: 0,
-          maxDepth: 2,
-          isParentCanceled: () => this.canceled,
-          onRuntimeEvent: this.options.onRuntimeEvent,
-          agentType,
-          providerRef: this.options.provider,
-        };
-        return executeSubtask(args?.prompt || args?.input || '', childContext);
-      },
-    });
-
-    // Register ask_user executor (sandbox-local, pauses for user input)
-    this.toolDispatcher.mergeExecutors({
-      ask_user: async (args: any) => {
-        const { question, options } = args || {};
-        if (!question || !Array.isArray(options) || options.length < 2) {
-          return { error: 'ask_user requires a question and 2-4 options.' };
-        }
-        this.emitRuntimeEvent({
-          type: 'ask_user_question',
-          phase: 'execution',
-          iteration: this.currentIteration,
-          question,
-          options: options.map((o: any) => ({ label: o.label, description: o.description })),
-        });
-        const answer = await new Promise<string>(r => {
-          this.pendingQuestion = { resolve: r };
-        });
-        this.pendingQuestion = null;
-        this.throwIfCanceled();
-        if (!answer) return { error: 'Question was canceled by user.' };
-        return { data: { answer } };
-      },
-    });
+    // Runtime-bound tools: tools that need `this` instance state.
+    // subtask is NOT registered here — it's injected externally by the caller
+    // (AgentOrchestrator or parent executor) via mergeToolExecutors().
+    this.registerRuntimeTools();
 
     if (process.env.NODE_ENV === 'test') {
       (this as any).THROTTLE_MS = 0;
@@ -268,6 +225,9 @@ export class AgentRuntime {
     if (this.activeAbortController && !this.activeAbortController.signal.aborted) {
       this.activeAbortController.abort();
     }
+    if (this.runAbortController && !this.runAbortController.signal.aborted) {
+      this.runAbortController.abort();
+    }
     this.emitCanceledEvent();
   }
 
@@ -278,6 +238,57 @@ export class AgentRuntime {
 
   public mergeToolExecutors(executors: Record<string, import('./tools/types').ToolExecutor>): void {
     this.toolDispatcher.mergeExecutors(executors);
+  }
+
+  // ─── Runtime-bound tools ────────────────────────────────────
+
+  /**
+   * Register tools that need `this` instance state (ask_user).
+   * subtask is NOT here — it's injected externally via mergeToolExecutors.
+   */
+  private registerRuntimeTools(): void {
+    if (this.allowedExecutionToolNames.has('ask_user')) {
+      this.toolDispatcher.mergeExecutors({
+        ask_user: async (args: any) => {
+          const { question, options } = args || {};
+          if (!question || !Array.isArray(options) || options.length < 2) {
+            return { error: 'ask_user requires a question and 2-4 options.' };
+          }
+          this.emitRuntimeEvent({
+            type: 'ask_user_question',
+            phase: 'execution',
+            iteration: this.currentIteration,
+            question,
+            options: options.map((o: any) => ({ label: o.label, description: o.description })),
+          });
+          const answer = await new Promise<string>(r => {
+            this.pendingQuestion = { resolve: r };
+          });
+          this.pendingQuestion = null;
+          this.throwIfCanceled();
+          if (!answer) return { error: 'Question was canceled by user.' };
+          return { data: { answer } };
+        },
+      });
+    }
+  }
+
+  // ─── Public accessors (used by agentFactory for child config) ──
+
+  public getCurrentIteration(): number {
+    return this.currentIteration;
+  }
+
+  public getMaxIterations(): number {
+    return this.maxIterations;
+  }
+
+  public getRunAbortSignal(): AbortSignal | undefined {
+    return this.runAbortController?.signal;
+  }
+
+  public getActiveExecutors(): Record<string, ToolExecutor> {
+    return this.toolDispatcher.getExecutors();
   }
 
   // ─── Events ──────────────────────────────────────────────────
@@ -391,12 +402,12 @@ export class AgentRuntime {
     ];
 
     // Update persistent design root from this turn's creations
-    if (this.turnCreatedNodeIds.length > 0) {
-      this.designRootId = this.turnCreatedNodeIds[0];
+    if (this.turnCreatedNodes.length > 0) {
+      this.designRootId = this.turnCreatedNodes[0]?.id;
     }
     // Add hyperlink: current turn's root, or fallback to previous turn's design
-    const linkNodeId = this.turnCreatedNodeIds.length > 0
-      ? this.turnCreatedNodeIds[0]
+    const linkNodeId = this.turnCreatedNodes.length > 0
+      ? this.turnCreatedNodes[0]?.id
       : this.designRootId;
     if (linkNodeId) {
       markupLines.push(`  link-text [link:NODE:${linkNodeId}]: → View design`);
@@ -413,37 +424,21 @@ export class AgentRuntime {
    * Extract the root design node ID from tool result data.
    * For chains, picks the shallowest path (fewest `/` segments) — the design root.
    */
-  private collectCreatedNodeIds(data: any): void {
-    // jsx tool format: { id: "1429:6341", name: "...", type: "frame", ... }
-    if (data?.id && typeof data.id === 'string' && !data.chain && !data.idMap) {
-      this.turnCreatedNodeIds.push(data.id);
-      return;
-    }
-    // Direct idMap (non-chained commands like single mk)
-    if (!data.chain && data.idMap && typeof data.idMap === 'object') {
-      const ids = Object.values(data.idMap) as string[];
-      if (ids.length > 0) this.turnCreatedNodeIds.push(String(ids[0]));
-      return;
-    }
-    // Chained commands (&&): find the shallowest path's node ID
-    if (Array.isArray(data.chain)) {
-      let bestId: string | null = null;
-      let bestDepth = Infinity;
-      for (const step of data.chain) {
-        const idMap = step.data?.idMap;
-        if (!idMap || typeof idMap !== 'object') continue;
-        const ids = Object.values(idMap) as string[];
-        if (ids.length === 0) continue;
-        // Extract path depth from command string: "mk /A/B/C ..." → depth 3
-        const cmd = step.command || '';
-        const pathMatch = cmd.match(/\/([\w/]+)\//);
-        const depth = pathMatch ? pathMatch[1].split('/').length : Infinity;
-        if (depth < bestDepth) {
-          bestDepth = depth;
-          bestId = String(ids[0]);
-        }
-      }
-      if (bestId) this.turnCreatedNodeIds.push(bestId);
+  /**
+   * Collect created node info from RAW tool result data (before presentForLLM).
+   * Reads from result.data — the original format, not the flattened presentation.
+   */
+  private collectCreatedNodes(rawResult: any): void {
+    const data = rawResult?.data;
+    if (!data || rawResult?.error) return;
+
+    // jsx tool: { data: { id: "1:2", name: "Card", type: "frame", ... } }
+    if (data.id && typeof data.id === 'string') {
+      this.turnCreatedNodes.push({
+        id: data.id,
+        name: data.name,
+        type: data.type,
+      });
     }
   }
 
@@ -456,6 +451,7 @@ export class AgentRuntime {
     this.eventSequence = 0;
     this.canceledEventEmitted = false;
     this.activeAbortController = null;
+    this.runAbortController = new AbortController();
     this.canceled = false;
     this.cancelReason = 'Canceled by user';
 
@@ -513,7 +509,7 @@ export class AgentRuntime {
     }
 
     // ── Render user message in chat panel ──
-    this.turnCreatedNodeIds = [];
+    this.turnCreatedNodes = [];
     try {
       await Promise.race([
         this.renderUserMessage(userPrompt, 0),
@@ -724,34 +720,27 @@ export class AgentRuntime {
       if (toolCallsForExecution.length > 0) {
         this.runStats.toolCallCount += toolCallsForExecution.length;
         const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
-        const content = dispatchResult.toolResultsMessage.content;
-        if (Array.isArray(content)) {
-          for (const part of content) {
-            if (part.functionResponse?.response?.error != null) {
-              this.runStats.toolErrorCount++;
-            }
-            // Track created node IDs for design link generation
-            const data = (part as any).functionResponse?.response?.data;
-            if (data) {
-              this.collectCreatedNodeIds(data);
-            }
-          }
+
+        // State tracking from RAW results (decoupled from presentForLLM)
+        for (const raw of dispatchResult.rawResults) {
+          if (raw.error) this.runStats.toolErrorCount++;
+          this.collectCreatedNodes(raw.result);
         }
+
+        // LLM context from PRESENTED results (separate concern)
         this.contextManager.pushToTurn(dispatchResult.toolResultsMessage);
 
         // Guardrails (consecutiveFailure, partialFailure, budget) are now
         // handled by builtin afterIteration hooks.
 
         // ──── HOOK: afterIteration ────
-        // Collect per-tool results for iteration-level analysis hooks
+        // Use raw results for hooks (not presented format)
         const iterationToolResults: Array<{ toolCall: LLMToolCall; result: any }> = [];
-        if (Array.isArray(content)) {
-          for (let i = 0; i < toolCallsForExecution.length && i < content.length; i++) {
-            iterationToolResults.push({
-              toolCall: toolCallsForExecution[i],
-              result: (content[i] as any)?.functionResponse?.response,
-            });
-          }
+        for (let i = 0; i < toolCallsForExecution.length && i < dispatchResult.rawResults.length; i++) {
+          iterationToolResults.push({
+            toolCall: toolCallsForExecution[i],
+            result: dispatchResult.rawResults[i].result,
+          });
         }
         const afterIterCtx: HookContext = {
           iteration,
@@ -835,9 +824,14 @@ export class AgentRuntime {
     return this.contextManager.getTurnMessages();
   }
 
-  /** Node IDs created during the current turn (cleared at endTurn). */
+  /** Structured node info created during the current turn. */
+  public getTurnCreatedNodes(): Array<{ id: string; name?: string; type?: string }> {
+    return [...this.turnCreatedNodes];
+  }
+
+  /** Backward compat: flat ID list. */
   public getTurnCreatedNodeIds(): string[] {
-    return [...this.turnCreatedNodeIds];
+    return this.turnCreatedNodes.map(n => n.id);
   }
 
   public getRunStats() {

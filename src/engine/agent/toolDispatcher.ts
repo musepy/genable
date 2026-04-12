@@ -42,10 +42,21 @@ export interface ToolLogEntry {
   error?: string;
 }
 
+/** Per-tool raw result — unprocessed by presentForLLM. For runtime state tracking. */
+export interface RawToolResult {
+  name: string;
+  id: string;
+  result: any;
+  durationMs: number;
+  error?: string;
+}
+
 export interface ToolDispatchResult {
   type: 'continue';
-  /** Formatted tool results message to add to context. */
+  /** Formatted tool results message for LLM context (post-presentForLLM). */
   toolResultsMessage: LLMMessage;
+  /** Raw results before presentation — for runtime state tracking (node IDs, stats). */
+  rawResults: RawToolResult[];
 }
 
 /** Hook-style interceptor result for beforeToolExec / afterToolExec. */
@@ -133,6 +144,16 @@ export class ToolDispatcher {
     Object.assign(this.toolExecutors, executors);
   }
 
+  /** Snapshot of all current executors (shallow copy — safe for child config). */
+  public getExecutors(): Record<string, ToolExecutor> {
+    return { ...this.toolExecutors };
+  }
+
+  /** Check if a local executor is registered for the given tool name. */
+  public hasExecutor(name: string): boolean {
+    return name in this.toolExecutors;
+  }
+
   /**
    * Dispatch an array of tool calls — handles execution, timeout,
    * error classification, and result cleaning.
@@ -142,6 +163,7 @@ export class ToolDispatcher {
     iteration: number,
   ): Promise<ToolDispatchResult> {
     const toolResults: LLMToolResult[] = [];
+    const rawResults: RawToolResult[] = [];
 
     for (const tc of toolCalls) {
       this.config.throwIfCanceled(iteration + 1);
@@ -246,6 +268,9 @@ export class ToolDispatcher {
         },
       });
 
+      // Capture raw result BEFORE presentation (for runtime state tracking)
+      rawResults.push({ name: toolName, id: tc.id, result, durationMs, error: errorMessage });
+
       // Extract image attachment before presentation pipe
       let imageAttachment: { mimeType: string; data: string } | undefined;
       if (result?.data?.__image) {
@@ -268,7 +293,7 @@ export class ToolDispatcher {
     const toolResultsMessage = this.config.formatToolResults(toolResults);
     toolResultsMessage.id = this.config.generateId('tol');
 
-    return { type: 'continue', toolResultsMessage };
+    return { type: 'continue', toolResultsMessage, rawResults };
   }
 
   // ─── Private helpers ────────────────────────────────────────

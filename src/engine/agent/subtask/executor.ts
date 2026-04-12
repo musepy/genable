@@ -1,113 +1,96 @@
 /**
  * @file executor.ts
- * @description Creates and runs a child AgentRuntime for delegated subtasks.
+ * @description Pure subtask execution — accepts a complete AgentConfig,
+ * creates a child AgentRuntime, runs it, returns results.
  *
- * Constraints:
- * - Max recursion depth: 2 (configurable via SubtaskContext.maxDepth)
- * - Child budget: min(parentRemaining / 2, 20)
- * - Shared: provider, ipcBridge, systemPrompt, tools
- * - Independent: turnMessages, summary, iteration counter
- * - Cancel cascades from parent to child
+ * Config assembly (tool filtering, prompt building, behavior inheritance)
+ * is handled by agentFactory.ts. This file only executes.
  */
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agentRuntime';
-import { SubtaskContext } from './types';
-import { resolveAgentType } from './agentTypes';
-import type { AgentTypeDefinition } from './agentTypes';
-import { buildStaticSystemPrompt } from '../../llm-client/context/system';
+import type { AgentConfig, RuntimeAccessor } from '../agentFactory';
+import { createSubtaskExecutor } from '../agentFactory';
+
+// ---------------------------------------------------------------------------
+// Subtask execution context (minimal — just depth + cancel signal)
+// ---------------------------------------------------------------------------
+
+export interface SubtaskExecutionContext {
+  parentAbortSignal?: AbortSignal;
+  depth: number;
+  maxDepth: number;
+}
+
+// ---------------------------------------------------------------------------
+// Execute
+// ---------------------------------------------------------------------------
 
 export async function executeSubtask(
   prompt: string,
-  context: SubtaskContext,
+  config: AgentConfig,
+  context: SubtaskExecutionContext,
 ): Promise<{ data?: any; error?: any }> {
-  // Depth guard
+  // ── Fail-fast guards ──
+  if (!prompt?.trim()) {
+    return { error: 'Subtask requires a prompt describing the work to delegate.' };
+  }
   if (context.depth >= context.maxDepth) {
     return {
       error: `Cannot create subtask: maximum recursion depth (${context.maxDepth}) reached. Complete this work inline instead.`,
     };
   }
 
-  if (!prompt || prompt.trim().length === 0) {
-    return {
-      error: 'Subtask requires a prompt describing the work to delegate.',
-    };
-  }
-
-  const agentType = context.agentType ?? resolveAgentType('create');
-
-  // Filter tools by agent type whitelist
-  const allowedToolSet = new Set(agentType.tools);
-  const filteredTools = context.tools.filter(t => allowedToolSet.has(t.name));
-
-  // Build agent-type-specific system prompt:
-  // rolePreamble (identity anchoring) + base system prompt (with filtered tools)
-  const basePrompt = context.providerRef
-    ? buildStaticSystemPrompt(filteredTools, context.providerRef)
-    : context.systemPrompt;
-  const childSystemPrompt = agentType.rolePreamble + '\n\n' + basePrompt;
-
-  // Create child runtime
-  const childDepth = context.depth + 1;
-  const childMaxIterations = Math.min(context.maxIterations, agentType.maxIterations);
-
+  // ── Create child runtime with validated config ──
   const childRuntime = new AgentRuntime({
-    provider: context.provider,
-    tools: filteredTools,
-    systemPrompt: childSystemPrompt,
-    ipcBridge: context.ipcBridge,
-    toolExecutors: context.toolExecutors,
-    maxIterations: childMaxIterations,
-    onRuntimeEvent: context.onRuntimeEvent,
+    provider: config.provider,
+    tools: config.tools,
+    systemPrompt: config.systemPrompt,
+    ipcBridge: config.ipcBridge,
+    toolExecutors: config.toolExecutors,
+    maxIterations: config.maxIterations,
+    behaviorConfig: config.behaviorConfig,
+    onRuntimeEvent: config.onRuntimeEvent,
+    contextWindow: config.contextWindow,
+    loopPolicy: config.loopPolicy,
   });
 
-  // Register subtask executor on child (for nested recursion up to maxDepth)
-  if (childDepth < context.maxDepth) {
+  // ── Register subtask on child (if tool pool includes it AND depth allows) ──
+  const childDepth = context.depth + 1;
+  if (childDepth < context.maxDepth && config.tools.some(t => t.name === 'subtask')) {
+    const accessor: RuntimeAccessor = {
+      getCurrentIteration: () => childRuntime.getCurrentIteration(),
+      getMaxIterations: () => config.maxIterations,
+      getRunAbortSignal: () => childRuntime.getRunAbortSignal(),
+      getActiveExecutors: () => childRuntime.getActiveExecutors(),
+    };
     childRuntime.mergeToolExecutors({
-      subtask: async (args: any) => {
-        const nestedType = resolveAgentType(args?.type);
-        const childContext: SubtaskContext = {
-          ...context,
-          depth: childDepth,
-          agentType: nestedType,
-          maxIterations: nestedType.maxIterations,
-          isParentCanceled: () => context.isParentCanceled(),
-        };
-        return executeSubtask(args?.prompt || args?.input || '', childContext);
-      },
+      subtask: createSubtaskExecutor(config, accessor, childDepth, context.maxDepth),
     });
   }
 
-  // Cancel cascade: poll parent cancel state
-  const cancelInterval = setInterval(() => {
-    if (context.isParentCanceled()) {
-      childRuntime.cancel('Parent task canceled');
-    }
-  }, 200);
+  // ── Cancel cascade via AbortSignal ──
+  const onParentAbort = () => childRuntime.cancel('Parent task canceled');
+  context.parentAbortSignal?.addEventListener('abort', onParentAbort);
 
   try {
-    const result = await childRuntime.run(prompt);
-    // Convenience field: rootNodeIds lets the parent agent reference the
-    // child's creations directly without parsing the natural-language summary.
-    // Failure path intentionally has no partialNodes — we don't try to
-    // hand back half-completed work; the parent retries cleanly or surfaces
-    // the error to the user.
+    const summary = await childRuntime.run(prompt);
+    const createdNodes = childRuntime.getTurnCreatedNodes();
+    const stats = childRuntime.getRunStats();
     return {
       data: {
-        result,
-        rootNodeIds: childRuntime.getTurnCreatedNodeIds(),
-        stats: childRuntime.getRunStats(),
+        // Structured — parent can reference nodes directly
+        createdNodes,
+        // Natural language summary — for LLM context
+        summary,
+        stats,
       },
     };
   } catch (error: any) {
     if (error instanceof AgentRuntimeCanceledError) {
-      return {
-        error: 'Subtask was canceled.',
-      };
+      return { error: 'Subtask was canceled.' };
     }
-    return {
-      error: error.message || 'Subtask failed.',
-    };
+    return { error: error.message || 'Subtask failed.' };
   } finally {
-    clearInterval(cancelInterval);
+    context.parentAbortSignal?.removeEventListener('abort', onParentAbort);
   }
 }

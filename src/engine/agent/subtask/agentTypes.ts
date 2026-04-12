@@ -2,10 +2,15 @@
  * @file agentTypes.ts
  * @description Agent type registry for typed subtask delegation.
  *
- * Each type defines a role preamble (prepended to system prompt),
- * a tool whitelist, and an iteration budget. Behavior differences
- * are driven by prompt engineering, not runtime branching.
+ * Each type defines an identity prompt (injected as a standalone section),
+ * a tool whitelist, and an iteration budget. Capability restrictions are
+ * enforced by the tool pool — if a tool isn't listed, the LLM never sees it.
+ * No prompt-level prohibitions needed.
  */
+
+import type { AgentBehaviorConfig } from '../agentBehaviorConfig';
+import type { ToolDefinition } from '../tools/types';
+import { buildStaticSystemPrompt } from '../../llm-client/context/system';
 
 // ---------------------------------------------------------------------------
 // Type definition
@@ -16,12 +21,31 @@ export interface AgentTypeDefinition {
   name: string;
   /** One-line description for parent LLM routing (injected into subtask tool description). */
   whenToUse: string;
-  /** Role preamble prepended to the base system prompt. */
-  rolePreamble: string;
+  /** Standalone identity + instructions. Injected as AGENT IDENTITY section in system prompt. */
+  identity: string;
   /** Tool whitelist — only these tools are available to the child agent. */
   tools: string[];
   /** Maximum iteration budget for this agent type. */
   maxIterations: number;
+  /** Optional behaviorConfig overrides (merged on top of parent's config). */
+  behaviorOverrides?: Partial<AgentBehaviorConfig>;
+}
+
+// ---------------------------------------------------------------------------
+// Child system prompt builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a complete, independent system prompt for a child agent.
+ * Not a prefix paste — the identity section is injected before the base prompt.
+ */
+export function buildChildSystemPrompt(
+  tools: ToolDefinition[],
+  provider: { getToolSystemInstruction: (tools: ToolDefinition[]) => string },
+  agentType: AgentTypeDefinition,
+): string {
+  const base = buildStaticSystemPrompt(tools, provider);
+  return `## AGENT IDENTITY\n\n${agentType.identity}\n\n---\n\n${base}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -31,17 +55,16 @@ export interface AgentTypeDefinition {
 const createType: AgentTypeDefinition = {
   name: 'create',
   whenToUse: 'Build an independent UI section (header, sidebar, form, card). Default.',
-  rolePreamble: `You are a focused creation agent. You build ONE specific section of a design.
+  identity: `You are a focused creation agent. You build ONE specific section of a design.
 
 Your strengths:
 - Building complete UI sections (headers, forms, cards, sidebars)
-- Following the creation flow: jsx \u2192 describe \u2192 fix \u2192 describe
+- Following the creation flow: jsx → describe → fix → describe
 - Compact, self-contained work
 
 Guidelines:
-- Create the section described in your prompt \u2014 nothing more, nothing less
+- Create the section described in your prompt — nothing more, nothing less
 - ALWAYS follow CREATION FLOW: jsx first, then describe to verify, fix issues with edit/setters, describe again
-- Do NOT create subtasks \u2014 you ARE the subtask
 
 Report: what you created (node name#id, structure summary) in 2-3 sentences.`,
   tools: [
@@ -54,11 +77,11 @@ Report: what you created (node name#id, structure summary) in 2-3 sentences.`,
 
 const auditType: AgentTypeDefinition = {
   name: 'audit',
-  whenToUse: 'Read-only design review \u2014 find layout issues, property omissions, report PASS/FAIL.',
-  rolePreamble: `You are a design audit specialist. Your job is to inspect the canvas and find problems \u2014 NOT to confirm it looks good.
+  whenToUse: 'Read-only design review — find layout issues, property omissions, report PASS/FAIL.',
+  identity: `You are a design audit specialist. Your job is to inspect the canvas and find problems — NOT to confirm it looks good.
 
 === CRITICAL: READ-ONLY MODE ===
-You are STRICTLY PROHIBITED from creating or modifying nodes. You have NO creation or editing tools. Your role is EXCLUSIVELY to inspect, analyze, and report.
+You have NO creation or editing tools. Your role is EXCLUSIVELY to inspect, analyze, and report.
 
 Your documented failure pattern: reading a few properties, seeing nothing obviously wrong, and issuing PASS. The caller will spot-check your work by re-inspecting the nodes you reviewed.
 
@@ -68,7 +91,7 @@ Your strengths:
 - Comparing actual structure against design intent
 
 Process:
-1. inspect target node(s) \u2014 read ALL properties, not just the obvious ones
+1. inspect target node(s) — read ALL properties, not just the obvious ones
 2. describe for semantic analysis + lint warnings
 3. find_nodes to scan broader scope if needed
 4. Report every issue found
@@ -90,8 +113,8 @@ End with: VERDICT: PASS | FAIL | WARN`,
 
 const tokenType: AgentTypeDefinition = {
   name: 'token',
-  whenToUse: 'Variable system operations \u2014 create collections, bind tokens, set up aliases.',
-  rolePreamble: `You are a variable system specialist. You create, bind, and alias design tokens.
+  whenToUse: 'Variable system operations — create collections, bind tokens, set up aliases.',
+  identity: `You are a variable system specialist. You create, bind, and alias design tokens.
 
 === CONSTRAINT: NO VISUAL CHANGES ===
 You can inspect nodes and manage variables, but you MUST NOT change layout, sizing, fills, or any visual property directly. All visual changes must go through variable bindings.
@@ -102,10 +125,10 @@ Your strengths:
 - Setting up alias chains between semantic and primitive tokens
 
 Process:
-1. list_variables \u2014 understand existing token structure
-2. inspect target nodes \u2014 see current hardcoded values
+1. list_variables — understand existing token structure
+2. inspect target nodes — see current hardcoded values
 3. create_variable / bind_variable / alias_variable as needed
-4. inspect again \u2014 verify bindings applied correctly
+4. inspect again — verify bindings applied correctly
 
 Report: list all variables created and bindings made, with target node name#ids.`,
   tools: [

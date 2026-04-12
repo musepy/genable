@@ -10,6 +10,7 @@ import { ProxyProvider } from '../llm-client/providers/proxy';
 import { agentTools } from '../agent/tools';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
 import { resolveBehavior } from '../agent/agentBehaviorConfig';
+import { createSubtaskExecutor, AgentConfig } from '../agent/agentFactory';
 
 import { ThinkingLevel } from '../llm-client/types';
 import { emit } from '@create-figma-plugin/utilities';
@@ -361,7 +362,7 @@ export class AgentOrchestrator {
 
     this.currentProvider = provider;
 
-    return new AgentRuntime({
+    const runtime = new AgentRuntime({
       provider,
       tools,
       systemPrompt,
@@ -376,6 +377,37 @@ export class AgentOrchestrator {
       onIterationStart: (iteration: number, taskInfo?: any) => this.options.onIterationStart?.(iteration, taskInfo),
       onRuntimeEvent: (event) => this.options.onRuntimeEvent?.(event),
     });
+
+    // Inject subtask executor externally (not a constructor side-effect).
+    // The closure reads LIVE state (iteration, executors, abort signal) at invocation time.
+    if (tools.some(t => t.name === 'subtask')) {
+      const parentConfig: AgentConfig = {
+        provider,
+        tools,
+        toolExecutors: {},  // placeholder — overridden at call time with live executors
+        systemPrompt,
+        behaviorConfig,
+        maxIterations: behaviorConfig.maxIterations || 40,
+        ipcBridge,
+        onRuntimeEvent: (event) => this.options.onRuntimeEvent?.(event),
+        contextWindow,
+      };
+      runtime.mergeToolExecutors({
+        subtask: createSubtaskExecutor(
+          parentConfig,
+          {
+            getCurrentIteration: () => runtime.getCurrentIteration(),
+            getMaxIterations: () => runtime.getMaxIterations(),
+            getRunAbortSignal: () => runtime.getRunAbortSignal(),
+            getActiveExecutors: () => runtime.getActiveExecutors(),
+          },
+          0,  // depth
+          2,  // maxDepth
+        ),
+      });
+    }
+
+    return runtime;
   }
 
   // ==========================================

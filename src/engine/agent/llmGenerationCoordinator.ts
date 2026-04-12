@@ -56,16 +56,15 @@ export interface LLMGenerationCoordinatorConfig {
 // ---------------------------------------------------------------------------
 
 export class LLMGenerationCoordinator {
-  /** Tracks the last thinking text for deduplication. */
+  private static readonly MAX_EMPTY_RETRIES = 2;
+
   private lastThinkingText = '';
-  /** Throttle timestamp for reasoning delta events. */
   private lastNotificationTime = 0;
-  /** Throttle timestamp for text delta events. */
   private lastTextNotificationTime = 0;
-  /** Buffered text delta not yet emitted due to throttling. */
   private pendingTextDelta = '';
-  /** Per-message content hashes from the previous LLM call, for cache prefix comparison. */
   private previousMessageHashes: number[] = [];
+  /** Consecutive empty response count for retry logic. */
+  private emptyRetryCount = 0;
 
   constructor(
     private provider: LLMProvider,
@@ -81,6 +80,7 @@ export class LLMGenerationCoordinator {
     this.lastNotificationTime = 0;
     this.lastTextNotificationTime = 0;
     this.pendingTextDelta = '';
+    this.emptyRetryCount = 0;
     // NOTE: previousMessageHashes is intentionally NOT reset here.
     // Messages accumulate across runs (this.messages persists), so the
     // hash chain must also persist for accurate KV-cache diagnostics.
@@ -187,9 +187,28 @@ export class LLMGenerationCoordinator {
         thinkingLevel: request.thinkingLevel,
       });
 
-      // Fail-fast: provider should never return undefined. If it does, that's a bug.
+      // Provider returned undefined = genuine bug. Provider returned empty content = model issue.
       if (!response) {
         throw new EmptyResponseError(this.provider.name, 'Provider returned undefined');
+      }
+
+      // Empty response guard: model returned no text AND no tool calls.
+      // Retry up to MAX_EMPTY_RETRIES before returning the empty response
+      // to the main loop (which will treat it as a turn end).
+      const hasContent = (response.text && response.text.length > 0)
+        || (response.toolCalls && response.toolCalls.length > 0);
+      if (!hasContent) {
+        this.emptyRetryCount++;
+        if (this.emptyRetryCount <= LLMGenerationCoordinator.MAX_EMPTY_RETRIES) {
+          console.warn(`[LLMCoordinator] Empty response from ${this.provider.name} (retry ${this.emptyRetryCount}/${LLMGenerationCoordinator.MAX_EMPTY_RETRIES})`);
+          // Recursive retry — same request, same abort controller
+          return this.generate(request, abortController);
+        }
+        console.warn(`[LLMCoordinator] Empty response persists after ${LLMGenerationCoordinator.MAX_EMPTY_RETRIES} retries — returning to main loop`);
+        // Reset for next iteration; let main loop handle the empty response as turn end
+        this.emptyRetryCount = 0;
+      } else {
+        this.emptyRetryCount = 0;
       }
 
       // Flush any buffered text delta
@@ -245,12 +264,25 @@ export class LLMGenerationCoordinator {
         rawToolCallsForLoopDetection,
       };
     } catch (err) {
+      // EmptyResponseError from provider assertNonEmpty: retry here instead of crashing.
+      // Provider's assertNonEmpty throws when model returns no text AND no tool calls.
+      // We absorb this and retry — empty responses are transient model issues, not bugs.
+      if (err instanceof EmptyResponseError) {
+        this.emptyRetryCount++;
+        if (this.emptyRetryCount <= LLMGenerationCoordinator.MAX_EMPTY_RETRIES) {
+          console.warn(`[LLMCoordinator] ${err.message} (retry ${this.emptyRetryCount}/${LLMGenerationCoordinator.MAX_EMPTY_RETRIES})`);
+          return this.generate(request, abortController);
+        }
+        // Exhausted retries — emit failure and re-throw
+        this.emptyRetryCount = 0;
+      }
+
       // Emit llm_response (failure) before re-throwing
       this.config.emitRuntimeEvent({
         type: 'llm_response',
         llmCallId,
         iteration: iteration + 1,
-  
+
         phase: 'execution',
         durationMs: Date.now() - llmStartMs,
         usage: undefined,

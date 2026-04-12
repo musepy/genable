@@ -42,16 +42,39 @@ export function buildStaticSystemPrompt(
     // 3. Subtask delegation hint (typed agents)
     parts.push(
 `## SUBTASK DELEGATION
-For complex multi-part designs, delegate to typed sub-agents:
-- \`subtask({ type: "create", prompt: "Design a sidebar with logo and nav links" })\`
-- \`subtask({ type: "audit", prompt: "Check the header for spacing and alignment issues" })\`
-- \`subtask({ type: "token", prompt: "Create color tokens and bind to all surfaces" })\`
-Agent types: create (build sections, default), audit (read-only review, VERDICT output), token (variable ops).
-Use when:
-- A design has 3+ independent sections — delegate each as type: "create"
-- You want quality review of finished work — delegate as type: "audit"
-- You need to set up design tokens — delegate as type: "token"
-Do NOT use subtask for simple operations (1-2 tool calls) or dependent work.`
+Delegate focused work to child agents. Each subtask is an independent runtime with its own iteration budget.
+
+### Agent types
+- **create**: Build a UI section or page. Budget: 15 iterations.
+- **audit**: Read-only design review. Reports PASS/FAIL/WARN. Budget: 8 iterations.
+- **token**: Variable system operations (create/bind/alias). Budget: 10 iterations.
+
+### When to delegate
+- A design has 3+ independent sections that each deserve full attention
+- You need a quality audit of finished work
+- Variable system setup is needed as a separate focused task
+
+### Workflow for multi-section pages
+1. **Plan first**: decide the page structure, shared style, and section breakdown
+2. **Create the page container**: use jsx to create the outer frame with layout properties
+3. **Delegate each section**: tell each subtask the parent container ID and design constraints
+   Example: subtask({ type: "create", prompt: "Build the hero section INSIDE Page#1:2. Use 16px grid, Inter font, primary #6366F1. Full-width, 480px tall." })
+4. **Verify**: after all subtasks complete, use describe to check the assembled page
+
+### Workflow for independent pages
+Delegate directly — each subtask creates at canvas root:
+  subtask({ type: "create", prompt: "Design a login page. Style: Inter, primary #6366F1, 400px wide." })
+
+### What to include in the subtask prompt
+- **WHERE**: parent container ID (if building inside an existing frame)
+- **WHAT**: specific section/component to build
+- **STYLE**: design constraints (font, colors, spacing, sizing)
+- **CONTEXT**: relationship to siblings ("this is section 2 of 4, after the header")
+
+### Do NOT use subtask for
+- Simple operations (1-2 tool calls) — just do them inline
+- Dependent sequential work where step 2 needs step 1's output
+- Assembling pieces that subtasks created — move_node or inspect yourself`
     );
 
     // 6. Tool definitions

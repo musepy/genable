@@ -69,7 +69,7 @@ export async function executeSubtask(
           ...context,
           depth: childDepth,
           agentType: nestedType,
-          maxIterations: Math.min(Math.floor(childMaxIterations / 2), nestedType.maxIterations),
+          maxIterations: nestedType.maxIterations,
           isParentCanceled: () => context.isParentCanceled(),
         };
         return executeSubtask(args?.prompt || args?.input || '', childContext);

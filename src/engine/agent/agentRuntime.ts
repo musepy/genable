@@ -33,6 +33,7 @@ import { resolveAgentType } from './subtask/agentTypes';
 import { OutputTooLongError } from '../llm-client/providers/shared/providerErrors';
 import { ContextManager } from './context/contextManager';
 
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -214,10 +215,7 @@ export class AgentRuntime {
           systemPrompt: this.contextManager.getSystemPrompt(),
           tools: this.options.tools,
           toolExecutors: this.options.toolExecutors,
-          maxIterations: Math.min(
-            Math.floor((this.maxIterations - this.currentIteration) / 2),
-            agentType.maxIterations,
-          ),
+          maxIterations: agentType.maxIterations,
           depth: 0,
           maxDepth: 2,
           isParentCanceled: () => this.canceled,
@@ -416,6 +414,11 @@ export class AgentRuntime {
    * For chains, picks the shallowest path (fewest `/` segments) — the design root.
    */
   private collectCreatedNodeIds(data: any): void {
+    // jsx tool format: { id: "1429:6341", name: "...", type: "frame", ... }
+    if (data?.id && typeof data.id === 'string' && !data.chain && !data.idMap) {
+      this.turnCreatedNodeIds.push(data.id);
+      return;
+    }
     // Direct idMap (non-chained commands like single mk)
     if (!data.chain && data.idMap && typeof data.idMap === 'object') {
       const ids = Object.values(data.idMap) as string[];

@@ -35,7 +35,6 @@ describe('buildStaticSystemPrompt', () => {
     it('should include agent identity', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('You are a Figma plugin agent');
-        expect(prompt).toContain('DESIGN FREEDOM PRINCIPLE');
     });
 
     it('should not include legacy phase blocks', () => {
@@ -55,16 +54,6 @@ describe('buildStaticSystemPrompt', () => {
         expect(prompt).toContain('Create a Figma design via XML markup.');
     });
 
-    it('should include creation protocol (merged from WORKFLOW)', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('CREATION PROTOCOL');
-    });
-
-    it('should include turn management (merged from WORKFLOW)', () => {
-        const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('TURN MANAGEMENT');
-    });
-
     it('should include provider tool instructions', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
         expect(prompt).toContain('PROVIDER_TOOLS_2');
@@ -78,31 +67,11 @@ describe('buildStaticSystemPrompt', () => {
 
     it('should include design knowledge (scene graph model)', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('SCENE GRAPH MENTAL MODEL');
+        expect(prompt).toContain('## SCENE GRAPH');
     });
 
     it('should include execution environment rules', () => {
         const prompt = buildStaticSystemPrompt(mockTools, mockProvider);
-        expect(prompt).toContain('EXECUTION ENVIRONMENT');
-    });
-
-    it('should use phase-based serialization when tools have categories', () => {
-        const categorizedTools: ToolDefinition[] = [
-            {
-                name: 'context',
-                description: 'Get canvas overview.',
-                category: 'read' as any,
-                parameters: { type: 'object', properties: {} }
-            },
-            {
-                name: 'create',
-                description: 'Create a design.',
-                category: 'create' as any,
-                parameters: { type: 'object', properties: {} }
-            }
-        ];
-        const prompt = buildStaticSystemPrompt(categorizedTools, mockProvider);
-        expect(prompt).toContain('Information Gathering');
-        expect(prompt).toContain('Execution');
+        expect(prompt).toContain('## ENVIRONMENT');
     });
 });

@@ -223,11 +223,11 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
 
     try {
       // Extract final text from last model message
-      const lastModel = [...state.history].reverse().find(m => m.role === 'model')
+      const lastModel = [...stateRef.current.history].reverse().find(m => m.role === 'model')
       const finalText = lastModel?.text || ''
 
       // Collect tool call details (including per-call results for debugging)
-      const allToolCalls = state.history.flatMap(m => m.toolCalls || [])
+      const allToolCalls = stateRef.current.history.flatMap(m => m.toolCalls || [])
       const toolCallSummary = {
         total: allToolCalls.length,
         errors: allToolCalls.filter(tc => tc.status === 'error').length,
@@ -247,13 +247,13 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
         }
       })
 
-      const logs = generateLogDigest(state.history, { modelName: state.modelName })
-      const rootNodeIds = extractRootNodeIds(state.history)
+      const logs = generateLogDigest(stateRef.current.history, { modelName: stateRef.current.modelName })
+      const rootNodeIds = extractRootNodeIds(stateRef.current.history)
 
       // Request node tree + screenshots from main thread, then POST everything
       requestExport(rootNodeIds).then(({ nodeTree, screenshots }) => {
         // Serialize full conversation history for debugging LLM decisions
-        const conversationHistory = state.history.map(m => ({
+        const conversationHistory = stateRef.current.history.map(m => ({
           role: m.role,
           text: m.text,
           toolCalls: m.toolCalls?.map(tc => ({
@@ -272,7 +272,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
             status: curr,
             finalText,
             durationMs,
-            modelName: state.modelName,
+            modelName: stateRef.current.modelName,
             rootNodeIds,
             toolCallSummary,
             toolCallDetails,
@@ -290,7 +290,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
             status: curr,
             finalText,
             durationMs,
-            modelName: state.modelName,
+            modelName: stateRef.current.modelName,
             toolCallSummary,
             toolCallDetails,
             logs,

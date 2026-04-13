@@ -296,8 +296,16 @@ async function handleResultGet(filterTriggerId: string | null, res: ServerRespon
         json(res, 200, { id: filterTriggerId, ...JSON.parse(meta) });
         return;
       } catch {
-        // Not found — might still be pending
-        json(res, 200, { id: filterTriggerId, status: 'pending', triggerId: filterTriggerId });
+        // Not found — might still be pending.
+        // 202 (not 200) signals "not ready" — a 200 response is a contract that meta is here.
+        // No business fields (no toolCallSummary, no durationMs, no logs) to prevent
+        // callers from misreading "0" as "run completed with 0 tool calls".
+        json(res, 202, {
+          id: filterTriggerId,
+          status: 'pending',
+          triggerId: filterTriggerId,
+          hint: `Run not complete. Ground truth: existence of /tmp/figma-bridge/results/${filterTriggerId}/meta.json`,
+        });
         return;
       }
     }
@@ -361,7 +369,17 @@ async function handleResultById(id: string, waitSec: number, res: ServerResponse
         if (idx >= 0) waiters.splice(idx, 1);
         if (waiters.length === 0) resultWaiters.delete(id);
       }
-      json(res, 202, { id, status: 'pending', message: `No result after ${waitSec}s` });
+      // Long-poll expired. Run MAY still be in progress — callers MUST NOT infer
+      // "run failed" or "0 tool calls" from this response. Never include business
+      // fields here (toolCallSummary, durationMs, logs) — missing fields prevent
+      // the "0 must mean done" misread that bit us in the Apr 13 prompt-eng session.
+      json(res, 202, {
+        id,
+        status: 'pending',
+        waitExpired: true,
+        message: `Long-poll timed out after ${waitSec}s — run may still be in progress`,
+        hint: `Ground truth: /tmp/figma-bridge/results/${id}/meta.json exists iff run completed`,
+      });
     }, timeoutMs);
 
     function resolve(data: any) {
@@ -374,7 +392,11 @@ async function handleResultById(id: string, waitSec: number, res: ServerResponse
     if (!resultWaiters.has(id)) resultWaiters.set(id, []);
     resultWaiters.get(id)!.push(resolve);
   } else {
-    json(res, 202, { id, status: 'pending' });
+    json(res, 202, {
+      id,
+      status: 'pending',
+      hint: `Use ?wait=N to long-poll, or check /tmp/figma-bridge/results/${id}/meta.json for ground truth`,
+    });
   }
 }
 

@@ -47,4 +47,4 @@ ask_user({
 
 ### After the user picks
 
-Call `knowledge({action:"read", id:"style:<chosen>"})` to load the full style guide — color tokens, typography, spacing, shape — before generating `jsx`. The menu shows only the description; the full content is what you need.
+Call `knowledge("style:<chosen>")` to load the full style guide — color tokens, typography, spacing, shape — before generating `jsx`. The menu shows only the description; the full content is what you need.

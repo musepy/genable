@@ -1,17 +1,10 @@
 /**
  * @file knowledgeTool.ts
- * @description Unified knowledge retrieval tool — search/read over all knowledge sources.
+ * @description Knowledge tool — load a library entry by id.
  *
- * Two actions:
- *   search — keyword search, returns [{id, name, description}] (lightweight)
- *   read   — full content by id
- *
- * Knowledge categories:
- *   guideline:*  — UI pattern design guidelines (form, dashboard, table, etc.)
- *   help:*       — tool usage guides and best practices
- *   skill:*      — advanced workflows (component sets, design systems, etc.)
- *   style:*      — visual style guides with color/typography tokens
- *   anatomy:*    — component structure blueprints (button, card, modal, etc.)
+ * Single parameter: pass the id, get the full content.
+ * The full menu (id + description) is in the system prompt.
+ * No search action — the LLM picks from the menu directly.
  */
 
 import { ToolDefinition } from '../types';
@@ -19,42 +12,29 @@ import { ToolDefinition } from '../types';
 export const knowledgeDefinition: ToolDefinition = {
   name: 'knowledge',
   executionStrategy: 'parallel',
-  description: `Read a knowledge library entry by id (preferred) or search as a last resort.
+  description: `Load a knowledge entry from the library.
 
-The FULL knowledge library menu is already in your system context under "## KNOWLEDGE LIBRARY" — every entry's id and description is listed. Scan that menu and call \`read\` with the matching id directly. Do NOT guess keywords with \`search\` when the menu already shows what is available.
+The FULL knowledge menu is in your system context under "## KNOWLEDGE LIBRARY". When an entry matches your task, this is a BLOCKING REQUIREMENT: load it BEFORE generating any other response about the task.
 
-Actions:
-  read   — fetch full content by id (primary usage — the menu is in your system context)
-  search — keyword fallback; only use when you cannot locate the right id from the menu
-
-Strong recommendations:
-  • Before creating a new design, read at least one style entry (e.g. "style:neon-cyber") so your color/typography decisions come from the library, not your prior.
-  • When building an unfamiliar component type, read the matching anatomy entry (e.g. "anatomy:data-table") before generating structure.
-  • Reference tables ("ref:*") are CSV data — read them when you need concrete tokens (colors, fonts, chart recommendations).
+When to load:
+  • Before creating a new design → load a style entry (e.g. "style:neon-cyber")
+  • Before building an unfamiliar component → load the anatomy entry (e.g. "anatomy:button")
+  • When the user's intent is vague or ambiguous → load "help:interaction-model"
+  • When style is under-specified → load "help:style-collaboration"
 
 Examples:
-  knowledge({action: "read", id: "style:neon-cyber"})
-  knowledge({action: "read", id: "anatomy:button"})
-  knowledge({action: "read", id: "guideline:form"})
-  knowledge({action: "read", id: "ref:colors"})
-  knowledge({action: "search", query: "dashboard hero"})  // fallback only`,
+  knowledge("style:neon-cyber")
+  knowledge("anatomy:data-table")
+  knowledge("help:interaction-model")
+  knowledge("guideline:form")`,
   parameters: {
     type: 'object',
     properties: {
-      action: {
-        type: 'string',
-        enum: ['search', 'read'],
-        description: '"search" to find entries, "read" to get full content',
-      },
-      query: {
-        type: 'string',
-        description: 'Search keywords (for search action)',
-      },
       id: {
         type: 'string',
-        description: 'Knowledge entry ID like "guideline:form" (for read action)',
+        description: 'The entry id from the KNOWLEDGE LIBRARY menu, e.g. "neon-cyber", "anatomy:button", "help:interaction-model"',
       },
     },
-    required: ['action'],
+    required: ['id'],
   },
 };

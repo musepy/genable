@@ -58,7 +58,7 @@ function renderLibrarySection(): string {
   lines.push('## KNOWLEDGE LIBRARY');
   lines.push('');
   lines.push(
-    'You have access to a curated knowledge library. The full menu is listed below — do NOT guess keywords with knowledge.search. Use knowledge.read with the exact id when an entry matches your need (e.g. knowledge({action: "read", id: "style:neon-cyber"})). For fresh designs, read at least one style entry before creating nodes.',
+    'You have access to a curated knowledge library. The full menu is listed below. When an entry matches your task, load it BEFORE proceeding — this is a BLOCKING REQUIREMENT. Use the exact id (e.g. knowledge("style:neon-cyber")). For fresh designs, load at least one style entry before creating nodes.',
   );
   lines.push('');
 

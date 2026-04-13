@@ -397,45 +397,15 @@ export function useChat({
     try {
       const localExecutors = {
         knowledge: async (params: any) => {
-          const action = params.action || 'search'
-
-          if (action === 'search') {
-            // Legacy compat: map old source/topic params to query
-            const query = params.query || params.topic || params.tags || ''
-            const results = knowledgeSearch.search(query)
-            if (results.length === 0) {
-              return { success: true, data: { message: `No entries matched "${query}".`, ids: knowledgeSearch.listIds() } }
-            }
-            return { success: true, data: { results } }
+          const id = params.id || ''
+          if (!id) {
+            return { success: false, error: 'Missing id. Check the KNOWLEDGE LIBRARY menu in your system context.' }
           }
-
-          if (action === 'read') {
-            // Legacy compat: accept old source:topic as id
-            let id = params.id || ''
-            if (!id && params.source && params.topic) {
-              id = `guideline:${params.topic}`
-            }
-            const content = knowledgeSearch.read(id)
-            if (!content) {
-              return { success: false, error: `Unknown id "${id}". Use knowledge({action: "search"}) to find available entries.` }
-            }
-            return { success: true, data: { id, content } }
+          const content = knowledgeSearch.read(id)
+          if (!content) {
+            return { success: false, error: `Unknown id "${id}". Check the KNOWLEDGE LIBRARY menu in your system context.` }
           }
-
-          // Legacy fallback: old source-based calls → map to search/read
-          if (params.source === 'guidelines' && params.topic) {
-            const id = `guideline:${params.topic.toLowerCase().trim()}`
-            const content = knowledgeSearch.read(id)
-            if (!content) {
-              return { success: false, error: `Unknown guideline "${params.topic}". Use knowledge({action: "search", query: "${params.topic}"}) to find entries.` }
-            }
-            return { success: true, data: { topic: params.topic, content } }
-          }
-          if (params.source === 'style-tags') {
-            return { success: true, data: { results: knowledgeSearch.search('style') } }
-          }
-
-          return { success: false, error: `Unknown action "${action}". Use "search" or "read".` }
+          return { success: true, data: { id, content } }
         },
       }
 

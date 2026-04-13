@@ -91,8 +91,8 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
   {
     tool: 'knowledge',
     mode: 'EXECUTION',
-    required: [],
-    repairHint: 'optionally provide "topic" or "source"+"tags"',
+    required: [{ name: 'id', trim: true, check: 'required' }],
+    repairHint: 'provide "id" from the KNOWLEDGE LIBRARY menu',
   },
   // Variable tools
   {

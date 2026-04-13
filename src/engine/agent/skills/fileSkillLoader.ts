@@ -68,7 +68,7 @@ function sanitizeLegacyToolReferences(text: string): string {
   if (!text) return text;
   return text
     // CLI run() wrapper → direct tool calls
-    .replace(/run\(\{command:\s*"man\s+/g, 'knowledge({topic: "')
+    .replace(/run\(\{command:\s*"man\s+/g, 'knowledge("')
     .replace(/run\(\{command:\s*"grep\s+/g, 'find_nodes({query: "')
     .replace(/run\(\{command:\s*"sed\s+/g, 'replace_props({node: "')
     .replace(/run\(\{command:\s*"rm\s+/g, 'delete_node({node: "')
@@ -79,7 +79,7 @@ function sanitizeLegacyToolReferences(text: string): string {
     .replace(/\bcat\s+\//g, 'inspect /')
     .replace(/\btree\s+\//g, 'inspect /')
     .replace(/\bls\s+\//g, 'inspect /')
-    .replace(/\bman\s+(\w)/g, 'knowledge({topic: "$1')
+    .replace(/\bman\s+(\w)/g, 'knowledge("$1')
     // Render is fully removed
     .replace(/\brender\b/gi, 'jsx');
 }

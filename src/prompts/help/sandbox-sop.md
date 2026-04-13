@@ -145,6 +145,6 @@ Component ↔ instance operations require multiple sequential steps. Budget your
 | Replace 1 icon frame → instance | 4-5 steps (clone + convert + instance + delete + reorder) |
 | Replace 5 icons → instances | 20-25 steps |
 
-**If budget is low (< 10 remaining)**: Stop icon-to-instance conversion. Tell the user what was completed and what remains. Don't burn iterations retrying failed approaches.
+**If budget is low (< 10 remaining)**: Stop icon-to-instance conversion. Tell the user what was completed and what remains. Retrying the same failed call with identical parameters wastes budget — change approach or stop.
 
 **Escalation rule**: If the same error occurs twice, change approach or stop. Do NOT retry the same call with the same parameters.

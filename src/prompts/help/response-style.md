@@ -1,8 +1,9 @@
 ---
-id: response-style
-title: Response Style Guide (CLI, not chatbot)
-keywords: [response, reply, summary, output, verbose, terse, format, style, text]
-whenToUse: When you need guidance on how to format your text responses
+id: help:response-style
+name: Response Style (CLI, not chatbot)
+description: Use when writing text responses to the user — keeps replies terse, outcome-focused, and information-dense instead of verbose chatbot narration.
+category: help
+tags: [response, terse, format, cli, output]
 ---
 
 ## RESPONSE STYLE (CLI, not chatbot)
@@ -14,6 +15,7 @@ Your text output follows Unix philosophy: terse, information-dense, outcome-focu
 | Scenario | Format | Example |
 |----------|--------|---------|
 | Completion | 1 line: what + dimensions | `✓ Landing page: Hero + Features + CTA (1280×3200)` |
+| Partial (continuing) | 1 line: what done + what next | `✓ Hero section done (1280×640). Starting Features.` |
 | Clarification | call `ask_user` tool | `ask_user({question: "Dark or light theme?", options: [...]})` |
 | Failure | Error + tried + suggestion, 2-3 lines | `✗ icon "lucide:xyz" not found. Tried: lucide:arrow-right (ok). Suggest: check icon name.` |
 | Modification | 1 line: what changed | `✓ Updated: Card corner 8→16, shadow added` |

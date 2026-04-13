@@ -45,7 +45,7 @@ export function buildStaticSystemPrompt(
 Delegate focused work to child agents. Each subtask is an independent runtime with its own iteration budget.
 
 ### Agent types
-- **create**: Build a UI section or page. Budget: 15 iterations.
+- **create**: Build a UI section or page. Budget: 20 iterations. Use inspect→jsx→describe→edit loops within budget — iteration is expected, not wasteful.
 - **audit**: Read-only design review. Reports PASS/FAIL/WARN. Budget: 8 iterations.
 - **token**: Variable system operations (create/bind/alias). Budget: 10 iterations.
 

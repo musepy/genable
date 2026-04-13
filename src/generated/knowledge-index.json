@@ -149,7 +149,7 @@
   {
     "id": "help:creation-flow",
     "name": "Creation Flow (4-Step Gate)",
-    "description": "Use when creating new design content with jsx — describes the mandatory 4-step gate (jsx then describe then fix then respond) to avoid broken layouts.",
+    "description": "Use when starting a jsx creation task — section-by-section workflow: jsx one block, describe to verify, edit or re-jsx to fix, repeat. Load before first jsx call.",
     "category": "help",
     "tags": [
       "jsx",
@@ -176,7 +176,7 @@
   {
     "id": "help:intent-detection",
     "name": "Intent Detection",
-    "description": "Use when starting a new design turn to determine if the user wants to create fresh content or edit existing canvas elements.",
+    "description": "Use when starting a turn — determines whether to inspect existing canvas first or start fresh with jsx.",
     "category": "help",
     "tags": [
       "intent",
@@ -268,6 +268,19 @@
       "instance",
       "sop",
       "workflow"
+    ]
+  },
+  {
+    "id": "help:style-collaboration",
+    "name": "Style Collaboration Playbook",
+    "description": "Use when style is under-specified before the first jsx call — semantic product-to-style matching + ask_user template + post-pick action.",
+    "category": "help",
+    "tags": [
+      "style",
+      "ask_user",
+      "aesthetic",
+      "collaboration",
+      "pre-jsx"
     ]
   },
   {

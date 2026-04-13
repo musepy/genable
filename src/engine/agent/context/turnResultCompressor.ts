@@ -144,26 +144,16 @@ function buildCompactResponse(toolName: string, resp: any): CompactResponse {
 function summarizeSuccess(toolName: string, resp: any): string {
   // After presentForLLM flattening, data fields are at top level (resp.X, not resp.data.X)
 
-  // Creation tools — show node count and ID mapping
-  if (toolName === 'jsx' || toolName === 'cp') {
-    // jsx spreads {id, name, type, children} to top level
+  // Creation — preserve idMap (LLM needs IDs for subsequent operations)
+  if (toolName === 'jsx') {
     if (resp.id) {
       const childCount = Array.isArray(resp.children) ? resp.children.length : 0;
       return `created ${resp.created || '?'} nodes, root: ${resp.name || resp.type}#${resp.id} (${childCount} children)`;
     }
-    const idMap = resp.idMap;
-    if (idMap && typeof idMap === 'object') {
-      const entries = Object.entries(idMap);
-      if (entries.length > 0) {
-        const sample = entries.slice(0, 8).map(([k, v]) => `${k}=${v}`);
-        const suffix = entries.length > 8 ? ` +${entries.length - 8} more` : '';
-        return `created ${entries.length} nodes [${sample.join(', ')}${suffix}]`;
-      }
-    }
-    return 'created ok';
+    return summarizeIdMap(resp.idMap) || 'created ok';
   }
 
-  // Edit tool — show count
+  // Edit — show count + change summary
   if (toolName === 'edit') {
     const edited = resp.edited ?? resp.editedCount;
     const changeSummary = resp.changeSummary;
@@ -173,58 +163,44 @@ function summarizeSuccess(toolName: string, resp: any): string {
     return edited ? `edited ${edited} nodes` : 'edited ok';
   }
 
-  // Design tool — show operation counts
-  if (toolName === 'design') {
-    const parts: string[] = [];
-    if (resp.created > 0) parts.push(`created ${resp.created}`);
-    if (resp.edited > 0) parts.push(`edited ${resp.edited}`);
-    if (resp.deleted > 0) parts.push(`deleted ${resp.deleted}`);
-    return parts.join(', ') || 'ok';
-  }
-
-  // Read tools — show line/item count instead of full content
-  if (toolName === 'inspect' || toolName === 'tree' || toolName === 'cat') {
+  // Read tools — show content size
+  if (toolName === 'inspect' || toolName === 'describe') {
     const content = resp.tree ?? resp.listing;
-    if (typeof content === 'string') {
-      const lines = content.split('\n').length;
-      return `${lines} lines of node data`;
-    }
+    if (typeof content === 'string') return `${content.split('\n').length} lines`;
     return 'ok';
   }
 
-  if (toolName === 'ls') {
-    if (typeof resp.listing === 'string') {
-      return `${resp.listing.split('\n').filter((l: string) => l.trim()).length} items`;
-    }
-    return resp.count !== undefined ? `${resp.count} items` : 'ok';
-  }
-
-  // Search tools — show match count
-  if (toolName === 'grep') {
+  // Search — show match count
+  if (toolName === 'find_nodes' || toolName === 'discover_props') {
     if (Array.isArray(resp.results)) return `${resp.results.length} matches`;
     return 'ok';
   }
-
-  if (toolName === 'sed') {
+  if (toolName === 'replace_props') {
     return resp.replaced != null ? `replaced ${resp.replaced}` : 'ok';
   }
 
-  // Delete/move
-  if (toolName === 'rm') {
+  // Structure
+  if (toolName === 'clone_node') {
+    return summarizeIdMap(resp.idMap) || 'cloned ok';
+  }
+  if (toolName === 'delete_node') {
     return resp.deleted ? `deleted ${resp.deleted}` : 'ok';
   }
-  if (toolName === 'mv') {
+  if (toolName === 'move_node') {
     return resp.name ? `moved → ${resp.name}` : 'ok';
   }
 
-  // Run (CLI wrapper) — generic summary
-  if (toolName === 'run') {
-    const cmd = resp.command;
-    if (typeof cmd === 'string') return `${cmd.split(/\s+/)[0]} ok`;
-    return 'ok';
-  }
-
+  // Generic fallback — most setter/variable/component tools return small results
   return 'ok';
+}
+
+function summarizeIdMap(idMap: any): string {
+  if (!idMap || typeof idMap !== 'object') return '';
+  const entries = Object.entries(idMap);
+  if (entries.length === 0) return '';
+  const sample = entries.slice(0, 8).map(([k, v]) => `${k}=${v}`);
+  const suffix = entries.length > 8 ? ` +${entries.length - 8} more` : '';
+  return `created ${entries.length} nodes [${sample.join(', ')}${suffix}]`;
 }
 
 function summarizeFailure(_toolName: string, resp: any): string {

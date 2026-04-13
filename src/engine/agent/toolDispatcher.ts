@@ -13,7 +13,6 @@ import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
 import { findClosestTool } from './tools/unified';
 import { presentForLLM } from './tools/unified/presentation';
-import { handleScratchCommand } from './scratchpad/handler';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -326,10 +325,6 @@ export class ToolDispatcher {
 
   private async executeTool(tc: LLMToolCall): Promise<any> {
     this.config.throwIfCanceled();
-
-    // ── Scratchpad intercept (sandbox-local, zero IPC) ──
-    const scratchResult = await handleScratchCommand(tc.name, tc.args);
-    if (scratchResult) return scratchResult;
 
     // ── Unknown tool guard ──
     if (!this.allowedToolNames.has(tc.name)) {

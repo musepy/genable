@@ -26,15 +26,6 @@ import {
 // ---------------------------------------------------------------------------
 
 const KEEP_FIELDS: Record<string, string[] | null> = {
-  // Legacy commands (backward compat)
-  cp:      ['idMap'],
-  rm:      ['deleted'],
-  mv:      ['id', 'name'],
-  tree:    ['tree'],
-  grep:    ['results', 'properties'],
-  sed:     ['replaced', 'details'],
-  man:     null,
-  // Core tools
   inspect: null,
   jsx:     null,
   edit:    ['id', 'name', 'type', 'updated', 'results'],
@@ -49,12 +40,6 @@ const KEEP_FIELDS: Record<string, string[] | null> = {
   // Variable & component tools — pass through
 };
 
-/** Overflow hints per command — contextual help for the LLM. */
-const OVERFLOW_HINTS: Record<string, string> = {
-  tree: 'Use inspect with mode "detail" for specific node properties.',
-  cat: 'Use inspect with mode "tree" to discover structure, then detail specific children.',
-  grep: 'Narrow the search query or target a specific path.',
-};
 
 /**
  * Transform a raw command result into LLM-ready format.
@@ -90,11 +75,10 @@ export function presentForLLM(result: any, commandName: string, durationMs: numb
   if (stderr) cleaned._stderr = stderr;
 
   // 6. Overflow + binary guard on text fields
-  const hint = OVERFLOW_HINTS[commandName];
   const TEXT_FIELDS = ['listing', 'tree'] as const;
   for (const field of TEXT_FIELDS) {
     if (cleaned[field] && typeof cleaned[field] === 'string') {
-      cleaned[field] = guardBinary(truncateOverflow(cleaned[field], hint));
+      cleaned[field] = guardBinary(truncateOverflow(cleaned[field]));
     }
   }
 

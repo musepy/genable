@@ -199,8 +199,8 @@ function extractToolResults(content: string | Part[], turn: TurnDigest): void {
 function summarizeArgs(toolName: string, args: any): string {
   if (!args || typeof args !== 'object') return '';
 
-  if (toolName === 'edit' || toolName === 'design') {
-    // XML content — just show length
+  // Tools with large XML/content payloads — show length + parentId
+  if (toolName === 'edit' || toolName === 'jsx') {
     const xml = args.xml || args.content || '';
     const parts: string[] = [];
     if (typeof xml === 'string' && xml.length > 0) {
@@ -209,17 +209,10 @@ function summarizeArgs(toolName: string, args: any): string {
     if (args.parentId) parts.push(`parent:${args.parentId}`);
     return parts.join(', ');
   }
-  if (toolName === 'context') {
-    return '';
-  }
-  if (toolName === 'outline' || toolName === 'inspect') {
+
+  // Read tools — show target node
+  if (toolName === 'inspect' || toolName === 'describe') {
     return args.nodeId || args.id || '';
-  }
-  if (toolName === 'ls' || toolName === 'tree' || toolName === 'cat') {
-    return args.path || '/';
-  }
-  if (toolName === 'query' || toolName === 'query_knowledge') {
-    return `${args.source || ''}:${truncate(args.query || '', 40)}`;
   }
 
   // Generic: show first string-valued arg
@@ -265,49 +258,46 @@ function summarizeFailResult(toolName: string, resp: any): string {
 }
 
 function summarizeSuccessResult(toolName: string, resp: any): string {
-  if (toolName === 'cp') {
+  // Creation tools with idMap
+  if (toolName === 'jsx' || toolName === 'clone_node') {
     return summarizeIdMap(resp.data?.idMap || resp.idMap);
   }
+
+  // Edit tool
   if (toolName === 'edit') {
     return summarizeEditLikeResult(resp.data);
   }
-  if (toolName === 'design') {
-    return summarizeDesignResult(resp.data);
+
+  // Read tools — show content length
+  if (toolName === 'inspect' || toolName === 'describe') {
+    const content = resp.data?.tree ?? resp.data?.xml ?? resp.data;
+    if (typeof content === 'string') return `${content.length} chars`;
+    return 'ok';
   }
-  if (toolName === 'rm') {
+
+  // Search tools — show results count
+  if (toolName === 'find_nodes' || toolName === 'discover_props') {
+    const results = resp.data?.results;
+    if (Array.isArray(results)) return `${results.length} results`;
+    return 'ok';
+  }
+
+  // Bulk replace
+  if (toolName === 'replace_props') {
+    return resp.data?.replaced != null ? `replaced ${resp.data.replaced}` : 'ok';
+  }
+
+  // Delete
+  if (toolName === 'delete_node') {
     const n = resp.data?.deleted;
     return n ? `deleted ${n}` : 'ok';
   }
-  if (toolName === 'mv') {
+
+  // Move/rename
+  if (toolName === 'move_node') {
     return resp.data?.name ? `→ ${resp.data.name}` : 'ok';
   }
-  if (toolName === 'context') {
-    const childCount = resp.data?.page?.childCount;
-    return childCount ? `page with ${childCount} nodes` : 'ok';
-  }
-  if (toolName === 'outline' || toolName === 'inspect') {
-    const tree = resp.data?.tree ?? resp.data?.xml ?? resp.data;
-    if (typeof tree === 'string') return `${tree.length} chars`;
-    return 'ok';
-  }
-  if (toolName === 'ls') {
-    const listing = resp.data?.listing;
-    if (typeof listing === 'string') return `${listing.split('\n').length} items`;
-    return resp.data?.count !== undefined ? `${resp.data.count} items` : 'ok';
-  }
-  if (toolName === 'tree' || toolName === 'cat') {
-    const tree = resp.data?.tree ?? resp.data?.listing ?? resp.data;
-    if (typeof tree === 'string') return `${tree.length} chars`;
-    return 'ok';
-  }
-  if (toolName === 'grep') {
-    const results = resp.data?.results;
-    if (Array.isArray(results)) return `${results.length} matches`;
-    return 'ok';
-  }
-  if (toolName === 'sed') {
-    return resp.data?.replaced != null ? `replaced ${resp.data.replaced}` : 'ok';
-  }
+
   return 'ok';
 }
 
@@ -331,29 +321,6 @@ function summarizeEditLikeResult(data: any): string {
   if (edited) parts.push(`edited ${edited}`);
 
   appendReceiptSignals(parts, data);
-
-  return parts.join(', ') || 'ok';
-}
-
-function summarizeDesignResult(data: any): string {
-  if (!data || typeof data !== 'object') return 'ok';
-
-  const parts: string[] = [];
-  if (typeof data.created === 'number' && data.created > 0) parts.push(`created ${data.created}`);
-  if (typeof data.edited === 'number' && data.edited > 0) parts.push(`edited ${data.edited}`);
-  if (typeof data.deleted === 'number' && data.deleted > 0) parts.push(`deleted ${data.deleted}`);
-
-  appendIdMapSummary(parts, data.idMap);
-  appendReceiptSignals(parts, data);
-
-  // Preserve per-op error details — critical for cross-turn learning
-  if (Array.isArray(data.errors) && data.errors.length > 0) {
-    const errorDetails = data.errors
-      .slice(0, 5)
-      .map((e: any) => `${e.op}: ${truncate(String(e.error || ''), 60)}`)
-      .join('; ');
-    parts.push(`errors [${errorDetails}]`);
-  }
 
   return parts.join(', ') || 'ok';
 }

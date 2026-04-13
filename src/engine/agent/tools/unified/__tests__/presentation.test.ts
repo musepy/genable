@@ -10,10 +10,10 @@ describe('presentForLLM — flat response format', () => {
         diagnostics: { elapsed: 42 },
       },
     };
-    const presented = presentForLLM(result, 'cp', 50);
-    // Data fields promoted to top level (cp keeps idMap)
+    const presented = presentForLLM(result, 'clone_node', 50);
+    // Data fields promoted to top level (clone_node keeps idMap)
     expect(presented.idMap).toEqual({ Card: '100:1', Title: '100:2' });
-    // Noise stripped (count, diagnostics not in cp keep-list)
+    // Noise stripped (count, diagnostics not in clone_node keep-list)
     expect(presented.count).toBeUndefined();
     expect(presented.diagnostics).toBeUndefined();
     // No data wrapper
@@ -22,41 +22,41 @@ describe('presentForLLM — flat response format', () => {
     expect(presented._meta).toMatch(/\[\d+m?s?\]/);
   });
 
-  it('flattens ls result — listing at top level', () => {
+  it('flattens inspect result — pass through (no keep-list)', () => {
     const result = {
       data: {
         tree: { id: '1:1', name: 'Card', type: 'frame', children: [] },
         count: 3,
       },
     };
-    const presented = presentForLLM(result, 'tree', 30);
+    const presented = presentForLLM(result, 'inspect', 30);
     expect(presented.tree).toEqual({ id: '1:1', name: 'Card', type: 'frame', children: [] });
-    expect(presented.count).toBeUndefined();
+    expect(presented.count).toBe(3); // inspect passes through all fields
     expect(presented.data).toBeUndefined();
   });
 
-  it('flattens cat result — node fields at top level (no node wrapper)', () => {
+  it('flattens describe result — node fields at top level', () => {
     const result = {
       data: {
         type: 'frame', id: '1:1', name: 'Card',
         width: 300, height: 400,
       },
     };
-    const presented = presentForLLM(result, 'cat', 20);
+    const presented = presentForLLM(result, 'describe', 20);
     expect(presented.type).toBe('frame');
     expect(presented.id).toBe('1:1');
     expect(presented.name).toBe('Card');
     expect(presented.data).toBeUndefined();
   });
 
-  it('flattens grep results to top level', () => {
+  it('flattens find_nodes results to top level', () => {
     const result = {
       data: {
         results: [{ id: '1:1', name: 'Card' }, { id: '1:2', name: 'Button' }],
         totalSearched: 100,
       },
     };
-    const presented = presentForLLM(result, 'grep', 15);
+    const presented = presentForLLM(result, 'find_nodes', 15);
     expect(presented.results).toHaveLength(2);
     expect(presented.totalSearched).toBeUndefined();
   });
@@ -65,7 +65,7 @@ describe('presentForLLM — flat response format', () => {
     const result = {
       data: { idMap: { Card: '100:1' } },
     };
-    const presented = presentForLLM(result, 'mk', 10);
+    const presented = presentForLLM(result, 'jsx', 10);
     expect(presented.success).toBeUndefined();
   });
 
@@ -74,7 +74,7 @@ describe('presentForLLM — flat response format', () => {
       data: {},
       error: 'Failed to create',
     };
-    const presented = presentForLLM(result, 'mk', 10);
+    const presented = presentForLLM(result, 'jsx', 10);
     expect(presented.error).toBe('Failed to create');
     expect(presented.success).toBeUndefined();
     expect(presented._meta).toMatch(/\[\d+m?s?\]/);
@@ -85,25 +85,25 @@ describe('presentForLLM — flat response format', () => {
       data: {
         chain: [
           {
-            command: 'tree /',
+            command: 'inspect 1:1',
             data: { tree: '<frame/>', nodeCount: 5 },
           },
           {
-            command: 'cat /Card/',
+            command: 'describe 1:2',
             data: { node: { type: 'frame', id: '1:1' }, extra: 'noise' },
           },
         ],
       },
     };
-    const presented = presentForLLM(result, 'run', 100);
+    const presented = presentForLLM(result, 'js', 100);
     const chain = presented.chain;
     expect(chain).toHaveLength(2);
-    // tree sub-result: keep tree, strip nodeCount
-    expect(chain[0].command).toBe('tree /');
+    // inspect sub-result: pass through (no keep-list)
+    expect(chain[0].command).toBe('inspect 1:1');
     expect(chain[0].tree).toBe('<frame/>');
     expect(chain[0].data).toBeUndefined();
-    // cat sub-result: keep node, strip extra
-    expect(chain[1].command).toBe('cat /Card/');
+    // describe sub-result: pass through (no keep-list)
+    expect(chain[1].command).toBe('describe 1:2');
     expect(chain[1].node).toEqual({ type: 'frame', id: '1:1' });
     expect(chain[1].data).toBeUndefined();
   });
@@ -113,14 +113,14 @@ describe('presentForLLM — flat response format', () => {
       data: {
         chain: [
           {
-            command: 'cat /Missing/',
+            command: 'describe /Missing/',
             error: 'Node not found',
             data: {},
           },
         ],
       },
     };
-    const presented = presentForLLM(result, 'run', 50);
+    const presented = presentForLLM(result, 'js', 50);
     expect(presented.chain[0].error).toBe('Node not found');
     expect(presented.chain[0].success).toBeUndefined();
   });
@@ -136,10 +136,10 @@ describe('presentForLLM — flat response format', () => {
 
   it('wraps string data as output field', () => {
     const result = {
-      data: 'mk — create nodes\n\nUsage: mk /path/ [type]',
+      data: 'knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)',
     };
-    const presented = presentForLLM(result, 'man', 5);
-    expect(presented.output).toBe('mk — create nodes\n\nUsage: mk /path/ [type]');
+    const presented = presentForLLM(result, 'knowledge', 5);
+    expect(presented.output).toBe('knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)');
   });
 
   it('strips result to lean shape per keep-list', () => {
@@ -188,8 +188,8 @@ describe('presentForLLM — flat response format', () => {
         violations: [{ message: 'sizing reverted' }],
       },
     };
-    // cp has a keep-list: ['idMap'] — warnings/violations stripped from output
-    const presented = presentForLLM(result, 'cp', 50);
+    // clone_node has a keep-list: ['idMap'] — warnings/violations stripped from output
+    const presented = presentForLLM(result, 'clone_node', 50);
     expect(presented._stderr).toContain('font fallback');
     expect(presented._stderr).toContain('sizing reverted');
     expect(presented.warnings).toBeUndefined();

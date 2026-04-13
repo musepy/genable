@@ -20,7 +20,6 @@ import { initializeSkills, skillRegistry } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { clearIconCache } from '../figma-adapter/assets/iconify';
-import { scratchClear } from '../agent/scratchpad/store';
 import { clearSessionNodes } from '../../ipc/commands/pathResolver';
 import { clearComponentRegistry } from '../actions/nodeFactory';
 import { LLMProvider } from '../llm-client/providers/types';
@@ -113,7 +112,6 @@ export class AgentOrchestrator {
     clearIconCache();
     clearSessionNodes();
     clearComponentRegistry();
-    scratchClear();
   }
 
   public answerQuestion(answer: string): void {

@@ -52,7 +52,7 @@ export interface ChatMessage {
     /** When this message generation finished */
     endTime?: number;
     /** Terminal state for historical display */
-    runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting';
+    runState?: 'idle' | 'running' | 'completed' | 'canceled' | 'error' | 'reconnecting' | 'empty_response';
     /** Error message, if any */
     runError?: string;
     /** Post-run agent debrief (collected after difficult runs) */

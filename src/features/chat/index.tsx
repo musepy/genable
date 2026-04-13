@@ -1,6 +1,17 @@
 import { h, Fragment } from 'preact'
-import { useState, useEffect } from 'preact/hooks'
+import { useState, useEffect, useRef } from 'preact/hooks'
 import { tokens } from '../../ui/design-system/tokens'
+
+const BRAILLE_FRAMES = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+function useBrailleSpinner(active: boolean): string {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setFrame(f => (f + 1) % BRAILLE_FRAMES.length), 80);
+    return () => clearInterval(id);
+  }, [active]);
+  return active ? BRAILLE_FRAMES[frame] : '';
+}
 import {
   derivePluginState,
   getElementState,
@@ -10,7 +21,6 @@ import { PromptInput } from '../../ui/components/PromptInput'
 import { ToolBlock } from '../../ui/components/ToolBlock'
 import { CanvasTextBlock as TextBlock } from '../../ui/components/canvas-markdown/CanvasTextBlock'
 import { ModelPopover } from '../../ui/components/ModelPopover'
-import { Button } from '../../ui/components/Button'
 import { on, emit } from '@create-figma-plugin/utilities'
 import {
   SendSelectionHandler, GetSelectionHandler,
@@ -71,31 +81,34 @@ const userItemStyle = {
 // StatusBlock — running / confirming stop / canceled / error
 // ============================================
 
-function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }: {
+function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue, onRetry, waitingForUser }: {
   runState: string;
   startTime?: number;
   endTime?: number;
   error?: string;
   onStop: () => void;
   onContinue: () => void;
+  onRetry: () => void;
+  waitingForUser?: boolean;
 }) {
   const t = useTranslations();
   const [confirming, setConfirming] = useState(false);
   const [elapsed, setElapsed] = useState('');
+  const spinner = useBrailleSpinner(runState === 'running' && !waitingForUser);
 
-  // Elapsed time ticker
+  // Elapsed time ticker — paused when waiting for user
   useEffect(() => {
-    if (runState !== 'running' || !startTime) {
+    if (runState !== 'running' || !startTime || waitingForUser) {
       if (startTime && endTime) {
         setElapsed(formatDuration(endTime - startTime));
       }
       return;
     }
-    const tick = () => setElapsed(formatDuration(Date.now() - startTime));
+    const tick = () => setElapsed(formatElapsedTimer(Date.now() - startTime));
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [runState, startTime, endTime]);
+  }, [runState, startTime, endTime, waitingForUser]);
 
   // Reset confirming when state changes
   useEffect(() => { setConfirming(false); }, [runState]);
@@ -128,6 +141,20 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
     );
   }
 
+  if (runState === 'empty_response') {
+    return (
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: `4px ${hPad}`, display: 'flex', alignItems: 'center' }}>
+        <span>{t.statusEmptyResponse}{elapsed ? ` · ${elapsed}` : ''}</span>
+        <span
+          onClick={onRetry}
+          style={{ marginLeft: 'auto', cursor: 'pointer', padding: '2px 8px', borderRadius: '6px', transition: 'background 120ms', color: dim }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >{t.retryAction}</span>
+      </div>
+    );
+  }
+
   // Outside scroll area → full 22px horizontal padding
   const row: h.JSX.CSSProperties = {
     fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim,
@@ -146,11 +173,22 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
     return <div style={row}>{label}</div>;
   }
 
+  // Waiting for user answer — paused, no timer ticking
+  if (waitingForUser) {
+    return (
+      <div style={row}>
+        <span style={{ color: tokens.colors.accent }}>Waiting for answer</span>
+        {elapsed ? <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed}</span> : null}
+      </div>
+    );
+  }
+
   // Running — two-step interrupt
   if (confirming) {
     return (
       <div style={row}>
-        <span className="thinking-shimmer">{t.statusThinking} · {elapsed || '0s'}</span>
+        <span className="thinking-shimmer">{spinner} {t.statusThinking}</span>
+        <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '⏱ 0s'}</span>
         <span style={{ flex: 1 }} />
         <span
           onClick={() => { setConfirming(false); onStop(); }}
@@ -174,7 +212,8 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue }
       onMouseEnter={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
       onMouseLeave={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '0'; }}
     >
-      <span className="thinking-shimmer">{t.statusThinking} · {elapsed || '0s'}</span>
+      <span className="thinking-shimmer">{spinner} {t.statusThinking}</span>
+      <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '⏱ 0s'}</span>
       <span style={{ flex: 1 }} />
       <span
         data-interrupt
@@ -194,18 +233,23 @@ function formatDuration(ms: number): string {
   return `${m}m ${s % 60}s`;
 }
 
+/** Format elapsed ms as a compact timer label with stopwatch prefix. */
+function formatElapsedTimer(ms: number): string {
+  return `⏱ ${formatDuration(ms)}`;
+}
+
+
 // ============================================
 // MessageList
 // ============================================
 
-function MessageList({ history, loading, runtimeState, onStop, onContinue, anchorRef, memoryCount }: {
+function MessageList({ history, loading, runtimeState, onStop, onContinue, anchorRef }: {
   history: any[];
   loading: boolean;
-  runtimeState: 'idle' | 'running' | 'canceled' | 'error';
+  runtimeState: 'idle' | 'running' | 'canceled' | 'error' | 'empty_response';
   onStop: () => void;
   onContinue: () => void;
   anchorRef: any;
-  memoryCount: number;
 }) {
   const isEmpty = history.length === 0 && !loading;
 
@@ -228,13 +272,6 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
           marginTop: tokens.space[1],
           lineHeight: tokens.lineHeight[2],
         }}>{t.emptyStateHint}</div>
-        {memoryCount > 0 && (
-          <span style={{
-            fontSize: 11,
-            color: tokens.colors.textSecondary,
-            marginTop: tokens.space[1],
-          }}>{t.itemsRemembered(memoryCount)}</span>
-        )}
       </div>
     );
   }
@@ -344,8 +381,7 @@ export function ChatFeature(props: UseChatProps) {
     generate,
     stopGeneration,
     continueGeneration,
-    pendingApproval,
-    respondToApproval,
+    retryGeneration,
     pendingQuestion,
     respondToQuestion,
     modelName,
@@ -356,7 +392,6 @@ export function ChatFeature(props: UseChatProps) {
     onOpenSettings,
     providerName,
     runtimeState,
-    memoryCount,
   } = useChat(props)
 
   // --- Context Attachments ---
@@ -409,6 +444,12 @@ export function ChatFeature(props: UseChatProps) {
   }
 
   const handleGenerate = () => {
+    // When ask_user is pending, route input to answer the question
+    if (pendingQuestion && prompt.trim()) {
+      respondToQuestion(prompt.trim())
+      setPrompt('')
+      return
+    }
     const snapshot = [...attachments]
     setAttachments([]) // Clear after send (selection/skill are one-shot)
     generate(snapshot.length > 0 ? snapshot : undefined)
@@ -423,7 +464,7 @@ export function ChatFeature(props: UseChatProps) {
   const chipsState = getElementState('promptChips', pluginState);
 
   const isEmpty = pluginState === 'EMPTY' || pluginState === 'TYPING';
-  const canSubmit = !!prompt.trim();
+  const canSubmit = !!prompt.trim() || !!pendingQuestion;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
@@ -436,15 +477,12 @@ export function ChatFeature(props: UseChatProps) {
           onStop={stopGeneration}
           onContinue={continueGeneration}
           anchorRef={anchorRef}
-          memoryCount={memoryCount}
         />
 
         {isEmpty && chipsState.visible && (
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 0 }}>
             <PromptChips
-              suggestions={memoryCount > 0
-                ? [...t.memorySuggestions, ...t.promptSuggestions]
-                : t.promptSuggestions}
+              suggestions={t.promptSuggestions}
               onSelect={selectSavedPrompt}
               visible={chipsState.visible}
               enabled={chipsState.enabled}
@@ -454,24 +492,6 @@ export function ChatFeature(props: UseChatProps) {
 
         {/* Scroll anchor for bottom */}
       </div>
-
-      {/* Tool Approval Panel — outside scroll, needs outerPad */}
-      {pendingApproval && (
-        <div style={{
-          flexShrink: 0,
-          padding: `${tokens.space[2]}px ${tokens.grid.outerPad}px`,
-          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.space[2],
-        }}>
-          <span style={{ flex: 1, fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontFamily: 'var(--font-family-mono)' }}>
-            {pendingApproval.toolCalls.map(tc => tc.name).join(', ')}
-          </span>
-          <Button variant="primary" size="sm" onClick={() => respondToApproval(true)}>{t.approve}</Button>
-          <Button variant="ghost" size="sm" onClick={() => respondToApproval(false)}>{t.deny}</Button>
-        </div>
-      )}
 
       {/* Ask User Question Panel — outside scroll, needs outerPad */}
       {pendingQuestion && (
@@ -542,6 +562,8 @@ export function ChatFeature(props: UseChatProps) {
               error={lastModel.runError}
               onStop={stopGeneration}
               onContinue={continueGeneration}
+              onRetry={retryGeneration}
+              waitingForUser={!!pendingQuestion}
             />
           </div>
         );
@@ -562,7 +584,7 @@ export function ChatFeature(props: UseChatProps) {
           onSubmit={handleGenerate}
           loading={loading}
           disabled={false}
-          placeholder={t.placeholder}
+          placeholder={pendingQuestion ? 'Or type your answer…' : t.placeholder}
           canSubmit={canSubmit}
           contextTags={attachments.length > 0 ? (
             <Fragment>

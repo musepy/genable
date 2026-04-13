@@ -127,6 +127,8 @@ export interface AgentRuntimeTurnEndEvent extends AgentRuntimeBaseEvent {
   iteration: number;
   totalIterations: number;
   summary: string;
+  /** True when the LLM returned no text and no tool calls after retries. */
+  emptyResponse?: boolean;
 }
 
 export interface AgentRuntimeRetryEvent extends AgentRuntimeBaseEvent {
@@ -138,13 +140,6 @@ export interface AgentRuntimeRetryEvent extends AgentRuntimeBaseEvent {
   delayMs: number;
   errorCategory: string;
   errorMessage: string;
-}
-
-export interface AgentRuntimeToolApprovalRequestEvent extends AgentRuntimeBaseEvent {
-  type: 'tool_approval_request';
-  phase: AgentRuntimePhase;
-  iteration: number;
-  toolCalls: { id: string; name: string; args: any }[];
 }
 
 export interface AgentRuntimeAskUserQuestionEvent extends AgentRuntimeBaseEvent {
@@ -251,7 +246,6 @@ export type AgentRuntimeEvent =
   | AgentRuntimeErrorEvent
   | AgentRuntimeTurnEndEvent
   | AgentRuntimeRetryEvent
-  | AgentRuntimeToolApprovalRequestEvent
   | AgentRuntimeAskUserQuestionEvent
   | AgentRuntimeCanceledEvent
   | AgentRuntimeLLMRequestEvent
@@ -270,7 +264,6 @@ export type AgentRuntimeEventType =
   | 'error'
   | 'turn_end'
   | 'retry'
-  | 'tool_approval_request'
   | 'ask_user_question'
   | 'canceled'
   | 'llm_request'

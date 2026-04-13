@@ -12,7 +12,7 @@ const LONG_POLL_WAIT_SEC = 30
 const RESULT_TIMEOUT_MS = 300_000 // Force post result if agent runs >5min
 
 type DevBridgeStatus = 'disconnected' | 'connected' | 'polling' | 'executing'
-type RunState = 'idle' | 'running' | 'canceled' | 'error'
+type RunState = 'idle' | 'running' | 'canceled' | 'error' | 'empty_response'
 
 export interface GenerateOptions {
   /** Restrict LLM to only these tools (e.g. ["jsx"]) */

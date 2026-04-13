@@ -9,7 +9,7 @@ import type {
   AgentRuntimeEvent,
 } from '../../shared/protocol/agentRuntimeEvents'
 import { useDevBridge, GenerateOptions } from '../../dev/useDevBridge'
-import { useLocale } from '../../ui/i18n'
+import { useLocale, useTranslations } from '../../ui/i18n'
 import { useMcpBridge } from '../../dev/useMcpBridge'
 
 interface UseChatProps {
@@ -23,16 +23,32 @@ interface UseChatProps {
   providerName: 'gemini' | 'openrouter' | 'dashscope' | 'claude'
 }
 
-export interface ToolApprovalRequest {
-  toolCalls: { id: string; name: string; args: any }[]
-}
-
 export interface UserQuestionRequest {
   question: string
   options: { label: string; description?: string }[]
 }
 
-type RunState = 'idle' | 'running' | 'canceled' | 'error'
+type RunState = 'idle' | 'running' | 'canceled' | 'error' | 'empty_response'
+
+export interface RetryInfo {
+  errorCode: string;
+  attempt: number;
+  maxAttempts: number;
+  delayMs: number;
+}
+
+const ERROR_CODE_LABELS: Record<string, string> = {
+  RETRYABLE_RATE_LIMIT: 'Rate limit',
+  RETRYABLE_TRANSIENT: 'Server error',
+  RETRYABLE_NETWORK: 'Network',
+  RETRYABLE_MALFORMED: 'Format error',
+};
+
+function extractErrorCode(message: string, category: string): string {
+  const match = message.match(/\b(\d{3})\b/);
+  if (match) return match[1];
+  return ERROR_CODE_LABELS[category] || category;
+}
 
 export function useChat({
   apiKey,
@@ -45,6 +61,7 @@ export function useChat({
   providerName,
 }: UseChatProps) {
   const locale = useLocale()
+  const t = useTranslations()
   const [prompt, setPrompt] = useState<string>('')
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState<boolean>(false)
@@ -52,9 +69,8 @@ export function useChat({
   const [error, setError] = useState<string | null>(null)
   const [thinkingText, setThinkingText] = useState<string>('')
   const [runtimeState, setRuntimeState] = useState<RunState>('idle')
-  const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null)
   const [pendingQuestion, setPendingQuestion] = useState<UserQuestionRequest | null>(null)
-  const [memoryCount, setMemoryCount] = useState<number>(0)
+  const [retryInfo, setRetryInfo] = useState<RetryInfo | null>(null)
 
   const [thinkingLevel] = useState<'minimal' | 'low' | 'high'>('high')
 
@@ -152,6 +168,7 @@ export function useChat({
     switch (event.type) {
       case 'iteration_start': {
         setRuntimeState('running')
+        setRetryInfo(null)
         const newIteration: IterationRecord = {
           iteration: event.iteration,
           thinking: '',
@@ -199,9 +216,6 @@ export function useChat({
       }
       case 'status': {
         setLoadingStatus(event.message)
-        if ((event as any).memoryCount !== undefined) {
-          setMemoryCount((event as any).memoryCount)
-        }
         break
       }
       case 'reasoning_delta': {
@@ -221,18 +235,15 @@ export function useChat({
         }))
         break
       }
-      case 'tool_approval_request': {
-        setPendingApproval({ toolCalls: event.toolCalls })
-        break
-      }
       case 'ask_user_question': {
         setPendingQuestion({ question: event.question, options: event.options })
         break
       }
       case 'turn_end': {
+        const isEmptyResponse = !!(event as any).emptyResponse
         setLoading(false)
-        setRuntimeState('idle')
-        
+        setRuntimeState(isEmptyResponse ? 'empty_response' : 'idle')
+        setRetryInfo(null)
         setLoadingStatus('')
         updateStreamingMessage(msg => {
           const finalText = event.summary || msg.text || ''
@@ -247,12 +258,16 @@ export function useChat({
               blocks = [...blocks, { type: 'text', content: event.summary }]
             }
           }
+          // Empty response: append hint as a text block
+          if (isEmptyResponse) {
+            blocks = [...blocks, { type: 'text' as const, content: t.emptyResponseHint }]
+          }
           return {
             ...msg,
-            text: finalText,
+            text: isEmptyResponse ? '' : finalText,
             blocks,
             streaming: false,
-            runState: 'completed',
+            runState: isEmptyResponse ? 'empty_response' : 'completed',
             endTime: Date.now(),
           }
         })
@@ -263,8 +278,7 @@ export function useChat({
         setRuntimeState('canceled')
         setLoadingStatus('Canceled by user')
         
-        setPendingApproval(null)
-    setPendingQuestion(null)
+        setPendingQuestion(null)
         updateStreamingMessage(msg => ({
           ...msg,
           text: msg.text || event.reason || 'Canceled by user',
@@ -275,16 +289,20 @@ export function useChat({
         break
       }
       case 'retry': {
-        setLoadingStatus(`Retrying (${event.attempt}/${event.maxAttempts})...`)
+        setRetryInfo({
+          errorCode: extractErrorCode(event.errorMessage, event.errorCategory),
+          attempt: event.attempt,
+          maxAttempts: event.maxAttempts,
+          delayMs: event.delayMs,
+        })
         break
       }
       case 'error': {
         setLoading(false)
         setRuntimeState('error')
-        
+        setRetryInfo(null)
         setError(event.message)
-        setPendingApproval(null)
-    setPendingQuestion(null)
+        setPendingQuestion(null)
         updateStreamingMessage(msg => ({
           ...msg,
           streaming: false,
@@ -325,9 +343,9 @@ export function useChat({
     setLoading(true)
     setError(null)
     setRuntimeState('running')
+    setRetryInfo(null)
     setLoadingStatus('Agent starting...')
     setThinkingText('')
-    setPendingApproval(null)
     setPendingQuestion(null)
     activeRunIdRef.current = null
     eventBufferRef.current = []
@@ -371,7 +389,6 @@ export function useChat({
         thinkingLevel,
         locale,
         workerUrl: 'https://figma-ai-generator.muse40007.workers.dev',
-        requireToolApproval: false,
         onRuntimeEvent: handleRuntimeEvent,
         ...(filteredTools ? { tools: filteredTools } : {}),
       })
@@ -447,10 +464,20 @@ export function useChat({
     await generateFromPrompt('Continue from where you left off.')
   }
 
-  const respondToApproval = (approved: boolean) => {
-    activeOrchestratorRef.current?.approveTools(approved)
-    setPendingApproval(null)
-    setPendingQuestion(null)
+  const retryGeneration = async () => {
+    if (loading) return
+    // Find the last user message to re-send
+    const lastUser = [...history].reverse().find(m => m.role === 'user')
+    if (!lastUser) return
+    const retryPrompt = lastUser.text
+    // Remove the empty user+model pair from UI history, then re-send
+    setHistory(prev => {
+      if (prev.length >= 2 && prev[prev.length - 1]?.runState === 'empty_response') {
+        return prev.slice(0, -2)
+      }
+      return prev
+    })
+    await generateFromPrompt(retryPrompt)
   }
 
   const respondToQuestion = (answer: string) => {
@@ -464,9 +491,9 @@ export function useChat({
     setPrompt('')
     setError(null)
     setRuntimeState('idle')
+    setRetryInfo(null)
     setLoadingStatus('')
     setThinkingText('')
-    setPendingApproval(null)
     setPendingQuestion(null)
   }
 
@@ -608,6 +635,10 @@ export function useChat({
       setLoading(true)
       setRuntimeState('running')
       setLoadingStatus('Executing changes')
+      // Simulate retry info
+      setRetryInfo({ errorCode: '429', attempt: 1, maxAttempts: 5, delayMs: 2000 })
+      queue(800, () => setRetryInfo({ errorCode: '429', attempt: 2, maxAttempts: 5, delayMs: 4000 }))
+      queue(1400, () => setRetryInfo(null))
       setHistory([
         { role: 'user', text: 'Run validation-heavy rewrite', id: `${userId}-error` },
         {
@@ -736,12 +767,11 @@ export function useChat({
     generate,
     stopGeneration,
     continueGeneration,
-    pendingApproval,
-    respondToApproval,
+    retryGeneration,
     pendingQuestion,
     respondToQuestion,
     runtimeState,
-    memoryCount,
+    retryInfo,
     // Pass-through props
     apiKey,
     setApiKey,

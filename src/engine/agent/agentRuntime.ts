@@ -758,6 +758,14 @@ export class AgentRuntime {
         iteration++;
         continue;
       } else {
+        // ──── EMPTY RESPONSE DETECTION ────
+        // LLM returned no text and no tool calls (after coordinator retries).
+        // Mark turn_end so the UI can surface a retry hint.
+        const isEmptyResponse = !response.text || response.text.trim().length === 0;
+        if (isEmptyResponse) {
+          console.warn(`[AgentRuntime] Empty response from LLM at iteration ${iteration + 1}`);
+        }
+
         // ──── ASK_USER NUDGE ────
         // If text-only response contains multiple question marks, the LLM is trying
         // to ask questions via plain text instead of using ask_user. Nudge once per run.
@@ -802,6 +810,7 @@ export class AgentRuntime {
           iteration: iteration + 1,
           totalIterations: iteration + 1,
           summary: response.text || '',
+          ...(isEmptyResponse ? { emptyResponse: true } : {}),
         });
         this.contextManager.endTurn();
         return response.text;

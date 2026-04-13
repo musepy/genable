@@ -63,11 +63,8 @@ type ErrorItem = { title: string; message: string; action: string };
 
 const en = {
   // Theme
-  followSystem: 'System',
   light: 'Light',
   dark: 'Dark',
-  clickToFollowSystem: 'Click to follow system',
-  themeLabel: (theme: string) => `Theme: ${theme}`,
 
   // Header / Navigation
   newDesign: 'New Design',
@@ -101,20 +98,16 @@ const en = {
   language: 'Language',
 
   // Chat Status
-  itemsRemembered: (count: number) => `${count} item${count !== 1 ? 's' : ''} remembered`,
   statusThought: 'Thought',
   statusError: 'Error',
   statusStopped: 'Stopped',
   statusThinking: 'Thinking',
+  statusEmptyResponse: 'Empty response',
+  emptyResponseHint: 'Model returned an empty response. Try rephrasing your request or switching models.',
   stopAction: 'stop',
   continueAction: 'continue',
+  retryAction: 'retry',
   clickToInterrupt: 'click to interrupt',
-
-  // Tool Execution
-  toolsFailed: (count: number) => `${count} failed`,
-  toolsCount: (count: number) => `${count} tool${count > 1 ? 's' : ''}`,
-  reconnecting: (count: number, max: number) => `Reconnecting ${count}/${max}`,
-  escKey: 'esc',
 
   // Model Popover
   selectModel: 'Select Model',
@@ -135,20 +128,6 @@ const en = {
   clearKeysConfirm: 'Clear all API keys and return to onboarding?',
   logoutClearKeys: 'Logout (Clear Keys)',
   restoreSession: 'Restore Saved Session',
-
-  // Approval
-  approve: 'Approve',
-  deny: 'Deny',
-
-  // Toast
-  dismiss: 'Dismiss',
-
-  // Feedback
-  createdDesign: (type: string, count: number) => `Created ${type} design (${count} elements)`,
-  designCreated: (count: number) => `Design created (${count} elements)`,
-
-  // UI Controls
-  newMessages: 'New messages',
 
   // Errors
   errors: {
@@ -174,12 +153,6 @@ const en = {
     } as ErrorItem,
   },
 
-  // Memory Suggestions
-  memorySuggestions: [
-    { icon: 'Palette', title: 'Show Design System', description: 'Show me my saved design system preferences and tokens.' },
-    { icon: 'Brain', title: 'Update Memory', description: 'Remember this design preference for future sessions.' },
-  ] as SuggestionItem[],
-
   // Prompt Suggestions
   promptSuggestions: [
     { icon: 'LayoutDashboard', title: 'Dashboard', description: 'A metrics scorecard showing 5 row items with columns: "Card Name", "Month", "Quarter", "Year", "Growth" and a trend indicator.' },
@@ -196,11 +169,8 @@ type Translations = typeof en;
 
 const zh: Translations = {
   // Theme
-  followSystem: '跟随系统',
   light: '亮色',
   dark: '暗色',
-  clickToFollowSystem: '点击跟随系统',
-  themeLabel: (theme: string) => `主题: ${theme}`,
 
   // Header / Navigation
   newDesign: '新设计',
@@ -234,20 +204,16 @@ const zh: Translations = {
   language: '语言',
 
   // Chat Status
-  itemsRemembered: (count: number) => `已记住 ${count} 条`,
   statusThought: '思考',
   statusError: '错误',
   statusStopped: '已停止',
   statusThinking: '思考中',
+  statusEmptyResponse: '空响应',
+  emptyResponseHint: '模型返回了空响应。请尝试换一种表述，或切换到其他模型。',
   stopAction: '停止',
   continueAction: '继续',
+  retryAction: '重试',
   clickToInterrupt: '点击中断',
-
-  // Tool Execution
-  toolsFailed: (count: number) => `${count} 个失败`,
-  toolsCount: (count: number) => `${count} 个工具`,
-  reconnecting: (count: number, max: number) => `重连中 ${count}/${max}`,
-  escKey: 'esc',
 
   // Model Popover
   selectModel: '选择模型',
@@ -268,20 +234,6 @@ const zh: Translations = {
   clearKeysConfirm: '清除所有 API Key 并返回引导页？',
   logoutClearKeys: '登出（清除 Key）',
   restoreSession: '恢复已保存的会话',
-
-  // Approval
-  approve: '批准',
-  deny: '拒绝',
-
-  // Toast
-  dismiss: '关闭',
-
-  // Feedback
-  createdDesign: (type: string, count: number) => `已创建 ${type} 设计 (${count} 个元素)`,
-  designCreated: (count: number) => `设计已创建 (${count} 个元素)`,
-
-  // UI Controls
-  newMessages: '新消息',
 
   // Errors
   errors: {
@@ -307,12 +259,6 @@ const zh: Translations = {
     },
   },
 
-  // Memory Suggestions
-  memorySuggestions: [
-    { icon: 'Palette', title: '显示设计系统', description: '显示我保存的设计系统偏好和 token。' },
-    { icon: 'Brain', title: '更新记忆', description: '记住这个设计偏好，以便将来使用。' },
-  ],
-
   // Prompt Suggestions
   promptSuggestions: [
     { icon: 'LayoutDashboard', title: '仪表盘', description: '包含 "卡片名称"、"月份"、"季度"、"年份"、"增长" 列及趋势指示器的5行指标记分卡。' },
@@ -327,11 +273,8 @@ const zh: Translations = {
 
 const fr: Translations = {
   // Theme
-  followSystem: 'Systeme',
   light: 'Clair',
   dark: 'Sombre',
-  clickToFollowSystem: 'Cliquer pour suivre le systeme',
-  themeLabel: (theme: string) => `Theme : ${theme}`,
 
   // Header / Navigation
   newDesign: 'Nouveau design',
@@ -365,20 +308,16 @@ const fr: Translations = {
   language: 'Langue',
 
   // Chat Status
-  itemsRemembered: (count: number) => `${count} element${count !== 1 ? 's' : ''} memorise${count !== 1 ? 's' : ''}`,
   statusThought: 'Reflexion',
   statusError: 'Erreur',
   statusStopped: 'Arrete',
   statusThinking: 'Reflexion',
+  statusEmptyResponse: 'Reponse vide',
+  emptyResponseHint: 'Le modele a renvoye une reponse vide. Essayez de reformuler ou de changer de modele.',
   stopAction: 'arreter',
   continueAction: 'continuer',
+  retryAction: 'reessayer',
   clickToInterrupt: 'cliquer pour interrompre',
-
-  // Tool Execution
-  toolsFailed: (count: number) => `${count} echoue${count > 1 ? 's' : ''}`,
-  toolsCount: (count: number) => `${count} outil${count > 1 ? 's' : ''}`,
-  reconnecting: (count: number, max: number) => `Reconnexion ${count}/${max}`,
-  escKey: 'esc',
 
   // Model Popover
   selectModel: 'Choisir le modele',
@@ -399,20 +338,6 @@ const fr: Translations = {
   clearKeysConfirm: 'Effacer toutes les cles API et revenir a l\'accueil ?',
   logoutClearKeys: 'Deconnexion (Effacer)',
   restoreSession: 'Restaurer la session',
-
-  // Approval
-  approve: 'Approuver',
-  deny: 'Refuser',
-
-  // Toast
-  dismiss: 'Fermer',
-
-  // Feedback
-  createdDesign: (type: string, count: number) => `Design ${type} cree (${count} elements)`,
-  designCreated: (count: number) => `Design cree (${count} elements)`,
-
-  // UI Controls
-  newMessages: 'Nouveaux messages',
 
   // Errors
   errors: {
@@ -437,12 +362,6 @@ const fr: Translations = {
       action: 'Fermer',
     },
   },
-
-  // Memory Suggestions
-  memorySuggestions: [
-    { icon: 'Palette', title: 'Design System', description: 'Afficher mes preferences et tokens de design system.' },
-    { icon: 'Brain', title: 'Mettre a jour', description: 'Memoriser cette preference pour les sessions futures.' },
-  ],
 
   // Prompt Suggestions
   promptSuggestions: [

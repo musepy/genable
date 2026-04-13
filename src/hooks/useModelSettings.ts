@@ -43,10 +43,18 @@ export function useModelSettings() {
 
   // --- Helpers ---
 
-  /** Update model name for the current provider */
+  /** Update model name for the current provider and persist immediately */
   const setModelName = useCallback((name: string) => {
     setModelNames(prev => ({ ...prev, [providerName]: name }))
-  }, [providerName])
+    // Persist to figma.clientStorage so the selection survives restart/rebuild
+    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
+      apiKey: apiKeys[providerName] || '',
+      apiKeys,
+      modelName: name,
+      providerName,
+      locale: localePref,
+    })
+  }, [providerName, apiKeys, localePref])
 
   /** Get model list synchronously — static fallback if empty */
   const getModels = useCallback((): { name: string, displayName: string }[] => {

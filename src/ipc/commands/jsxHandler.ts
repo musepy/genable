@@ -177,6 +177,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   }
 
   data.created = ctx.rollbackStack.length;
+  data.createdIds = ctx.rollbackStack;
 
   return { data, _stderr, _stages };
 }

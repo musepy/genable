@@ -202,14 +202,35 @@ export class ToolDispatcher {
           throw new Error(intercept.reason || 'Aborted by beforeToolExec hook');
         }
         if (intercept?.action === 'skip') {
+          const skipReason = intercept.reason || `Tool "${toolName}" was blocked.`;
+          const skipDurationMs = Date.now() - startedAt;
           toolResults.push({
             name: toolName,
             id: tc.id,
-            response: {
-              error: intercept.reason || `Tool "${toolName}" was blocked.`,
-            },
+            response: { error: skipReason },
             thought_signature: tc.thought_signature,
           });
+          // Emit events so UI/dev-bridge update status (not stuck on "running")
+          this.config.emitRuntimeEvent({
+            type: 'tool_log',
+            iteration: iteration + 1,
+            logEntry: {
+              callId: tc.id, toolName, args: tc.args,
+              startedAt, durationMs: skipDurationMs,
+              isDuplicate, isNoop: false, error: skipReason,
+            },
+          });
+          this.config.emitRuntimeEvent({
+            type: 'tool_result',
+            iteration: iteration + 1,
+            phase: 'execution',
+            toolResult: {
+              id: tc.id, name: toolName, durationMs: skipDurationMs,
+              error: skipReason, isDuplicate, isNoop: false,
+              raw: { error: skipReason },
+            },
+          });
+          rawResults.push({ name: toolName, id: tc.id, result: { error: skipReason }, durationMs: skipDurationMs, error: skipReason });
           continue;
         }
       }

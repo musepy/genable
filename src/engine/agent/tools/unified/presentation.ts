@@ -25,6 +25,11 @@ import {
 // null = pass through (no stripping). undefined/missing = pass through.
 // ---------------------------------------------------------------------------
 
+/** Fields to always strip from results (runtime-only, not for LLM). */
+const STRIP_FIELDS: Record<string, string[]> = {
+  jsx: ['createdIds'],  // internal: inspection tracker uses it, LLM doesn't need 69 IDs
+};
+
 const KEEP_FIELDS: Record<string, string[] | null> = {
   inspect: null,
   jsx:     null,
@@ -116,12 +121,21 @@ function stripForLLM(data: any, commandName: string): any {
   return stripFields(data, commandName);
 }
 
-/** Strip a single result's data according to KEEP_FIELDS. */
+/** Strip a single result's data according to KEEP_FIELDS and STRIP_FIELDS. */
 function stripFields(data: any, commandName: string): any {
   const keepList = KEEP_FIELDS[commandName];
 
   // null = pass through, undefined = unknown command → pass through
-  if (keepList === null || keepList === undefined) return data;
+  // But still apply STRIP_FIELDS if defined
+  if (keepList === null || keepList === undefined) {
+    const stripList = STRIP_FIELDS[commandName];
+    if (stripList) {
+      const copy = { ...data };
+      for (const field of stripList) delete copy[field];
+      return copy;
+    }
+    return data;
+  }
 
   const stripped: any = {};
   for (const field of keepList) {

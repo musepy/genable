@@ -20,6 +20,7 @@ import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
+import type { InspectionTracker } from './hooks/inspectionTracker';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
@@ -106,6 +107,7 @@ export class AgentRuntime {
   private pendingQuestion: { resolve: (answer: string) => void } | null = null;
   private chatPanelId: string | null = null;
   private turnCreatedNodes: Array<{ id: string; name?: string; type?: string }> = [];
+  private inspectionTracker: InspectionTracker | null = null;
   private designRootId: string | null = null;  // persists across turns for edit-turn links
   private runStats = {
     toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
@@ -150,8 +152,9 @@ export class AgentRuntime {
     if (options.hooks) {
       this.hookRegistry.registerAll(options.hooks);
     } else {
-      const { hooks, reset } = createBuiltinHooksWithState();
+      const { hooks, tracker, reset } = createBuiltinHooksWithState();
       this.hookRegistry.registerAll(hooks);
+      this.inspectionTracker = tracker;
       this.resetBuiltinState = reset;
     }
     this.hookRunner = new HookRunner(this.hookRegistry, (event) => this.emitRuntimeEvent(event as RuntimeEventPayload));
@@ -432,13 +435,22 @@ export class AgentRuntime {
     const data = rawResult?.data;
     if (!data || rawResult?.error) return;
 
-    // jsx tool: { data: { id: "1:2", name: "Card", type: "frame", ... } }
+    // jsx tool: { data: { id: "1:2", name: "Card", type: "frame", createdIds: ["1:2","1:3",...] } }
     if (data.id && typeof data.id === 'string') {
       this.turnCreatedNodes.push({
         id: data.id,
         name: data.name,
         type: data.type,
       });
+      // jsx-created nodes are born clean — no inspect needed before first mutation
+      // Mark ALL created nodes (root + all descendants), not just root
+      if (Array.isArray(data.createdIds)) {
+        for (const id of data.createdIds) {
+          this.inspectionTracker?.markInspected(id);
+        }
+      } else {
+        this.inspectionTracker?.markInspected(data.id);
+      }
     }
   }
 

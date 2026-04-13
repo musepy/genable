@@ -25,6 +25,10 @@ import { createConsecutiveFailureGuard } from './consecutiveFailureGuard';
 import { createPartialFailureGuard } from './partialFailureGuard';
 import { createBudgetGuard } from './budgetGuard';
 import { createStepWarningHook } from './stepWarningHook';
+import { createInspectionTracker, InspectionTracker } from './inspectionTracker';
+import { createInspectGateHook } from './inspectGateHook';
+import { createInspectStubHook } from './inspectStubHook';
+import { unifiedTools } from '../tools/unified';
 
 // ---------------------------------------------------------------------------
 // Shared state across hook invocations (scoped per createBuiltinHooks call)
@@ -85,6 +89,7 @@ function createLoopDetectionHook(state: BuiltinHookState): HookRegistration {
  */
 export function createBuiltinHooksWithState(): {
   hooks: HookRegistration[];
+  tracker: InspectionTracker;
   reset: () => void;
 } {
   const state: BuiltinHookState = {
@@ -96,6 +101,9 @@ export function createBuiltinHooksWithState(): {
   const partialFailureGuard = createPartialFailureGuard();
   const budgetGuard = createBudgetGuard();
   const stepWarning = createStepWarningHook();
+  const tracker = createInspectionTracker();
+  const inspectGate = createInspectGateHook(tracker, unifiedTools);
+  const inspectStub = createInspectStubHook(tracker);
 
   const hooks = [
     createLoopDetectionHook(state),
@@ -104,10 +112,13 @@ export function createBuiltinHooksWithState(): {
     ...partialFailureGuard.hooks,
     ...budgetGuard.hooks,
     ...stepWarning.hooks,
+    ...inspectGate.hooks,
+    ...inspectStub.hooks,
   ];
 
   return {
     hooks,
+    tracker,
     reset: () => {
       state.loopDetector.reset();
       emptyArgsGuard.reset();
@@ -115,6 +126,9 @@ export function createBuiltinHooksWithState(): {
       partialFailureGuard.reset();
       budgetGuard.reset();
       stepWarning.reset();
+      inspectGate.reset();
+      inspectStub.reset();
+      tracker.reset();
     },
   };
 }

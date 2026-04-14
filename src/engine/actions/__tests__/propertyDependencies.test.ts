@@ -21,10 +21,25 @@ describe('validateDependencies', () => {
       expect(warnings).toHaveLength(0);
     });
 
-    it('auto-fixes: alignItems without layoutMode → injects VERTICAL', () => {
+    it('auto-fixes: align-only deps → injects HORIZONTAL (CSS row flow)', () => {
       const { fixes } = validateDependencies({
         primaryAxisAlignItems: 'CENTER',
         counterAxisAlignItems: 'CENTER',
+      });
+      expect(fixes).toEqual({ layoutMode: 'HORIZONTAL' });
+    });
+
+    it('auto-fixes: counterAxisAlignItems alone → injects HORIZONTAL', () => {
+      const { fixes } = validateDependencies({
+        counterAxisAlignItems: 'CENTER',
+      });
+      expect(fixes).toEqual({ layoutMode: 'HORIZONTAL' });
+    });
+
+    it('auto-fixes: align + padding (mixed) → injects VERTICAL (non-align wins)', () => {
+      const { fixes } = validateDependencies({
+        counterAxisAlignItems: 'CENTER',
+        paddingLeft: 16,
       });
       expect(fixes).toEqual({ layoutMode: 'VERTICAL' });
     });

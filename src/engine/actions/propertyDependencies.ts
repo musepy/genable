@@ -25,6 +25,13 @@ type Dependent =
   | string
   | { readonly property: string; readonly whenValue: string };
 
+/**
+ * Inject value — either a literal or a resolver that sees which dependents
+ * actually triggered the gate miss. Used to infer direction (HORIZONTAL vs
+ * VERTICAL) from what the agent wrote.
+ */
+type Injector = unknown | ((triggered: ReadonlySet<string>) => unknown);
+
 interface DependencyRule {
   /** The gate property that must satisfy `condition` */
   readonly gate: string;
@@ -32,8 +39,8 @@ interface DependencyRule {
   readonly scope: 'self' | 'parent';
   /** Condition the gate must satisfy */
   readonly condition: Condition;
-  /** Value to auto-inject when gate is absent from both ops and node. Undefined = warn only. */
-  readonly inject?: unknown;
+  /** Value (or resolver) to auto-inject when gate is absent from both ops and node. Undefined = warn only. */
+  readonly inject?: Injector;
   /** Properties that require this gate */
   readonly dependents: readonly Dependent[];
 }
@@ -52,11 +59,24 @@ interface ExecutionOrderRule {
 export const DEPENDENCY_RULES: readonly DependencyRule[] = [
   // ── Auto Layout (AutoLayoutMixin) ──────────────────────────────────────
   // All auto-layout properties require layoutMode to be active.
+  // Inject direction inferred from triggered dependents:
+  //   align-only (primary/counter) → HORIZONTAL (CSS row flow)
+  //   anything else (padding/gap/sizing) → VERTICAL (Figma default)
+  // Rationale: `align="center"` with a hard-coded VERTICAL default centered
+  // only horizontally. HORIZONTAL matches the "center in a row" intent when
+  // alignment is the only signal; non-align deps carry no direction hint and
+  // keep the Figma-side default.
   {
     gate: 'layoutMode',
     scope: 'self',
     condition: { op: '!=', value: 'NONE' },
-    inject: 'VERTICAL',
+    inject: (triggered: ReadonlySet<string>) => {
+      const alignDeps = new Set(['primaryAxisAlignItems', 'counterAxisAlignItems']);
+      for (const d of triggered) {
+        if (!alignDeps.has(d)) return 'VERTICAL';
+      }
+      return 'HORIZONTAL';
+    },
     dependents: [
       'paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom',
       'itemSpacing',
@@ -273,6 +293,17 @@ export function validateDependencies(
   const warnings: string[] = [];
 
   for (const rule of DEPENDENCY_RULES) {
+    // Pre-pass: collect triggered dependents so inject resolvers can infer
+    // direction from the full set (not a single dep at a time).
+    const triggered = new Set<string>();
+    for (const dep of rule.dependents) {
+      const depName = typeof dep === 'string' ? dep : dep.property;
+      const depValue = props[depName];
+      if (depValue === undefined) continue;
+      if (typeof dep !== 'string' && depValue !== dep.whenValue) continue;
+      triggered.add(depName);
+    }
+
     for (const dep of rule.dependents) {
       const depName = typeof dep === 'string' ? dep : dep.property;
       const depValue = props[depName];
@@ -294,7 +325,9 @@ export function validateDependencies(
           // Auto-fix: inject the correct gate value (e.g. layoutMode:'VERTICAL' when align is set
           // but no layout was specified — the node's default 'NONE' should not block injection).
           if (rule.inject !== undefined) {
-            fixes[rule.gate] = rule.inject;
+            fixes[rule.gate] = typeof rule.inject === 'function'
+              ? (rule.inject as (t: ReadonlySet<string>) => unknown)(triggered)
+              : rule.inject;
           } else {
             warnings.push(`'${depName}' requires ${formatCondition(rule.gate, rule.condition)}`);
           }

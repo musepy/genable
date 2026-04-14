@@ -35,9 +35,9 @@ describe('expandShorthands', () => {
   // ── Alignment ──────────────────────────────────────────────────────────
 
   describe('align', () => {
-    it('"center" → cross-axis only (CSS align-items mental model)', () => {
+    it('"center" → both axes CENTER (LLM mental model)', () => {
       const result = expandShorthands({ align: 'center' });
-      expect(result.primaryAxisAlignItems).toBeUndefined();
+      expect(result.primaryAxisAlignItems).toBe('CENTER');
       expect(result.counterAxisAlignItems).toBe('CENTER');
     });
     it('"center center" → both axes CENTER', () => {
@@ -52,6 +52,11 @@ describe('expandShorthands', () => {
     });
     it('explicit counterAxisAlignItems overrides align shorthand', () => {
       const result = expandShorthands({ align: 'center', counterAxisAlignItems: 'MIN' });
+      expect(result.counterAxisAlignItems).toBe('MIN');
+    });
+    it('single-value "start" applies to both axes', () => {
+      const result = expandShorthands({ align: 'start' });
+      expect(result.primaryAxisAlignItems).toBe('MIN');
       expect(result.counterAxisAlignItems).toBe('MIN');
     });
   });
@@ -340,12 +345,11 @@ describe('expandShorthands', () => {
       paddingBottom: 12,
       paddingLeft: 16,
       itemSpacing: 8,
+      primaryAxisAlignItems: 'CENTER',
       counterAxisAlignItems: 'CENTER',
       cornerRadius: 12,
       fills: ['#FFFFFF'],
     });
-    // align="center" single value → cross-axis only, primaryAxis untouched
-    expect(result.primaryAxisAlignItems).toBeUndefined();
     // No shorthand keys remain
     expect(result.layout).toBeUndefined();
     expect(result.padding).toBeUndefined();

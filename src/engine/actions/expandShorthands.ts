@@ -94,10 +94,13 @@ const EXPANDERS: Record<string, Expander> = {
   align: (v) => {
     const parts = String(v).trim().split(/\s+/);
     if (parts.length === 1) {
-      // Single value: cross-axis only (matches CSS `align-items` mental model).
-      // LLMs almost always mean "vertically center in a row" when writing align="center".
-      // Use justify="center" for main-axis, or align="center center" for both.
-      return { counterAxisAlignItems: mapAlign(parts[0]) };
+      // Single value sets BOTH axes. LLMs write align="center" meaning
+      // "center it", not CSS align-items cross-only semantics. Dropping CSS
+      // parity here eliminates axis ambiguity (the injected layoutMode
+      // direction no longer changes the visible result).
+      // Use alignItems=/justifyContent= for explicit single-axis control.
+      const mapped = mapAlign(parts[0]);
+      return { primaryAxisAlignItems: mapped, counterAxisAlignItems: mapped };
     }
     return { primaryAxisAlignItems: mapAlign(parts[0]), counterAxisAlignItems: mapAlign(parts[1]) };
   },

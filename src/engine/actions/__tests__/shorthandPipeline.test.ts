@@ -61,9 +61,9 @@ describe('shorthand pipeline (coerceValue → expandShorthands)', () => {
   // ── Alignment ──────────────────────────────────────────────────────────
 
   describe('alignment shorthands', () => {
-    it('align:center → cross-axis only (CSS align-items mental model)', () => {
+    it('align:center → both axes CENTER (LLM mental model)', () => {
       const r = pipeline({ align: 'center' });
-      expect(r.primaryAxisAlignItems).toBeUndefined();
+      expect(r.primaryAxisAlignItems).toBe('CENTER');
       expect(r.counterAxisAlignItems).toBe('CENTER');
     });
 

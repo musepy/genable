@@ -23,7 +23,7 @@
   "devDependencies": {
     "@create-figma-plugin/build": "^4.0.3",
     "@create-figma-plugin/tsconfig": "^4.0.3",
-    "@figma/plugin-typings": "1.109.0",
+    "@figma/plugin-typings": "^1.124.0",
     "@preact/preset-vite": "^2.9.0",
     "@types/js-yaml": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "^8.52.0",

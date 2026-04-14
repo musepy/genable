@@ -84,6 +84,14 @@ const ROLE_MAP: Record<string, Role> = {
   counterAxisAlignContent: 'layout',
   layoutWrap: 'layout', layoutGrow: 'layout', layoutAlign: 'layout',
   layoutPositioning: 'layout', itemReverseZIndex: 'layout',
+  // Grid container (FRAME with grid layout — added in plugin-typings ~1.110+)
+  gridRowCount: 'layout', gridColumnCount: 'layout',
+  gridRowGap: 'layout', gridColumnGap: 'layout',
+  gridRowSizes: 'layout', gridColumnSizes: 'layout',
+  // Grid child (any node inside a grid container)
+  gridRowAnchorIndex: 'layout', gridColumnAnchorIndex: 'layout',
+  gridRowSpan: 'layout', gridColumnSpan: 'layout',
+  gridChildHorizontalAlign: 'layout', gridChildVerticalAlign: 'layout',
 
   // ── Fill ──
   fills: 'fill',
@@ -94,6 +102,8 @@ const ROLE_MAP: Record<string, Role> = {
   strokeTopWeight: 'stroke', strokeRightWeight: 'stroke',
   strokeBottomWeight: 'stroke', strokeLeftWeight: 'stroke',
   strokesIncludedInLayout: 'stroke',
+  // Variable-width / complex strokes (added in plugin-typings ~1.115+)
+  variableWidthStrokeProperties: 'stroke', complexStrokeProperties: 'stroke',
   cornerRadius: 'stroke', cornerSmoothing: 'stroke',
   topLeftRadius: 'stroke', topRightRadius: 'stroke',
   bottomLeftRadius: 'stroke', bottomRightRadius: 'stroke',
@@ -176,6 +186,9 @@ interface ExtractedProp {
   role: Role;
 }
 
+// Accumulated across all node types — flushed at end of generate()
+const unclassified: Array<{ key: string; nodeType: string }> = [];
+
 function classifyType(typeStr: string): string {
   const clean = typeStr
     .replace(/\s*\|\s*PluginAPI\['mixed'\]/g, '')
@@ -190,7 +203,7 @@ function classifyType(typeStr: string): string {
   return 'object';
 }
 
-function extractProperties(checker: ts.TypeChecker, interfaceName: string, sourceFile: ts.SourceFile): ExtractedProp[] {
+function extractProperties(checker: ts.TypeChecker, interfaceName: string, sourceFile: ts.SourceFile, nodeType: string): ExtractedProp[] {
   const props: ExtractedProp[] = [];
   const seen = new Set<string>();
 
@@ -236,7 +249,7 @@ function extractProperties(checker: ts.TypeChecker, interfaceName: string, sourc
     const valueType = classifyType(typeStr);
     const role = ROLE_MAP[name];
     if (!role) {
-      console.warn(`    [unclassified] ${name} — defaulting to 'appearance'`);
+      unclassified.push({ key: name, nodeType });
     }
 
     props.push({ key: name, valueType, readonly: isReadonly, role: role || 'appearance' });
@@ -245,8 +258,8 @@ function extractProperties(checker: ts.TypeChecker, interfaceName: string, sourc
   return props;
 }
 
-function generate(): void {
-  console.log('Parsing @figma/plugin-typings...');
+function generate(check: boolean): void {
+  console.log(`Parsing @figma/plugin-typings... (${check ? 'check' : 'write'} mode)`);
 
   const program = ts.createProgram([TYPINGS_PATH], {
     target: ts.ScriptTarget.ESNext,
@@ -265,10 +278,23 @@ function generate(): void {
 
   for (const [nodeType, interfaceName] of Object.entries(TARGET_NODES)) {
     console.log(`  ${nodeType} → ${interfaceName}`);
-    const props = extractProperties(checker, interfaceName, sourceFile);
+    const props = extractProperties(checker, interfaceName, sourceFile, nodeType);
     registry[nodeType] = props;
-    const visual = props.filter(p => p.role === 'visual').length;
-    console.log(`    ${props.length} total, ${visual} visual`);
+    console.log(`    ${props.length} total`);
+  }
+
+  // ── Fail fast on unclassified — must be fixed in ROLE_MAP before writing ──
+  if (unclassified.length > 0) {
+    const byKey = new Map<string, string[]>();
+    for (const { key, nodeType } of unclassified) {
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key)!.push(nodeType);
+    }
+    console.error(`\n❌ ${byKey.size} unclassified propert${byKey.size === 1 ? 'y' : 'ies'} — add to ROLE_MAP in tools/extract-figma-props.ts:`);
+    for (const [key, nodeTypes] of byKey) {
+      console.error(`   ${key}  (${nodeTypes.join(', ')})`);
+    }
+    process.exit(1);
   }
 
   // ── Generate Section 1 only ──
@@ -326,8 +352,18 @@ function generate(): void {
   const preserved = existing.substring(section2Start);
   const output = header + section1Lines.join('\n') + '\n\n' + preserved;
 
-  fs.writeFileSync(OUTPUT_PATH, output);
-  console.log(`\nWritten: ${OUTPUT_PATH}`);
+  if (check) {
+    if (existing !== output) {
+      console.error('\n❌ figma-property-registry.ts is out of sync with @figma/plugin-typings.');
+      console.error('   Run: npx tsx tools/extract-figma-props.ts');
+      console.error('   Review the diff, then commit the regenerated file.');
+      process.exit(1);
+    }
+    console.log(`\n✅ figma-property-registry.ts is in sync.`);
+  } else {
+    fs.writeFileSync(OUTPUT_PATH, output);
+    console.log(`\nWritten: ${OUTPUT_PATH}`);
+  }
 
   // Summary
   const roleCounts: Record<string, number> = {};
@@ -345,4 +381,5 @@ function generate(): void {
   }
 }
 
-generate();
+const isCheck = process.argv.includes('--check');
+generate(isCheck);

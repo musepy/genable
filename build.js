@@ -84,6 +84,9 @@ if (isWatch) {
     execSync(`node scripts/generate-knowledge-index.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-prompt-catalog.js`, { stdio: 'inherit' });
 
+    console.log(`🔨 Verifying Figma property registry sync...`);
+    execSync(`npx tsx tools/extract-figma-props.ts --check`, { stdio: 'inherit' });
+
     console.log(`🔨 Running Figma Plugin Build...`);
     execSync(`npx ${buildArgs.join(' ')}`, { stdio: 'inherit' });
     injectMetaData();

@@ -494,8 +494,15 @@ function applyMarginToGap(
   }
 }
 
+const LAYOUT_KEYWORD_TO_MODE: Record<string, string> = {
+  row: 'HORIZONTAL', column: 'VERTICAL', horizontal: 'HORIZONTAL',
+  vertical: 'VERTICAL', grid: 'GRID', none: 'NONE',
+};
+
 /**
  * Inject layout defaults: frames with layout default to hug sizing.
+ * GRID containers can't HUG while any track is FLEX (the default), so
+ * grid containers default to a fixed size instead of HUG.
  */
 function applyLayoutDefaults(
   nodeType: string,
@@ -506,21 +513,30 @@ function applyLayoutDefaults(
   const layoutTypes = new Set([
     'FRAME', 'SECTION', 'COMPONENT', 'IMAGE',
   ]);
-  if (hasLayout && layoutTypes.has(nodeType)) {
-    if (
-      props.h === undefined && props.height === undefined &&
-      props.sizingV === undefined &&
-      props.layoutSizingVertical === undefined
-    ) {
-      props.h = 'hug';
-    }
-    if (
-      props.w === undefined && props.width === undefined &&
-      props.sizingH === undefined &&
-      props.layoutSizingHorizontal === undefined
-    ) {
-      props.w = 'hug';
-    }
+  if (!hasLayout || !layoutTypes.has(nodeType)) return;
+
+  const layoutMode: string | undefined =
+    props.layoutMode ??
+    (typeof props.layout === 'string'
+      ? LAYOUT_KEYWORD_TO_MODE[props.layout.toLowerCase().replace(/[-_]/g, '')] ?? props.layout.toUpperCase()
+      : undefined);
+  const isGrid = layoutMode === 'GRID';
+  const defaultH: string | number = isGrid ? 400 : 'hug';
+  const defaultV: string | number = isGrid ? 300 : 'hug';
+
+  if (
+    props.h === undefined && props.height === undefined &&
+    props.sizingV === undefined &&
+    props.layoutSizingVertical === undefined
+  ) {
+    props.h = defaultV;
+  }
+  if (
+    props.w === undefined && props.width === undefined &&
+    props.sizingH === undefined &&
+    props.layoutSizingHorizontal === undefined
+  ) {
+    props.w = defaultH;
   }
 }
 

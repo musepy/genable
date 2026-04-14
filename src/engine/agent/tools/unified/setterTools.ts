@@ -96,18 +96,25 @@ export const setLayoutDefinition: ToolDefinition = {
   set_layout({node: "1:2", gap: 16, p: 24})
   set_layout({node: "1:2", layout: "row", justify: "space-between"})
   set_layout({node: "1:2", layout: "column", gap: 8, p: "16 24", align: "center"})
+  set_layout({node: "1:2", layout: "grid", cols: 3, rows: 2, gap: 16})
 
-Controls spacing, padding, direction, and alignment of a container's children.`,
+Controls spacing, padding, direction, and alignment of a container's children.
+Grid: use layout:"grid" with cols/rows + gap (or rowGap/colGap for asymmetric).
+Children fill the grid in insertion order.`,
   parameters: {
     type: 'object',
     properties: {
       node:    { type: 'string', description: 'Node ID' },
-      layout:  { type: 'string', description: 'row | column' },
-      gap:     { type: 'number', description: 'Spacing between children (px)' },
+      layout:  { type: 'string', description: 'row | column | grid' },
+      gap:     { type: 'number', description: 'Spacing between children (px). On grid sets both row+column gap.' },
+      rowGap:  { type: 'number', description: 'Grid row gap (px, grid only)' },
+      colGap:  { type: 'number', description: 'Grid column gap (px, grid only)' },
+      cols:    { type: 'number', description: 'Grid column count (required when layout="grid")' },
+      rows:    { type: 'number', description: 'Grid row count (required when layout="grid")' },
       p:       { type: 'number', description: 'Padding — number, "v h", or "t r b l"' },
-      justify: { type: 'string', description: 'Main axis: center | space-between | start | end' },
-      align:   { type: 'string', description: 'Cross axis: center | start | end | baseline' },
-      wrap:    { type: 'string', description: 'wrap | nowrap' },
+      justify: { type: 'string', description: 'Main axis (flex only): center | space-between | start | end' },
+      align:   { type: 'string', description: 'Cross axis (flex only): center | start | end | baseline' },
+      wrap:    { type: 'string', description: 'wrap | nowrap (flex only)' },
     },
     required: ['node'],
   },

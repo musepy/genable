@@ -10,6 +10,9 @@ export interface NormalizeSizingContext {
   hasAutoLayout: boolean;
   parentHasAutoLayout: boolean;
   isRoot: boolean;
+  /** True when this node's layoutMode === 'GRID'. Grid containers cannot HUG
+   *  while any track is FLEX (the default), so HUG demotes to FIXED. */
+  isGridContainer?: boolean;
 }
 
 /** Check if a node is absolutely positioned within an auto-layout parent */
@@ -52,6 +55,13 @@ export function normalizeSizing(
 
   // Rule 4: Double-check after FILL→HUG demotion
   if (!ctx.hasAutoLayout) {
+    if (h === 'HUG') h = 'FIXED';
+    if (v === 'HUG') v = 'FIXED';
+  }
+
+  // Rule 5: GRID containers can't HUG with FLEX tracks (the default). Demote
+  // to FIXED so resize() on the container produces a deterministic size.
+  if (ctx.isGridContainer) {
     if (h === 'HUG') h = 'FIXED';
     if (v === 'HUG') v = 'FIXED';
   }

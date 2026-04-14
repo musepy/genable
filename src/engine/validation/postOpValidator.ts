@@ -234,8 +234,9 @@ function validateFrameOverflow(frame: FrameNode): ValidationViolation[] {
   if (!isFixedH && !isFixedV) return violations;
   if (!frame.children || frame.children.length === 0) return violations;
 
-  // For auto-layout frames, check if children total exceeds frame
-  if (frame.layoutMode && frame.layoutMode !== 'NONE') {
+  // For auto-layout frames, check if children total exceeds frame.
+  // Skip GRID — overflow math is rows×columns, not linear stacking.
+  if (frame.layoutMode && frame.layoutMode !== 'NONE' && frame.layoutMode !== 'GRID') {
     const isHorizontal = frame.layoutMode === 'HORIZONTAL';
     let childrenExtent = 0;
     const gap = (frame as any).itemSpacing || 0;

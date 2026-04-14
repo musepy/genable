@@ -16,7 +16,12 @@ import { effectSpec } from '../../domain/property-specs';
 
 const LAYOUT_MAP: Record<string, string> = {
   row: 'HORIZONTAL', column: 'VERTICAL', horizontal: 'HORIZONTAL',
-  vertical: 'VERTICAL', none: 'NONE',
+  vertical: 'VERTICAL', grid: 'GRID', none: 'NONE',
+};
+
+const GRID_ALIGN_MAP: Record<string, string> = {
+  start: 'MIN', end: 'MAX', center: 'CENTER', auto: 'AUTO',
+  min: 'MIN', max: 'MAX',
 };
 
 const ALIGN_MAP: Record<string, string> = {
@@ -46,6 +51,18 @@ const norm = (s: string) => s.toLowerCase().replace(/[-_]/g, '');
 
 function mapAlign(v: string): string {
   return ALIGN_MAP[norm(v)] ?? v.toUpperCase();
+}
+
+function mapGridAlign(v: string): string {
+  return GRID_ALIGN_MAP[norm(String(v))] ?? String(v).toUpperCase();
+}
+
+function resolveLayoutMode(all: Record<string, any>): string | undefined {
+  if (typeof all.layoutMode === 'string') return all.layoutMode;
+  if (typeof all.layout === 'string') {
+    return LAYOUT_MAP[norm(all.layout)] ?? all.layout.toUpperCase();
+  }
+  return undefined;
 }
 
 function expandPaddingParts(parts: number[]): Record<string, number> {
@@ -132,9 +149,30 @@ const EXPANDERS: Record<string, Expander> = {
     return {};
   },
 
-  gap: (v) => isVarRef(v) ? { itemSpacing: v } : { itemSpacing: Number(v) },
+  gap: (v, all) => {
+    const val = isVarRef(v) ? v : Number(v);
+    // GRID uses gridRowGap/gridColumnGap, not itemSpacing.
+    if (resolveLayoutMode(all) === 'GRID') {
+      return { gridRowGap: val, gridColumnGap: val };
+    }
+    return { itemSpacing: val };
+  },
   crossGap: (v) => isVarRef(v) ? { counterAxisSpacing: v } : { counterAxisSpacing: Number(v) },
   crossAxisGap: (v) => isVarRef(v) ? { counterAxisSpacing: v } : { counterAxisSpacing: Number(v) },
+
+  // ── Grid container (layoutMode=GRID) ──────────────────────────────────
+  cols: (v) => ({ gridColumnCount: Number(v) }),
+  rows: (v) => ({ gridRowCount: Number(v) }),
+  rowGap: (v) => ({ gridRowGap: isVarRef(v) ? v : Number(v) }),
+  colGap: (v) => ({ gridColumnGap: isVarRef(v) ? v : Number(v) }),
+  columnGap: (v) => ({ gridColumnGap: isVarRef(v) ? v : Number(v) }),
+
+  // ── Grid child (parent layoutMode=GRID) ───────────────────────────────
+  rowSpan: (v) => ({ gridRowSpan: Number(v) }),
+  colSpan: (v) => ({ gridColumnSpan: Number(v) }),
+  columnSpan: (v) => ({ gridColumnSpan: Number(v) }),
+  alignX: (v) => ({ gridChildHorizontalAlign: mapGridAlign(String(v)) }),
+  alignY: (v) => ({ gridChildVerticalAlign: mapGridAlign(String(v)) }),
 
   // ── Sizing ─────────────────────────────────────────────────────────────
   width: (v) => {

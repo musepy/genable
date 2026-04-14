@@ -87,6 +87,7 @@ export const NODE_TYPES = {
 export const LAYOUT_MODES = {
   HORIZONTAL: 'HORIZONTAL',
   VERTICAL: 'VERTICAL',
+  GRID: 'GRID',
   NONE: 'NONE',
 } as const;
 

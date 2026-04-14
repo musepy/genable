@@ -57,6 +57,36 @@ interface ExecutionOrderRule {
 // Self-scope gates can be auto-fixed via `inject`; parent-scope gates can only warn.
 
 export const DEPENDENCY_RULES: readonly DependencyRule[] = [
+  // ── Grid container (GridLayoutMixin) ───────────────────────────────────
+  // Grid-only properties require layoutMode='GRID'. Placed BEFORE the generic
+  // layoutMode!=NONE rule so GRID wins when the agent mixes grid-specific
+  // props with generic auto-layout props — otherwise the generic rule would
+  // inject VERTICAL first and the grid rule would then just warn.
+  {
+    gate: 'layoutMode',
+    scope: 'self',
+    condition: { op: '==', value: 'GRID' },
+    inject: 'GRID',
+    dependents: [
+      'gridRowCount', 'gridColumnCount',
+      'gridRowGap', 'gridColumnGap',
+      'gridRowSizes', 'gridColumnSizes',
+    ],
+  },
+
+  // ── Grid child (GridChildrenMixin) ─────────────────────────────────────
+  // Grid child properties require parent layoutMode='GRID'. Parent-scope —
+  // warn only, can't auto-fix from the child's position.
+  {
+    gate: 'layoutMode',
+    scope: 'parent',
+    condition: { op: '==', value: 'GRID' },
+    dependents: [
+      'gridRowSpan', 'gridColumnSpan',
+      'gridChildHorizontalAlign', 'gridChildVerticalAlign',
+    ],
+  },
+
   // ── Auto Layout (AutoLayoutMixin) ──────────────────────────────────────
   // All auto-layout properties require layoutMode to be active.
   // Inject direction inferred from triggered dependents:

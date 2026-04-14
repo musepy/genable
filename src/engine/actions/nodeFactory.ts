@@ -693,12 +693,13 @@ export function normalizeSizingInProps(
   const warnings: Warning[] = [];
 
   const nodeLayoutMode = props.layoutMode ?? (targetNode as any)?.layoutMode;
-  const hasAutoLayout = nodeLayoutMode === 'HORIZONTAL' || nodeLayoutMode === 'VERTICAL';
+  const hasAutoLayout = nodeLayoutMode === 'HORIZONTAL' || nodeLayoutMode === 'VERTICAL' || nodeLayoutMode === 'GRID';
+  const isGridContainer = nodeLayoutMode === 'GRID';
   const parentLayoutMode =
     parentNode && 'layoutMode' in (parentNode as any)
       ? (parentNode as any).layoutMode
       : undefined;
-  const parentHasAutoLayout = parentLayoutMode === 'HORIZONTAL' || parentLayoutMode === 'VERTICAL';
+  const parentHasAutoLayout = parentLayoutMode === 'HORIZONTAL' || parentLayoutMode === 'VERTICAL' || parentLayoutMode === 'GRID';
   const isRoot = !parentNode || (parentNode as any).type === 'PAGE';
 
   const toSizingMode = (v: unknown): SizingMode =>
@@ -715,6 +716,7 @@ export function normalizeSizingInProps(
     hasAutoLayout,
     parentHasAutoLayout,
     isRoot,
+    isGridContainer,
   });
 
   if (props.layoutSizingHorizontal !== undefined) props.layoutSizingHorizontal = h;

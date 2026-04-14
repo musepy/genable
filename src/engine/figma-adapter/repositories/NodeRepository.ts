@@ -12,7 +12,7 @@
 import { findNodeByIdAsync } from './nodeRegistry';
 
 export interface NodeLayoutConfig {
-  layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+  layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID';
   layoutPositioning?: 'AUTO' | 'ABSOLUTE' | string;
   sizing?: {
     horizontal?: 'FIXED' | 'HUG' | 'FILL';

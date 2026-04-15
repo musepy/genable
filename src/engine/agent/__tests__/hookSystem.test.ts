@@ -233,9 +233,13 @@ describe('createBuiltinHooks', () => {
 describe('createBuiltinHooksWithState', () => {
   it('should provide a reset function', () => {
     const { hooks, reset } = createBuiltinHooksWithState();
-    // 1 loopDetection + 6 guard hooks
-    // (emptyArgsCounter, emptyArgsSkip, consecutiveFailure, partialFailure, budget, stepWarning)
-    expect(hooks).toHaveLength(7);
+    // 1 loopDetection
+    // + emptyArgsGuard(2: counter + skip)
+    // + consecutiveFailure(1) + partialFailure(1) + budget(1) + stepWarning(1)
+    // + inspectGate(2: gate + dirty) + inspectStub(1)
+    // + toolPlanTriggers(5: jsxMarkupSize, jsxNodeCount, editUnknownId, knownIdObserver, deleteRebuild)
+    // = 15
+    expect(hooks).toHaveLength(15);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();

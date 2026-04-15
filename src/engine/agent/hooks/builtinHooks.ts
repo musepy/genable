@@ -29,6 +29,8 @@ import { createInspectionTracker, InspectionTracker } from './inspectionTracker'
 import { createInspectGateHook } from './inspectGateHook';
 import { createInspectStubHook } from './inspectStubHook';
 import { unifiedTools } from '../tools/unified';
+import { createTurnState } from '../triggers/turnState';
+import { createToolPlanTriggers } from '../triggers/toolPlanTriggers';
 
 // ---------------------------------------------------------------------------
 // Shared state across hook invocations (scoped per createBuiltinHooks call)
@@ -104,6 +106,8 @@ export function createBuiltinHooksWithState(): {
   const tracker = createInspectionTracker();
   const inspectGate = createInspectGateHook(tracker, unifiedTools);
   const inspectStub = createInspectStubHook(tracker);
+  const turnState = createTurnState();
+  const toolPlanTriggers = createToolPlanTriggers(turnState);
 
   const hooks = [
     createLoopDetectionHook(state),
@@ -114,6 +118,7 @@ export function createBuiltinHooksWithState(): {
     ...stepWarning.hooks,
     ...inspectGate.hooks,
     ...inspectStub.hooks,
+    ...toolPlanTriggers.hooks,
   ];
 
   return {
@@ -129,6 +134,7 @@ export function createBuiltinHooksWithState(): {
       inspectGate.reset();
       inspectStub.reset();
       tracker.reset();
+      turnState.reset();
     },
   };
 }

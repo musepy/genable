@@ -154,6 +154,13 @@ export class AgentOrchestrator {
       });
 
       this.options.onComplete?.({}, finalResponse);
+      this.emitFallbackRuntimeEvent({
+        type: 'turn_end',
+        phase: 'idle',
+        iteration: 0,
+        totalIterations: 0,
+        summary: finalResponse || '',
+      });
       await this.maybeDebrief(this.activeAgent, 'completed');
 
     } catch (error: any) {

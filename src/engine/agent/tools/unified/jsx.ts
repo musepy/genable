@@ -14,8 +14,9 @@ export const jsxDefinition: ToolDefinition = {
   mutates: true,
   description: `Create design trees with nested JSX markup — nesting IS the hierarchy.
 
-Example:
-  jsx({markup: "<frame name='Card' w={400} layout='column' p={24} bg='#FFF' corner={12}>\\n  <frame name='Header' layout='row' gap={12} w='fill'>\\n    <text name='Title' size={18} weight='Bold' fill='#111'>John Doe</text>\\n  </frame>\\n  <text name='Body' size={14} fill='#666' w='fill'>Description</text>\\n</frame>"})
+Examples:
+  jsx({markup: "<frame name='Card' layout='col' padding={16} fill='#FFFFFF' w='fill' />"})
+  jsx({markup: "<frame name='Section' layout='col' gap={8}><text name='Heading'>Title</text></frame>"})
 
 Elements: frame, text, rect, ellipse, line, icon, image, instance, component, group, section, vector
 Attributes: same shorthands (w, h, bg, layout, gap, p, corner, fill, size, weight, stroke, shadow)

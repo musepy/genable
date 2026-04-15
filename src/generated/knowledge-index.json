@@ -288,6 +288,20 @@
     ]
   },
   {
+    "id": "help:restructure-without-rebuild",
+    "name": "Restructuring Without Delete+Rebuild",
+    "description": "Use when you want to change child order, move a node, swap a variant, or fix properties on an existing subtree — alternatives to delete_node+jsx.",
+    "category": "help",
+    "tags": [
+      "move_node",
+      "replace_props",
+      "edit",
+      "delete_node",
+      "restructure",
+      "anti-pattern"
+    ]
+  },
+  {
     "id": "help:sandbox-sop",
     "name": "Sandbox Rules and Component SOPs",
     "description": "Use when using the js tool, converting frames to components/instances, hitting Blocked/parenting-cycle errors, or planning multi-step component-to-instance replacement workflows.",

@@ -67,6 +67,7 @@ Runtime enforces the rules below as machine-observable state changes. It may pre
 | Same inspect target twice | Auto-served from cache | Free re-inspect — use it |
 | set_text characters > 500 | Soft hint injected | Verify wordBreak on parent |
 | delete_node targets a root design | Rejected | Use ask_user to confirm |
+| Want to restructure a subtree (reorder children, move node, change a variant) | Runtime hint | Use `move_node`, `replace_props`, or `edit` — never `delete_node` + `jsx` for the same logical element |
 | knowledge id not found | Suggestions returned | Re-query with a closer id |
 | Iteration count > 20 in one turn | Turn aborted | Plan tighter; use subtask |
 

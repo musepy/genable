@@ -31,7 +31,7 @@ export const moveNodeDefinition: ToolDefinition = {
   name: 'move_node',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Move, rename, or reorder a node.
+  description: `Relocate a node to a different parent or reorder within siblings. Use when: (a) changing child order within a container, (b) moving a subtree into a different parent without recreating it, (c) fixing a placement mistake after jsx. DO NOT delete+jsx to restructure — move_node preserves IDs, bound variables, and component instances.
 
 Examples:
   move_node({node: "1:3", name: "NewTitle"})

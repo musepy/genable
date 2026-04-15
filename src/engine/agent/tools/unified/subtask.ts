@@ -15,7 +15,7 @@ export const subtaskDefinition: ToolDefinition = {
 Available agent types:
 ${getAgentTypeDescriptions()}
 
-Use when a design has 3+ independent sections or when you need specialized behavior (audit, token ops). Do NOT use for simple operations (1-2 tool calls).`,
+Use when the prompt names 3+ distinct regions (e.g. header, sidebar, main) that share no nodes, or when you need specialized behavior (audit, token ops). Do NOT use for simple operations (1-2 tool calls).`,
   parameters: {
     type: 'object',
     properties: {

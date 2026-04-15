@@ -11,9 +11,7 @@ import type { ToolDefinition } from '../types';
 export const describeDefinition: ToolDefinition = {
   name: 'describe',
   executionStrategy: 'parallel',
-  description: `Validate a design subtree — semantic description, role detection, and lint rules.
-
-Call after jsx() or edit() to check for layout conflicts, overflow, missing properties, and structural issues.
+  description: `Validate a design subtree — semantic description, role detection, and lint rules. Checks for layout conflicts, overflow, missing properties, and structural issues.
 
 Parameters:
   node: Node ID to describe (e.g. "100:5"). Required.

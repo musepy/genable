@@ -14,7 +14,7 @@ export const jsToolDefinition: ToolDefinition = {
   mutates: true,
   description: `Execute JavaScript in the Figma plugin runtime — full figma.* API access.
 
-Use as escape hatch for operations not covered by other tools.
+Use as escape hatch for operations not covered by other tools. NOT for setting fills, text, layout, or stroke — use the dedicated setters (set_fill, set_text, set_layout, set_stroke) instead.
 
 Examples:
   js({code: "figma.currentPage.children.length"})

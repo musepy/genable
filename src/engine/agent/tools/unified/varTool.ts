@@ -81,10 +81,6 @@ export const bindVariableDefinition: ToolDefinition = {
   mutates: true,
   description: `Bind a variable to a node property.
 
-When selecting which variable to bind: if the node is a Tablet or Mobile variant
-(name or variant property contains "Tablet"/"Mobile"), match the node's property
-value against the Tablet/Mobile mode column from list_variables — not Desktop.
-
 Examples:
   bind_variable({node: "1:2", prop: "fills", variable: "Theme/bg"})
   bind_variable({node: "1:3", prop: "fontSize", variable: "sizing/heading"})`,
@@ -125,7 +121,7 @@ Examples:
     properties: {
       node: {
         type: 'string',
-        description: 'Node ID or name#id (e.g. "1:2" or "Card#1:2")',
+        description: 'Node ID (e.g. "1:2")',
       },
       collection: {
         type: 'string',

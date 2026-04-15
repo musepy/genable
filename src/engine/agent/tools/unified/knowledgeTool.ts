@@ -14,13 +14,9 @@ export const knowledgeDefinition: ToolDefinition = {
   executionStrategy: 'parallel',
   description: `Load a knowledge entry from the library.
 
-The FULL knowledge menu is in your system context under "## KNOWLEDGE LIBRARY". When an entry matches your task, this is a BLOCKING REQUIREMENT: load it BEFORE generating any other response about the task.
+The FULL knowledge menu is in your system context under "## KNOWLEDGE LIBRARY".
 
-When to load:
-  • Before creating a new design → load a style entry (e.g. "style:neon-cyber")
-  • Before building an unfamiliar component → load the anatomy entry (e.g. "anatomy:button")
-  • When the user's intent is vague or ambiguous → load "help:interaction-model"
-  • When style is under-specified → load "help:style-collaboration"
+Load via \`read\` when (a) the prompt names a style or component you have not just used, (b) the design type (mobile, form, dashboard) is one with a dedicated guideline, or (c) you need a values list (color tokens, type scale). Use \`search\` only when the id is unknown.
 
 Examples:
   knowledge("style:neon-cyber")

@@ -2,7 +2,7 @@
  * @file unified/index.ts
  * @description Barrel export for unified tool definitions.
  *
- * LLM-facing API: 24 first-class tools, all structured JSON, verb_noun naming.
+ * LLM-facing API: 28 first-class tools, all structured JSON, verb_noun naming.
  */
 
 import { jsxDefinition } from './jsx';

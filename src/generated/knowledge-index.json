@@ -104,6 +104,22 @@
     ]
   },
   {
+    "id": "guideline:product-type-lookup",
+    "name": "Product Type Design Lookup",
+    "description": "Use when you know the product type (SaaS, e-commerce, fintech, healthcare, etc.) and need starting design recommendations — primary visual style, landing page pattern, dashboard style, and color palette focus for 96 product types.",
+    "category": "guideline",
+    "tags": [
+      "product-type",
+      "style",
+      "pattern",
+      "lookup",
+      "saas",
+      "ecommerce",
+      "fintech",
+      "dashboard"
+    ]
+  },
+  {
     "id": "guideline:table",
     "name": "Table Design Guideline",
     "description": "Use when designing data tables, spreadsheet views, admin lists, transaction logs, or inventory tables — covers column sizing, headers, row actions, sorting, and pagination.",
@@ -906,131 +922,5 @@
     "name": "Toast",
     "description": "Use when showing a transient notification message after a user action — composed of optional icon, content text, and close button in a horizontal row.",
     "category": "anatomy"
-  },
-  {
-    "id": "ref:colors",
-    "name": "Color Palettes by Product Type",
-    "description": "Use when picking a starting color palette for a specific product type (SaaS, e-commerce, health, fintech, etc.) — primary/secondary/CTA/background/text/border hex values for 95 product types.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:typography",
-    "name": "Font Pairings and Typography",
-    "description": "Use when choosing heading and body font pairings for a new design — mood-tagged Google Fonts combinations with best-for guidance and category labels.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:styles",
-    "name": "Visual Style Definitions",
-    "description": "Use when choosing a visual style direction (minimalism, neumorphism, glassmorphism, etc.) — color palettes, effects, accessibility ratings, and complexity for each style.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:charts",
-    "name": "Chart Type Recommendations",
-    "description": "Use when picking the right chart type for a data pattern — trend, comparison, distribution, composition, or relationship — with secondary options and accessibility notes.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:landing",
-    "name": "Landing Page Patterns",
-    "description": "Use when structuring a landing page — section order patterns, primary CTA placement, color strategy, and conversion optimization tactics for common page archetypes.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:products",
-    "name": "Product Type Design Trends",
-    "description": "Use when you know a product type (CRM, social app, fitness tracker, etc.) and need starting design recommendations — primary style, landing pattern, dashboard style, color focus.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:reasoning",
-    "name": "UI Design Reasoning Rules",
-    "description": "Use when deciding design patterns and anti-patterns for a specific UI category — recommended pattern, style priority, color/typography mood, and pitfalls to avoid.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:ux-guidelines",
-    "name": "UX Design Guidelines",
-    "description": "Use when you need UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, and error handling.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:web-interface",
-    "name": "Web Interface Guidelines",
-    "description": "Use when designing web-specific layouts — interaction patterns, responsive breakpoints, spacing systems, and performance conventions for browser UI.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-flutter",
-    "name": "flutter Design Guidelines",
-    "description": "Use when building UI in the flutter framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-html-tailwind",
-    "name": "html-tailwind Design Guidelines",
-    "description": "Use when building UI in the html-tailwind framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-jetpack-compose",
-    "name": "jetpack-compose Design Guidelines",
-    "description": "Use when building UI in the jetpack-compose framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-nextjs",
-    "name": "nextjs Design Guidelines",
-    "description": "Use when building UI in the nextjs framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-nuxt-ui",
-    "name": "nuxt-ui Design Guidelines",
-    "description": "Use when building UI in the nuxt-ui framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-nuxtjs",
-    "name": "nuxtjs Design Guidelines",
-    "description": "Use when building UI in the nuxtjs framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-react-native",
-    "name": "react-native Design Guidelines",
-    "description": "Use when building UI in the react-native framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-react",
-    "name": "react Design Guidelines",
-    "description": "Use when building UI in the react framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-shadcn",
-    "name": "shadcn Design Guidelines",
-    "description": "Use when building UI in the shadcn framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-svelte",
-    "name": "svelte Design Guidelines",
-    "description": "Use when building UI in the svelte framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-swiftui",
-    "name": "swiftui Design Guidelines",
-    "description": "Use when building UI in the swiftui framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
-  },
-  {
-    "id": "ref:stack-vue",
-    "name": "vue Design Guidelines",
-    "description": "Use when building UI in the vue framework — framework-specific do/dont rules, code examples, and best practices.",
-    "category": "reference"
   }
 ]

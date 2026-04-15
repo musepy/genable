@@ -2,7 +2,7 @@
  * @file generate-knowledge-index.js
  * @description Build-time script to generate a unified knowledge index from all sources.
  *
- * Scans 6 knowledge sources → generates 2 files:
+ * Scans 5 knowledge sources → generates 2 files:
  *   - knowledge-index.json: lightweight catalog [{id, name, description, category}]
  *   - knowledge-content.json: full content keyed by id {[id]: string}
  *
@@ -13,7 +13,10 @@
  *   4. src/style-guides/*.md + src/guidelines/style-guides/*.md
  *                                      -> style:*       (frontmatter required)
  *   5. .agent/knowledge/components/    -> anatomy:*     (YAML with name + description required)
- *   6. UI Pro Max CSV data             -> reference:*   (inline configs)
+ *
+ * NOTE: ref:* category retired April 2026. 21 entries (12 ref:stack-*, 9 non-stack) had
+ * 0 fetches across 8 E2E runs. Merged charts→guideline:chart, landing→guideline:landing-page,
+ * migrated products→guideline:product-type-lookup. Stack entries inapplicable to Figma-native.
  *
  * FAIL FAST: every source file must declare a unified frontmatter (id, name, description,
  * category). The generator throws with file path when required fields are missing — no
@@ -237,151 +240,14 @@ function scanAnatomy() {
   return entries;
 }
 
-// ==========================================
-// Source 6: UI Pro Max CSV reference data
-// ==========================================
-
-const UIPROMAX_DATA_DIR = path.join(PROJECT_ROOT, '..', 'ui-ux-pro-max-skill', '.shared', 'ui-ux-pro-max', 'data');
-
-/** Lightweight CSV parser — handles quoted fields and newlines */
-function parseCSV(text) {
-  const rows = [];
-  let row = [], field = '', inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQuotes = false; }
-      else field += ch;
-    } else if (ch === '"') { inQuotes = true; }
-    else if (ch === ',') { row.push(field); field = ''; }
-    else if (ch === '\n') { row.push(field); field = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }
-    else if (ch !== '\r') { field += ch; }
-  }
-  row.push(field);
-  if (row.length > 1 || row[0] !== '') rows.push(row);
-  if (rows.length < 2) return [];
-  const headers = rows[0];
-  return rows.slice(1).map(r => {
-    const obj = {};
-    headers.forEach((h, i) => { obj[h.trim()] = (r[i] || '').trim(); });
-    return obj;
-  });
-}
-
-/** Convert CSV rows to readable markdown table */
-function csvToMarkdown(records, columns) {
-  if (!records.length) return '';
-  const cols = columns || Object.keys(records[0]);
-  const header = '| ' + cols.join(' | ') + ' |';
-  const sep = '| ' + cols.map(() => '---').join(' | ') + ' |';
-  const rows = records.map(r => '| ' + cols.map(c => (r[c] || '').replace(/\|/g, '/').replace(/\n/g, ' ')).join(' | ') + ' |');
-  return [header, sep, ...rows].join('\n');
-}
-
-const CSV_SOURCES = {
-  'colors': {
-    file: 'colors.csv',
-    name: 'Color Palettes by Product Type',
-    description: 'Use when picking a starting color palette for a specific product type (SaaS, e-commerce, health, fintech, etc.) — primary/secondary/CTA/background/text/border hex values for 95 product types.',
-    columns: ['Product Type', 'Keywords', 'Primary (Hex)', 'Secondary (Hex)', 'CTA (Hex)', 'Background (Hex)', 'Text (Hex)', 'Notes'],
-  },
-  'typography': {
-    file: 'typography.csv',
-    name: 'Font Pairings and Typography',
-    description: 'Use when choosing heading and body font pairings for a new design — mood-tagged Google Fonts combinations with best-for guidance and category labels.',
-    columns: ['Font Pairing Name', 'Category', 'Heading Font', 'Body Font', 'Mood/Style Keywords', 'Best For', 'Notes'],
-  },
-  'styles': {
-    file: 'styles.csv',
-    name: 'Visual Style Definitions',
-    description: 'Use when choosing a visual style direction (minimalism, neumorphism, glassmorphism, etc.) — color palettes, effects, accessibility ratings, and complexity for each style.',
-    columns: ['Style Category', 'Type', 'Keywords', 'Primary Colors', 'Effects & Animation', 'Best For', 'Complexity'],
-  },
-  'charts': {
-    file: 'charts.csv',
-    name: 'Chart Type Recommendations',
-    description: 'Use when picking the right chart type for a data pattern — trend, comparison, distribution, composition, or relationship — with secondary options and accessibility notes.',
-    columns: ['Data Type', 'Keywords', 'Best Chart Type', 'Secondary Options', 'Color Guidance', 'Accessibility Notes'],
-  },
-  'landing': {
-    file: 'landing.csv',
-    name: 'Landing Page Patterns',
-    description: 'Use when structuring a landing page — section order patterns, primary CTA placement, color strategy, and conversion optimization tactics for common page archetypes.',
-    columns: ['Pattern Name', 'Keywords', 'Section Order', 'Primary CTA Placement', 'Color Strategy', 'Conversion Optimization'],
-  },
-  'products': {
-    file: 'products.csv',
-    name: 'Product Type Design Trends',
-    description: 'Use when you know a product type (CRM, social app, fitness tracker, etc.) and need starting design recommendations — primary style, landing pattern, dashboard style, color focus.',
-    columns: ['Product Type', 'Keywords', 'Primary Style Recommendation', 'Landing Page Pattern', 'Color Palette Focus', 'Key Considerations'],
-  },
-  'reasoning': {
-    file: 'ui-reasoning.csv',
-    name: 'UI Design Reasoning Rules',
-    description: 'Use when deciding design patterns and anti-patterns for a specific UI category — recommended pattern, style priority, color/typography mood, and pitfalls to avoid.',
-    columns: ['UI_Category', 'Recommended_Pattern', 'Style_Priority', 'Color_Mood', 'Typography_Mood', 'Anti_Patterns', 'Severity'],
-  },
-  'ux-guidelines': {
-    file: 'ux-guidelines.csv',
-    name: 'UX Design Guidelines',
-    description: 'Use when you need UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, and error handling.',
-    columns: null, // use all
-  },
-  'web-interface': {
-    file: 'web-interface.csv',
-    name: 'Web Interface Guidelines',
-    description: 'Use when designing web-specific layouts — interaction patterns, responsive breakpoints, spacing systems, and performance conventions for browser UI.',
-    columns: null,
-  },
-};
-
-function scanUIProMax() {
-  const entries = [];
-  if (!fs.existsSync(UIPROMAX_DATA_DIR)) {
-    console.log('   (UI Pro Max data dir not found, skipping)');
-    return entries;
-  }
-
-  for (const [id, config] of Object.entries(CSV_SOURCES)) {
-    const filePath = path.join(UIPROMAX_DATA_DIR, config.file);
-    if (!fs.existsSync(filePath)) continue;
-
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const records = parseCSV(raw);
-    const md = csvToMarkdown(records, config.columns);
-
-    entries.push({
-      id: `ref:${id}`,
-      name: config.name,
-      description: config.description,
-      category: 'reference',
-      content: `# ${config.name}\n\n${config.description}\n\n${md}`,
-    });
-  }
-
-  // Stacks — one entry per framework
-  const stacksDir = path.join(UIPROMAX_DATA_DIR, 'stacks');
-  if (fs.existsSync(stacksDir)) {
-    for (const file of fs.readdirSync(stacksDir)) {
-      if (!file.endsWith('.csv')) continue;
-      const stack = path.parse(file).name;
-      const filePath = path.join(stacksDir, file);
-      const raw = fs.readFileSync(filePath, 'utf-8');
-      const records = parseCSV(raw);
-      const md = csvToMarkdown(records);
-
-      entries.push({
-        id: `ref:stack-${stack}`,
-        name: `${stack} Design Guidelines`,
-        description: `Use when building UI in the ${stack} framework — framework-specific do/dont rules, code examples, and best practices.`,
-        category: 'reference',
-        content: `# ${stack} Design Guidelines\n\n${md}`,
-      });
-    }
-  }
-
-  return entries;
-}
+// NOTE: scanUIProMax() removed April 2026 — ref:* category retired.
+// 21 entries had 0 fetches across 8 E2E runs. Content merged/migrated into guidelines:
+//   ref:charts    → guideline:chart (## Chart Type Selection section)
+//   ref:landing   → guideline:landing-page (## Section Patterns section)
+//   ref:products  → guideline:product-type-lookup (new file)
+//   ref:stack-*   → deleted (framework-specific, inapplicable to Figma-native plugin)
+//   ref:colors, ref:typography, ref:styles, ref:reasoning,
+//   ref:ux-guidelines, ref:web-interface → deleted (duplicates or web/CSS-only)
 
 // ==========================================
 // Figma Sandbox Safe Writer
@@ -414,7 +280,6 @@ function main() {
     ...scanSkills(),
     ...scanStyles(),
     ...scanAnatomy(),
-    ...scanUIProMax(),
   ];
 
   // Duplicate id detection — fail fast if ids collide across sources

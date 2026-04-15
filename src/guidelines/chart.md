@@ -210,3 +210,17 @@ tags: [chart, data-viz, bar, line, pie, visualization, axes]
 | > 5 colors without clear differentiation | Limit to 5 distinct colors; use opacity variations for more |
 | Grid lines too dark | Grid: `#F3F4F6` (very subtle) — never `#000000` or `#9CA3AF` |
 | Donut chart without center label | Center of donut: summary value + label text |
+
+## Chart Type Selection
+
+| Data Pattern | Best Chart Type | Secondary Options |
+|---|---|---|
+| Trend over time | Line Chart | Area Chart |
+| Compare categories | Bar Chart (horizontal or vertical) | Column Chart, Grouped Bar |
+| Part-to-whole | Pie Chart or Donut | Stacked Bar, Treemap |
+| Correlation / distribution | Scatter Plot or Bubble Chart | Heat Map, Matrix |
+| Heatmap / intensity | Heat Map or Choropleth | Grid Heat Map |
+| Geographic data | Choropleth Map, Bubble Map | Geographic Heat Map |
+| Funnel / flow | Funnel Chart, Sankey | Waterfall |
+| Performance vs target | Gauge Chart or Bullet Chart | Dial, Thermometer |
+| Hierarchical / nested | Treemap | Sunburst, Nested Donut |

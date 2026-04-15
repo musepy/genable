@@ -193,3 +193,13 @@ tags: [landing-page, marketing, hero, cta, saas, homepage]
 | Section without padding | Every section needs `p='80 120'` (vertical horizontal) |
 | No eyebrow/label above section titles | Add category label: `14px Bold` in brand color |
 | Footer same bg as content | Footer: `bg='#111827'` (dark) to visually close the page |
+
+## Section Patterns
+
+| Pattern Name | Section Order | Primary CTA Placement |
+|---|---|---|
+| Hero + Features + CTA | 1. Hero with headline/image, 2. Value prop, 3. Key features (3-5), 4. CTA section, 5. Footer | Hero (sticky) + Bottom |
+| Hero + Testimonials + CTA | 1. Hero, 2. Problem statement, 3. Solution overview, 4. Testimonials, 5. CTA | Hero (sticky) + Post-testimonials |
+| Product Demo + Features | 1. Hero, 2. Product video/mockup (center), 3. Feature breakdown per section, 4. Comparison (optional), 5. CTA | Video center + CTA right/bottom |
+| Minimal Single Column | 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer | Center, large CTA button |
+| Funnel (3-Step Conversion) | 1. Hero, 2. Step 1 (problem), 3. Step 2 (solution), 4. Step 3 (action), 5. CTA progression | Each step: mini-CTA. Final: main CTA |

@@ -4,6 +4,4 @@
  */
 
 export { NodeLayoutService, nodeLayoutService } from './NodeLayoutService';
-export { SettingsService, settingsService } from './SettingsService';
-export type { LayoutResult, LayoutValidationError } from './NodeLayoutService';
-export type { SettingsResult, SaveSettingsInput } from './SettingsService';
+export type { LayoutResult } from './NodeLayoutService';

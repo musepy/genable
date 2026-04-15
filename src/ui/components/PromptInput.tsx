@@ -16,10 +16,59 @@
 
 import { h, ComponentChildren } from 'preact';
 import { useRef, useLayoutEffect } from 'preact/hooks';
-import { Plus, ArrowUp } from 'lucide-preact';
 import { ActionPopover } from './ActionPopover';
-import { tokens, componentStyles } from '../design-system/tokens';
+import { tokens } from '../design-system/tokens';
 import { t } from '../i18n';
+
+const submitButtonBase = {
+  position: 'absolute' as const,
+  right: tokens.space[1],
+  bottom: tokens.space[1],
+  width: tokens.size.button.md,
+  height: tokens.size.button.md,
+  borderRadius: '50%',
+  display: 'flex' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  transition: 'var(--transition-crisp, all 150ms ease)',
+};
+const submitButtonActive = {
+  background: 'var(--accent-9)',
+  border: '1.5px solid var(--accent-9)',
+  cursor: 'pointer',
+};
+const submitButtonDisabled = {
+  background: 'var(--gray-a4)',
+  border: 'none',
+  cursor: 'default',
+};
+
+const inputAreaContainer = {
+  position: 'relative' as const,
+  background: tokens.colors.surface,
+  border: 'none',
+  borderRadius: 'var(--radius-5)',
+  boxShadow: `inset 0 0 0 0.5px var(--gray-a4), ${tokens.colors.shadowFocus}`,
+};
+const inputAreaTextarea = {
+  width: '100%',
+  minHeight: tokens.space[6] + tokens.space[5],
+  maxHeight: tokens.space[9] + tokens.space[6] + tokens.space[5],
+  paddingTop: tokens.space[2],
+  paddingBottom: tokens.space[2],
+  paddingLeft: tokens.grid.blockPad,   // text at scrollPad(12) + blockPad(10) = 22
+  paddingRight: tokens.grid.blockPad,
+  fontSize: tokens.fontSize[1],
+  background: 'transparent',
+  color: 'var(--gray-12)',
+  border: 'none',
+  outline: 'none',
+  resize: 'none' as const,
+  fontFamily: tokens.font.sans,
+  lineHeight: tokens.lineHeight[2],
+  boxSizing: 'border-box' as const,
+  transition: 'height 200ms cubic-bezier(0, 0, 0.2, 1)',
+};
 
 export interface PromptInputProps {
   value: string;
@@ -36,6 +85,8 @@ export interface PromptInputProps {
   leftElement?: ComponentChildren;
   /** Callback for the plus (+) button */
   onPlusClick?: () => void;
+  /** Callback when a skill is selected from action popover */
+  onSkillSelect?: (skillId: string) => void;
 }
 
 export function PromptInput({
@@ -49,6 +100,7 @@ export function PromptInput({
   contextTags,
   leftElement,
   onPlusClick,
+  onSkillSelect,
 }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -84,8 +136,13 @@ export function PromptInput({
     }
   }, [value]);
 
+  const runningBorder = loading ? {
+    border: '1px solid transparent',
+    boxShadow: '0 0 0 2px var(--accent-a2), 0 0 12px var(--accent-a3)',
+  } : undefined;
+
   return (
-    <div style={componentStyles.inputArea.container}>
+    <div style={{ ...inputAreaContainer, ...runningBorder } as h.JSX.CSSProperties}>
       {/* Context Tags row */}
       {contextTags && (
         <div style={{
@@ -102,7 +159,7 @@ export function PromptInput({
       <textarea
         ref={textareaRef}
         className="focusable"
-        style={componentStyles.inputArea.textarea as h.JSX.CSSProperties}
+        style={inputAreaTextarea as h.JSX.CSSProperties}
         value={value}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
@@ -121,6 +178,7 @@ export function PromptInput({
         {/* Left: Action Popover (+) */}
         <ActionPopover 
           onSerializeSelection={onPlusClick || (() => {})} 
+          onInsertSkill={onSkillSelect}
           disabled={disabled}
         />
 
@@ -141,8 +199,8 @@ export function PromptInput({
           <button
             className={canSubmit ? 'submit-btn-active' : 'submit-btn-disabled'}
             style={{
-              ...componentStyles.submitButton.base,
-              ...(canSubmit ? componentStyles.submitButton.active : componentStyles.submitButton.disabled),
+              ...submitButtonBase,
+              ...(canSubmit ? submitButtonActive : submitButtonDisabled),
               position: 'relative',
               right: 'auto',
               bottom: 'auto',

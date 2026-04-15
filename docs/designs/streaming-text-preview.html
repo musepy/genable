@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Block Flow v7</title>
+<style>
+  :root{
+    --g3:#f0f0f0;--g4:#e8e8e8;--g9:#888;--g11:#666;--g12:#171717;
+    --ga3:rgba(0,0,0,.06);
+    --ac9:#3b82f6;
+    --sans:Inter,-apple-system,system-ui,sans-serif;
+    --mono:'SF Mono',ui-monospace,monospace;
+    --win-r:12px;--card-m:10px;--input-r:8px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--sans);background:#eee;display:flex;justify-content:center;padding:24px 16px;gap:28px;flex-wrap:wrap}
+  .col-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--g11);margin-bottom:8px}
+
+  .win{
+    width:320px;height:520px;background:#fff;border-radius:var(--win-r);
+    box-shadow:0 1px 3px rgba(0,0,0,.1),0 8px 24px rgba(0,0,0,.06);
+    overflow:hidden;display:flex;flex-direction:column;position:relative;
+  }
+  .scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px;scroll-behavior:smooth}
+  .scroll::-webkit-scrollbar{width:3px}
+  .scroll::-webkit-scrollbar-thumb{background:var(--g4);border-radius:3px}
+  .bar{flex-shrink:0;padding:8px 12px;border-top:1px solid var(--g3);background:white}
+  .bar input{width:100%;border:1px solid var(--g4);border-radius:var(--input-r);padding:8px 10px;font-size:12px;color:var(--g9);background:white;font-family:var(--sans);outline:none}
+
+  /* === shared block metrics === */
+  /* All blocks: same horizontal padding so content aligns vertically.
+     Input & foldable text share identical shape (padding, radius, bg). */
+
+  /* === input === */
+  .b-input{background:var(--g3);border-radius:var(--input-r);padding:6px 10px;font-size:12px;line-height:20px;color:var(--g12);margin-bottom:4px}
+
+  /* === text === */
+  .b-text{font-size:12px;line-height:20px;color:var(--g12);padding:4px 10px;word-break:break-word}
+  .b-text p{margin:0}.b-text ul{padding-left:16px;margin:0}.b-text li{margin:0}.b-text strong{font-weight:600}
+  .b-text code{background:var(--ga3);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:.9em}
+  /* foldable: matches input shape — same padding, radius, hover bg.
+     line-clamp requires inline flow, so text uses <br> not <p>. */
+  .b-text.foldable{cursor:pointer;border-radius:var(--input-r);transition:background 120ms;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;overflow:hidden}
+  .b-text.foldable:hover{background:var(--g3)}
+
+  /* === tool === */
+  .b-tool{font-size:12px;line-height:20px;color:var(--g9);padding:0}
+  .b-tool-hd{cursor:pointer;border-radius:var(--input-r);padding:2px 10px;transition:background 120ms}
+  .b-tool-hd:hover{background:var(--g3);color:var(--g11)}
+  /* drawer: grid-rows trick for smooth height animation */
+  .b-tool-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 220ms ease}
+  .b-tool-detail.open{grid-template-rows:1fr}
+  .b-tool-detail-inner{overflow:hidden}
+  .b-tool-row{
+    font-size:12px;line-height:20px;color:var(--g11);
+    padding:0 10px 0 20px;border-radius:6px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    transition:background 120ms;cursor:default;
+  }
+  .b-tool-row:hover{background:var(--ga3)}
+  .b-tool-row .args{color:var(--g9);margin-left:4px}
+  .b-tool-row.more{color:var(--ac9);cursor:pointer}
+  .b-tool-row.more:hover{background:var(--ga3)}
+
+  .cur::after{content:'▍';color:var(--ac9);animation:bl .8s step-end infinite;margin-left:1px}
+  @keyframes bl{50%{opacity:0}}
+
+  /* === floating card (text only) === */
+  .card{
+    position:absolute;z-index:100;background:white;
+    border:1px solid var(--g4);border-radius:var(--input-r);
+    box-shadow:0 4px 20px rgba(0,0,0,.1),0 1px 4px rgba(0,0,0,.05);
+    display:flex;flex-direction:column;overflow:hidden;cursor:pointer;
+    opacity:0;transform:scale(.97);
+    transition:opacity 100ms ease,transform 100ms ease;
+  }
+  .card.show{opacity:1;transform:scale(1)}
+  .card-body{flex:1;overflow-y:auto;padding:12px 10px;font-size:12px;line-height:20px;color:var(--g12)}
+  .card-body::-webkit-scrollbar{width:3px}
+  .card-body::-webkit-scrollbar-thumb{background:var(--g4);border-radius:3px}
+  .card-body strong{font-weight:600}
+  .card-body code{background:var(--ga3);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:.9em}
+  /* bottom close hint — visual indicator, inherits card's click */
+  .card-close-hint{
+    flex-shrink:0;
+    padding:24px 10px 8px;text-align:center;
+    font-size:11px;color:var(--g9);
+    background:linear-gradient(transparent,white 50%);
+    margin-top:-24px;position:relative;
+    transition:color 100ms;
+  }
+  .card:hover .card-close-hint{color:var(--g11)}
+
+  .ctrl{position:absolute;top:6px;right:6px;z-index:10}
+  .btn{background:var(--g12);color:white;border:none;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:var(--sans);font-weight:500;opacity:.7;transition:opacity 120ms}
+  .btn:hover{opacity:1}.btn:disabled{opacity:.3;cursor:default}
+  .btn.ac{background:var(--ac9);opacity:1}
+</style>
+</head>
+<body>
+
+<div>
+  <div class="col-title">Short — 8 tools</div>
+  <div class="win" id="win-s">
+    <div class="ctrl"><button class="btn ac" id="p-s" onclick="play('s')">▶</button></div>
+    <div class="scroll" id="sc-s"><div id="st-s"></div></div>
+    <div class="bar"><input placeholder="What would you like to design?"></div>
+  </div>
+</div>
+
+<div>
+  <div class="col-title">Long — 57 tools</div>
+  <div class="win" id="win-l">
+    <div class="ctrl"><button class="btn ac" id="p-l" onclick="play('l')">▶</button></div>
+    <div class="scroll" id="sc-l"><div id="st-l"></div></div>
+    <div class="bar"><input placeholder="What would you like to design?"></div>
+  </div>
+</div>
+
+<script>
+const FOLD_LINES=6,LH=20;
+
+// Mock args for tools
+const TOOL_ARGS={
+  Knowledge:'design guidelines',JSX:'',Inspect:'',
+  Edit:'',Describe:'','Set Fill':'','Set Layout':'',
+  Move:'',Delete:''
+};
+const JSX_LABELS=['hero section','feature grid','tech specs','reviews section','FAQ section','CTA banner','navbar'];
+let jsxIdx=0;
+
+const S=[
+  {t:'input',v:'Design a login page with email, password, sign-in button'},
+  {t:'text',v:"I'll follow the form design guidelines.",sp:22},
+  {t:'tool',n:'Knowledge',a:'form patterns',d:500},{t:'tool',n:'JSX',a:'login form',d:800},
+  {t:'tool',n:'JSX',a:'footer links',d:700},{t:'tool',n:'Inspect',a:'root frame',d:400},
+  {t:'text',v:'Good structure. Refining spacing and details.',sp:20},
+  {t:'tool',n:'Edit',a:'padding: 8, gap: 12',d:350},{t:'tool',n:'Edit',a:'cornerRadius: 8',d:350},
+  {t:'tool',n:'Describe',a:'full page',d:300},{t:'tool',n:'Edit',a:'fill: #1a1a1a',d:350},
+  {t:'text',v:'Login page created with:\n\n- **Heading**: "Welcome back" with subtitle\n- **Email field**: Label + input with placeholder\n- **Password field**: Label + input with placeholder\n- **Sign In button**: Primary CTA, full width\n- **Forgot password link**: Centered below button\n\nAll inputs use `8px` spacing and `8px` corner radius.',sp:10},
+];
+
+const L=[
+  {t:'input',v:'设计安克充电宝旗舰产品的北美区产品详情页，含 hero, 特性, 参数, 评价, FAQ, CTA'},
+  {t:'text',v:'这是一个复杂的产品页面，我会按区块逐步构建。',sp:18},
+  {t:'tool',n:'Knowledge',a:'product page patterns',d:400},
+  {t:'tool',n:'JSX',a:'hero section',d:500},{t:'tool',n:'JSX',a:'feature grid',d:500},
+  {t:'tool',n:'Inspect',a:'hero frame',d:300},
+  {t:'tool',n:'Edit',a:'padding: 24',d:250},{t:'tool',n:'Edit',a:'gap: 16',d:250},
+  {t:'text',v:'Hero 和特性区块完成。构建技术参数表格。',sp:16},
+  {t:'tool',n:'JSX',a:'tech specs table',d:400},{t:'tool',n:'Inspect',a:'specs frame',d:250},
+  ...Array(11).fill(0).map((_,i)=>({t:'tool',n:'Edit',a:['fontSize: 14','fontWeight: 600','padding: 12','gap: 8','fill: #f5f5f5','cornerRadius: 8','width: fill','textAlignHorizontal: CENTER','opacity: 0.8','layoutMode: VERTICAL','itemSpacing: 4'][i%11],d:160})),
+  {t:'text',v:'应用品牌色到所有区块。',sp:16},
+  ...Array(20).fill(0).map((_,i)=>({t:'tool',n:'Set Fill',a:`#00A0E0, node ${i+1}`,d:70})),
+  {t:'text',v:'品牌色完成。构建评价、FAQ 和底部区块。',sp:16},
+  ...[0,1,2,3,4].flatMap(i=>[
+    {t:'tool',n:'JSX',a:['reviews','FAQ','CTA banner','footer','navbar'][i],d:350},
+    {t:'tool',n:'Move',a:`to position ${i+3}`,d:100},
+    {t:'tool',n:'Delete',a:'placeholder frame',d:60},
+  ]),
+  {t:'tool',n:'Describe',a:'full page',d:250},
+  {t:'tool',n:'Set Layout',a:'root auto-layout',d:150},
+  {t:'tool',n:'Inspect',a:'final check',d:250},
+  {t:'text',v:'**安克充电宝产品页设计完成！**\n\n页面包含 7 个区块：\n\n- **Hero Section**: 产品大图 + 标题 + 核心卖点 + "Buy Now" CTA\n- **Feature Grid**: 6 个特性卡片（65W 快充、20000mAh、LED 电量显示等）\n- **Tech Specs**: 参数对比表格（尺寸、重量、接口、协议）\n- **Reviews**: 3 条用户评价卡片 + 星级评分\n- **FAQ**: 5 个常见问题手风琴折叠\n- **CTA Banner**: "Limited Time Offer" 底部转化横幅\n- **Footer**: Anker 品牌信息 + 导航 + 社交链接\n\n品牌色 `#00A0E0`，间距 `24px`，圆角 `12px`。全页响应式布局。',sp:8},
+];
+
+// ============================================
+class R{
+  constructor(id){
+    this.id=id;
+    this.el=document.getElementById('st-'+id);
+    this.sc=document.getElementById('sc-'+id);
+    this.win=document.getElementById('win-'+id);
+    this.toolGroup=null; // current tool group state
+  }
+  bottom(){this.sc.scrollTop=this.sc.scrollHeight}
+  clear(){this.el.innerHTML='';this.toolGroup=null;closeCard(this.id)}
+
+  finalizeTools(){
+    if(!this.toolGroup)return;
+    const g=this.toolGroup;
+    const n=g.state.tools.length;
+    g.hdEl.textContent=n+(n===1?' tool':' tools');
+    this.toolGroup=null;
+  }
+
+  addInput(text){
+    this.finalizeTools();
+    const d=document.createElement('div');d.className='b-input';
+    d.textContent=text;this.el.appendChild(d);this.bottom();
+  }
+
+  async addText(text,speed){
+    this.finalizeTools();
+    const el=document.createElement('div');el.className='b-text';
+    // Clamp during streaming — never grows beyond fold lines
+    el.style.display='-webkit-box';
+    el.style.webkitBoxOrient='vertical';
+    el.style.webkitLineClamp=FOLD_LINES+'';
+    el.style.overflow='hidden';
+    this.el.appendChild(el);
+
+    let buf='';
+    for(let i=0;i<text.length;i++){
+      buf+=text[i];
+      if(text[i]==='\n'||i%3===0||i===text.length-1){
+        el.innerHTML=md(buf)+(i<text.length-1?'<span class="cur"></span>':'');
+        this.bottom();
+      }
+      await slp(speed);
+    }
+    el.innerHTML=md(text);
+
+    // Check if content was clamped
+    el.style.display='';el.style.webkitBoxOrient='';
+    el.style.webkitLineClamp='';el.style.overflow='';
+    const fullH=el.scrollHeight;
+    const clampH=FOLD_LINES*LH;
+    if(fullH>clampH+8){
+      el.classList.add('foldable');
+      const self=this;
+      el.onclick=()=>toggleCard(self.id,el,md(text));
+    }
+    this.bottom();
+  }
+
+  startToolGroup(){
+    const wrap=document.createElement('div');wrap.className='b-tool';
+    const hd=document.createElement('div');hd.className='b-tool-hd';
+    const detail=document.createElement('div');detail.className='b-tool-detail';
+    wrap.appendChild(hd);wrap.appendChild(detail);
+    this.el.appendChild(wrap);
+
+    // State owned by this group (survives finalizeTools)
+    const state={tools:[],expanded:false,showAll:false};
+    this.toolGroup={wrap,hdEl:hd,detailEl:detail,state};
+
+    hd.onclick=()=>{
+      state.expanded=!state.expanded;
+      detail.classList.toggle('open',state.expanded);
+    };
+  }
+
+  addTool(name,args){
+    if(!this.toolGroup)this.startToolGroup();
+    const g=this.toolGroup;
+    g.state.tools.push({name,args:args||''});
+    g.hdEl.textContent=name+'...';
+    this._renderDetail(g);
+    this.bottom();
+  }
+
+  doneTool(){
+    if(!this.toolGroup)return;
+    const n=this.toolGroup.state.tools.length;
+    this.toolGroup.hdEl.textContent=n+(n===1?' tool':' tools');
+  }
+
+  _renderDetail(g){
+    const INITIAL_SHOW=5;
+    const tools=g.state.tools;
+    const showing=g.state.showAll?tools:tools.slice(0,INITIAL_SHOW);
+    const remaining=tools.length-showing.length;
+
+    const inner=document.createElement('div');
+    inner.className='b-tool-detail-inner';
+
+    showing.forEach(t=>{
+      const row=document.createElement('div');
+      row.className='b-tool-row';
+      row.textContent=t.name;
+      if(t.args){const sp=document.createElement('span');sp.className='args';sp.textContent=t.args;row.appendChild(sp)}
+      inner.appendChild(row);
+    });
+
+    if(remaining>0){
+      const moreRow=document.createElement('div');
+      moreRow.className='b-tool-row more';
+      moreRow.textContent='+'+remaining+' more';
+      // Bind directly to THIS group's state
+      const self=this;const ref=g;
+      moreRow.addEventListener('click',function(e){
+        e.stopPropagation();
+        ref.state.showAll=true;
+        self._renderDetail(ref);
+      });
+      inner.appendChild(moreRow);
+    }
+
+    g.detailEl.innerHTML='';
+    g.detailEl.appendChild(inner);
+  }
+}
+
+// ============================================
+// Floating card — no breakpoints, just final size
+// ============================================
+const cardState={};
+
+function toggleCard(winId,srcEl,html){
+  if(cardState[winId]&&cardState[winId].srcEl===srcEl){closeCard(winId);return}
+  closeCard(winId);openCard(winId,srcEl,html);
+}
+
+function openCard(winId,srcEl,html){
+  const win=document.getElementById('win-'+winId);
+  const wr=win.getBoundingClientRect();
+  const m=10;
+
+  const card=document.createElement('div');card.className='card';
+  // Position at final size immediately
+  card.style.left=m+'px';card.style.top=m+'px';
+  card.style.width=(wr.width-m*2)+'px';card.style.height=(wr.height-m*2)+'px';
+
+  const body=document.createElement('div');body.className='card-body';
+  body.innerHTML=html;
+  card.appendChild(body);
+
+  // Bottom hint — visual only, not interactive
+  const hint=document.createElement('div');hint.className='card-close-hint';
+  hint.textContent='click to close';
+  card.appendChild(hint);
+
+  // Click anywhere on card = close
+  card.addEventListener('click',()=>closeCard(winId));
+
+  win.appendChild(card);
+
+  // Trigger entrance animation
+  card.offsetHeight;
+  card.classList.add('show');
+
+  cardState[winId]={card,srcEl};
+}
+
+function closeCard(winId){
+  const s=cardState[winId];if(!s)return;
+  s.card.classList.remove('show');
+  s.card.style.pointerEvents='none';
+  setTimeout(()=>s.card.remove(),120);
+  delete cardState[winId];
+}
+
+// ============================================
+const playing={};
+async function play(id){
+  if(playing[id])return;playing[id]=true;
+  const btn=document.getElementById('p-'+id);
+  btn.disabled=true;btn.textContent='●';
+  const sc=id==='s'?S:L;
+  const r=new R(id);r.clear();
+  for(const ev of sc){
+    if(ev.t==='input'){r.addInput(ev.v);await slp(250)}
+    else if(ev.t==='text'){await r.addText(ev.v,ev.sp||15);await slp(150)}
+    else if(ev.t==='tool'){r.addTool(ev.n,ev.a);await slp(ev.d||300);r.doneTool();r.bottom()}
+  }
+  r.finalizeTools();r.bottom();
+  btn.textContent='↻';btn.disabled=false;playing[id]=false;
+}
+function slp(ms){return new Promise(r=>setTimeout(r,ms))}
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+// Inline markdown — no block elements (<p>,<div>), so line-clamp works.
+// Uses <br> for line breaks, inline <span> for lists.
+function md(t){
+  return esc(t)
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`(.+?)`/g,'<code>$1</code>')
+    .replace(/^- (.+)$/gm,'  • $1')
+    .replace(/\n/g,'<br>');
+}
+setTimeout(()=>play('s'),300);
+setTimeout(()=>play('l'),500);
+</script>
+</body>
+</html>

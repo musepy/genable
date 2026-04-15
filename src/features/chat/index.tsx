@@ -1,31 +1,62 @@
 import { h, Fragment } from 'preact'
-import { useState, useEffect } from 'preact/hooks'
-import { Sparkles, ChevronDown, AlertCircle } from 'lucide-preact' // Added AlertCircle
+import { useState, useEffect, useRef } from 'preact/hooks'
 import { tokens } from '../../ui/design-system/tokens'
+
+const BRAILLE_FRAMES = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+function useBrailleSpinner(active: boolean): string {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setFrame(f => (f + 1) % BRAILLE_FRAMES.length), 80);
+    return () => clearInterval(id);
+  }, [active]);
+  return active ? BRAILLE_FRAMES[frame] : '';
+}
 import {
   derivePluginState,
   getElementState,
 } from '../../ui/index'
 import { PromptChips } from '../../ui/components/PromptChips'
 import { PromptInput } from '../../ui/components/PromptInput'
-import { MessageRenderer } from '../../ui/components/MessageRenderer'
-import { ToolExecutionPanel } from '../../ui/components/ToolExecutionPanel'
-import { RawOutputPanel } from '../../ui/components/RawOutputPanel'
+import { ToolBlock } from '../../ui/components/ToolBlock'
+import { CanvasTextBlock as TextBlock } from '../../ui/components/canvas-markdown/CanvasTextBlock'
 import { ModelPopover } from '../../ui/components/ModelPopover'
-import { Button } from '../../ui/components/Button'
-import { Copy, Code } from 'lucide-preact'
 import { on, emit } from '@create-figma-plugin/utilities'
-import { SendSerializedSelectionHandler, SerializeSelectionHandler, SelectNodeHandler } from '../../types'
-import { useClipboard } from '../../ui/hooks/useClipboard'
+import {
+  SendSelectionHandler, GetSelectionHandler,
+  ContextAttachment,
+} from '../../types'
+import { ContextTag } from '../../ui/components/ContextTag'
 import type { PluginState } from '../../ui/index'
 
 import { useChat, UseChatProps } from './useChat'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
-import { t } from '../../ui/i18n'
-import { categorizeError } from '../../engine/llm-client/errorCategorizer'
-import type { ErrorActionType } from '../../config/errorPatterns'
+import { useTranslations } from '../../ui/i18n'
+// ErrorActionType removed — error handling moved to StatusBlock
+import type { ContentBlock } from '../../types/chat'
 
-// Inline styles
+const TRIVIAL_TEXT_THRESHOLD = 20;
+
+/** Merge consecutive tool_groups and skip trivial text fragments between them. */
+function mergeBlocks(blocks: ContentBlock[]): ContentBlock[] {
+  const out: ContentBlock[] = [];
+  for (const block of blocks) {
+    // Skip trivial text fragments (LLM noise like "<", "row", "Semi")
+    if (block.type === 'text' && block.content.trim().length < TRIVIAL_TEXT_THRESHOLD) continue;
+    // Merge consecutive tool_groups
+    if (block.type === 'tool_group') {
+      const last = out[out.length - 1];
+      if (last && last.type === 'tool_group') {
+        out[out.length - 1] = { type: 'tool_group', tools: [...last.tools, ...block.tools] };
+        continue;
+      }
+    }
+    out.push(block);
+  }
+  return out;
+}
+
+// Inline styles — flat transcript layout
 const messagesContainerStyle = {
   display: 'flex',
   flexDirection: 'column' as const,
@@ -33,181 +64,273 @@ const messagesContainerStyle = {
   minHeight: 0,
   overflowY: 'auto' as const,
   padding: `${tokens.space[3]}px ${tokens.space[3]}px`,
-  paddingBottom: tokens.space[1], 
-  gap: tokens.space[1],
+  paddingBottom: tokens.space[1],
 };
 
-const messageBubbleUserStyle = {
-  background: tokens.colors.alpha[2],
-  color: tokens.colors.textPrimary,
-  borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+// User messages: gray background, same padding as other blocks
+const userItemStyle = {
+  padding: '4px 10px',
   width: '100%',
+  background: 'var(--gray-3)',
+  borderRadius: 'var(--radius-3)',
+  userSelect: 'text' as const,
+  WebkitUserSelect: 'text' as const,
 };
 
-const messageBubbleModelStyle = {
-  borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-  width: '100%',
-};
+// ============================================
+// StatusBlock — running / confirming stop / canceled / error
+// ============================================
 
-const messageBubbleResultStyle = {
-  background: tokens.colors.accentAlpha[2],
-  borderRadius: 'var(--radius-4)',
-  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-  width: '100%',
-};
-
-// ------------------------------------------------------------------
-// Error Handling System (Type-Safe & HIG Compliant)
-// ------------------------------------------------------------------
-
-// 1. Action Types (Logic) - Imported from errorPatterns
-
-
-// 2. Config Structure
-interface ErrorConfig {
-  i18nKey: keyof typeof t.errors;
-  handler: ErrorActionType;
-}
-
-// 3. Error Parser & Config Mapper (Delegated to Service)
-function getErrorConfig(errorMsg: string): ErrorConfig {
-  return categorizeError(errorMsg) as ErrorConfig;
-}
-
-function ErrorBanner({ error, errorActions }: { 
-  error: string | null; 
-  errorActions: Record<ErrorActionType, () => void> 
+function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue, onRetry, waitingForUser }: {
+  runState: string;
+  startTime?: number;
+  endTime?: number;
+  error?: string;
+  onStop: () => void;
+  onContinue: () => void;
+  onRetry: () => void;
+  waitingForUser?: boolean;
 }) {
-  if (!error) return null;
-  const config = getErrorConfig(error);
-  const content = t.errors[config.i18nKey];
-  if (!content) return null;
+  const t = useTranslations();
+  const [confirming, setConfirming] = useState(false);
+  const [elapsed, setElapsed] = useState('');
+  const spinner = useBrailleSpinner(runState === 'running' && !waitingForUser);
+
+  // Elapsed time ticker — paused when waiting for user
+  useEffect(() => {
+    if (runState !== 'running' || !startTime || waitingForUser) {
+      if (startTime && endTime) {
+        setElapsed(formatDuration(endTime - startTime));
+      }
+      return;
+    }
+    const tick = () => setElapsed(formatElapsedTimer(Date.now() - startTime));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [runState, startTime, endTime, waitingForUser]);
+
+  // Reset confirming when state changes
+  useEffect(() => { setConfirming(false); }, [runState]);
+
+  const sz = tokens.fontSize[1];
+  const dim = tokens.colors.textSecondary;
+
+  // StatusBlock renders OUTSIDE scroll area — needs full outerPad
+  const hPad = `${tokens.grid.outerPad}px`;
+
+  if (runState === 'error') {
+    return (
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: tokens.colors.error, padding: `4px ${hPad}` }}>
+        {error || t.statusError}{elapsed ? ` · ${elapsed}` : ''}
+      </div>
+    );
+  }
+
+  if (runState === 'canceled') {
+    return (
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: `4px ${hPad}`, display: 'flex', alignItems: 'center' }}>
+        <span>{t.statusStopped}{elapsed ? ` · ${elapsed}` : ''}</span>
+        <span
+          onClick={onContinue}
+          style={{ marginLeft: 'auto', cursor: 'pointer', padding: '2px 8px', borderRadius: '6px', transition: 'background 120ms', color: dim }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >{t.continueAction}</span>
+      </div>
+    );
+  }
+
+  if (runState === 'empty_response') {
+    return (
+      <div style={{ fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim, padding: `4px ${hPad}`, display: 'flex', alignItems: 'center' }}>
+        <span>{t.statusEmptyResponse}{elapsed ? ` · ${elapsed}` : ''}</span>
+        <span
+          onClick={onRetry}
+          style={{ marginLeft: 'auto', cursor: 'pointer', padding: '2px 8px', borderRadius: '6px', transition: 'background 120ms', color: dim }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >{t.retryAction}</span>
+      </div>
+    );
+  }
+
+  // Outside scroll area → full 22px horizontal padding
+  const row: h.JSX.CSSProperties = {
+    fontSize: sz, lineHeight: tokens.lineHeight[2], color: dim,
+    padding: `${tokens.space[1]}px ${hPad}`,
+    display: 'flex', alignItems: 'center',
+  };
+
+  const isRunning = runState === 'running';
+
+  // Completed / canceled / error — same word, ed form
+  if (!isRunning) {
+    if (!elapsed) return null;
+    const label = runState === 'error' ? `${t.statusError} · ${elapsed}`
+      : runState === 'canceled' ? `${t.statusStopped} · ${elapsed}`
+      : `${t.statusThought} · ${elapsed}`;
+    return <div style={row}>{label}</div>;
+  }
+
+  // Waiting for user answer — paused, no timer ticking
+  if (waitingForUser) {
+    return (
+      <div style={row}>
+        <span style={{ color: tokens.colors.accent }}>Waiting for answer</span>
+        {elapsed ? <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed}</span> : null}
+      </div>
+    );
+  }
+
+  // Running — two-step interrupt
+  if (confirming) {
+    return (
+      <div style={row}>
+        <span className="thinking-shimmer">{spinner} {t.statusThinking}</span>
+        <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '⏱ 0s'}</span>
+        <span style={{ flex: 1 }} />
+        <span
+          onClick={() => { setConfirming(false); onStop(); }}
+          style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms', color: tokens.colors.error }}
+          onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--error-3)' }}
+          onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >{t.stopAction}</span>
+        <span
+          onClick={() => setConfirming(false)}
+          style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 120ms', marginLeft: tokens.space[1] }}
+          onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+          onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = '' }}
+        >{t.continueAction}</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="message-enter" style={{
-      background: tokens.colors.errorMuted,
-      border: `1px solid ${tokens.colors.errorBorder}`,
-      borderRadius: 'var(--radius-3)',
-      padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-      margin: `0 ${tokens.space[4]}px`,
-      marginBottom: tokens.space[2],
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: tokens.space[3],
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], flex: 1, minWidth: 0 }}>
-        <AlertCircle size={14} color={tokens.colors.error} style={{ flexShrink: 0 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.space[2], overflow: 'hidden' }}>
-          <span style={{ fontSize: tokens.fontSize[1], fontWeight: 500, color: tokens.colors.error, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {content.title}
-          </span>
-          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {content.message}
-          </span>
-        </div>
-      </div>
-      <button
-        onClick={errorActions[config.handler]}
-        style={{ background: 'none', border: 'none', padding: 0, color: tokens.colors.error, fontSize: tokens.fontSize[1], fontWeight: 500, cursor: 'pointer', flexShrink: 0 }}
-      >
-        {content.action}
-      </button>
+    <div
+      style={row}
+      onMouseEnter={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '1'; }}
+      onMouseLeave={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '0'; }}
+    >
+      <span className="thinking-shimmer">{spinner} {t.statusThinking}</span>
+      <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '⏱ 0s'}</span>
+      <span style={{ flex: 1 }} />
+      <span
+        data-interrupt
+        onClick={() => setConfirming(true)}
+        style={{ flexShrink: 0, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-3)', transition: 'background 150ms, opacity 150ms', color: dim, background: 'transparent', opacity: 0 }}
+        onMouseEnter={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
+        onMouseLeave={(e: MouseEvent) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+      >{t.clickToInterrupt}</span>
     </div>
   );
 }
 
-function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, iterations, loading, loadingStatus, anchorRef }: {
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+/** Format elapsed ms as a compact timer label with stopwatch prefix. */
+function formatElapsedTimer(ms: number): string {
+  return `⏱ ${formatDuration(ms)}`;
+}
+
+
+// ============================================
+// MessageList
+// ============================================
+
+function MessageList({ history, loading, runtimeState, onStop, onContinue, anchorRef }: {
   history: any[];
-  expandedRawIds: Set<number>;
-  toggleRaw: (id: number) => void;
-  currentToolCalls: any[];
-  iterations: any[];
   loading: boolean;
-  loadingStatus?: string;
+  runtimeState: 'idle' | 'running' | 'canceled' | 'error' | 'empty_response';
+  onStop: () => void;
+  onContinue: () => void;
   anchorRef: any;
 }) {
   const isEmpty = history.length === 0 && !loading;
 
+  const t = useTranslations();
   if (isEmpty) {
+    const pad = tokens.grid.blockPad; // 10px
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', flex: 1, gap: tokens.space[2], color: tokens.colors.textSecondary, textAlign: 'center', paddingTop: tokens.space[5] }}>
-        <Sparkles size={24} strokeWidth={1.5} style={{ color: tokens.colors.accent }} />
-        <span style={{ 
-          fontSize: tokens.fontSize[2],
-          lineHeight: 'var(--typography-line-height-2)',
-        }}>{t.emptyStateHint}</span>
-        {/* Chips are handled in the parent for now to access setPrompt */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', flex: 1, padding: `0 ${pad}px` }}>
+        <div style={{
+          fontSize: 32,
+          fontWeight: 400,
+          fontFamily: 'var(--typography-font-family-emphasis)',
+          color: 'var(--gray-12)',
+          lineHeight: 1.25,
+          letterSpacing: '-0.2px',
+        }}>{t.buildSomething}<br />{t.great}</div>
+        <div style={{
+          fontSize: tokens.fontSize[1],
+          color: 'var(--gray-9)',
+          marginTop: tokens.space[1],
+          lineHeight: tokens.lineHeight[2],
+        }}>{t.emptyStateHint}</div>
       </div>
     );
   }
 
   return (
     <Fragment>
-      {history.filter(msg => !msg.id?.startsWith('recovery_')).map((msg, i) => {
+      {history.map((msg, i) => {
         const isUserMessage = msg.role === 'user';
         const prevRole = i > 0 ? history[i - 1].role : null;
-        const isCrossRole = prevRole !== null && prevRole !== msg.role;
-        const marginTop = i === 0 ? 0 : (isCrossRole ? tokens.space[5] : tokens.space[1]);
+        const marginTop = i === 0 ? 0 : tokens.space[1];
 
-        const hasToolCalls = !isUserMessage && Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0;
-        const bubbleStyle = isUserMessage
-          ? messageBubbleUserStyle
-          : (hasToolCalls ? messageBubbleResultStyle : messageBubbleModelStyle);
+        if (isUserMessage) {
+          return (
+            <div key={msg.id || `msg-${i}`} style={{ ...userItemStyle, marginTop }}>
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                  {msg.attachments.map((att: ContextAttachment, ai: number) => (
+                    <ContextTag key={ai} icon={attachmentIcon(att)} label={attachmentLabel(att)} />
+                  ))}
+                </div>
+              )}
+              <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
+                {typeof msg.text === 'string' ? msg.text : String(msg.text ?? '')}
+              </span>
+            </div>
+          );
+        }
 
-        const safeText = typeof msg.text === 'string' ? msg.text : String(msg.text ?? '');
-
-        const lastIteration = msg.iterations?.[msg.iterations.length - 1];
-        const thinkingDetail = lastIteration?.thinking?.trim();
-        const thinkingStatus = msg.streaming ? (loadingStatus || 'Thinking...') : undefined;
-
-        const shouldShowToolGroup = !isUserMessage && (
-          (msg.toolCalls && msg.toolCalls.length > 0) ||
-          !!thinkingDetail ||
-          !!thinkingStatus
-        );
+        // Model message — flat block stream
+        const isStreaming = !!msg.streaming;
+        const blocks = mergeBlocks(msg.blocks || []);
+        const isError = msg.runState === 'error';
+        const isCanceled = msg.runState === 'canceled';
 
         return (
-          <div key={msg.id || `msg-${i}`} className="message-enter" style={{ ...bubbleStyle as any, marginTop }}>
-            {isUserMessage ? (
-              <span style={{ fontSize: tokens.fontSize[2], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-3)' }}>
-                {safeText}
-              </span>
-            ) : (
-              <Fragment>
-                {shouldShowToolGroup && (
-                  <div style={{ marginBottom: tokens.space[3] }}>
-                    <ToolExecutionPanel
-                      toolCalls={msg.toolCalls}
-                      thinkingStatus={thinkingStatus}
-                      thinkingDetail={thinkingDetail}
-                      onSelectNode={(nodeId) => {
-                        const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-                        emit<SelectNodeHandler>('SELECT_NODE', { nodeId, smooth: !reduce, durationMs: 250 });
-                      }}
+          <Fragment key={msg.id || `msg-${i}`}>
+            {blocks.map((block: any, bi: number) => {
+              const blockMargin = bi === 0 && marginTop ? marginTop : tokens.space[1];
+              if (block.type === 'text') {
+                return (
+                  <div key={`b-${bi}`} style={{ marginTop: blockMargin }}>
+                    <TextBlock
+                      content={block.content}
+                      streaming={isStreaming && bi === blocks.length - 1}
                     />
                   </div>
-                )}
-
-                {safeText ? <MessageRenderer content={safeText} level="L3" /> : <div />}
-
-                {msg.rawOutput && (
-                  <div style={{ marginTop: tokens.space[2] }}>
-                    <button
-                      onClick={() => toggleRaw(i)}
-                      className="ghost-btn"
-                      style={{ padding: `0 ${tokens.space[2]}px`, background: 'transparent', border: 'none', color: tokens.colors.textSecondary, fontSize: tokens.fontSize[1], cursor: 'pointer' }}
-                    >
-                      {expandedRawIds.has(i) ? t.hideRaw : t.showRaw}
-                    </button>
-                    <RawOutputPanel content={msg.rawOutput} isExpanded={expandedRawIds.has(i)} onToggle={() => toggleRaw(i)} />
+                );
+              }
+              if (block.type === 'tool_group') {
+                return (
+                  <div key={`b-${bi}`} style={{ marginTop: blockMargin }}>
+                    <ToolBlock tools={block.tools} />
                   </div>
-                )}
-              </Fragment>
-            )}
-          </div>
+                );
+              }
+              return null;
+            })}
+
+          </Fragment>
         );
       })}
 
@@ -216,67 +339,120 @@ function MessageList({ history, expandedRawIds, toggleRaw, currentToolCalls, ite
   );
 }
 
+// --- Attachment helpers ---
+
+function selectionSummary(nodes: { name: string; type: string }[]): string {
+  if (nodes.length === 0) return 'Empty'
+  if (nodes.length === 1) return nodes[0].name
+  // Group by type, show first name + count
+  const names = nodes.slice(0, 2).map(n => n.name)
+  const rest = nodes.length - names.length
+  return rest > 0 ? `${names.join(', ')} +${rest}` : names.join(', ')
+}
+
+function attachmentLabel(att: ContextAttachment): string {
+  switch (att.type) {
+    case 'page': return att.pageName
+    case 'selection': return selectionSummary(att.nodes)
+    case 'skill': return att.name
+  }
+}
+
+function attachmentIcon(att: ContextAttachment): h.JSX.Element {
+  const size = 12
+  const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round' as const }
+  switch (att.type) {
+    case 'page':
+      return <svg {...props}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+    case 'selection':
+      return <svg {...props}><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>
+    case 'skill':
+      return <svg {...props}><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+  }
+}
+
 export function ChatFeature(props: UseChatProps) {
+  const t = useTranslations();
   const {
     prompt,
     setPrompt,
     history,
     loading,
-    loadingStatus,
-    error,
-    setError,
-    thinkingText,
-    isThinkingStreaming,
     generate,
-    setHistory,
+    stopGeneration,
+    continueGeneration,
+    retryGeneration,
+    pendingQuestion,
+    respondToQuestion,
     modelName,
     setModelName,
     apiKey,
     setApiKey,
     suggestedModels,
     onOpenSettings,
-    providerName, // [NEW]
-    tokenUsage, // [NEW]
-    currentToolCalls, // [NEW]
-    iterations // [NEW]
+    providerName,
+    runtimeState,
   } = useChat(props)
 
-  const { copy } = useClipboard()
+  // --- Context Attachments ---
+  const [attachments, setAttachments] = useState<ContextAttachment[]>([])
 
+  const addAttachment = (att: ContextAttachment) => {
+    setAttachments(prev => {
+      // Deduplicate by type (only one selection, one page at a time)
+      if (att.type === 'selection' || att.type === 'page') {
+        return [...prev.filter(a => a.type !== att.type), att]
+      }
+      // Skills: deduplicate by skillId
+      if (att.type === 'skill' && prev.some(a => a.type === 'skill' && a.skillId === att.skillId)) {
+        return prev
+      }
+      return [...prev, att]
+    })
+  }
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Listen for selection context from main thread (replacing old JSON dump)
   useEffect(() => {
-    return on<SendSerializedSelectionHandler>('SEND_SERIALIZED_SELECTION', (data) => {
-      copy(data.jsonString);
-      // Optional: also put it in the prompt to show it works
-      setPrompt(data.jsonString);
-    });
-  }, [copy, setPrompt]);
-
-  const messagesEndRef = { current: null as HTMLDivElement | null };
+    return on<SendSelectionHandler>('SEND_SELECTION', (data) => {
+      if (data.selection.length === 0) return
+      addAttachment({ type: 'selection', nodes: data.selection })
+    })
+  }, [])
 
   const {
     shouldAutoScroll,
     containerRef,
     anchorRef,
-    showNewMessagesIndicator,
-    scrollToBottom,
   } = useSmartScroll(history, { threshold: 100 });
-
-  const [expandedRawIds, setExpandedRawIds] = useState<Set<number>>(new Set())
-
-  // No longer using Toast for errors
 
   // Conditional scroll
   useEffect(() => {
     if (shouldAutoScroll) {
       anchorRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [history, thinkingText, shouldAutoScroll])
+  }, [history, shouldAutoScroll])
 
   const selectSavedPrompt = (title: string) => {
     const suggestion = t.promptSuggestions.find(s => s.title === title)
     if (suggestion) {
       setPrompt(suggestion.description)
     }
+  }
+
+  const handleGenerate = () => {
+    // When ask_user is pending, route input to answer the question
+    if (pendingQuestion && prompt.trim()) {
+      respondToQuestion(prompt.trim())
+      setPrompt('')
+      return
+    }
+    const snapshot = [...attachments]
+    setAttachments([]) // Clear after send (selection/skill are one-shot)
+    generate(snapshot.length > 0 ? snapshot : undefined)
   }
 
   const pluginState: PluginState = derivePluginState({
@@ -286,54 +462,20 @@ export function ChatFeature(props: UseChatProps) {
   });
 
   const chipsState = getElementState('promptChips', pluginState);
-  const submitState = getElementState('submitButton', pluginState);
-  const textareaState = getElementState('textarea', pluginState);
 
   const isEmpty = pluginState === 'EMPTY' || pluginState === 'TYPING';
-  const canSubmit = submitState.enabled && !!prompt.trim();
-
-  // Resolve Error Config
-  const errorConfig = error ? getErrorConfig(error) : null;
-  const errorContent = errorConfig ? t.errors[errorConfig.i18nKey] : null;
-
-  // Action Handlers
-  const errorActions: Record<ErrorActionType, () => void> = {
-    openModelSelector: () => {
-      // Logic to open model selector is typically via the Popover trigger,
-      // but here we might prompt user or just dismiss error so they can click it.
-      // For now, simpler to just dismiss error and focus attention (or let user click).
-      // Actually, we can't programmatically open the popover easily without context.
-      // So we'll dismiss error to unblock UI. Ideally we'd trigger the popover.
-      setError(null);
-    },
-    openSettings: () => {
-      setError(null);
-      onOpenSettings?.();
-    },
-    retry: () => {
-      setError(null);
-      generate();
-    },
-    dismiss: () => setError(null),
-  };
+  const canSubmit = !!prompt.trim() || !!pendingQuestion;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       {/* Messages Area */}
-      <div style={messagesContainerStyle} ref={containerRef}>
+      <div style={messagesContainerStyle} ref={containerRef} className="messages-mask">
         <MessageList
           history={history}
-          expandedRawIds={expandedRawIds}
-          toggleRaw={(id) => setExpandedRawIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })}
-          currentToolCalls={currentToolCalls}
-          iterations={iterations}
           loading={loading}
-          loadingStatus={loadingStatus}
+          runtimeState={runtimeState}
+          onStop={stopGeneration}
+          onContinue={continueGeneration}
           anchorRef={anchorRef}
         />
 
@@ -351,34 +493,111 @@ export function ChatFeature(props: UseChatProps) {
         {/* Scroll anchor for bottom */}
       </div>
 
-      {/* Input Area — floating with backdrop blur */}
-      <div style={{
-        position: 'sticky' as const,
-        bottom: 0,
-        padding: tokens.space[3],
-        background: 'linear-gradient(to top, var(--color-background) 0%, var(--color-background) 80%, transparent 100%)',
-        backdropFilter: 'blur(5px)',
-        WebkitBackdropFilter: 'blur(5px)',
-        zIndex: 10,
-      }}>
-        {tokenUsage && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: tokens.space[2], padding: `0 ${tokens.space[2]}px`, gap: tokens.space[3], fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-            <span>Input: {tokenUsage.promptTokens}</span>
-            <span>Output: {tokenUsage.completionTokens}</span>
-            <span>Total: {tokenUsage.totalTokens}</span>
+      {/* Ask User Question Panel — outside scroll, needs outerPad */}
+      {pendingQuestion && (
+        <div style={{
+          flexShrink: 0,
+          padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
+          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.space[2],
+        }}>
+          <span style={{
+            fontSize: tokens.fontSize[2],
+            color: tokens.colors.textPrimary,
+            fontWeight: 500,
+            lineHeight: tokens.lineHeight[2],
+          }}>
+            {pendingQuestion.question}
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+            {pendingQuestion.options.map(opt => (
+              <button
+                key={opt.label}
+                className="card-interactive"
+                onClick={() => respondToQuestion(opt.label)}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 2,
+                  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+                  border: 'var(--border-default)',
+                  borderRadius: 'var(--radius-2)',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  width: '100%',
+                  fontFamily: tokens.font.sans,
+                  transition: 'var(--transition-crisp)',
+                }}
+              >
+                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>
+                  {opt.label}
+                </span>
+                {opt.description && (
+                  <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
+                    {opt.description}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        <ErrorBanner error={error} errorActions={errorActions} />
-        
+      {/* Status bar — fixed between scroll area and input */}
+      {(() => {
+        const lastModel = [...history].reverse().find((m: any) => m.role === 'model');
+        if (!lastModel) return null;
+        const state = loading ? runtimeState : lastModel.runState;
+        if (!state) return null;
+        return (
+          <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.colors.alpha[2]}` }}>
+            <StatusBlock
+              runState={state}
+              startTime={lastModel.startTime}
+              endTime={lastModel.endTime}
+              error={lastModel.runError}
+              onStop={stopGeneration}
+              onContinue={continueGeneration}
+              onRetry={retryGeneration}
+              waitingForUser={!!pendingQuestion}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Input Area — Flex-anchored at bottom */}
+      <div style={{
+        flexShrink: 0,
+        padding: `0 ${tokens.space[3]}px ${tokens.space[3]}px`,
+        background: tokens.colors.background,
+        zIndex: 10,
+        position: 'relative',
+      }}>
+
         <PromptInput
           value={prompt}
           onChange={(v) => setPrompt(v)}
-          onSubmit={generate}
+          onSubmit={handleGenerate}
           loading={loading}
-          disabled={!textareaState.enabled}
-          placeholder={t.placeholder}
+          disabled={false}
+          placeholder={pendingQuestion ? 'Or type your answer…' : t.placeholder}
           canSubmit={canSubmit}
+          contextTags={attachments.length > 0 ? (
+            <Fragment>
+              {attachments.map((att, i) => (
+                <ContextTag
+                  key={att.type === 'skill' ? att.skillId : att.type}
+                  icon={attachmentIcon(att)}
+                  label={attachmentLabel(att)}
+                  onRemove={att.type === 'page' ? undefined : () => removeAttachment(i)}
+                />
+              ))}
+            </Fragment>
+          ) : undefined}
           leftElement={
             <ModelPopover
               currentModel={modelName}
@@ -390,10 +609,13 @@ export function ChatFeature(props: UseChatProps) {
               placement="top"
               variant="ghost"
               align="end"
-              providerName={providerName} // [NEW]
+              providerName={providerName}
             />
           }
-          onPlusClick={() => emit<SerializeSelectionHandler>('SERIALIZE_SELECTION')}
+          onPlusClick={() => emit<GetSelectionHandler>('GET_SELECTION')}
+          onSkillSelect={(skillId) => {
+            addAttachment({ type: 'skill', skillId, name: skillId })
+          }}
         />
       </div>
     </div>

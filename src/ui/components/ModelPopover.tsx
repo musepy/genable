@@ -10,7 +10,41 @@
 import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { Settings, ChevronRight, Check } from 'lucide-preact';
-import { tokens, componentStyles } from '../design-system/tokens';
+import { tokens } from '../design-system/tokens';
+import { useTranslations } from '../i18n';
+
+const modelSelectorGhost = {
+  display: 'inline-flex' as const,
+  alignItems: 'center' as const,
+  gap: tokens.space[1],
+  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+  background: 'transparent',
+  border: 'none',
+  color: 'var(--gray-11)',
+  fontSize: tokens.fontSize[1],
+  fontWeight: tokens.fontWeight.regular,
+  cursor: 'pointer',
+  transition: 'var(--transition-crisp)',
+  whiteSpace: 'nowrap' as const,
+  borderRadius: 'var(--radius-5)',
+};
+const modelSelectorChip = {
+  display: 'inline-flex' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  gap: tokens.space[1],
+  padding: `0 ${tokens.space[2]}px`,
+  height: tokens.size.button.md,
+  background: 'transparent',
+  color: tokens.colors.textPrimary,
+  border: '1px solid transparent',
+  borderRadius: 'var(--radius-5)',
+  fontSize: tokens.fontSize[1],
+  fontWeight: tokens.fontWeight.regular,
+  lineHeight: tokens.lineHeight[1],
+  cursor: 'pointer',
+  transition: 'var(--transition-crisp)',
+};
 import { SUPPORTED_MODELS, sortModels } from '../constants/models';
 import { isGemini3Family } from '../../engine/llm-client/modelEngine';
 
@@ -30,7 +64,7 @@ interface ModelPopoverProps {
   onSelectModel: (modelName: string) => void;
   onApiKeyChange: (key: string) => void;
   onOpenSettings?: () => void;
-  providerName?: 'gemini' | 'openrouter'; // [NEW]
+  providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
   
   // P4: Layout variants
   placement?: 'bottom' | 'top';  // Popover 弹出方向
@@ -53,6 +87,7 @@ export function ModelPopover({
   align = 'start',
   providerName = 'gemini', // [NEW]
 }: ModelPopoverProps) {
+  const t = useTranslations();
   const [isOpen, setIsOpen] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [localApiKey, setLocalApiKey] = useState(apiKey);
@@ -99,7 +134,7 @@ export function ModelPopover({
 
   // Determine thinking level label for Gemini 3.0+ models using SSOT utility
   const isGemini3 = isGemini3Family(currentModel);
-  const baseText = displayName || currentModel.split('/').pop()?.replace(/-/g, ' ') || 'Select Model';
+  const baseText = displayName || currentModel.split('/').pop()?.replace(/-/g, ' ') || t.selectModel;
   
   // Concise naming override for Gemini 3.0 Flash
   const conciseBaseText = baseText.toLowerCase().includes('gemini 3.0 flash') ? 'gemini 3.0 flash' : baseText;
@@ -110,9 +145,9 @@ export function ModelPopover({
   const chipText = conciseBaseText + levelLabel;
 
   // Trigger styles based on variant
-  const triggerBaseStyle = variant === 'ghost' 
-    ? componentStyles.modelSelector.ghost
-    : componentStyles.modelSelector.chip;
+  const triggerBaseStyle = variant === 'ghost'
+    ? modelSelectorGhost
+    : modelSelectorChip;
   const triggerStyle = {
     ...triggerBaseStyle,
     cursor: disabled ? 'default' : 'pointer',
@@ -138,7 +173,7 @@ export function ModelPopover({
       stroke="currentColor" 
       strokeWidth="2.5"
       style={{
-        transition: 'transform 200ms ease',
+        transition: 'var(--transition-normal)',
         transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
       }}
     >
@@ -185,7 +220,7 @@ export function ModelPopover({
             width: 240,
             minWidth: 220,
             maxWidth: 'calc(100vw - 24px)',
-            zIndex: 50,
+            zIndex: tokens.zIndex.popover,
             maxHeight: 'min(360px, calc(100vh - 120px))',
             display: 'flex',
             flexDirection: 'column',
@@ -196,7 +231,7 @@ export function ModelPopover({
           {hasApiKey && (
             <div
               role="listbox"
-              aria-label="Select model"
+              aria-label={t.selectModel}
               style={{
                 padding: tokens.space[1],
                 overflowY: 'auto',
@@ -227,11 +262,11 @@ export function ModelPopover({
                         {model.displayName || model.name}
                       </span>
                       {isGemini3Family(model.name) && (
-                        <span style={{ 
-                          fontSize: '10px', 
-                          color: tokens.colors.gray[9],
-                          marginLeft: tokens.space[1] 
-                        }}>
+                      <span style={{ 
+                        fontSize: tokens.fontSize[1],
+                        color: tokens.colors.gray[9],
+                        marginLeft: tokens.space[1] 
+                      }}>
                           High
                         </span>
                       )}
@@ -248,7 +283,7 @@ export function ModelPopover({
           {/* Settings Section (Apple HIG: settings at bottom) */}
           <div style={{ 
             padding: tokens.space[1],
-            borderTop: hasApiKey ? `var(--border-subtle) solid var(--gray-a4)` : 'none',
+            borderTop: hasApiKey ? 'var(--border-subtle)' : 'none',
           }}>
             {hasApiKey ? (
               // API Key Settings link
@@ -258,14 +293,14 @@ export function ModelPopover({
                 style={{ height: tokens.space[6] }} // Ensure base height
               >
                 <Settings size={14} strokeWidth={2} />
-                <span>API Key Settings</span>
+                <span>{t.apiKeySettings}</span>
                 <ChevronRight size={10} strokeWidth={2} style={{ marginLeft: 'auto' }} />
               </div>
             ) : (
               // API Key Input (if not configured)
               <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1], padding: tokens.space[1] }}>
                 <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-                  Enter API Key to start
+                  {t.enterApiKeyToStart}
                 </span>
                 <div style={{ display: 'flex', gap: tokens.space[1] }}>
                   <input
@@ -273,13 +308,13 @@ export function ModelPopover({
                     value={localApiKey}
                     onInput={(e) => setLocalApiKey((e.target as HTMLInputElement).value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleApiKeySubmit()}
-                    placeholder={providerName === 'openrouter' ? "OpenRouter API Key" : "Gemini API Key"}
+                    placeholder={t.enterApiKey(providerName)}
                     style={{
                       flex: 1,
                       padding: tokens.space[1],
                       fontSize: tokens.fontSize[1],
                       background: tokens.colors.background, // Migrated from colors.background
-                      border: `var(--border-subtle) solid var(--gray-a4)`,
+                      border: 'var(--border-subtle)',
                       borderRadius: 'var(--radius-4)',
                       outline: 'none',
                       color: tokens.colors.textPrimary,
@@ -298,7 +333,7 @@ export function ModelPopover({
                       cursor: localApiKey.length >= 20 ? 'pointer' : 'default',
                     }}
                   >
-                    Save
+                    {t.save}
                   </button>
                 </div>
               </div>

@@ -9,14 +9,23 @@
  * making the code testable and the architecture layered.
  */
 
-import { findNodeByIdAsync } from '../../pipeline/RenderOrchestrator';
+import { findNodeByIdAsync } from './nodeRegistry';
 
 export interface NodeLayoutConfig {
   layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+  layoutPositioning?: 'AUTO' | 'ABSOLUTE' | string;
   sizing?: {
     horizontal?: 'FIXED' | 'HUG' | 'FILL';
     vertical?: 'FIXED' | 'HUG' | 'FILL';
   };
+  layoutGrow?: number;
+  layoutAlign?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH' | 'INHERIT' | string;
+  constraints?: {
+    horizontal?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH' | 'SCALE' | string;
+    vertical?: 'MIN' | 'CENTER' | 'MAX' | 'STRETCH' | 'SCALE' | string;
+  };
+  x?: number;
+  y?: number;
   width?: number;
   height?: number;
   gap?: number;
@@ -38,12 +47,6 @@ export interface NodeStyleConfig {
   opacity?: number;
 }
 
-export interface NodeInfo {
-  id: string;
-  name: string;
-  type: string;
-}
-
 /**
  * Repository for Figma Node operations.
  * All direct figma.* node API calls go here.
@@ -54,31 +57,6 @@ export class NodeRepository {
    */
   async findById(nodeId: string): Promise<SceneNode | null> {
     return findNodeByIdAsync(nodeId);
-  }
-
-  /**
-   * Get current page selection
-   */
-  getSelection(): SceneNode[] {
-    return [...figma.currentPage.selection];
-  }
-
-  /**
-   * Get selection as simplified NodeInfo[]
-   */
-  getSelectionInfo(): NodeInfo[] {
-    return figma.currentPage.selection.map(node => ({
-      id: node.id,
-      name: node.name,
-      type: node.type
-    }));
-  }
-
-  /**
-   * Get selection count
-   */
-  getSelectionCount(): number {
-    return figma.currentPage.selection.length;
   }
 
   /**
@@ -124,6 +102,20 @@ export class NodeRepository {
       node.layoutMode = config.layoutMode;
     }
 
+    const parent = this.getParentContainer(node);
+    const parentIsAutoLayout = !!(
+      parent &&
+      parent.type !== 'PAGE' &&
+      'layoutMode' in parent &&
+      (parent as any).layoutMode !== 'NONE'
+    );
+
+    // Auto-layout child positioning override (ignore auto layout flow)
+    if (config.layoutPositioning !== undefined && parentIsAutoLayout && 'layoutPositioning' in node) {
+      const positioning = String(config.layoutPositioning).toUpperCase();
+      (node as any).layoutPositioning = positioning === 'ABSOLUTE' ? 'ABSOLUTE' : 'AUTO';
+    }
+
     // Apply Sizing
     if (config.sizing) {
       const { horizontal, vertical } = config.sizing;
@@ -142,6 +134,42 @@ export class NodeRepository {
       }
       if (vertical !== undefined) {
         node.layoutSizingVertical = vertical;
+      }
+    }
+
+    // Explicit dimensions can be applied independently from sizing updates.
+    if (config.sizing === undefined && (config.width !== undefined || config.height !== undefined)) {
+      node.resize(config.width ?? node.width, config.height ?? node.height);
+    }
+
+    // Apply explicit auto-layout child controls when relevant.
+    if (parentIsAutoLayout) {
+      if (config.layoutGrow !== undefined && 'layoutGrow' in node) {
+        (node as any).layoutGrow = config.layoutGrow;
+      }
+      if (config.layoutAlign !== undefined && 'layoutAlign' in node) {
+        (node as any).layoutAlign = this.normalizeLayoutAlign(config.layoutAlign);
+      }
+    }
+
+    // Apply constraints for non-auto-layout positioning behavior (left/right/scale, etc.)
+    if (config.constraints && 'constraints' in node) {
+      const current = ((node as any).constraints || { horizontal: 'MIN', vertical: 'MIN' }) as Constraints;
+      (node as any).constraints = {
+        horizontal: this.normalizeConstraintAxis(config.constraints.horizontal, 'horizontal') || current.horizontal,
+        vertical: this.normalizeConstraintAxis(config.constraints.vertical, 'vertical') || current.vertical
+      } as Constraints;
+    }
+
+    // x/y are valid in non-auto-layout parents and in auto-layout only when child is ABSOLUTE.
+    const isAbsoluteInAutoLayout = parentIsAutoLayout && (node as any).layoutPositioning === 'ABSOLUTE';
+    const canSetXY = !parentIsAutoLayout || isAbsoluteInAutoLayout;
+    if (canSetXY) {
+      if (config.x !== undefined && 'x' in node) {
+        (node as any).x = config.x;
+      }
+      if (config.y !== undefined && 'y' in node) {
+        (node as any).y = config.y;
       }
     }
 
@@ -170,6 +198,41 @@ export class NodeRepository {
         if (padding.bottom !== undefined) node.paddingBottom = padding.bottom;
       }
     }
+  }
+
+  private normalizeConstraintAxis(
+    value: string | undefined,
+    axis: 'horizontal' | 'vertical'
+  ): ConstraintType | undefined {
+    if (!value) return undefined;
+    const upper = String(value).toUpperCase();
+
+    if (axis === 'horizontal') {
+      const map: Record<string, ConstraintType> = {
+        LEFT: 'MIN',
+        RIGHT: 'MAX',
+        LEFT_RIGHT: 'STRETCH'
+      };
+      return map[upper] || (upper as ConstraintType);
+    }
+
+    const map: Record<string, ConstraintType> = {
+      TOP: 'MIN',
+      BOTTOM: 'MAX',
+      TOP_BOTTOM: 'STRETCH'
+    };
+    return map[upper] || (upper as ConstraintType);
+  }
+
+  private normalizeLayoutAlign(value: string): string {
+    const upper = String(value).toUpperCase();
+    const map: Record<string, string> = {
+      LEFT: 'MIN',
+      RIGHT: 'MAX',
+      TOP: 'MIN',
+      BOTTOM: 'MAX'
+    };
+    return map[upper] || upper;
   }
 
   /**

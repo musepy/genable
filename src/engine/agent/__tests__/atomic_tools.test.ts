@@ -60,7 +60,18 @@ describe('Atomic Tools Interactions', () => {
                 { name: 'setNodeLayout', args: { nodeId: '1:1', sizing: 'HUG' } }
             ]
           })
-          .mockResolvedValue({ text: 'Done' }),
+          .mockResolvedValueOnce({
+            text: 'Done',
+            toolCalls: [] 
+          })
+          .mockResolvedValueOnce({
+            text: 'Really done',
+            toolCalls: [] 
+          })
+          .mockResolvedValue({
+            text: 'Absolutely done',
+            toolCalls: []
+          }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
           role: 'model',
@@ -87,7 +98,10 @@ describe('Atomic Tools Interactions', () => {
 
     runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [], // We'll add definitions later, runtime doesn't strictly validate against schema in this test
+      tools: [
+        { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
+        { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
+      ],
       ipcBridge: mockIpcBridge
     });
 
@@ -106,12 +120,12 @@ describe('Atomic Tools Interactions', () => {
                 layoutMode: 'NONE', // Default
                 sizing: 'FIXED'      // Default
             };
-            return { success: true, data: { nodeId: generatedId } };
+            return { data: { nodeId: generatedId } };
         }
         
         if (name === 'setNodeLayout') {
             const node = figmaState[args.nodeId];
-            if (!node) return { success: false, error: { message: 'Node not found' } };
+            if (!node) return { error: { message: 'Node not found' } };
 
             // Logic: Setting HUG requires Auto Layout context (parent OR self)
             if (args.sizing === 'HUG') {
@@ -124,7 +138,6 @@ describe('Atomic Tools Interactions', () => {
                 // HUG is valid if: (1) self is Auto Layout, OR (2) parent is Auto Layout
                 if (!isSelfAutoLayout && !isParentAutoLayout) {
                     return {
-                        success: false,
                         error: { message: `HUG sizing requires Auto Layout context. Either set layoutMode to VERTICAL/HORIZONTAL, or ensure parent has Auto Layout.` }
                     };
                 }
@@ -139,10 +152,10 @@ describe('Atomic Tools Interactions', () => {
                 node.sizing = args.sizing;
             }
 
-            return { success: true, data: { nodeId: node.id } };
+            return { data: { nodeId: node.id } };
         }
         
-        return { success: false, error: { message: 'Unknown tool' } };
+        return { error: { message: 'Unknown tool' } };
     });
   });
 
@@ -194,7 +207,18 @@ describe('Atomic Tools Interactions', () => {
                 { name: 'setNodeLayout', args: { nodeId: 'guessed-123', layoutMode: 'VERTICAL' } }
             ]
           })
-          .mockResolvedValue({ text: 'Done' }),
+          .mockResolvedValueOnce({
+            text: 'Done',
+            toolCalls: [] 
+          })
+          .mockResolvedValueOnce({
+            text: 'Really done',
+            toolCalls: [] 
+          })
+          .mockResolvedValue({
+            text: 'Absolutely done',
+            toolCalls: []
+          }),
         generateStream: vi.fn(),
         formatResponse: vi.fn().mockImplementation(res => ({
           role: 'model',
@@ -215,14 +239,22 @@ describe('Atomic Tools Interactions', () => {
 
     const testRuntime = new AgentRuntime({
       provider: guessingProvider,
-      tools: [],
+      tools: [
+        { name: 'createNode', description: 'Create node', parameters: { type: 'object', properties: {} } },
+        { name: 'setNodeLayout', description: 'Set layout', parameters: { type: 'object', properties: {} } },
+      ],
       ipcBridge: (runtime as any).options.ipcBridge
     });
 
-    await testRuntime.run('Test guessed ID');
+    try {
+      await testRuntime.run('Test guessed ID');
+    } catch (e) {
+      // Ignore: Agent reaches loop detector and fails, which is expected since it never fixes the 'guessed-123' error
+      expect(e).toBeDefined();
+    }
     
     // Verify that setNodeLayout was called with the guessed ID and failed
-    const mockCallTool = (runtime as any).options.ipcBridge.callTool;
+    const mockCallTool = (testRuntime as any).options.ipcBridge.callTool;
     const setLayoutCalls = mockCallTool.mock.calls.filter((c: any) => c[0] === 'setNodeLayout' && c[1].nodeId === 'guessed-123');
     expect(setLayoutCalls.length).toBeGreaterThan(0);
   });

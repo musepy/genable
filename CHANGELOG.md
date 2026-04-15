@@ -2,7 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.0] - 2026-02-02
+## [1.3.0] - 2026-02-12
+
+### Added
+- **Unified Context Module**: Extracted context management, token estimation, and tool result cleaning into a dedicated module (`src/engine/agent/context/`).
+- **Robust Loop Policy**: Introduced `agentLoopPolicy.ts` with configurable retry limits, recovery phases, and failure-aware exit mechanisms.
+- **Structured Prompt System**: Migrated system prompts to a dedicated directory (`src/engine/prompt/`) for better version control and modularity.
+- **Knowledge Base Expansion**: Added detailed chronicles for Figma sandbox fixes and performance optimizations.
+
+### Changed
+- **Agent Runtime Refactor**: Simplified `agentRuntime.ts` by delegating context and loop control to specialized modules.
+- **Generate Design Optimization**: Enhanced `generateDesign` tool schema and internal logic for better style adherence and one-shot generation.
+- **Visual Pipeline Improvements**: Refined `Normalizer` and `RenderOrchestrator` to fix visual effects (shadows, blurs) loss.
+
+### Fixed
+- **Figma Sandbox Import Bug**: Fixed the `possible import expression rejected` error by implementing synchronous esbuild sanitization.
+- **Token Bloat**: Reduced context size through more aggressive tool result truncation and unified token counting.
+
+
 
 ### Added
 - **Agentic Orchestration**: Implemented `AgentOrchestrator` for autonomous multi-phase generation (Planning → Execution → Verification).

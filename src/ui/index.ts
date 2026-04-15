@@ -3,15 +3,8 @@
  * @description UI module exports
  */
 
-export { tokens, cssTokens, motionTokens, interactionTokens, layoutTokens, componentStyles } from './design-system/tokens';
-export type { Tokens, MotionTokens, InteractionTokens, LayoutTokens, ComponentStyles } from './design-system/tokens';
-
-export {
-  containerStyle,
-  headerStyle,
-  cardStyle,
-  btnPrimaryStyle,
-} from './styles';
+export { tokens, cssTokens } from './design-system/tokens';
+export type { Tokens } from './design-system/tokens';
 
 export { SettingsPanel } from './SettingsPanel';
 export type { SettingsPanelProps } from './SettingsPanel';
@@ -32,10 +25,6 @@ export type {
   ElementState,
   ButtonState,
 } from './interactionStates';
-
-// ExperimentTab kept but not actively exported to main UI
-// export { ExperimentTab } from './ExperimentTab';
-// export type { ExperimentTabProps } from './ExperimentTab';
 
 // P2: 语义化组件
 export { Header } from './components/Header';

@@ -1,0 +1,130 @@
+{
+  "timestamp": "2026-03-20T10:53:01.116Z",
+  "gitCommit": "8685261",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774003571871",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 22,
+          "maxDepth": 0,
+          "durationSec": 23.665
+        },
+        "score": 100,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774003600131",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.64,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.62,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 65,
+          "maxDepth": 5,
+          "durationSec": 73.017
+        },
+        "score": 90.7,
+        "issues": [
+          "Frame \"Dashboard\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing",
+          "Frame \"Header\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774003677795",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0.5555555555555556,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 138.445
+        },
+        "score": 85.6,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774003821980",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6875,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.5,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 20,
+          "maxDepth": 3,
+          "durationSec": 49.812
+        },
+        "score": 89.4,
+        "issues": [
+          "Frame \"ProfileCard\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774003877388",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0.7777777777777778,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 99.899
+        },
+        "score": 87.8,
+        "issues": []
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 90.69999999999999,
+    "minScore": 85.6,
+    "maxScore": 100,
+    "totalDurationSec": 384.83799999999997,
+    "totalNodes": 107,
+    "totalIssues": 7
+  }
+}

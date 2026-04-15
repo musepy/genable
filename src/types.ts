@@ -5,44 +5,13 @@ export type { NodeLayer };
 
 export interface Settings {
   apiKey: string; // Active/Default key for backward compatibility
-  apiKeys?: Record<string, string>; // [NEW] Map of provider -> key
+  apiKeys?: Record<string, string>; // Map of provider -> key
   modelName: string;
-  providerName?: 'gemini' | 'openrouter';
-  availableModels?: { name: string; displayName: string }[];
-  /** Timestamp when models were last fetched (for SWR cache) */
-  cacheTimestamp?: number;
-}
-
-export interface SelectionStyles {
-  // Aggregate styles for legacy UI compatibility (Deprecated - favor selectionNodes)
-  colors?: string[];
-  fonts?: string[];
-  cornerRadius?: number[];
-  selectedName?: string; // For UI feedback
-  // Context: The layout structure of the user's selection (if any)
-  referenceLayout?: {
-    width: number;
-    height: number;
-    layoutMode: 'VERTICAL' | 'HORIZONTAL' | 'NONE';
-    itemSpacing?: number;
-    padding?: { top: number; right: number; bottom: number; left: number };
-  };
-  // Detailed structure for LLM to learn patterns
-  selectionNodes?: NodeLayer[];
-}
-
-export interface AnalyzePatternHandler extends EventHandler {
-  name: 'ANALYZE_PATTERN';
-  handler: () => void;
-}
-
-export interface SendAnalyzedPatternHandler extends EventHandler {
-  name: 'SEND_ANALYZED_PATTERN';
-  handler: (data: {
-    nodes: NodeLayer[],
-    dna: { colors: string[], fonts: string[], radii: number[], spacing: number[] },
-    patternSummary?: string  // 新增: 模式识别摘要用于 LLM 上下文
-  }) => void;
+  /** Per-provider model names (loaded from storage, used for provider switch restore) */
+  modelNames?: Record<string, string>;
+  providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
+  /** User's preferred UI + LLM communication language */
+  locale?: 'auto' | 'en' | 'zh' | 'fr';
 }
 
 export interface CreateLayersHandler extends EventHandler {
@@ -94,33 +63,6 @@ export interface SendVariablesHandler extends EventHandler {
   handler: (data: { names: string[] }) => void;
 }
 
-export interface GetLibraryResourcesHandler extends EventHandler {
-  name: 'GET_LIBRARY_RESOURCES';
-  handler: () => void;
-}
-
-export interface LibraryResource {
-  key: string;
-  name: string;
-  type: 'STYLE' | 'COMPONENT' | 'VARIABLE';
-  libraryName?: string;
-  description?: string;
-}
-
-export interface SendLibraryResourcesHandler extends EventHandler {
-  name: 'SEND_LIBRARY_RESOURCES';
-  handler: (data: { resources: LibraryResource[] }) => void;
-}
-
-export interface GetSelectionStylesHandler extends EventHandler {
-  name: 'GET_SELECTION_STYLES';
-  handler: () => void;
-}
-
-export interface SendSelectionStylesHandler extends EventHandler {
-  name: 'SEND_SELECTION_STYLES';
-  handler: (styles: SelectionStyles) => void;
-}
 
 export interface LoadSettingsHandler extends EventHandler {
   name: 'LOAD_SETTINGS';
@@ -130,6 +72,11 @@ export interface LoadSettingsHandler extends EventHandler {
 export interface SaveSettingsHandler extends EventHandler {
   name: 'SAVE_SETTINGS';
   handler: (settings: Settings) => void;
+}
+
+export interface ResetSettingsHandler extends EventHandler {
+  name: 'RESET_SETTINGS';
+  handler: () => void;
 }
 
 export interface SettingsLoadedHandler extends EventHandler {
@@ -183,32 +130,6 @@ export interface SendLocalComponentsHandler extends EventHandler {
   handler: (data: { components: LocalComponent[] }) => void;
 }
 
-export interface ProjectTemplate {
-  id: string;
-  name: string;
-  version: string;
-  path: string;
-  data?: NodeLayer; // Legacy single-state support
-  variants?: {      // New multi-state support
-    name: string;   // e.g. "Variant=Primary, State=Default"
-    data: NodeLayer;
-  }[];
-}
-
-export interface GetProjectTemplatesHandler extends EventHandler {
-  name: 'GET_PROJECT_TEMPLATES';
-  handler: () => void;
-}
-
-export interface SendProjectTemplatesHandler extends EventHandler {
-  name: 'SEND_PROJECT_TEMPLATES';
-  handler: (data: { templates: ProjectTemplate[] }) => void;
-}
-
-export interface ImportProjectTemplateHandler extends EventHandler {
-  name: 'IMPORT_PROJECT_TEMPLATE';
-  handler: (data: { templateId: string }) => void;
-}
 
 export interface ImportJsonHandler extends EventHandler {
   name: 'IMPORT_JSON';
@@ -241,9 +162,32 @@ export interface SendSerializedSelectionHandler extends EventHandler {
   handler: (data: { jsonString: string }) => void;
 }
 
+// --- Context Attachments ---
+
+export type ContextAttachment =
+  | { type: 'skill'; skillId: string; name: string }
+  | { type: 'selection'; nodes: { id: string; name: string; type: string }[] }
+  | { type: 'page'; pageId: string; pageName: string }
+
+
 export interface SelectNodeHandler extends EventHandler {
   name: 'SELECT_NODE';
   handler: (data: { nodeId: string; smooth?: boolean; durationMs?: number }) => void;
+}
+
+export interface GetSelectionHandler extends EventHandler {
+  name: 'GET_SELECTION';
+  handler: () => void;
+}
+
+export interface SendSelectionHandler extends EventHandler {
+  name: 'SEND_SELECTION';
+  handler: (data: { selection: Array<{ id: string; name: string; type: string }> }) => void;
+}
+
+export interface SendFileInfoHandler extends EventHandler {
+  name: 'SEND_FILE_INFO';
+  handler: (data: { fileKey: string; fileName: string }) => void;
 }
 
 export interface ImportTokensHandler extends EventHandler {
@@ -261,13 +205,9 @@ export interface SendExportedTokensHandler extends EventHandler {
   handler: (data: { tokens: any }) => void;
 }
 
-export interface SelectNodeHandler extends EventHandler {
-  name: 'SELECT_NODE';
-  handler: (data: {
-    nodeId: string;
-    smooth?: boolean;   // default true
-    durationMs?: number; // optional
-  }) => void;
+export interface ResizeHandler extends EventHandler {
+  name: 'RESIZE';
+  handler: (data: { height: number }) => void;
 }
 
 // ==========================================
@@ -289,6 +229,23 @@ export interface ToolResultHandler extends EventHandler {
   handler: (data: {
     requestId: string,
     response: import('./engine/agent/tools/types').ToolResponse
+  }) => void;
+}
+
+// ==========================================
+// Dev Bridge: Node Tree + Screenshot Export
+// ==========================================
+
+export interface DevBridgeExportHandler extends EventHandler {
+  name: 'DEV_BRIDGE_EXPORT';
+  handler: (data: { rootNodeIds?: string[] }) => void;
+}
+
+export interface DevBridgeExportResultHandler extends EventHandler {
+  name: 'DEV_BRIDGE_EXPORT_RESULT';
+  handler: (data: {
+    nodeTree: any;
+    screenshots: Array<{ nodeId: string; name: string; base64: string }>; // per-root-node screenshots
   }) => void;
 }
 

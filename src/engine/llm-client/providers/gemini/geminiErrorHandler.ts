@@ -1,84 +1,82 @@
 /**
  * @file geminiErrorHandler.ts
- * @description Centralized error handling logic for Gemini LLM Provider.
+ * @description Maps Gemini SDK exceptions and Gemini-specific response shapes
+ * to typed `ProviderError` instances.
+ *
+ * Replaces the previous `GeminiError`/`GeminiErrorType` enum-based design.
+ * The enum is preserved as `GeminiErrorTag` metadata for finer-grained logging
+ * but the error type seen by callers is the unified `ProviderError` hierarchy.
  */
 
 import { GEMINI_CONFIG } from '../../config';
 import { GeminiLogger } from './geminiLogger';
+import {
+  ProviderError,
+  APIError,
+  TransportError,
+  EmptyResponseError,
+  MalformedToolCallError,
+  OutputTooLongError,
+} from '../shared/providerErrors';
 
-export enum GeminiErrorType {
-  OVERLOADED = 'OVERLOADED',
-  MALFORMED_FUNCTION_CALL = 'MALFORMED_FUNCTION_CALL',
-  EMPTY_RESPONSE = 'EMPTY_RESPONSE',
+const PROVIDER_NAME = 'gemini';
+
+/**
+ * Optional tag for sub-categorizing Gemini errors in logs / analytics.
+ * The runtime should NOT branch on these — branch on `ProviderError` subclasses instead.
+ */
+export enum GeminiErrorTag {
   RECITATION_BLOCKED = 'RECITATION_BLOCKED',
   SAFETY_BLOCKED = 'SAFETY_BLOCKED',
-  INVALID_ARGUMENT = 'INVALID_ARGUMENT',
-  QUOTA_EXCEEDED = 'QUOTA_EXCEEDED',
-  UNKNOWN = 'UNKNOWN'
 }
 
 /**
- * Unified error object for Gemini provider
+ * Content-filter / safety errors. We extend ProviderError so the runtime
+ * sees a uniform error type, but tag = which kind of filter triggered.
  */
-export class GeminiError extends Error {
-  constructor(
-    public type: GeminiErrorType,
-    message: string,
-    public details?: Record<string, any>,
-    public rawError?: any
-  ) {
-    super(message);
-    this.name = 'GeminiError';
+export class GeminiContentBlockedError extends ProviderError {
+  readonly category = 'content';
+  readonly userActionable = true;
+  readonly userMessage: string;
+
+  constructor(public readonly tag: GeminiErrorTag, message: string) {
+    super(PROVIDER_NAME, message);
+    if (tag === GeminiErrorTag.RECITATION_BLOCKED) {
+      this.userMessage = 'Gemini 因版权过滤拒绝了响应。请改写 prompt 避免直接引用。';
+    } else {
+      this.userMessage = 'Gemini 因安全过滤拒绝了响应。请改写 prompt 避免敏感内容。';
+    }
   }
 }
 
-/**
- * Utility class to handle and unify Gemini-specific errors
- */
 export class GeminiErrorHandler {
   /**
-   * Processes exceptions thrown by the GenAI SDK
+   * Maps an exception thrown by the GenAI SDK to a ProviderError.
+   * Always throws — never returns.
    */
   static handleSdkError(error: any): never {
-    const message = error.message || String(error);
+    const message = error?.message || String(error);
     const lowerMessage = message.toLowerCase();
 
-    // 503 Overloaded
     if (message.includes('503') || lowerMessage.includes('overloaded')) {
-      throw new GeminiError(
-        GeminiErrorType.OVERLOADED,
-        'Gemini model is currently overloaded (503). This usually happens during high traffic. Please try again in a few moments.',
-        undefined,
-        error
-      );
+      throw new APIError(PROVIDER_NAME, 503, message);
     }
 
-    // 429 Quota Exceeded
     if (message.includes('429') || lowerMessage.includes('quota') || lowerMessage.includes('rate limit')) {
-      throw new GeminiError(
-        GeminiErrorType.QUOTA_EXCEEDED,
-        'Gemini API quota exceeded (429). Please check your billing status or wait for the quota to reset.',
-        undefined,
-        error
-      );
+      throw new APIError(PROVIDER_NAME, 429, message);
     }
 
-    // 400 Invalid Argument
     if (message.includes('400') || lowerMessage.includes('invalid')) {
-      throw new GeminiError(
-        GeminiErrorType.INVALID_ARGUMENT,
-        `Gemini received an invalid argument: ${message}`,
-        undefined,
-        error
-      );
+      throw new APIError(PROVIDER_NAME, 400, message);
     }
 
-    // Default rethrow
-    throw error;
+    // Unknown / network — wrap as TransportError for consistency
+    throw new TransportError(PROVIDER_NAME, message, error);
   }
 
   /**
-   * Processes errors found within the response structure (e.g. Candidates)
+   * Inspects a Gemini API response shape for in-band errors that aren't
+   * surfaced as SDK exceptions (e.g. finishReason='MALFORMED_FUNCTION_CALL').
    */
   static handleResponseError(response: any): void {
     const candidate = response.candidates?.[0];
@@ -90,52 +88,42 @@ export class GeminiErrorHandler {
       const actualOutputTokens = usage?.candidatesTokenCount || 0;
       const isTokenLimitExceeded = actualOutputTokens >= configMaxTokens;
 
-      const details = {
-        finishReason,
-        configMaxTokens,
-        actualOutputTokens,
-        isTokenLimitExceeded,
-        promptTokens: usage?.promptTokenCount,
-        totalTokens: usage?.totalTokenCount,
-      };
+      GeminiLogger.error('MALFORMED_FUNCTION_CALL detected:', {
+        finishReason, configMaxTokens, actualOutputTokens, isTokenLimitExceeded,
+      });
 
-      GeminiLogger.error('MALFORMED_FUNCTION_CALL detected:', details);
-
-      let errorMessage = 'Gemini produced a malformed function call (MALFORMED_FUNCTION_CALL).';
+      // If we exceeded max_tokens, the truncation IS the cause — raise that
+      // error so the user sees the correct guidance (raise max_tokens / split task).
       if (isTokenLimitExceeded) {
-        errorMessage += ` This was likely caused by exceeding the output token limit (${actualOutputTokens} >= ${configMaxTokens}), which truncated the function call.`;
-      } else {
-        errorMessage += ' This can happen if the model fails to follow the tool call syntax correctly.';
+        throw new OutputTooLongError(PROVIDER_NAME, configMaxTokens, '');
       }
 
-      throw new GeminiError(GeminiErrorType.MALFORMED_FUNCTION_CALL, errorMessage, details);
+      throw new MalformedToolCallError(PROVIDER_NAME, JSON.stringify(candidate?.content || {}));
     }
 
     if (finishReason === 'RECITATION') {
-      throw new GeminiError(
-        GeminiErrorType.RECITATION_BLOCKED,
-        'Gemini blocked the response due to recitation (copyright) filters.'
+      throw new GeminiContentBlockedError(
+        GeminiErrorTag.RECITATION_BLOCKED,
+        'Gemini blocked the response due to recitation (copyright) filters.',
       );
     }
 
     if (finishReason === 'SAFETY') {
-      throw new GeminiError(
-        GeminiErrorType.SAFETY_BLOCKED,
-        'Gemini blocked the response due to safety filters.'
+      throw new GeminiContentBlockedError(
+        GeminiErrorTag.SAFETY_BLOCKED,
+        'Gemini blocked the response due to safety filters.',
       );
     }
   }
 
   /**
-   * Validates that the response contains at least some useful content
+   * Validates that the streaming accumulator yielded *something*.
+   * Empty → throw EmptyResponseError (handled by runtime, surfaces to user).
    */
   static validateResponseContent(text: string, toolCalls: any[] | undefined, thoughts: string): void {
     if (!text && (!toolCalls || toolCalls.length === 0) && !thoughts) {
       GeminiLogger.warn('Empty response detected');
-      throw new GeminiError(
-        GeminiErrorType.EMPTY_RESPONSE,
-        'Gemini produced an empty response (no text, thoughts, or tool calls).'
-      );
+      throw new EmptyResponseError(PROVIDER_NAME, 'Gemini produced no text, thoughts, or tool calls');
     }
   }
 }

@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
+      "port": 5173
+    },
+    {
+      "name": "watch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["build.js", "--watch"],
+      "port": 0
+    },
+    {
+      "name": "test:watch",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vitest"],
+      "port": 0
+    },
+    {
+      "name": "dev-bridge",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "tools/dev-bridge/server.ts"],
+      "port": 3456
+    }
+  ]
+}

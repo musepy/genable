@@ -1,0 +1,121 @@
+{
+  "timestamp": "2026-03-20T10:27:05.975Z",
+  "gitCommit": "947d1e6",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774002204771",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0.8,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 36.97
+        },
+        "score": 88,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774002245379",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 1,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 58.95
+        },
+        "score": 90,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774002307436",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 1,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 27.655
+        },
+        "score": 90,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774002338052",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 1,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 28.136
+        },
+        "score": 90,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774002368582",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0.6666666666666667,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 55.561
+        },
+        "score": 86.7,
+        "issues": []
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 88.94,
+    "minScore": 86.7,
+    "maxScore": 90,
+    "totalDurationSec": 207.27200000000002,
+    "totalNodes": 0,
+    "totalIssues": 0
+  }
+}

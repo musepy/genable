@@ -1,12 +1,15 @@
 .DS_Store
 *.log
 *.css.d.ts
+*.bak
+*.resolved
 /build/
 combined_import.js
 verify_tokens.js
 temp_*.css
 reproduce_bug.js
 repro_*.ts
+.playwright-mcp/console-*.log
 
 node_modules/
 dist/
@@ -14,3 +17,7 @@ coverage/
 .env
 .idea/
 .vscode/
+test_output.txt
+数据结构/产出日志.json
+.agent-runs/
+.gstack/

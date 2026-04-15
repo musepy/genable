@@ -1,0 +1,129 @@
+{
+  "timestamp": "2026-03-20T13:16:28.402Z",
+  "gitCommit": "990deda",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774012236048",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6818181818181818,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.6666666666666666,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 22,
+          "maxDepth": 2,
+          "durationSec": 31.552
+        },
+        "score": 91.8,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774012273174",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6538461538461539,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7647058823529411,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 64,
+          "maxDepth": 3,
+          "durationSec": 71.227
+        },
+        "score": 93,
+        "issues": [
+          "Frame \"Dashboard\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774012349161",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.5882352941176471,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.5789473684210527,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 82,
+          "maxDepth": 3,
+          "durationSec": 90.879
+        },
+        "score": 89.6,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774012445902",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.7222222222222222,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.75,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 21,
+          "maxDepth": 2,
+          "durationSec": 41.812
+        },
+        "score": 93.5,
+        "issues": [
+          "Frame \"Profile Card\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774012493514",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.6710526315789473,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.5416666666666666,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.8333333333333334,
+          "nodeCount": 81,
+          "maxDepth": 3,
+          "durationSec": 92.255
+        },
+        "score": 88.2,
+        "issues": [
+          "Frame \"Toggle Row - Push\" missing itemSpacing",
+          "Frame \"Toggle Row - Email\" missing itemSpacing",
+          "Frame \"Toggle Row - Marketing\" missing itemSpacing"
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 91.22,
+    "minScore": 88.2,
+    "maxScore": 93.5,
+    "totalDurationSec": 327.725,
+    "totalNodes": 270,
+    "totalIssues": 5
+  }
+}

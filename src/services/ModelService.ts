@@ -11,10 +11,9 @@
 import { fetchModels, LLMModel } from '../engine/llm-client/modelFilter';
 import { SUPPORTED_MODELS, MODEL_CACHE_TTL_MS, ModelConfig } from '../ui/constants/models';
 
-export type ProviderName = 'gemini' | 'openrouter';
+export type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude';
 
 export interface ModelFetchResult {
-  success: boolean;
   models: LLMModel[];
   error?: string;
   fromCache: boolean;
@@ -49,7 +48,6 @@ class ModelServiceImpl {
     // 1. 无 API Key 时返回静态列表
     if (!apiKey) {
       return {
-        success: true,
         models: this.getStaticModels(provider),
         fromCache: false,
       };
@@ -60,7 +58,6 @@ class ModelServiceImpl {
       const cached = this.cache.get(provider);
       if (cached && !this.isCacheStale(cached.timestamp)) {
         return {
-          success: true,
           models: cached.models,
           fromCache: true,
         };
@@ -114,7 +111,6 @@ class ModelServiceImpl {
       });
 
       return {
-        success: true,
         models: uniqueModels,
         fromCache: false,
       };
@@ -124,7 +120,6 @@ class ModelServiceImpl {
       console.warn(`[ModelService] API fetch failed for provider: ${provider}, key: ${maskedKey}, Error:`, error);
       
       return {
-        success: false,
         models: this.getStaticModels(provider),
         error: error instanceof Error ? error.message : 'Unknown error',
         fromCache: false,
@@ -140,6 +135,7 @@ class ModelServiceImpl {
     return configs.map(c => ({
       name: c.name,
       displayName: c.displayName,
+      isFree: c.isFree,
     }));
   }
 

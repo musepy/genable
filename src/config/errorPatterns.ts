@@ -1,14 +1,18 @@
 /**
  * @file errorPatterns.ts
  * @description Declarative error categorization mapping.
- * 
- * Separates "What indicates an error" (Regex) from "How to handle it" (Handler).
+ *
+ * Only USER-ACTIONABLE errors get an ErrorBanner.
+ * Agent-internal errors (network, stream, malformed, empty) are routed
+ * through the agent's status channel by AgentOrchestrator.
  */
 
-export type ErrorActionType = 'openModelSelector' | 'openSettings' | 'retry' | 'dismiss';
+export type ErrorActionType = 'openSettings' | 'dismiss' | 'retry';
 
 /**
- * Error categorizations mapping regex patterns to semantic types.
+ * Error categories that require the user to take action.
+ * Everything else is handled silently by the agent loop.
+ * Order matters: first match wins.
  */
 export const ERROR_CATEGORIES = [
   {
@@ -17,35 +21,15 @@ export const ERROR_CATEGORIES = [
     handler: 'openSettings' as ErrorActionType,
   },
   {
-    id: 'notFound',
-    pattern: /404|not.?found|model/i,
-    handler: 'openModelSelector' as ErrorActionType,
-  },
-  {
-    id: 'rateLimit',
-    pattern: /rate.?limit|429|quota/i,
+    id: 'rateLimited',
+    pattern: /rate.?limit|temporarily|RATE_LIMIT_EXHAUSTED/i,
     handler: 'retry' as ErrorActionType,
   },
   {
-    id: 'serverError',
-    pattern: /50[0-3]|server/i,
-    handler: 'retry' as ErrorActionType,
+    id: 'quotaExceeded',
+    pattern: /quota|billing|insufficient.?credits/i,
+    handler: 'openSettings' as ErrorActionType,
   },
-  {
-    id: 'network',
-    pattern: /network|fetch|timeout/i,
-    handler: 'retry' as ErrorActionType,
-  },
-  {
-    id: 'malformedFunctionCall',
-    pattern: /malformed.?function.?call/i,
-    handler: 'retry' as ErrorActionType,
-  },
-  {
-    id: 'emptyResponse',
-    pattern: /empty.?response/i,
-    handler: 'retry' as ErrorActionType,
-  }
 ] as const;
 
 export const DEFAULT_ERROR_CATEGORY = {

@@ -85,7 +85,7 @@ export class TreeReconstructor {
             if (!current) continue;
 
             // Root detection
-            if (node.parent === null || node.parent === '' || node.parent === undefined) {
+            if (node.parent === null || node.parent === '' || node.parent === undefined || node.parent === 'null') {
                 if (!rootIds.has(node.id)) {
                     roots.push(current);
                     rootIds.add(node.id);
@@ -98,8 +98,9 @@ export class TreeReconstructor {
             if (parent) {
                 parent.children = parent.children || [];
                 parent.children.push(current);
-            } else {
+            } else if (node.parent !== null && node.parent !== '' && node.parent !== undefined) {
                 // [Robustness] Orphan recovery: promote orphan to root
+                // Only warn if the parent was supposed to exist but didn't
                 warnings.push(`Orphan node "${node.id}": Parent "${node.parent}" not found. Promoting to root.`);
                 roots.push(current);
             }

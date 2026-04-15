@@ -18,6 +18,9 @@ export class FontBus {
     private static instance: FontBus;
     private loadedFonts: Set<string> = new Set();
     private loadingQueues: Map<string, Promise<void>> = new Map();
+    private failureCooldownUntil: Map<string, number> = new Map();
+    private failureLogCooldownUntil: Map<string, number> = new Map();
+    private readonly FAILURE_COOLDOWN_MS = 30_000;
 
     private readonly STATIC_FONTS: FontRecord[] = [
         { family: 'Inter', style: 'Regular' },
@@ -45,59 +48,116 @@ export class FontBus {
         console.log('[FontBus] Warmup complete.');
     }
 
-    /**
-     * Get or Load: High-level entry for Renderers
-     * If the font is not ready, it kicks off loading and returns immediate status.
-     */
-    public async getOrLoad(family: string, style: string): Promise<boolean> {
+    public async getOrLoad(family: string, style: string): Promise<{ loadedStyle: string; error?: boolean }> {
         const normalizedStyle = this.normalizeStyle(style);
         const key = this.getFontKey(family, normalizedStyle);
         
-        if (this.loadedFonts.has(key)) return true;
+        if (this.loadedFonts.has(key)) return { loadedStyle: normalizedStyle };
+        
+        if (this.isInFailureCooldown(key)) {
+            const regularKey = this.getFontKey(family, 'Regular');
+            if (this.loadedFonts.has(regularKey)) {
+                return { loadedStyle: 'Regular' };
+            }
+            return { loadedStyle: normalizedStyle, error: true };
+        }
 
         // If currently loading, wait for it
         if (this.loadingQueues.has(key)) {
             await this.loadingQueues.get(key);
-            return this.loadedFonts.has(key);
+            if (this.loadedFonts.has(key)) {
+                return { loadedStyle: normalizedStyle };
+            }
+            const regularKey = this.getFontKey(family, 'Regular');
+            if (this.loadedFonts.has(regularKey)) {
+                return { loadedStyle: 'Regular' };
+            }
+            return { loadedStyle: normalizedStyle, error: true };
         }
 
         // Trigger dynamic on-demand load
-        try {
-            await this.loadFontAsync({ family, style: normalizedStyle });
-            return true;
-        } catch (e) {
-            console.warn(`[FontBus] Dynamic load failed for ${key}, falling back to Inter Regular`);
-            return false;
+        await this.loadFontAsync({ family, style: normalizedStyle });
+
+        if (this.loadedFonts.has(key)) {
+            return { loadedStyle: normalizedStyle };
         }
+
+        const regularKey = this.getFontKey(family, 'Regular');
+        if (this.loadedFonts.has(regularKey)) {
+            return { loadedStyle: 'Regular' };
+        }
+
+        return { loadedStyle: normalizedStyle, error: true };
+    }
+
+    /**
+     * Normalize font weight to a Figma style name.
+     * Handles: numeric (400→Regular), string aliases (semibold→Semi Bold).
+     */
+    public normalizeWeight(weight: any): string {
+        if (weight === null || weight === undefined) return 'Regular';
+
+        // Handle numeric weights (e.g. 400 -> Regular, 700 -> Bold)
+        if (typeof weight === 'number') {
+            if (weight <= 100) return 'Thin';
+            if (weight <= 200) return 'Extra Light';
+            if (weight <= 300) return 'Light';
+            if (weight <= 400) return 'Regular';
+            if (weight <= 500) return 'Medium';
+            if (weight <= 600) return 'Semi Bold';
+            if (weight <= 700) return 'Bold';
+            if (weight <= 800) return 'Extra Bold';
+            return 'Black';
+        }
+
+        // Safe casting to string before manipulation
+        const styleStr = String(weight);
+        const s = styleStr.toLowerCase().replace(/[^a-z]/g, '');
+
+        const WEIGHT_MAP: Record<string, string> = {
+            thin: 'Thin', extralight: 'Extra Light', light: 'Light',
+            regular: 'Regular', normal: 'Regular', medium: 'Medium',
+            semibold: 'Semi Bold', demibold: 'Semi Bold',
+            bold: 'Bold', extrabold: 'Extra Bold', black: 'Black',
+        };
+
+        return WEIGHT_MAP[s] ?? styleStr;
+    }
+
+    /**
+     * Build the full Figma style string from weight + italic flag.
+     * e.g., ('Bold', true) → 'Bold Italic', ('Regular', true) → 'Italic'
+     */
+    public buildStyleString(weight: string, italic: boolean): string {
+        if (!italic) return weight;
+        if (weight === 'Regular') return 'Italic';
+        return `${weight} Italic`;
     }
 
     /**
      * Normalize font style names for common Figma variations
+     * @deprecated Use normalizeWeight + buildStyleString for new code
      */
     private normalizeStyle(style: any): string {
         if (style === null || style === undefined) return 'Regular';
-        
+
         // Handle numeric weights (e.g. 400 -> Regular, 700 -> Bold)
         if (typeof style === 'number') {
-            if (style <= 400) return 'Regular';
-            if (style <= 500) return 'Medium';
-            if (style <= 600) return 'Semi Bold';
-            return 'Bold';
+            return this.normalizeWeight(style);
         }
 
         // Safe casting to string before manipulation
         const styleStr = String(style);
         const s = styleStr.toLowerCase().replace(/[^a-z]/g, '');
-        
-        // Figma standard for Inter and most common fonts
-        if (s === 'semibold' || s === 'demibold') return 'Semi Bold';
-        if (s === 'bold') return 'Bold';
-        if (s === 'medium') return 'Medium';
-        if (s === 'regular' || s === 'normal') return 'Regular';
-        if (s === 'italic') return 'Italic';
-        if (s === 'bolditalic') return 'Bold Italic';
-        
-        return styleStr; 
+
+        // Check if it contains "italic" — split into weight + italic
+        if (s.includes('italic')) {
+            const weightPart = s.replace('italic', '').trim();
+            const weight = weightPart ? this.normalizeWeight(weightPart) : 'Regular';
+            return this.buildStyleString(weight, true);
+        }
+
+        return this.normalizeWeight(style);
     }
 
     /**
@@ -108,18 +168,31 @@ export class FontBus {
     }
 
     /**
+     * Basic health summary for diagnostics.
+     */
+    public getHealth(): { degraded: boolean; loadedCount: number; failedCount: number } {
+        return {
+            degraded: this.failureCooldownUntil.size > 0,
+            loadedCount: this.loadedFonts.size,
+            failedCount: this.failureCooldownUntil.size,
+        };
+    }
+
+    /**
      * Private: Actual Figma API call with queue management
      */
     private async loadFontAsync(font: FontRecord): Promise<void> {
         const key = this.getFontKey(font.family, font.style);
         if (this.loadedFonts.has(key)) return;
+        if (this.isInFailureCooldown(key)) return;
 
         const loadPromise = (async () => {
             try {
                 await figma.loadFontAsync(font);
                 this.loadedFonts.add(key);
+                this.failureCooldownUntil.delete(key);
             } catch (e) {
-                console.warn(`[FontBus] Failed to load font: ${key}`, e);
+                this.markFailure(key, e);
                 // Attempt fallback to Regular if specific style fails
                 if (font.style !== 'Regular') {
                     await this.loadFontAsync({ family: font.family, style: 'Regular' });
@@ -135,6 +208,24 @@ export class FontBus {
 
     private getFontKey(family: string, style: string): string {
         return `${family}:${style}`;
+    }
+
+    private isInFailureCooldown(key: string): boolean {
+        const until = this.failureCooldownUntil.get(key);
+        if (!until) return false;
+        if (Date.now() < until) return true;
+        this.failureCooldownUntil.delete(key);
+        return false;
+    }
+
+    private markFailure(key: string, error: unknown): void {
+        const now = Date.now();
+        this.failureCooldownUntil.set(key, now + this.FAILURE_COOLDOWN_MS);
+        const logCooldown = this.failureLogCooldownUntil.get(key) ?? 0;
+        if (now >= logCooldown) {
+            this.failureLogCooldownUntil.set(key, now + this.FAILURE_COOLDOWN_MS);
+            console.warn(`[FontBus] Failed to load font: ${key}`, error);
+        }
     }
 }
 

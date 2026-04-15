@@ -1,16 +1,8 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
-import { PROPS, NODE_TYPES } from '../../constants/figma-api';
-
-// Mock figma global
-vi.stubGlobal('figma', {
-  getNodeById: vi.fn(),
-});
+import { NODE_TYPES } from '../../constants/figma-api';
 
 describe('NodeSerializer - Compression', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
 
   it('should prune properties that match default values', () => {
     const mockNode = {
@@ -44,6 +36,7 @@ describe('NodeSerializer - Compression', () => {
       visible: false,      // NON-DEFAULT
       opacity: 0.5,        // NON-DEFAULT
       layoutMode: 'HORIZONTAL', // NON-DEFAULT
+      constraints: { horizontal: 'MAX', vertical: 'MIN' }, // NON-DEFAULT
       children: [],
     } as any;
 
@@ -52,6 +45,7 @@ describe('NodeSerializer - Compression', () => {
     expect(serialized.props.visible).toBe(false);
     expect(serialized.props.opacity).toBe(0.5);
     expect(serialized.props.layoutMode).toBe('HORIZONTAL');
+    expect(serialized.props.constraints).toEqual({ horizontal: 'MAX', vertical: 'MIN' });
   });
 
   it('should respect maxDepth limit', () => {

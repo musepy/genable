@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Theme Color Audit</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font: 13px/1.6 Inter, sans-serif; padding: 20px; }
+:root {
+  --gray-1: #fcfcfc; --gray-2: #f9f9f9; --gray-11: #6f6f6f; --gray-12: #171717;
+  --gray-a2: rgba(0,0,0,0.02); --gray-a3: rgba(0,0,0,0.05);
+  --accent-11: #0d74ce; --accent-a3: rgba(0,100,200,0.08);
+  --color-background: #ffffff;
+}
+:root.dark {
+  --gray-1: #111111; --gray-2: #1c1c1c; --gray-11: #b4b4b4; --gray-12: #eeeeee;
+  --gray-a2: rgba(255,255,255,0.04); --gray-a3: rgba(255,255,255,0.07);
+  --accent-11: #70b8ff; --accent-a3: rgba(110,176,247,0.12);
+  --color-background: #111111;
+}
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th, td { padding: 6px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+th { background: #f4f4f4; font-weight: 600; }
+.pass { color: #16a34a; }
+.fail { color: #dc2626; font-weight: 600; background: #fff0f0; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: middle; margin-right: 4px; border: 1px solid rgba(0,0,0,0.1); }
+canvas { border: 1px solid rgba(128,128,128,0.2); border-radius: 6px; margin: 8px 0; }
+h2 { margin: 16px 0 8px; }
+</style>
+</head><body>
+
+<h1>Theme Color Audit</h1>
+<p>Renders canvas text in both themes, samples pixels, verifies correctness.</p>
+
+<h2>Inline TextBlock</h2>
+<canvas id="canvas" width="316" height="120"></canvas>
+
+<h2>Floating Card (re-renders on theme switch)</h2>
+<canvas id="canvasFloat" width="316" height="120"></canvas>
+
+<h2>BUG: Stale Card (rendered in light, displayed in dark)</h2>
+<canvas id="canvasStale" width="316" height="120"></canvas>
+
+<div id="results"></div>
+
+<script>
+const W = 316, H = 120;
+const FONT_SANS = 'Inter, -apple-system, sans-serif';
+
+// --- Resolve CSS var to actual color via probe ---
+function resolveVar(varName, prop = 'color') {
+  const probe = document.createElement('div');
+  probe.style[prop] = `var(${varName})`;
+  document.body.appendChild(probe);
+  const val = getComputedStyle(probe)[prop];
+  document.body.removeChild(probe);
+  return val;
+}
+
+function parseRgb(str) {
+  const m = str.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  return m ? { r: +m[1], g: +m[2], b: +m[3] } : null;
+}
+
+// --- Render test content ---
+// Uses solid color blocks (not text) to avoid anti-aliasing sampling errors.
+// Each block is 20x12px; text labels are drawn next to them for visual reference.
+const SWATCH_W = 20, SWATCH_H = 12, GAP = 24;
+const samplePoints = {
+  bg:        { x: W - 10, y: 5 },
+  text:      { x: 10, y: 10 + SWATCH_H/2 },
+  body:      { x: 10, y: 10 + GAP + SWATCH_H/2 },
+  secondary: { x: 10, y: 10 + GAP*2 + SWATCH_H/2 },
+  accent:    { x: 10, y: 10 + GAP*3 + SWATCH_H/2 },
+  fade:      { x: Math.floor(W/2), y: H - 2 },
+};
+
+function renderTestCanvas() {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const textColor = resolveVar('--gray-12');
+  const secondaryColor = resolveVar('--gray-11');
+  const accentColor = resolveVar('--accent-11');
+  const bgColor = resolveVar('--color-background', 'backgroundColor');
+
+  // Fill background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, W, H);
+
+  // Solid color blocks + labels
+  const entries = [
+    { color: textColor, label: '--gray-12 (text)', y: 10 },
+    { color: textColor, label: '--gray-12 (body)', y: 10 + GAP },
+    { color: secondaryColor, label: '--gray-11 (secondary)', y: 10 + GAP*2 },
+    { color: accentColor, label: '--accent-11 (accent)', y: 10 + GAP*3 },
+  ];
+
+  for (const e of entries) {
+    // Solid block — no anti-aliasing
+    ctx.fillStyle = e.color;
+    ctx.fillRect(10, e.y, SWATCH_W, SWATCH_H);
+    // Label
+    ctx.font = `400 11px ${FONT_SANS}`;
+    ctx.fillText(e.label, 10 + SWATCH_W + 8, e.y + SWATCH_H - 2);
+  }
+
+  // Fade gradient block at bottom
+  const bgRgb = parseRgb(bgColor) || { r: 255, g: 255, b: 255 };
+  const grad = ctx.createLinearGradient(0, H - 20, 0, H);
+  grad.addColorStop(0, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},0)`);
+  grad.addColorStop(1, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},1)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, H - 20, W, 20);
+
+  return { textColor, secondaryColor, accentColor, bgColor };
+}
+
+// --- Sample pixel from canvas ---
+function samplePixel(x, y) {
+  const ctx = document.getElementById('canvas').getContext('2d');
+  const px = ctx.getImageData(x, y, 1, 1).data;
+  return { r: px[0], g: px[1], b: px[2], a: px[3] };
+}
+
+function rgbStr(px) {
+  return `rgb(${px.r},${px.g},${px.b})`;
+}
+
+function luminance(px) {
+  return 0.299 * px.r + 0.587 * px.g + 0.114 * px.b;
+}
+
+// --- Render floating card canvas ---
+// FloatingCanvasCard has its own background, border-top, and "click to close" text.
+// BUG SCENARIO: card rendered in light mode, then theme switches to dark.
+// The canvas keeps stale light-mode colors → dark text on dark background.
+function renderFloatingCard(forceTheme) {
+  const canvas = document.getElementById('canvasFloat');
+  const ctx = canvas.getContext('2d');
+
+  // If forceTheme specified, simulate the bug: render with one theme's colors
+  // but display on the other theme's background
+  const bgColor = resolveVar('--color-background', 'backgroundColor');
+  const textColor = resolveVar('--gray-12');
+  const secondaryColor = resolveVar('--gray-11');
+
+  // Fill card background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, W, H);
+
+  // Content color blocks
+  ctx.fillStyle = textColor;
+  ctx.fillRect(10, 14, SWATCH_W, SWATCH_H);
+  ctx.font = `400 11px ${FONT_SANS}`;
+  ctx.fillText('card text (--gray-12)', 10 + SWATCH_W + 8, 14 + SWATCH_H - 2);
+
+  ctx.fillStyle = secondaryColor;
+  ctx.fillRect(10, 14 + GAP, SWATCH_W, SWATCH_H);
+  ctx.fillText('"click to close" (--gray-11)', 10 + SWATCH_W + 8, 14 + GAP + SWATCH_H - 2);
+
+  // Fade gradient
+  const bgRgb = parseRgb(bgColor) || { r: 255, g: 255, b: 255 };
+  const grad = ctx.createLinearGradient(0, H - 20, 0, H);
+  grad.addColorStop(0, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},0)`);
+  grad.addColorStop(1, `rgba(${bgRgb.r},${bgRgb.g},${bgRgb.b},1)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, H - 20, W, 20);
+
+  return { bgColor, textColor, secondaryColor };
+}
+
+// --- Stale card test: render in light, switch to dark, DON'T re-render ---
+function renderStaleCard() {
+  const canvas = document.getElementById('canvasStale');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  // Render with LIGHT theme colors (simulating the bug)
+  document.documentElement.classList.remove('dark');
+  const lightText = resolveVar('--gray-12');
+  const lightBg = resolveVar('--color-background', 'backgroundColor');
+  const lightSecondary = resolveVar('--gray-11');
+
+  // Now switch to dark BUT don't re-resolve colors
+  document.documentElement.classList.add('dark');
+  const darkBg = resolveVar('--color-background', 'backgroundColor');
+
+  // Draw: dark background + light-mode text colors = THE BUG
+  ctx.fillStyle = darkBg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = lightText; // stale light-mode color on dark bg
+  ctx.fillRect(10, 14, SWATCH_W, SWATCH_H);
+  ctx.font = `400 11px ${FONT_SANS}`;
+  ctx.fillText('STALE: light text color on dark bg', 10 + SWATCH_W + 8, 14 + SWATCH_H - 2);
+  ctx.fillStyle = lightSecondary;
+  ctx.fillRect(10, 14 + GAP, SWATCH_W, SWATCH_H);
+  ctx.fillText('STALE: light secondary on dark bg', 10 + SWATCH_W + 8, 14 + GAP + SWATCH_H - 2);
+
+  // Reset
+  document.documentElement.classList.remove('dark');
+}
+
+const floatSamplePoints = {
+  bg:    { x: W - 10, y: 60 },
+  text:  { x: 15, y: 14 + SWATCH_H/2 },
+  close: { x: 15, y: 14 + GAP + SWATCH_H/2 },
+  fade:  { x: Math.floor(W/2), y: H - 2 },
+};
+
+// --- Run audit for current theme ---
+function auditTheme(themeName) {
+  const isDark = themeName === 'dark';
+  const resolved = renderTestCanvas();
+
+  // Sample from solid color blocks (center of each swatch)
+  const sp = samplePoints;
+  const samples = [
+    { name: 'Background', x: sp.bg.x, y: sp.bg.y, expect: isDark ? 'dark (L<60)' : 'light (L>200)' },
+    { name: '--gray-12 (text)', x: sp.text.x + 5, y: sp.text.y, expect: isDark ? 'light (L>180)' : 'dark (L<60)' },
+    { name: '--gray-12 (body)', x: sp.body.x + 5, y: sp.body.y, expect: isDark ? 'light (L>180)' : 'dark (L<60)' },
+    { name: '--gray-11 (secondary)', x: sp.secondary.x + 5, y: sp.secondary.y, expect: isDark ? 'mid-light (L>120)' : 'mid-dark (L<140)' },
+    { name: '--accent-11 (accent)', x: sp.accent.x + 5, y: sp.accent.y, expect: isDark ? 'blue-light' : 'blue-dark' },
+    { name: 'Fade gradient end', x: sp.fade.x, y: sp.fade.y, expect: isDark ? 'match bg dark' : 'match bg light' },
+  ];
+
+  const rows = [];
+  for (const s of samples) {
+    const px = samplePixel(s.x, s.y);
+    const L = luminance(px);
+    let pass = false;
+
+    if (s.name === 'Background') {
+      pass = isDark ? L < 60 : L > 200;
+    } else if (s.name.includes('gray-12')) {
+      pass = isDark ? L > 180 : L < 60;
+    } else if (s.name.includes('gray-11')) {
+      pass = isDark ? L > 120 : L < 160;
+    } else if (s.name.includes('accent-11')) {
+      pass = px.b > px.r && px.b > 80;
+    } else if (s.name.includes('Fade gradient')) {
+      const bgPx = samplePixel(sp.bg.x, sp.bg.y);
+      pass = Math.abs(px.r - bgPx.r) < 10 && Math.abs(px.g - bgPx.g) < 10 && Math.abs(px.b - bgPx.b) < 10;
+    }
+
+    rows.push({ ...s, px, L: L.toFixed(0), pass });
+  }
+
+  // Also verify resolved CSS values
+  const resolvedRows = [
+    { name: '--gray-12 (text)', resolved: resolved.textColor, expectDark: 'light', expectLight: 'dark' },
+    { name: '--gray-11 (secondary)', resolved: resolved.secondaryColor, expectDark: 'mid', expectLight: 'mid' },
+    { name: '--accent-11 (accent)', resolved: resolved.accentColor, expectDark: 'blue', expectLight: 'blue' },
+    { name: '--color-background', resolved: resolved.bgColor, expectDark: 'dark', expectLight: 'light' },
+  ];
+
+  // --- Floating card audit ---
+  renderFloatingCard();
+  const fp = floatSamplePoints;
+
+  function sampleFloatPixel(x, y) {
+    const ctx = document.getElementById('canvasFloat').getContext('2d');
+    const px = ctx.getImageData(x, y, 1, 1).data;
+    return { r: px[0], g: px[1], b: px[2], a: px[3] };
+  }
+
+  const floatSamples = [
+    { name: 'Card bg', x: fp.bg.x, y: fp.bg.y, expect: isDark ? 'dark (L<60)' : 'light (L>200)' },
+    { name: 'Card text (--gray-12)', x: fp.text.x, y: fp.text.y, expect: isDark ? 'light (L>180)' : 'dark (L<60)' },
+    { name: 'Card "close" (--gray-11)', x: fp.close.x, y: fp.close.y, expect: isDark ? 'mid-light (L>120)' : 'mid-dark (L<160)' },
+    { name: 'Card fade end', x: fp.fade.x, y: fp.fade.y, expect: isDark ? 'match card bg' : 'match card bg' },
+  ];
+
+  for (const s of floatSamples) {
+    const px = sampleFloatPixel(s.x, s.y);
+    const L = luminance(px);
+    let pass = false;
+    if (s.name.includes('Card bg')) {
+      pass = isDark ? L < 60 : L > 200;
+    } else if (s.name.includes('gray-12')) {
+      pass = isDark ? L > 180 : L < 60;
+    } else if (s.name.includes('gray-11')) {
+      pass = isDark ? L > 120 : L < 160;
+    } else if (s.name.includes('fade')) {
+      const bgPx = sampleFloatPixel(fp.bg.x, fp.bg.y);
+      pass = Math.abs(px.r - bgPx.r) < 10 && Math.abs(px.g - bgPx.g) < 10 && Math.abs(px.b - bgPx.b) < 10;
+    }
+    rows.push({ ...s, px, L: L.toFixed(0), pass });
+  }
+
+  return { themeName, samples: rows, resolved: resolvedRows };
+}
+
+// --- Stale card contrast audit ---
+// Simulates the bug: card rendered in theme A, then switched to theme B without re-render
+function auditStaleCard() {
+  const staleResults = [];
+
+  // Scenario 1: rendered in LIGHT, displayed in DARK
+  document.documentElement.classList.remove('dark');
+  const lightText = resolveVar('--gray-12');
+  const lightTextRgb = parseRgb(lightText);
+  document.documentElement.classList.add('dark');
+  const darkBg = resolveVar('--color-background', 'backgroundColor');
+  const darkBgRgb = parseRgb(darkBg);
+  if (lightTextRgb && darkBgRgb) {
+    const contrast = Math.abs(luminance(lightTextRgb) - luminance(darkBgRgb));
+    staleResults.push({
+      scenario: 'Light text → Dark bg (stale)',
+      textL: luminance(lightTextRgb).toFixed(0),
+      bgL: luminance(darkBgRgb).toFixed(0),
+      contrast: contrast.toFixed(0),
+      pass: contrast > 120, // needs enough contrast to read
+      text: lightText,
+      bg: darkBg,
+    });
+  }
+
+  // Scenario 2: rendered in DARK, displayed in LIGHT
+  document.documentElement.classList.add('dark');
+  const darkText = resolveVar('--gray-12');
+  const darkTextRgb = parseRgb(darkText);
+  document.documentElement.classList.remove('dark');
+  const lightBg = resolveVar('--color-background', 'backgroundColor');
+  const lightBgRgb = parseRgb(lightBg);
+  if (darkTextRgb && lightBgRgb) {
+    const contrast = Math.abs(luminance(darkTextRgb) - luminance(lightBgRgb));
+    staleResults.push({
+      scenario: 'Dark text → Light bg (stale)',
+      textL: luminance(darkTextRgb).toFixed(0),
+      bgL: luminance(lightBgRgb).toFixed(0),
+      contrast: contrast.toFixed(0),
+      pass: contrast > 120,
+      text: darkText,
+      bg: lightBg,
+    });
+  }
+
+  document.documentElement.classList.remove('dark');
+  return staleResults;
+}
+
+// --- Run all audits ---
+function runFullAudit() {
+  const results = [];
+
+  // Light mode
+  document.documentElement.classList.remove('dark');
+  results.push(auditTheme('light'));
+
+  // Dark mode
+  document.documentElement.classList.add('dark');
+  document.body.style.background = '#111';
+  results.push(auditTheme('dark'));
+
+  // Stale card contrast test
+  const staleResults = auditStaleCard();
+
+  // Render stale card visual
+  renderStaleCard();
+
+  // Reset to light
+  document.documentElement.classList.remove('dark');
+  document.body.style.background = '';
+  renderTestCanvas();
+  renderFloatingCard();
+
+  // Render results
+  let html = '';
+  for (const r of results) {
+    html += `<h2>${r.themeName.toUpperCase()} MODE</h2>`;
+    html += '<table><tr><th>Element</th><th>Pixel</th><th>Luminance</th><th>Expected</th><th>Result</th></tr>';
+    for (const s of r.samples) {
+      const cls = s.pass ? 'pass' : 'fail';
+      html += `<tr class="${cls}">`;
+      html += `<td>${s.name}</td>`;
+      html += `<td><span class="swatch" style="background:${rgbStr(s.px)}"></span>${rgbStr(s.px)}</td>`;
+      html += `<td>${s.L}</td>`;
+      html += `<td>${s.expect}</td>`;
+      html += `<td>${s.pass ? '✓ PASS' : '✗ FAIL'}</td>`;
+      html += '</tr>';
+    }
+    html += '</table>';
+
+    html += '<table><tr><th>CSS Variable</th><th>Resolved Value</th></tr>';
+    for (const rv of r.resolved) {
+      html += `<tr><td>${rv.name}</td><td><span class="swatch" style="background:${rv.resolved}"></span>${rv.resolved}</td></tr>`;
+    }
+    html += '</table>';
+  }
+
+  // Stale card contrast results
+  html += '<h2>STALE CARD CONTRAST (bug detection)</h2>';
+  html += '<p style="font-size:12px;color:#888;margin-bottom:8px">If floating card doesn\'t re-render on theme switch, these are the contrasts users see:</p>';
+  html += '<table><tr><th>Scenario</th><th>Text Color</th><th>Bg Color</th><th>Text L</th><th>Bg L</th><th>Contrast</th><th>Readable?</th></tr>';
+  for (const s of staleResults) {
+    const cls = s.pass ? 'pass' : 'fail';
+    html += `<tr class="${cls}">`;
+    html += `<td>${s.scenario}</td>`;
+    html += `<td><span class="swatch" style="background:${s.text}"></span>${s.text}</td>`;
+    html += `<td><span class="swatch" style="background:${s.bg}"></span>${s.bg}</td>`;
+    html += `<td>${s.textL}</td><td>${s.bgL}</td><td>${s.contrast}</td>`;
+    html += `<td>${s.pass ? '✓ OK (>120)' : '✗ UNREADABLE (<120)'}</td>`;
+    html += '</tr>';
+  }
+  html += '</table>';
+
+  // Summary
+  const themePass = results.every(r => r.samples.every(s => s.pass));
+  const staleAllFail = staleResults.every(s => !s.pass); // stale SHOULD fail (proves the bug)
+  html += '<h2>Summary</h2>';
+  html += `<p>Theme colors: ${themePass ? '✓ ALL PASS' : '✗ FAILURES'}</p>`;
+  html += `<p>Stale card: ${staleAllFail ? '✗ Both directions unreadable (confirms bug — card MUST re-render on theme switch)' : '⚠ Some stale combos still readable (partial bug)'}</p>`;
+
+  document.getElementById('results').innerHTML = html;
+}
+
+// Auto-run
+runFullAudit();
+
+// Dump text summary for automated extraction
+setTimeout(() => {
+  const rows = document.querySelectorAll('table tr');
+  const lines = [];
+  rows.forEach(r => {
+    const cells = Array.from(r.querySelectorAll('th,td')).map(c => c.textContent.trim());
+    const cls = r.className;
+    lines.push((cls === 'fail' ? 'FAIL ' : cls === 'pass' ? 'PASS ' : '     ') + cells.join(' | '));
+  });
+  const pre = document.createElement('pre');
+  pre.id = 'text-dump';
+  pre.style.cssText = 'margin-top:20px;font:12px/1.6 monospace;background:#f8f8f8;padding:12px;border-radius:6px;white-space:pre-wrap';
+  pre.textContent = lines.join('\n');
+  document.body.appendChild(pre);
+}, 100);
+</script>
+</body></html>

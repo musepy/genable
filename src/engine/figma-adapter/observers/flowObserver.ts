@@ -10,6 +10,8 @@
  * 5. SWAP - Semantic component instance replacements
  */
 
+import { logger } from '../../../utils/logger';
+
 export enum FlowPhase {
     PROMPT = 'PROMPT',
     LLM_RESPONSE = 'LLM_RESPONSE',
@@ -81,10 +83,18 @@ export class FlowObserver {
         this.events.push(event);
 
         // Immediate Console Output for transparency
-        const prefix = `[Trace: ${this.traceId}] PHASE: [${phase}]`;
-        console.log(`${prefix} - ${message}`);
+        const prefix = `PHASE: [${phase}]`;
+        if (phase === FlowPhase.RENDER || phase === FlowPhase.SWAP) {
+            logger.debug(`${prefix} - ${message}`);
+        } else {
+            logger.info(`${prefix} - ${message}`);
+        }
         if (details) {
-            console.log(`${prefix} - Details:`, details);
+            if (phase === FlowPhase.RENDER || phase === FlowPhase.SWAP) {
+                logger.debug(`${prefix} - Details:`, details);
+            } else {
+                logger.info(`${prefix} - Details:`, details);
+            }
         }
     }
 

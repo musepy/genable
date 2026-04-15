@@ -1,4 +1,5 @@
 name: Pie Chart
+description: Use when visualizing proportions as parts of a whole — composed of a circular canvas with slices and a vertical legend alongside.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

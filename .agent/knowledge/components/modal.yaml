@@ -1,4 +1,5 @@
 name: Modal
+description: Use when overlaying a focused task container on top of the page — composed of header, content body, and footer with action buttons.
 structure:
   type: FRAME
   layoutMode: VERTICAL

@@ -14,7 +14,7 @@ describe('ModelService', () => {
 
   it('should return static models when no API key', async () => {
     const result = await ModelService.getModels('gemini', '');
-    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
     expect(result.models.length).toBeGreaterThan(0);
     expect(result.fromCache).toBe(false);
   });
@@ -32,7 +32,7 @@ describe('ModelService', () => {
 
     // 只应调用 1 次 API
     expect(fetchModels).toHaveBeenCalledTimes(1);
-    expect(results.every(r => r.success)).toBe(true);
+    expect(results.every(r => !r.error)).toBe(true);
   });
 
   it('should fallback to static models on API error', async () => {
@@ -41,7 +41,7 @@ describe('ModelService', () => {
 
     const result = await ModelService.getModels('gemini', 'key', true);
     
-    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
     expect(result.error).toBe('Network error');
     expect(result.models.length).toBeGreaterThan(0); // 有降级模型
   });

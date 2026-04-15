@@ -6,8 +6,8 @@
  * Ensures consistency between extraction (serialization) and rendering (deserialization).
  */
 
-import { PROP_METADATA, PROPS } from '../../constants/figma-api';
-import { rgbToHex } from '../../utils/colorUtils';
+import { PROP_METADATA } from '../../constants/figma-api';
+import { rgbaToHex } from '../../utils/colorUtils';
 import { FigmaNodeData } from './figmaNodeData';
 
 export class PropertyTransformer {
@@ -30,18 +30,23 @@ export class PropertyTransformer {
             // console.log(`[Debug] ${dslKey} (figmaKey: ${meta.figmaKey}) =`, figmaValue);
         }
 
-        // [Figma Sandbox Fix] Safety: Handle figma.mixed (a Symbol)
-        // Symbols cannot be passed through postMessage (emit), causing "Cannot unwrap symbol"
+        // Handle mixed properties: figmaNodeData normalizes figma.mixed → 'mixed' string.
+        // Pass through as-is so the serializer can render `prop:mixed`.
+        if (figmaValue === 'mixed') return 'mixed';
+
+        // [Safety] Also handle raw figma.mixed symbol (in case called with un-normalized data)
         const figmaMixed = typeof figma !== 'undefined' ? figma.mixed : undefined;
-        if (typeof figmaMixed !== 'undefined' && figmaValue === figmaMixed) {
-            // console.log(`[Debug] ${dslKey} is figma.mixed -> returning null`);
-            return null;
-        }
+        if (typeof figmaMixed !== 'undefined' && figmaValue === figmaMixed) return 'mixed';
 
         // 2. Transformation Logic based on type
         switch (meta.type) {
             case 'scalar':
                 if (figmaValue === undefined) return meta.defaultValue;
+                // Figma lineHeight/letterSpacing are objects {unit, value}, not scalars
+                if (figmaValue && typeof figmaValue === 'object' && 'value' in figmaValue) {
+                    if (figmaValue.unit === 'AUTO') return undefined; // AUTO = default, skip
+                    return figmaValue.value;
+                }
                 return figmaValue;
 
             case 'color':
@@ -50,7 +55,7 @@ export class PropertyTransformer {
                     return figmaValue
                         .map(paint => {
                             if (paint.type === 'SOLID') {
-                                return rgbToHex(paint.color.r, paint.color.g, paint.color.b);
+                                return rgbaToHex(paint.color);
                             }
                             // Legacy/Future: Gradient/Image handling can be added here
                             return null;
@@ -76,61 +81,18 @@ export class PropertyTransformer {
         }
     }
 
-    /**
-     * DESERIALIZE: DSL -> Figma API
-     * Converts a DSL value into a format that can be applied to a Figma node.
-     * Note: Some properties (like colors) require async factory functions (createPaint).
-     * 
-     * @param dslValue - The value from LLM/DSL
-     * @param dslKey - The key from PROPS
-     * @returns The Figma-compatible value (or instruction for the renderer)
-     */
-    static deserialize(dslValue: any, dslKey: string): any {
-        const meta = PROP_METADATA[dslKey];
-        if (!meta) return dslValue;
 
-        switch (meta.type) {
-            case 'color':
-                // Fills/Strokes are handled by the renderer calling createPaintFn
-                // We return the raw value (string or array)
-                return dslValue;
-
-            case 'enum':
-                if (meta.enumMap && typeof dslValue === 'string') {
-                    return meta.enumMap[dslValue.toUpperCase()] || dslValue;
-                }
-                return dslValue;
-
-            case 'scalar':
-                if (dslValue === null || dslValue === undefined) return 0;
-                if (typeof dslValue === 'string' && !dslValue.startsWith('$')) {
-                    const parsed = parseFloat(dslValue);
-                    return isNaN(parsed) ? 0 : parsed;
-                }
-                // V6.1 FIX: Prevent number NaN leak
-                if (typeof dslValue === 'number') {
-                    return isNaN(dslValue) ? 0 : dslValue;
-                }
-                return dslValue;
-
-            case 'string':
-                return String(dslValue ?? '');
-
-            default:
-                return dslValue;
-        }
-    }
 
     /**
      * Internal: Handle properties that require specific logic to extract
      */
     private static extractVirtualProperty(nodeData: FigmaNodeData, dslKey: string): any {
         switch (dslKey) {
-            case PROPS.fontFamily:
+            case 'fontFamily':
                 return nodeData.fontName ? (nodeData.fontName as FontName).family : null;
-            case PROPS.fontWeight:
+            case 'fontWeight':
                 return nodeData.fontName ? (nodeData.fontName as FontName).style : null;
-            case PROPS.semantic:
+            case 'semantic':
                 // [PURE TRUST] Removed naming-based inference. Trusted to LLM/props only.
                 return undefined;
             default:
@@ -142,17 +104,24 @@ export class PropertyTransformer {
      * Internal: Serialize arrays of objects (e.g. effects)
      */
     private static serializeArray(figmaValue: any, dslKey: string): any {
-        if (dslKey === PROPS.effects && Array.isArray(figmaValue)) {
+        if (dslKey === 'effects' && Array.isArray(figmaValue)) {
             return figmaValue.map((eff: Effect) => {
                 const base = { type: eff.type };
                 if (eff.type === 'DROP_SHADOW' || eff.type === 'INNER_SHADOW') {
                     const shadow = eff as DropShadowEffect | InnerShadowEffect;
                     return {
                         ...base,
-                        color: rgbToHex(shadow.color.r, shadow.color.g, shadow.color.b), // Simple hex for now
+                        color: rgbaToHex(shadow.color), // Simple hex for now
                         offset: shadow.offset,
-                        radius: shadow.radius,
+                        blur: shadow.radius, // Map radius to blur in DSL
                         spread: shadow.spread
+                    };
+                }
+                if (eff.type === 'LAYER_BLUR' || eff.type === 'BACKGROUND_BLUR') {
+                    const blurEffect = eff as BlurEffect;
+                    return {
+                        ...base,
+                        blur: blurEffect.radius // Map radius to blur in DSL
                     };
                 }
                 return base;
@@ -186,6 +155,10 @@ export class PropertyTransformer {
 
         if (meta.type === 'array') {
             // Complex arrays like effects require deep comparison
+            return this.deepEqual(currentState, dslValue);
+        }
+
+        if (meta.type === 'object') {
             return this.deepEqual(currentState, dslValue);
         }
 

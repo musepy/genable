@@ -1,4 +1,5 @@
 name: List Item
+description: Use when rendering one row inside a list — composed of optional leading icon, content block, and trailing action aligned center in a horizontal row.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

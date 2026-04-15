@@ -1,0 +1,138 @@
+{
+  "timestamp": "2026-03-20T15:25:30.179Z",
+  "gitCommit": "5afa95d",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774019804136",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.7857142857142857,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 16,
+          "maxDepth": 1,
+          "durationSec": 128.06
+        },
+        "score": 97.9,
+        "issues": []
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "trigger-1774019938313",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9695652173913044,
+          "fillCompleteness": 0.6724137931034483,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7894736842105263,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 71,
+          "maxDepth": 3,
+          "durationSec": 123.903
+        },
+        "score": 92.8,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Notification\" has 1 children but no auto-layout",
+          "Frame \"Dashboard\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "trigger-1774020067819",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9854166666666666,
+          "fillCompleteness": 0.6212121212121212,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.53125,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 82,
+          "maxDepth": 3,
+          "durationSec": 121.573
+        },
+        "score": 88.8,
+        "issues": [
+          "Frame \"Badge\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774020195700",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9416666666666668,
+          "fillCompleteness": 0.6666666666666666,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.25,
+          "toolEfficiency": 1,
+          "errorFreeRate": 1,
+          "nodeCount": 24,
+          "maxDepth": 3,
+          "durationSec": 42.725
+        },
+        "score": 84,
+        "issues": [
+          "Frame \"Avatar\" has 1 children but no auto-layout",
+          "Frame \"Profile Card\" missing itemSpacing",
+          "Frame \"Stats\" missing itemSpacing"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774020245013",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 0.7272727272727273,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.8571428571428572,
+          "nodeCount": 47,
+          "maxDepth": 2,
+          "durationSec": 79.695
+        },
+        "score": 80.8,
+        "issues": [
+          "Frame \"Toggle Row\" missing itemSpacing",
+          "Frame \"Toggle Row\" missing itemSpacing",
+          "Frame \"Toggle Row\" missing itemSpacing",
+          "Frame \"Toggle Row\" missing itemSpacing",
+          "Frame \"Toggle Row\" missing itemSpacing",
+          "Frame \"Toggle Row\" missing itemSpacing"
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 88.86,
+    "minScore": 80.8,
+    "maxScore": 97.9,
+    "totalDurationSec": 495.956,
+    "totalNodes": 240,
+    "totalIssues": 13
+  }
+}

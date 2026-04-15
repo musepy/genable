@@ -2,34 +2,30 @@
   "name": "figma-ai-generator",
   "version": "1.0.0",
   "dependencies": {
-    "@anthropic-ai/vertex-sdk": "^0.14.2",
+    "@ai-sdk/google": "^3.0.54",
     "@create-figma-plugin/ui": "^4.0.3",
     "@create-figma-plugin/utilities": "^4.0.3",
-    "@google-cloud/vertexai": "^1.10.0",
     "@google/genai": "^1.38.0",
-    "fuse.js": "^7.1.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ai": "^6.0.141",
     "handlebars": "^4.7.8",
     "js-yaml": "^4.1.1",
     "lucide-preact": "^0.562.0",
+    "marked": "^17.0.5",
     "minisearch": "^7.2.0",
-    "motion": "^12.23.26",
     "preact": ">=10",
-    "prismjs": "1.29.0",
     "react-markdown": "^10.1.0",
-    "react-simple-code-editor": "0.13.1",
     "remark-gfm": "^4.0.1",
-    "valibot": "^1.2.0"
+    "sucrase": "^3.35.1",
+    "valibot": "^1.2.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@create-figma-plugin/build": "^4.0.3",
     "@create-figma-plugin/tsconfig": "^4.0.3",
-    "@figma/plugin-typings": "1.109.0",
+    "@figma/plugin-typings": "^1.124.0",
     "@preact/preset-vite": "^2.9.0",
-    "@types/csv-parse": "^1.1.12",
     "@types/js-yaml": "^4.0.9",
-    "@types/jsdom": "^27.0.0",
-    "@types/prismjs": "1.26.3",
-    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.52.0",
     "@typescript-eslint/parser": "^8.52.0",
     "@vitest/coverage-v8": "^4.0.16",
@@ -38,13 +34,10 @@
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^27.4.0",
-    "stylelint": "^16.26.1",
-    "stylelint-config-standard": "^39.0.1",
     "ts-node": "^10.9.2",
     "typescript": ">=5",
     "vite": "^6.2.0",
-    "vitest": "^4.0.16",
-    "ws": "^8.18.3"
+    "vitest": "^4.0.16"
   },
   "scripts": {
     "build": "node build.js",
@@ -57,7 +50,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "generate:reasoning": "node scripts/generate-reasoning.js",
-    "generate:knowledge": "node scripts/generate-knowledge.js"
+    "generate:knowledge": "node scripts/generate-knowledge.js",
+    "mcp-server": "npx tsx tools/mcp-server/index.ts"
   },
   "figma-plugin": {
     "editorType": [
@@ -68,7 +62,7 @@
       "inspect"
     ],
     "id": "1583731690321161934",
-    "name": "Genable (Dogfood)",
+    "name": "Genable",
     "main": "src/main.ts",
     "ui": "src/ui.tsx",
     "documentAccess": "dynamic-page",
@@ -79,8 +73,19 @@
       "allowedDomains": [
         "https://generativelanguage.googleapis.com",
         "https://api.iconify.design",
-        "https://openrouter.ai"
-      ]
+        "https://openrouter.ai",
+        "https://coding.dashscope.aliyuncs.com",
+        "https://figma-ai-generator.muse40007.workers.dev",
+        "https://api.anthropic.com",
+        "https://dashscope.aliyuncs.com"
+      ],
+      "devAllowedDomains": [
+        "http://localhost:3456",
+        "ws://localhost:3458",
+        "ws://localhost:3459",
+        "ws://localhost:3461"
+      ],
+      "reasoning": "Production: LLM APIs, icon service, CORS proxy. Dev: local bridge server + MCP relay for automation."
     }
   }
 }

@@ -25,39 +25,43 @@ describe('AgentRuntime', () => {
           thought_signature: tr.thought_signature
         }))
       })),
+      getCapabilities: vi.fn().mockReturnValue({
+        supportsTextStreaming: true,
+        supportsReasoningStreaming: true,
+      }),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions')
     } as any;
   });
 
-  it('should complete in one iteration if no tool calls', async () => {
+  it('should complete in one iteration if no tool calls (implicit completion)', async () => {
     (mockProvider.generate as any).mockResolvedValue({
-      text: 'Final result',
+      text: 'Done — task completed.',
       toolCalls: []
     });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [],
-      systemPrompt: 'System'
+      systemPrompt: 'System',
+      loopPolicy: { useSkillSystem: false } as any
     });
 
     const result = await runtime.run('User prompt');
 
-    expect(result).toBe('Final result');
+    expect(result).toBe('Done — task completed.');
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
-    expect(runtime.getMessages()).toHaveLength(3); // system, user, model
   });
 
-  it('should execute tool calls and loop', async () => {
+  it('should execute tool calls and loop until text-only response', async () => {
     // Round 1: Model calls a tool
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'Thinking...',
         toolCalls: [{ name: 'get_info', args: { query: 'test' } }]
       })
-      // Round 2: Model gives final answer
+      // Round 2: Model gives final answer (no tool calls = implicit completion)
       .mockResolvedValueOnce({
-        text: 'Final answer based on info',
+        text: 'Task done',
         toolCalls: []
       });
 
@@ -66,80 +70,214 @@ describe('AgentRuntime', () => {
         callTool: vi.fn(),
         dispose: vi.fn()
     } as any;
-    
-    mockIpcBridge.callTool.mockResolvedValue({ success: true, data: 'Some info' });
+
+    mockIpcBridge.callTool.mockResolvedValue({ data: 'Some info' });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [{ name: 'get_info', description: 'Get info', parameters: { type: 'object', properties: {} } }],
-      ipcBridge: mockIpcBridge
+      tools: [
+        { name: 'get_info', description: 'Get info', parameters: { type: 'object', properties: {} } },
+      ],
+      ipcBridge: mockIpcBridge,
+      systemPrompt: 'System',
+      loopPolicy: { useSkillSystem: false } as any
     });
 
     const result = await runtime.run('Tell me something');
 
-    expect(result).toBe('Final answer based on info');
+    expect(result).toBe('Task done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(2);
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
-    
+
     const messages = runtime.getMessages();
-    expect(messages).toHaveLength(5); // system, user, model(thought+call), tool(result), model(final)
-    expect(messages[3].role).toBe('tool');
+    expect(messages).toHaveLength(4); // user, model(thought+call), tool(result), model(text)
+    expect(messages[2].role).toBe('tool');
   });
 
-  it('should throw error if max iterations reached', async () => {
+  it('should reject unknown tool names with UNKNOWN_TOOL error', async () => {
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'start task',
+        toolCalls: [{ name: 'task_start', args: { title: 'Legacy call' } }]
+      })
+      .mockResolvedValueOnce({
+        text: 'Recovered',
+        toolCalls: []
+      });
+
+    const mockIpcBridge = {
+      callTool: vi.fn(),
+      dispose: vi.fn()
+    } as any;
+
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'jsx', description: 'Create', parameters: { type: 'object', properties: { markup: { type: 'string' } }, required: ['markup'] } },
+      ],
+      ipcBridge: mockIpcBridge,
+      loopPolicy: { useSkillSystem: false } as any
+    });
+
+    const result = await runtime.run('Create something');
+
+    expect(result).toBe('Recovered');
+    // task_start should be rejected locally — NOT forwarded to IPC
+    expect(mockIpcBridge.callTool).not.toHaveBeenCalledWith('task_start', expect.anything());
+
+    const firstToolTurn = (mockProvider.formatToolResults as any).mock.calls[0][0];
+    const firstResponse = firstToolTurn[0].response;
+    // presentForLLM flattens errors — check for the error string in the response
+    const responseStr = JSON.stringify(firstResponse);
+    expect(responseStr).toContain('Unknown tool');
+  });
+
+  it('should return graceful message when max iterations reached', async () => {
     (mockProvider.generate as any).mockResolvedValue({
       text: 'Thinking...',
       toolCalls: [{ name: 'loop', args: {} }]
     });
 
+    const events: any[] = [];
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [{ name: 'loop', description: 'Loop', parameters: { type: 'object', properties: {} } }],
-      maxIterations: 2
+      maxIterations: 2,
+      onRuntimeEvent: (event) => events.push(event),
     });
 
-    await expect(runtime.run('Loop me')).rejects.toThrow('Agent reached maximum iterations (2)');
+    const result = await runtime.run('Loop me');
+    expect(result).toContain('used all 2 iterations');
+    expect(events.some(e => e.type === 'budget_exhausted')).toBe(true);
   });
 
-  it('should propagate streaming callbacks to provider', async () => {
-    const onProgress = vi.fn();
-    const onThinking = vi.fn();
-    
+  it('should emit reasoning_delta runtime events when provider streams thoughts', async () => {
+    const events: any[] = [];
+
     (mockProvider.generate as any).mockImplementation(({ onProgress: cbP, onThinking: cbT }: any) => {
       cbP?.('Part 1');
       cbT?.('Thinking...');
-      return Promise.resolve({ text: 'Final', toolCalls: [] });
+      return Promise.resolve({ text: 'Done', toolCalls: [] });
     });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       tools: [],
-      onProgress,
-      onThinking
+      onRuntimeEvent: (event) => events.push(event)
     });
 
     await runtime.run('Test');
 
-    expect(onProgress).toHaveBeenCalledWith('Part 1');
-    expect(onThinking).toHaveBeenCalledWith('Thinking...');
+    expect(events.some(event => event.type === 'reasoning_delta' && event.text === 'Thinking...')).toBe(true);
   });
 
-  it('should throw error if stuck in planning loop (3+ planDesign calls)', async () => {
-    let callCount = 0;
-    (mockProvider.generate as any).mockImplementation(() => {
-      callCount++;
-      return Promise.resolve({
-        text: 'Planning...',
-        toolCalls: [{ name: 'planDesign', args: { analysis: `test ${callCount}`, steps: [] } }]
-      });
+  it('should detect generic tool call loops (safety guardrail)', async () => {
+    // Same tool with same args called repeatedly → loop detector should fire
+    // With elastic iterations, the agent returns gracefully instead of throwing
+    (mockProvider.generate as any).mockResolvedValue({
+      text: 'Doing same thing...',
+      toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
     });
+
+    const mockIpcBridge = {
+      callTool: vi.fn().mockResolvedValue({ data: {} }),
+      dispose: vi.fn()
+    } as any;
+
+    const events: any[] = [];
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
+      ],
+      ipcBridge: mockIpcBridge,
+      maxIterations: 15,
+      onRuntimeEvent: (event) => events.push(event),
+    });
+
+    const result = await runtime.run('Loop me');
+    expect(result).toContain('used all 15 iterations');
+    expect(events.some(e => e.type === 'budget_exhausted')).toBe(true);
+  });
+
+  it('should complete immediately with text-only response (implicit completion)', async () => {
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'Finished immediately',
+        toolCalls: []
+      });
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
-      tools: [{ name: 'planDesign', description: 'Plan', parameters: { type: 'object', properties: {} } }],
-      maxIterations: 10
+      tools: []
     });
 
-    await expect(runtime.run('Loop me')).rejects.toThrow('Agent stuck in planning loop');
+    const result = await runtime.run('Quick task');
+    expect(result).toBe('Finished immediately');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('should complete after mutation with text-only response (implicit completion)', async () => {
+    const toolExecutors = {
+      patchNode: vi.fn().mockResolvedValue({ data: { nodeId: '1:1', modified: true } }),
+    };
+
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'Mutate design',
+        toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
+      })
+      .mockResolvedValueOnce({
+        text: 'Mutated and done',
+        toolCalls: []
+      });
+
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'patchNode', description: 'Patch', parameters: { type: 'object', properties: {} } },
+      ],
+      toolExecutors: toolExecutors as any
+    });
+
+    const result = await runtime.run('Mutation without inspect');
+    expect(result).toBe('Mutated and done');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('should allow LLM to self-inspect before completing (autonomous choice)', async () => {
+    // LLM autonomously decides to inspect, then complete — not forced by Runtime
+    const toolExecutors = {
+      patchNode: vi.fn().mockResolvedValue({ data: { nodeId: '1:1', modified: true } }),
+      inspectDesign: vi.fn().mockResolvedValue({ data: { id: '1:1', type: 'FRAME' } }),
+    };
+
+    (mockProvider.generate as any)
+      .mockResolvedValueOnce({
+        text: 'Mutate',
+        toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
+      })
+      .mockResolvedValueOnce({
+        text: 'Let me verify',
+        toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
+      })
+      .mockResolvedValueOnce({
+        text: 'Verified and done',
+        toolCalls: []
+      });
+
+    const runtime = new AgentRuntime({
+      provider: mockProvider,
+      tools: [
+        { name: 'patchNode', description: 'Patch', parameters: { type: 'object', properties: {} } },
+        { name: 'inspectDesign', description: 'Inspect', parameters: { type: 'object', properties: {} } },
+      ],
+      toolExecutors: toolExecutors as any
+    });
+
+    const result = await runtime.run('Autonomous inspect');
+    expect(result).toBe('Verified and done');
+    expect(mockProvider.generate).toHaveBeenCalledTimes(3);
+    expect(toolExecutors.inspectDesign).toHaveBeenCalled();
   });
 });

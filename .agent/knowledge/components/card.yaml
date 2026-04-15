@@ -1,4 +1,5 @@
 name: Card
+description: Use when grouping related content into a surface container — composed of optional header, content area, and footer with vertical stacking.
 structure:
   type: FRAME
   layoutMode: VERTICAL

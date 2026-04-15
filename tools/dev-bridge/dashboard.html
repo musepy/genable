@@ -1,0 +1,2594 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Timeline Dashboard</title>
+  <style>
+    /* ===== Theme Variables ===== */
+    :root,
+    [data-theme="dark"] {
+      --bg-body: #111;
+      --bg-header: #1a1a1a;
+      --bg-card: #1a1a1a;
+      --bg-input: #2a2a2a;
+      --bg-hover: #333;
+      --bg-code: #1a1a1a;
+      --bg-tool-body: #151515;
+      --bg-live-item: #1f1f1f;
+      --bg-detail-hover: #222;
+      --bg-idx: #2a2a2a;
+      --bg-bar-live: #2a2a2a;
+
+      --border-header: #333;
+      --border-card: #2a2a2a;
+      --border-input: #444;
+      --border-row: #1f1f1f;
+      --border-detail: #222;
+      --border-tooltip: #555;
+      --border-bar-live: #555;
+
+      --text-primary: #e0e0e0;
+      --text-heading: #fff;
+      --text-secondary: #aaa;
+      --text-muted: #888;
+      --text-dimmed: #666;
+      --text-code: #b0b0b0;
+      --text-final: #ccc;
+      --text-status: #999;
+      --text-empty: #666;
+      --text-bar: #fff;
+
+      --tooltip-bg: #333;
+      --tooltip-text: #e0e0e0;
+
+      --dot-idle: #666;
+
+      --theme-toggle-icon: '☀️';
+    }
+
+    [data-theme="light"] {
+      --bg-body: #f5f6f8;
+      --bg-header: #fff;
+      --bg-card: #fff;
+      --bg-input: #fff;
+      --bg-hover: #e8eaed;
+      --bg-code: #f5f5f5;
+      --bg-tool-body: #fafbfc;
+      --bg-live-item: #f5f6f8;
+      --bg-detail-hover: #f5f6f8;
+      --bg-idx: #eef0f2;
+      --bg-bar-live: #e8eaed;
+
+      --border-header: #e2e4e8;
+      --border-card: #e2e4e8;
+      --border-input: #d0d4da;
+      --border-row: #eef0f2;
+      --border-detail: #eef0f2;
+      --border-tooltip: #d0d4da;
+      --border-bar-live: #bbb;
+
+      --text-primary: #2c2c2c;
+      --text-heading: #111;
+      --text-secondary: #555;
+      --text-muted: #777;
+      --text-dimmed: #999;
+      --text-code: #444;
+      --text-final: #333;
+      --text-status: #777;
+      --text-empty: #aaa;
+      --text-bar: #fff;
+
+      --tooltip-bg: #fff;
+      --tooltip-text: #333;
+
+      --dot-idle: #bbb;
+
+      --theme-toggle-icon: '🌙';
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-body);
+      color: var(--text-primary);
+      min-height: 100vh;
+      transition: background .25s, color .25s;
+    }
+    code, pre, .mono {
+      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border-header);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      transition: background .25s, border-color .25s;
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-heading);
+      white-space: nowrap;
+    }
+    .header-spacer { flex: 1; }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mode-btn {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all .15s;
+    }
+    .mode-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-heading); }
+    select, input[type="text"] {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    select:focus, input[type="text"]:focus { border-color: #3b82f6; }
+    select { max-width: 280px; }
+    input[type="text"] { width: 400px; }
+    .btn {
+      background: #3b82f6;
+      border: none;
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background .15s;
+    }
+    .btn:hover { background: #2563eb; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+    }
+    .btn-ghost:hover { background: var(--bg-input); color: var(--text-heading); }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+
+    /* Theme toggle */
+    .theme-toggle {
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .theme-toggle:hover {
+      background: var(--bg-hover);
+      border-color: #3b82f6;
+    }
+
+    /* Main content */
+    .main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+
+    /* Mode panels */
+    .mode-panel { display: none; align-items: center; gap: 8px; }
+    .mode-panel.active { display: flex; }
+
+    /* Live status */
+    .live-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-status);
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--dot-idle);
+    }
+    .live-dot.connected { background: #22c55e; animation: pulse 2s infinite; }
+    .live-dot.running { background: #f59e0b; animation: pulse 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      transition: background .25s, border-color .25s;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dimmed);
+      margin-bottom: 12px;
+    }
+
+    /* Overview */
+    .overview-prompt {
+      font-size: 14px;
+      color: var(--text-heading);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .overview-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .stat-value.model { color: #a78bfa; }
+    .stat-value.duration { color: #f59e0b; }
+    .stat-value.tools { color: #22c55e; }
+    .stat-value.errors { color: #ef4444; }
+    .stat-value.iterations { color: #3b82f6; }
+
+    /* Timeline */
+    .timeline-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-row);
+    }
+    .timeline-row:last-child { border-bottom: none; }
+    .timeline-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      width: 56px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .timeline-label.setup { color: var(--text-dimmed); font-style: italic; }
+    .timeline-ctx {
+      font-size: 10px;
+      color: #f59e0b;
+      background: rgba(245,158,11,.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      white-space: nowrap;
+      cursor: default;
+    }
+    /* Context layer stacked bar */
+    .ctx-layers {
+      display: flex;
+      height: 14px;
+      width: 80px;
+      border-radius: 3px;
+      overflow: hidden;
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .ctx-layer {
+      height: 100%;
+      min-width: 1px;
+      transition: width .2s;
+    }
+    .ctx-l1 { background: #6366f1; } /* system prompt — indigo */
+    .ctx-l2 { background: #f59e0b; } /* summary — amber */
+    .ctx-l3 { background: #22c55e; } /* conversation history — green */
+    .ctx-l4 { background: #3b82f6; } /* turn messages — blue */
+
+    /* Context layer separator in conversation flow */
+    .conv-layer-sep {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      margin: 8px 0;
+      border-top: 1px solid var(--border-card);
+    }
+    .conv-layer-sep:first-child { border-top: none; margin-top: 0; }
+    .conv-layer-dot {
+      width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+    }
+    .conv-layer-sep-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-dimmed);
+    }
+    .conv-layer-sep-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+    /* System message avatar */
+    .conv-avatar.system { background: #6366f1; color: #c7d2fe; }
+    .conv-avatar.tool { background: #166534; color: #86efac; }
+    /* Iteration tabs */
+    .conv-iter-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .conv-iter-tab {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
+      color: var(--text-secondary);
+    }
+    .conv-iter-tab:hover { background: var(--bg-hover); }
+    .conv-iter-tab.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .timeline-bars {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+    .bar {
+      height: 26px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-bar);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 36px;
+      position: relative;
+      cursor: default;
+    }
+    .bar-llm {
+      background: #1e40af;
+      border: 1px solid #2563eb;
+    }
+    .bar-tool-ok {
+      background: #166534;
+      border: 1px solid #22c55e;
+    }
+    .bar-tool-err {
+      background: #7f1d1d;
+      border: 1px solid #ef4444;
+    }
+    .bar-text {
+      background: #581c87;
+      border: 1px solid #a855f7;
+    }
+    .bar-live {
+      background: var(--bg-bar-live);
+      border: 1px solid var(--border-bar-live);
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    .timeline-duration {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      flex-shrink: 0;
+      width: 50px;
+      text-align: right;
+    }
+
+    /* Tooltip */
+    .bar[data-tooltip]:hover::after,
+    .ctx-layers[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 0;
+      background: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      white-space: pre;
+      z-index: 50;
+      pointer-events: none;
+      border: 1px solid var(--border-tooltip);
+      max-width: 400px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    }
+    .ctx-layers {
+      position: relative;
+    }
+
+    /* Tool call details */
+    .tool-detail {
+      border-bottom: 1px solid var(--border-detail);
+    }
+    .tool-detail:last-child { border-bottom: none; }
+    .tool-detail summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+    }
+    .tool-detail summary::-webkit-details-marker { display: none; }
+    .tool-detail summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .tool-detail[open] summary::before { transform: rotate(90deg); }
+    .tool-detail summary:hover { background: var(--bg-detail-hover); }
+    .tool-idx {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .tool-name { font-weight: 600; color: var(--text-primary); }
+    .tool-status-ok { color: #22c55e; font-size: 11px; }
+    .tool-status-err { color: #ef4444; font-size: 11px; }
+    .tool-dur { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+    .tool-body {
+      padding: 8px 12px 12px 28px;
+      background: var(--bg-tool-body);
+    }
+    .tool-section-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin: 8px 0 4px 0;
+    }
+    .tool-section-label:first-child { margin-top: 0; }
+    .tool-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+    .tool-error-banner {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+    [data-theme="light"] .tool-error-banner {
+      color: #dc2626;
+    }
+    .expand-btn {
+      background: none;
+      border: none;
+      color: #3b82f6;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 4px 0;
+    }
+    .expand-btn:hover { text-decoration: underline; }
+
+    /* ===== Pipeline Architecture ===== */
+    .pipe-arch { display: flex; flex-direction: column; gap: 0; position: relative; }
+
+    /* Shared nodes */
+    .pipe-shared {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 0;
+    }
+    .pipe-node {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      position: relative;
+    }
+    .pipe-node:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+    .pipe-node.llm { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; }
+    .pipe-node.dispatch { background: #3b1f5e; border-color: #7c3aed; color: #c4b5fd; }
+    .pipe-node.present { background: #1a3a2a; border-color: #16a34a; color: #86efac; }
+    .pipe-node .pipe-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #f59e0b;
+      color: #000;
+      font-size: 9px;
+      font-weight: 700;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pipe-node.inactive { opacity: 0.3; cursor: default; }
+    .pipe-node.inactive:hover { transform: none; box-shadow: none; }
+
+    /* Arrow connector */
+    .pipe-arrow {
+      text-align: center;
+      color: var(--text-dimmed);
+      font-size: 18px;
+      line-height: 1;
+      padding: 2px 0;
+    }
+    .pipe-arrow-h {
+      color: var(--text-dimmed);
+      font-size: 14px;
+      margin: 0 2px;
+    }
+
+    /* Tool columns */
+    .pipe-cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      padding: 0 8px;
+    }
+    .pipe-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .pipe-col-head {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      position: relative;
+    }
+    .pipe-col-head:hover { transform: translateY(-1px); }
+    .pipe-col-head .pipe-col-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .pipe-col-head .pipe-col-count {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    .pipe-col-head.jsx { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+    .pipe-col-head.inspect { background: #1a3a2a; border-color: #22c55e; color: #86efac; }
+    .pipe-col-head.edit { background: #3b2f10; border-color: #f59e0b; color: #fcd34d; }
+    .pipe-col-head.run { background: #3b1f5e; border-color: #a855f7; color: #d8b4fe; }
+    .pipe-col-head.inactive { opacity: 0.25; cursor: default; }
+    .pipe-col-head.inactive:hover { transform: none; }
+
+    /* Stage pills inside columns */
+    .pipe-stages {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+      padding: 0 4px;
+    }
+    .pipe-stage-arrow {
+      color: var(--text-dimmed);
+      font-size: 11px;
+      line-height: 1;
+      opacity: 0.4;
+    }
+    .pipe-stage {
+      width: 100%;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      text-align: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      cursor: default;
+      transition: all .15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pipe-stage.active {
+      border-color: #3b82f6;
+      background: rgba(59,130,246,.1);
+      color: var(--text-primary);
+    }
+    .pipe-stage .pipe-stage-file {
+      font-size: 9px;
+      color: var(--text-dimmed);
+      display: block;
+    }
+
+    /* Pipeline detail panel (expands below) */
+    .pipe-detail {
+      margin-top: 16px;
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+      animation: fadeIn .2s;
+    }
+    .pipe-detail-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-input);
+      border-bottom: 1px solid var(--border-card);
+      font-size: 12px;
+    }
+    .pipe-detail-header .pipe-detail-title {
+      font-weight: 600;
+      color: var(--text-heading);
+    }
+    .pipe-detail-header .pipe-detail-close {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-dimmed);
+      font-size: 16px;
+      background: none;
+      border: none;
+      padding: 0 4px;
+    }
+    .pipe-detail-header .pipe-detail-close:hover { color: var(--text-primary); }
+    .pipe-detail-body {
+      padding: 12px 14px;
+    }
+    /* Trace row: horizontal flow of stages */
+    .pipe-trace {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pipe-trace-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-row);
+    }
+    .pipe-trace-row:last-child { border-bottom: none; }
+    .pipe-trace-idx {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .pipe-trace-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .pipe-trace-stages {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .pipe-trace-stage {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .pipe-trace-stage:hover { filter: brightness(1.2); }
+    .pipe-trace-stage.stage-dispatch { background: #3b1f5e; border: 1px solid #7c3aed; color: #d8b4fe; }
+    .pipe-trace-stage.stage-handler { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
+    .pipe-trace-stage.stage-exec { background: #1a3a2a; border: 1px solid #22c55e; color: #86efac; }
+    .pipe-trace-stage.stage-present { background: #3b2f10; border: 1px solid #f59e0b; color: #fcd34d; }
+    .pipe-trace-stage.stage-err { background: #3b1010; border: 1px solid #ef4444; color: #fca5a5; }
+    .pipe-trace-arrow { color: var(--text-dimmed); font-size: 10px; flex-shrink: 0; }
+    .pipe-trace-dur {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      flex-shrink: 0;
+      width: 50px;
+      text-align: right;
+    }
+    .pipe-trace-status-ok { color: #22c55e; font-size: 10px; }
+    .pipe-trace-status-err { color: #ef4444; font-size: 10px; }
+
+    /* Data popup for trace stage click */
+    .pipe-data-popup {
+      margin-top: 8px;
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      background: var(--bg-tool-body);
+      animation: fadeIn .15s;
+    }
+    .pipe-data-popup-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-card);
+    }
+    .pipe-data-popup-title { font-size: 11px; font-weight: 600; color: var(--text-heading); }
+    .pipe-data-popup-close {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-dimmed);
+      background: none;
+      border: none;
+      font-size: 14px;
+    }
+    .pipe-data-popup-body { padding: 8px 12px; }
+    /* Data view toggle */
+    .data-view-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .data-view-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-input);
+      background: var(--bg-input);
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .data-view-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .data-view-btn:hover:not(.active) { background: var(--bg-hover); }
+    .data-view-btn.raw-btn.active { background: #7c3aed; border-color: #7c3aed; }
+    .data-view-btn.llm-btn.active { background: #f59e0b; border-color: #f59e0b; color: #000; }
+    .data-view-spacer { flex: 1; }
+    .stringify-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .stringify-toggle input { cursor: pointer; }
+    .data-diff-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(245,158,11,.15);
+      color: #f59e0b;
+    }
+
+    .pipe-data-section { font-size: 10px; color: var(--text-dimmed); text-transform: uppercase; margin: 6px 0 3px; }
+    .pipe-data-section:first-child { margin-top: 0; }
+    .pipe-data-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 10px;
+      line-height: 1.4;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+
+    [data-theme="light"] .pipe-node.llm { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+    [data-theme="light"] .pipe-node.dispatch { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+    [data-theme="light"] .pipe-node.present { background: #dcfce7; border-color: #16a34a; color: #166534; }
+    [data-theme="light"] .pipe-col-head.jsx { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+    [data-theme="light"] .pipe-col-head.inspect { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    [data-theme="light"] .pipe-col-head.edit { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    [data-theme="light"] .pipe-col-head.run { background: #ede9fe; border-color: #a855f7; color: #5b21b6; }
+    [data-theme="light"] .pipe-trace-stage.stage-dispatch { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+    [data-theme="light"] .pipe-trace-stage.stage-handler { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+    [data-theme="light"] .pipe-trace-stage.stage-exec { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    [data-theme="light"] .pipe-trace-stage.stage-present { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    [data-theme="light"] .pipe-trace-stage.stage-err { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+
+    /* ===== Conversation Flow ===== */
+    .conv-flow { display: flex; flex-direction: column; gap: 12px; }
+    .conv-msg {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .conv-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .conv-avatar.user { background: #1e40af; color: #93c5fd; }
+    .conv-avatar.model { background: #581c87; color: #d8b4fe; }
+    .conv-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .conv-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-dimmed);
+      margin-bottom: 4px;
+    }
+    .conv-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg-tool-body);
+      border-radius: 6px;
+      padding: 10px 14px;
+      border: 1px solid var(--border-card);
+    }
+    .conv-text.collapsed {
+      max-height: 120px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+    }
+    .conv-text.collapsed::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 40px;
+      background: linear-gradient(transparent, var(--bg-tool-body));
+      pointer-events: none;
+    }
+    .conv-text-toggle {
+      font-size: 11px;
+      color: #3b82f6;
+      cursor: pointer;
+      padding: 4px 0;
+      user-select: none;
+    }
+    .conv-text-toggle:hover { text-decoration: underline; }
+    }
+    .conv-text:empty { display: none; }
+    .conv-toolcalls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .conv-tc {
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .conv-tc summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      background: var(--bg-card);
+      transition: background .15s;
+    }
+    .conv-tc summary::-webkit-details-marker { display: none; }
+    .conv-tc summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .conv-tc[open] summary::before { transform: rotate(90deg); }
+    .conv-tc summary:hover { background: var(--bg-detail-hover); }
+    .conv-tc-name { font-weight: 600; color: var(--text-primary); }
+    .conv-tc-status-ok { color: #22c55e; font-size: 11px; }
+    .conv-tc-status-err { color: #ef4444; font-size: 11px; }
+    .conv-tc-body {
+      padding: 8px 12px 12px 12px;
+      background: var(--bg-tool-body);
+    }
+    .conv-tc-section {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin: 8px 0 4px 0;
+    }
+    .conv-tc-section:first-child { margin-top: 0; }
+    .conv-tc-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+    .conv-tc-error {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+    [data-theme="light"] .conv-tc-error { color: #dc2626; }
+
+    /* ===== LLM Context card ===== */
+    .llm-ctx-list { display: flex; flex-direction: column; gap: 8px; }
+    .llm-ctx-item {
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .llm-ctx-item summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      background: var(--bg-card);
+    }
+    .llm-ctx-item summary::-webkit-details-marker { display: none; }
+    .llm-ctx-item summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .llm-ctx-item[open] summary::before { transform: rotate(90deg); }
+    .llm-ctx-item summary:hover { background: var(--bg-detail-hover); }
+    .llm-ctx-iter {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .llm-ctx-label { font-weight: 600; color: var(--text-primary); }
+    .llm-ctx-meta { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+    .llm-ctx-body {
+      padding: 10px 14px;
+      background: var(--bg-tool-body);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .llm-ctx-msgs {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .llm-ctx-msg {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+    }
+    .llm-ctx-msg-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      width: 52px;
+      flex-shrink: 0;
+    }
+    .llm-ctx-msg-role.system { color: #f59e0b; }
+    .llm-ctx-msg-role.user { color: #3b82f6; }
+    .llm-ctx-msg-role.model { color: #a855f7; }
+    .llm-ctx-msg-role.tool { color: #22c55e; }
+    .llm-ctx-msg-len {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .llm-ctx-msg-flags {
+      font-size: 10px;
+      color: var(--text-dimmed);
+    }
+    .llm-ctx-tools {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-card);
+    }
+    .llm-ctx-tools-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .llm-ctx-tool-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .llm-ctx-tool-tag {
+      font-size: 10px;
+      background: var(--bg-idx);
+      color: var(--text-secondary);
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .llm-ctx-cache {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-card);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Footer: screenshot + final text */
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) {
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+    .screenshot-img {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid var(--border-card);
+    }
+    .final-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-final);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-empty);
+      font-size: 13px;
+    }
+    .empty-state .icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+
+    /* Live tool list */
+    .live-tools {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .live-tool-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--bg-live-item);
+      border-radius: 4px;
+      font-size: 12px;
+      animation: fadeIn .3s;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .live-tool-item .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .live-tool-item .dot.ok { background: #22c55e; }
+    .live-tool-item .dot.err { background: #ef4444; }
+
+    /* Light theme bar adjustments */
+    [data-theme="light"] .bar-llm {
+      background: #2563eb;
+      border-color: #1d4ed8;
+    }
+    [data-theme="light"] .bar-tool-ok {
+      background: #16a34a;
+      border-color: #15803d;
+    }
+    [data-theme="light"] .bar-tool-err {
+      background: #dc2626;
+      border-color: #b91c1c;
+    }
+    [data-theme="light"] .bar-text {
+      background: #7c3aed;
+      border-color: #6d28d9;
+    }
+    [data-theme="light"] .timeline-ctx {
+      background: rgba(245,158,11,.15);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Agent Timeline</h1>
+    <div class="controls">
+      <button class="mode-btn active" data-mode="history" onclick="switchMode('history')">History</button>
+      <button class="mode-btn" data-mode="live" onclick="switchMode('live')">Live</button>
+    </div>
+    <div class="header-spacer"></div>
+
+    <!-- History controls -->
+    <div class="mode-panel active" id="history-controls">
+      <select id="recording-select" onchange="loadRecording(this.value)">
+        <option value="">-- select recording --</option>
+      </select>
+      <button class="btn btn-ghost" onclick="refreshRecordings()">Refresh</button>
+    </div>
+
+    <!-- Live controls -->
+    <div class="mode-panel" id="live-controls">
+      <input type="text" id="live-prompt" placeholder="Enter a design prompt..." onkeydown="if(event.key==='Enter')sendLivePrompt()">
+      <button class="btn" id="live-send-btn" onclick="sendLivePrompt()">Send</button>
+      <button class="btn btn-danger" id="live-stop-btn" style="display:none" onclick="stopLive()">Stop</button>
+      <div class="live-status" id="live-status">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="live-status-text">Idle</span>
+      </div>
+    </div>
+
+    <!-- Theme toggle -->
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark"></button>
+  </div>
+
+  <div class="main">
+    <!-- Overview -->
+    <div class="card" id="overview-card" style="display:none">
+      <div class="card-title">Overview</div>
+      <div class="overview-prompt" id="overview-prompt"></div>
+      <div class="overview-stats" id="overview-stats"></div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card" id="timeline-card" style="display:none">
+      <div class="card-title">Iteration Timeline</div>
+      <div id="timeline-container"></div>
+    </div>
+
+    <!-- Live tool feed -->
+    <div class="card" id="live-feed-card" style="display:none">
+      <div class="card-title">Live Tool Calls</div>
+      <div class="live-tools" id="live-tools"></div>
+    </div>
+
+    <!-- Pipeline Architecture -->
+    <div class="card" id="pipe-card" style="display:none">
+      <div class="card-title">Execution Pipeline</div>
+      <div id="pipe-container"></div>
+    </div>
+
+    <!-- Conversation Flow -->
+    <div class="card" id="conv-card" style="display:none">
+      <div class="card-title">Conversation Flow</div>
+      <div class="conv-flow" id="conv-container"></div>
+    </div>
+
+    <!-- LLM Context (per iteration) -->
+    <div class="card" id="llm-ctx-card" style="display:none">
+      <div class="card-title">LLM Context (per iteration)</div>
+      <div class="llm-ctx-list" id="llm-ctx-container"></div>
+    </div>
+
+    <!-- Tool call details -->
+    <div class="card" id="tools-card" style="display:none">
+      <div class="card-title">Tool Call Details</div>
+      <div id="tools-container"></div>
+    </div>
+
+    <!-- Footer: screenshot + final text -->
+    <div class="footer-grid" id="footer-grid" style="display:none">
+      <div class="card" id="screenshot-card">
+        <div class="card-title">Screenshot</div>
+        <img id="screenshot-img" class="screenshot-img" style="display:none">
+        <div id="screenshot-empty" class="empty-state" style="padding:30px">No screenshot</div>
+      </div>
+      <div class="card" id="finaltext-card">
+        <div class="card-title">Agent Response</div>
+        <div class="final-text" id="final-text"></div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="empty-state">
+      <div class="icon">&#9776;</div>
+      <div>Select a recording or send a live prompt to begin</div>
+    </div>
+  </div>
+
+<script>
+// ===== Theme =====
+function getPreferredTheme() {
+  const stored = localStorage.getItem('dashboard-theme');
+  if (stored) return stored;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('theme-toggle');
+  btn.textContent = theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19';
+  btn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('dashboard-theme', next);
+  applyTheme(next);
+}
+
+// Apply theme immediately
+applyTheme(getPreferredTheme());
+
+// ===== State =====
+const BASE = location.origin;
+let currentMode = 'history';
+let liveEventSource = null;
+let liveTriggerId = null;
+let liveToolCount = 0;
+
+// ===== Mode switching =====
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('history-controls').classList.toggle('active', mode === 'history');
+  document.getElementById('live-controls').classList.toggle('active', mode === 'live');
+  if (mode === 'live') {
+    clearDisplay();
+    document.getElementById('live-feed-card').style.display = '';
+  } else {
+    document.getElementById('live-feed-card').style.display = 'none';
+    stopLive();
+  }
+}
+
+// ===== History mode =====
+async function refreshRecordings() {
+  try {
+    const res = await fetch(BASE + '/recordings');
+    const list = await res.json();
+    const select = document.getElementById('recording-select');
+    select.innerHTML = '<option value="">-- select recording --</option>';
+    const withEvents = list.filter(r => r.hasEvents);
+    for (const rec of withEvents) {
+      const opt = document.createElement('option');
+      opt.value = rec.id;
+      const d = new Date(rec.mtime);
+      opt.textContent = rec.id + ' (' + d.toLocaleString() + ')';
+      select.appendChild(opt);
+    }
+  } catch (e) {
+    console.error('Failed to fetch recordings:', e);
+  }
+}
+
+async function loadRecording(id) {
+  if (!id) return;
+  clearDisplay();
+  try {
+    const [eventsRes, metaRes] = await Promise.all([
+      fetch(BASE + '/recordings/' + id + '/events'),
+      fetch(BASE + '/recordings/' + id + '/meta'),
+    ]);
+    const events = await eventsRes.json();
+    const meta = await metaRes.json();
+    renderFull(id, events, meta);
+  } catch (e) {
+    console.error('Failed to load recording:', e);
+  }
+}
+
+// ===== Live mode =====
+async function sendLivePrompt() {
+  const input = document.getElementById('live-prompt');
+  const prompt = input.value.trim();
+  if (!prompt) return;
+
+  stopLive();
+  clearDisplay();
+  document.getElementById('live-feed-card').style.display = '';
+
+  try {
+    const res = await fetch(BASE + '/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    liveTriggerId = data.id;
+    liveToolCount = 0;
+
+    setLiveStatus('connected', 'Waiting for agent...');
+    document.getElementById('live-send-btn').style.display = 'none';
+    document.getElementById('live-stop-btn').style.display = '';
+
+    // Subscribe to SSE
+    liveEventSource = new EventSource(BASE + '/stream/' + liveTriggerId);
+
+    liveEventSource.addEventListener('connected', () => {
+      setLiveStatus('connected', 'Connected, waiting...');
+    });
+
+    liveEventSource.addEventListener('tool', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', 'Running... Tool #' + (ev.index || ''));
+      appendLiveTool(ev);
+    });
+
+    liveEventSource.addEventListener('status', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', ev.message || 'Running...');
+    });
+
+    liveEventSource.addEventListener('iteration_start', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', 'Iteration ' + ev.iteration + '/' + (ev.maxIterations || '?'));
+    });
+
+    liveEventSource.addEventListener('tool_call', (e) => {
+      const ev = JSON.parse(e.data);
+      setLiveStatus('running', 'Calling: ' + (ev.toolCall?.name || ''));
+      appendLiveTool({ index: ++liveToolCount, name: ev.toolCall?.name, status: 'running' });
+    });
+
+    liveEventSource.addEventListener('tool_result', (e) => {
+      const ev = JSON.parse(e.data);
+      updateLastLiveTool(ev.toolResult?.name, ev.toolResult?.success ? 'ok' : 'err', ev.toolResult?.durationMs);
+    });
+
+    liveEventSource.addEventListener('text_delta', (e) => {
+      setLiveStatus('running', 'Generating text...');
+    });
+
+    liveEventSource.addEventListener('done', async (e) => {
+      setLiveStatus('connected', 'Done! Loading results...');
+      closeLiveStream();
+      // Load full result
+      try {
+        const [eventsRes, metaRes] = await Promise.all([
+          fetch(BASE + '/recordings/' + liveTriggerId + '/events'),
+          fetch(BASE + '/recordings/' + liveTriggerId + '/meta'),
+        ]);
+        const events = await eventsRes.json();
+        const meta = await metaRes.json();
+        document.getElementById('live-feed-card').style.display = 'none';
+        renderFull(liveTriggerId, events, meta);
+        setLiveStatus('', 'Completed');
+        // Also refresh recordings list
+        refreshRecordings();
+      } catch (err) {
+        setLiveStatus('', 'Error loading results: ' + err.message);
+      }
+      document.getElementById('live-send-btn').style.display = '';
+      document.getElementById('live-stop-btn').style.display = 'none';
+    });
+
+    liveEventSource.onerror = () => {
+      setLiveStatus('', 'Disconnected');
+    };
+  } catch (e) {
+    setLiveStatus('', 'Error: ' + e.message);
+    document.getElementById('live-send-btn').style.display = '';
+    document.getElementById('live-stop-btn').style.display = 'none';
+  }
+}
+
+function stopLive() {
+  closeLiveStream();
+  setLiveStatus('', 'Idle');
+  document.getElementById('live-send-btn').style.display = '';
+  document.getElementById('live-stop-btn').style.display = 'none';
+}
+
+function closeLiveStream() {
+  if (liveEventSource) {
+    liveEventSource.close();
+    liveEventSource = null;
+  }
+}
+
+function setLiveStatus(state, text) {
+  const dot = document.getElementById('live-dot');
+  dot.className = 'live-dot' + (state ? ' ' + state : '');
+  document.getElementById('live-status-text').textContent = text;
+}
+
+function appendLiveTool(ev) {
+  const container = document.getElementById('live-tools');
+  const item = document.createElement('div');
+  item.className = 'live-tool-item';
+  item.id = 'live-tool-' + (ev.index || liveToolCount);
+  const statusClass = ev.status === 'running' ? '' : (ev.status === 'error' || ev.status === 'err' ? 'err' : 'ok');
+  item.innerHTML = '<span class="dot ' + statusClass + '"></span>' +
+    '<span class="tool-name">#' + (ev.index || '') + ' ' + (ev.name || '') + '</span>' +
+    (ev.quality ? '<span style="color:#f59e0b;font-size:10px">' + ev.quality + '</span>' : '') +
+    (ev.error ? '<span style="color:#ef4444;font-size:10px">' + ev.error + '</span>' : '') +
+    (ev.status === 'running' ? '<span style="color:var(--text-muted);font-size:10px">running...</span>' : '');
+  container.appendChild(item);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateLastLiveTool(name, status, durationMs) {
+  const items = document.querySelectorAll('.live-tool-item');
+  const last = items[items.length - 1];
+  if (!last) return;
+  const dot = last.querySelector('.dot');
+  if (dot) dot.className = 'dot ' + status;
+  if (durationMs !== undefined) {
+    last.innerHTML += '<span class="tool-dur" style="margin-left:auto">' + formatDuration(durationMs) + '</span>';
+  }
+}
+
+// ===== Rendering =====
+function clearDisplay() {
+  document.getElementById('overview-card').style.display = 'none';
+  document.getElementById('timeline-card').style.display = 'none';
+  document.getElementById('pipe-card').style.display = 'none';
+  document.getElementById('conv-card').style.display = 'none';
+  document.getElementById('llm-ctx-card').style.display = 'none';
+  document.getElementById('tools-card').style.display = 'none';
+  document.getElementById('footer-grid').style.display = 'none';
+  document.getElementById('live-feed-card').style.display = 'none';
+  document.getElementById('empty-state').style.display = '';
+  document.getElementById('live-tools').innerHTML = '';
+}
+
+function renderFull(id, events, meta) {
+  document.getElementById('empty-state').style.display = 'none';
+  renderOverview(meta);
+  renderTimeline(events);
+  renderPipeline(events, meta);
+  renderConversation(meta.conversationHistory || [], events);
+  renderLLMContext(events);
+  renderToolDetails(meta.toolCallDetails || []);
+  renderFooter(id, meta);
+}
+
+function renderOverview(meta) {
+  const card = document.getElementById('overview-card');
+  card.style.display = '';
+
+  // Extract prompt from conversation history
+  const prompt = meta.conversationHistory?.[0]?.text || meta.logs?.match(/Prompt: "(.+?)"/)?.[1] || '(unknown)';
+  document.getElementById('overview-prompt').textContent = '"' + prompt + '"';
+
+  const stats = document.getElementById('overview-stats');
+  const s = meta.toolCallSummary || {};
+  stats.innerHTML = statHTML('Model', meta.modelName || '?', 'model') +
+    statHTML('Duration', formatDuration(meta.durationMs), 'duration') +
+    statHTML('Tools', (s.total || 0) + ' calls', 'tools') +
+    statHTML('Errors', (s.errors || 0) + '', 'errors') +
+    statHTML('Iterations', countIterations(meta.runtimeEvents || []) + '', 'iterations') +
+    statHTML('Status', meta.status || '?', '');
+}
+
+function statHTML(label, value, cls) {
+  return '<div class="stat"><span class="stat-label">' + label + '</span><span class="stat-value ' + cls + '">' + value + '</span></div>';
+}
+
+function countIterations(events) {
+  let max = 0;
+  for (const e of events) {
+    if (e.iteration > max) max = e.iteration;
+  }
+  return max;
+}
+
+// ===== Timeline rendering =====
+function renderTimeline(events) {
+  const card = document.getElementById('timeline-card');
+  card.style.display = '';
+  const container = document.getElementById('timeline-container');
+  container.innerHTML = '';
+
+  // Group events by iteration
+  const groups = new Map(); // iteration -> events[]
+  const setupEvents = [];
+  for (const e of events) {
+    const iter = e.iteration || 0;
+    if (iter === 0) {
+      setupEvents.push(e);
+      continue;
+    }
+    if (!groups.has(iter)) groups.set(iter, []);
+    groups.get(iter).push(e);
+  }
+
+  // Calculate max total duration for scaling
+  let maxDuration = 0;
+  for (const [, evts] of groups) {
+    let dur = 0;
+    for (const e of evts) {
+      if (e.type === 'llm_response') dur += e.durationMs || 0;
+      if (e.type === 'tool_result') dur += e.toolResult?.durationMs || 0;
+    }
+    if (dur > maxDuration) maxDuration = dur;
+  }
+  if (maxDuration === 0) maxDuration = 1;
+
+  // Setup row
+  if (setupEvents.length > 0) {
+    const statusMsgs = setupEvents.filter(e => e.type === 'status').map(e => e.message).filter(Boolean);
+    if (statusMsgs.length > 0) {
+      const row = document.createElement('div');
+      row.className = 'timeline-row';
+      row.innerHTML = '<span class="timeline-label setup">Setup</span>' +
+        '<div class="timeline-bars"><span style="color:var(--text-muted);font-size:11px">' + statusMsgs.join(' \u2192 ') + '</span></div>';
+      container.appendChild(row);
+    }
+  }
+
+  // Iteration rows
+  for (const [iter, evts] of groups) {
+    const row = document.createElement('div');
+    row.className = 'timeline-row';
+
+    // Extract data
+    const llmReq = evts.find(e => e.type === 'llm_request');
+    const llmRes = evts.find(e => e.type === 'llm_response');
+    const toolCalls = evts.filter(e => e.type === 'tool_call');
+    const toolResults = evts.filter(e => e.type === 'tool_result');
+    const textDeltas = evts.filter(e => e.type === 'text_delta');
+    const ctxUsage = evts.find(e => e.type === 'context_usage');
+    const errors = evts.filter(e => e.type === 'error');
+
+    let barsHTML = '';
+
+    // LLM bar
+    if (llmRes) {
+      const llmDur = llmRes.durationMs || 0;
+      const pct = Math.max(8, (llmDur / maxDuration) * 100);
+      const shape = llmRes.responseShape || {};
+      const usage = llmRes.usage || {};
+      let tooltip = 'LLM ' + formatDuration(llmDur);
+      if (usage.promptTokens) tooltip += '\nPrompt: ' + usage.promptTokens + ' tok';
+      if (usage.completionTokens) tooltip += '\nCompletion: ' + usage.completionTokens + ' tok';
+      if (usage.cachedTokens) tooltip += '\nCached: ' + usage.cachedTokens + ' tok';
+      if (shape.toolCallCount) tooltip += '\nTool calls: ' + shape.toolCallCount;
+      if (shape.toolCallNames?.length) tooltip += ' (' + shape.toolCallNames.join(', ') + ')';
+      barsHTML += '<div class="bar bar-llm" style="width:' + pct + '%" data-tooltip="' + escHtml(tooltip) + '">' +
+        'LLM ' + formatDuration(llmDur) + '</div>';
+    }
+
+    // Tool bars
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      const tr = toolResults.find(r => r.toolResult?.id === tc.toolCall?.id) || toolResults[i];
+      const name = tc.toolCall?.displayName || tc.toolCall?.name || '?';
+      const success = tr?.toolResult?.success !== false;
+      const dur = tr?.toolResult?.durationMs || 0;
+      const pct = Math.max(5, (dur / maxDuration) * 100);
+      let tooltip = name + ' ' + formatDuration(dur);
+      if (tr?.toolResult?.error) tooltip += '\nError: ' + tr.toolResult.error.slice(0, 200);
+      const cls = success ? 'bar-tool-ok' : 'bar-tool-err';
+      barsHTML += '<div class="bar ' + cls + '" style="width:' + pct + '%" data-tooltip="' + escHtml(tooltip) + '">' +
+        name + ' ' + formatDuration(dur) + '</div>';
+    }
+
+    // Text output indicator
+    if (textDeltas.length > 0) {
+      const totalChars = textDeltas.reduce((s, e) => s + (e.text?.length || 0), 0);
+      barsHTML += '<div class="bar bar-text" style="width:auto;flex-shrink:0">' + totalChars + ' chars</div>';
+    }
+
+    // Error badges
+    for (const err of errors) {
+      barsHTML += '<div class="bar bar-tool-err" style="width:auto;flex-shrink:0" data-tooltip="' + escHtml(err.message || '') + '">ERR</div>';
+    }
+
+    // Context usage — stacked layer bar + msg count (click scrolls to conv flow)
+    let ctxHTML = '';
+    if (ctxUsage?.usage) {
+      const u = ctxUsage.usage;
+      const L = u.layers;
+      if (L) {
+        const total = L.systemPrompt.chars + L.summary.chars + L.conversationHistory.chars + L.turnMessages.chars || 1;
+        const pct = (c) => Math.max(c > 0 ? 1 : 0, (c / total * 100)).toFixed(1);
+        const tip = 'System: ' + L.systemPrompt.chars + ' chars (' + L.systemPrompt.msgs + ' msg)' +
+          '\\nSummary: ' + L.summary.chars + ' chars (' + L.summary.msgs + ' msg)' +
+          '\\nHistory: ' + L.conversationHistory.chars + ' chars (' + L.conversationHistory.msgs + ' msg)' +
+          '\\nTurn: ' + L.turnMessages.chars + ' chars (' + L.turnMessages.msgs + ' msg)' +
+          '\\n\\nClick to view in Conversation Flow';
+        const scrollFn = "document.querySelector('.conv-iter-tab[data-iter=\\'" + iter + "\\']')?.click();" +
+          "document.getElementById('conv-card')?.scrollIntoView({behavior:'smooth'})";
+        ctxHTML = '<div class="ctx-layers" style="cursor:pointer" data-tooltip="' + escHtml(tip) + '" onclick="' + scrollFn + '">' +
+          '<div class="ctx-layer ctx-l1" style="width:' + pct(L.systemPrompt.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l2" style="width:' + pct(L.summary.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l3" style="width:' + pct(L.conversationHistory.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l4" style="width:' + pct(L.turnMessages.chars) + '%"></div>' +
+          '</div>' +
+          '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      } else {
+        ctxHTML = '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      }
+    }
+
+    // Total duration for this iteration
+    let totalDur = 0;
+    if (llmRes) totalDur += llmRes.durationMs || 0;
+    for (const tr of toolResults) totalDur += tr.toolResult?.durationMs || 0;
+
+    row.innerHTML = '<span class="timeline-label">Iter ' + iter + '</span>' +
+      ctxHTML +
+      '<div class="timeline-bars">' + barsHTML + '</div>' +
+      '<span class="timeline-duration">' + formatDuration(totalDur) + '</span>';
+    container.appendChild(row);
+  }
+}
+
+// ===== Pipeline Architecture =====
+// Pipeline stages — FALLBACK for recordings without _stages.
+// New recordings auto-report stages from PipelineTracer (src/ipc/commands/pipelineTracer.ts).
+// Synced to: 15 verb_noun tools + 4 first-class tools (f0e22c7)
+const TOOL_PIPELINES = {
+  jsx: {
+    color: 'jsx',
+    stages: [
+      { id: 'parse', label: 'parseJsx()', file: 'jsxParser.ts' },
+      { id: 'ir', label: 'jsxToIR()', file: 'jsxToIR.ts' },
+      { id: 'factory', label: 'nodeFactory.create*()', file: 'nodeFactory.ts' },
+      { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
+    ]
+  },
+  inspect: {
+    color: 'inspect',
+    stages: [
+      { id: 'route', label: 'handleInspect()', file: 'inspectHandler.ts' },
+      { id: 'read', label: 'readHandler()', file: 'readHandlers.ts' },
+      { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
+    ]
+  },
+  edit: {
+    color: 'edit',
+    stages: [
+      { id: 'resolve', label: 'resolveNode()', file: 'pathResolver.ts' },
+      { id: 'apply', label: 'nodeFactory.applyProps()', file: 'nodeFactory.ts' },
+    ]
+  },
+  describe: {
+    color: 'inspect',
+    stages: [
+      { id: 'resolve', label: 'resolveNode()', file: 'pathResolver.ts' },
+      { id: 'serialize', label: 'describeHandler()', file: 'describeHandler.ts' },
+    ]
+  },
+  search: {
+    color: 'run',
+    stages: [
+      { id: 'find', label: 'searchAdapter()', file: 'searchAdapter.ts' },
+      { id: 'handler', label: 'searchHandlers()', file: 'searchHandlers.ts' },
+    ]
+  },
+  structure: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'structureAdapter()', file: 'structureAdapter.ts' },
+      { id: 'handler', label: 'writeHandlers()', file: 'writeHandlers.ts' },
+    ]
+  },
+  var: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'varAdapter()', file: 'varAdapter.ts' },
+      { id: 'handler', label: 'varHandlers()', file: 'varHandlers.ts' },
+    ]
+  },
+  comp: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'compAdapter()', file: 'compAdapter.ts' },
+      { id: 'handler', label: 'compHandlers()', file: 'compHandlers.ts' },
+    ]
+  },
+  js: {
+    color: 'edit',
+    stages: [
+      { id: 'eval', label: 'handleJs()', file: 'jsHandler.ts' },
+    ]
+  },
+};
+
+// Map tool names to pipeline keys
+function toolToPipeline(name) {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  // Create
+  if (n === 'jsx' || n === 'mk' || n === 'render' || n === 'design' || n === 'create') return 'jsx';
+  // Read
+  if (n === 'inspect' || n === 'cat' || n === 'tree' || n === 'ls') return 'inspect';
+  if (n === 'describe') return 'describe';
+  // Update
+  if (n === 'edit' || n === 'update' || n === 'set_text' || n === 'set_fill' || n === 'set_stroke' || n === 'set_layout') return 'edit';
+  // Search
+  if (n === 'find_nodes' || n === 'discover_props' || n === 'replace_props' || n === 'grep' || n === 'sed') return 'search';
+  // Structure
+  if (n === 'delete_node' || n === 'move_node' || n === 'clone_node' || n === 'rm' || n === 'mv' || n === 'cp') return 'structure';
+  // Variables
+  if (n === 'list_variables' || n === 'create_variable' || n === 'bind_variable' || n === 'alias_variable') return 'var';
+  // Components
+  if (n === 'create_component' || n === 'combine_components' || n === 'add_component_prop' || n === 'list_component_props' || n === 'create_instance') return 'comp';
+  // JS escape hatch
+  if (n === 'js') return 'js';
+  // Legacy run
+  if (n === 'run' || n === 'man') return 'structure';
+  return null;
+}
+
+/** Extract _stages from tool_result events in runtimeEvents. */
+function extractStagesFromEvents(events) {
+  const stagesMap = {}; // toolResultId → _stages array
+  for (const e of events) {
+    if (e.type !== 'tool_result') continue;
+    const raw = e.toolResult?.raw;
+    if (!raw) continue;
+    // _stages can be at top level or inside data
+    const stages = raw._stages || raw.data?._stages;
+    if (stages && Array.isArray(stages)) {
+      stagesMap[e.toolResult.id] = stages;
+    }
+  }
+  return stagesMap;
+}
+
+/** Build per-pipeline stages from runtime data, falling back to hardcoded. */
+function getPipelineStages(pipeKey, toolCallStages) {
+  if (toolCallStages && toolCallStages.length > 0) {
+    return toolCallStages.map((s, i) => ({
+      id: 'runtime-' + i,
+      label: s.label,
+      file: s.file,
+      durationMs: s.durationMs,
+      meta: s.meta,
+    }));
+  }
+  // Fallback to hardcoded
+  return TOOL_PIPELINES[pipeKey]?.stages || [];
+}
+
+let pipeDetailData = null; // currently selected detail
+
+function renderPipeline(events, meta) {
+  const card = document.getElementById('pipe-card');
+  card.style.display = '';
+  const container = document.getElementById('pipe-container');
+  container.innerHTML = '';
+
+  // Extract _stages from runtime events (keyed by tool result ID)
+  const stagesMap = extractStagesFromEvents(events);
+  // Also try to get _stages from toolCallDetails result (alternative path)
+  const toolResultEvents = events.filter(e => e.type === 'tool_result');
+
+  // Gather tool call data
+  const toolCalls = (meta.toolCallDetails || []).map((tc, i) => {
+    // Try to find matching runtime _stages
+    const matchingEvent = toolResultEvents[i]; // position-based fallback
+    let runtimeStages = matchingEvent ? stagesMap[matchingEvent.toolResult?.id] : null;
+    // Also check if result JSON contains _stages
+    if (!runtimeStages && tc.result) {
+      try {
+        const parsed = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
+        if (parsed._stages) runtimeStages = parsed._stages;
+      } catch {}
+    }
+    return {
+      ...tc,
+      index: i + 1,
+      pipeline: toolToPipeline(tc.name),
+      runtimeStages: runtimeStages || null,
+    };
+  });
+
+  // Count per pipeline — initialize all keys from TOOL_PIPELINES
+  const counts = {};
+  for (const k of Object.keys(TOOL_PIPELINES)) counts[k] = 0;
+  for (const tc of toolCalls) {
+    if (tc.pipeline && counts[tc.pipeline] !== undefined) counts[tc.pipeline]++;
+  }
+
+  // LLM call count
+  const llmCount = events.filter(e => e.type === 'llm_response').length;
+  const totalDur = meta.durationMs;
+
+  // === Build architecture diagram ===
+  let html = '<div class="pipe-arch">';
+
+  // LLM node
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node llm" onclick="pipeShowLLM()" title="Click: show LLM call details">' +
+      'LLM Generate' +
+      '<span class="pipe-badge">' + llmCount + '</span>' +
+    '</div></div>';
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // Dispatcher
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node dispatch">' +
+      'toolDispatcher.dispatch()' +
+      '<span class="pipe-badge">' + toolCalls.length + '</span>' +
+    '</div></div>';
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // 4 tool columns
+  html += '<div class="pipe-cols">';
+  for (const [key, pipe] of Object.entries(TOOL_PIPELINES)) {
+    const count = counts[key];
+    const isActive = count > 0;
+    // Use runtime stages from first matching call, fallback to hardcoded
+    const firstCallWithStages = toolCalls.find(tc => tc.pipeline === key && tc.runtimeStages);
+    const displayStages = firstCallWithStages
+      ? firstCallWithStages.runtimeStages.map((s, i) => ({ id: 'rt-' + i, label: s.label, file: s.file }))
+      : pipe.stages;
+    const isRuntime = !!firstCallWithStages;
+
+    html += '<div class="pipe-col">';
+    html += '<div class="pipe-col-head ' + key + (isActive ? '' : ' inactive') + '"' +
+      (isActive ? ' onclick="pipeShowTool(\'' + key + '\')" title="Click: show ' + key + ' calls"' : '') + '>' +
+      '<div class="pipe-col-name">' + key + (isRuntime ? ' *' : '') + '</div>' +
+      '<div class="pipe-col-count">' + count + ' call' + (count !== 1 ? 's' : '') + '</div>' +
+    '</div>';
+
+    // Stages
+    html += '<div class="pipe-stages">';
+    for (let si = 0; si < displayStages.length; si++) {
+      const s = displayStages[si];
+      html += '<div class="pipe-stage-arrow">\u2193</div>';
+      html += '<div class="pipe-stage' + (isActive ? ' active' : '') + '" title="' + escHtml(s.file || '') + '">' +
+        s.label + '<span class="pipe-stage-file">' + (s.file || '') + '</span></div>';
+    }
+    html += '</div>'; // stages
+    html += '</div>'; // col
+  }
+  html += '</div>'; // cols
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // presentForLLM
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node present">' +
+      'presentForLLM()' +
+      '<span class="pipe-badge">' + toolCalls.length + '</span>' +
+    '</div></div>';
+
+  // Detail panel placeholder
+  html += '<div id="pipe-detail-slot"></div>';
+
+  html += '</div>'; // pipe-arch
+  container.innerHTML = html;
+
+  // Store data for click handlers
+  pipeDetailData = { events, meta, toolCalls, counts, llmCount };
+}
+
+function pipeShowLLM() {
+  if (!pipeDetailData) return;
+  const slot = document.getElementById('pipe-detail-slot');
+  const { events } = pipeDetailData;
+  const llmReqs = events.filter(e => e.type === 'llm_request');
+  const llmResps = events.filter(e => e.type === 'llm_response');
+
+  let html = '<div class="pipe-detail">';
+  html += '<div class="pipe-detail-header">' +
+    '<span class="pipe-detail-title">LLM Calls (' + llmResps.length + ')</span>' +
+    '<button class="pipe-detail-close" onclick="this.closest(\'.pipe-detail\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-detail-body"><div class="pipe-trace">';
+
+  for (let i = 0; i < llmResps.length; i++) {
+    const req = llmReqs[i];
+    const resp = llmResps[i];
+    const usage = resp?.usage || {};
+    const shape = resp?.responseShape || {};
+    html += '<div class="pipe-trace-row">' +
+      '<span class="pipe-trace-idx">Iter ' + (resp?.iteration || i+1) + '</span>' +
+      '<div class="pipe-trace-stages">' +
+        '<span class="pipe-trace-stage stage-handler">' +
+          (req?.messageCount || '?') + ' msgs \u2192 LLM' +
+        '</span>' +
+        '<span class="pipe-trace-arrow">\u2192</span>' +
+        '<span class="pipe-trace-stage stage-exec">' +
+          (usage.promptTokens || '?') + ' prompt tok' +
+          (usage.cachedTokens ? ' (' + usage.cachedTokens + ' cached)' : '') +
+        '</span>' +
+        '<span class="pipe-trace-arrow">\u2192</span>' +
+        '<span class="pipe-trace-stage stage-present">' +
+          'text=' + (shape.textLength || 0) + ' tools=' + (shape.toolCallCount || 0) +
+          (shape.toolCallNames?.length ? ' (' + shape.toolCallNames.join(',') + ')' : '') +
+        '</span>' +
+      '</div>' +
+      '<span class="pipe-trace-dur">' + formatDuration(resp?.durationMs) + '</span>' +
+    '</div>';
+  }
+
+  html += '</div></div></div>';
+  slot.innerHTML = html;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pipeShowTool(pipeKey) {
+  if (!pipeDetailData) return;
+  const slot = document.getElementById('pipe-detail-slot');
+  const { toolCalls } = pipeDetailData;
+  const pipe = TOOL_PIPELINES[pipeKey];
+  const calls = toolCalls.filter(tc => tc.pipeline === pipeKey);
+
+  let html = '<div class="pipe-detail">';
+  html += '<div class="pipe-detail-header">' +
+    '<span class="pipe-detail-title">' + pipeKey + ' calls (' + calls.length + ')</span>' +
+    '<button class="pipe-detail-close" onclick="this.closest(\'.pipe-detail\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-detail-body"><div class="pipe-trace">';
+
+  for (const tc of calls) {
+    const isErr = tc.status === 'error';
+    const hasRuntime = tc.runtimeStages && tc.runtimeStages.length > 0;
+
+    // Build stage trace — use runtime stages when available
+    const stages = [];
+    stages.push({ label: 'dispatch', cls: 'stage-dispatch', dur: null });
+    if (hasRuntime) {
+      for (const s of tc.runtimeStages) {
+        const cls = s.label.includes('executor') || s.label.includes('executeIR') ? 'stage-exec'
+          : s.label.includes('present') ? 'stage-present'
+          : 'stage-handler';
+        stages.push({ label: s.label, cls, dur: s.durationMs });
+      }
+    } else {
+      for (const s of pipe.stages) {
+        stages.push({ label: s.label, cls: 'stage-handler', dur: null });
+      }
+    }
+    stages.push({ label: 'presentForLLM', cls: 'stage-present', dur: null });
+    if (isErr) stages.push({ label: 'ERROR', cls: 'stage-err', dur: null });
+
+    let stagesHTML = '';
+    for (let si = 0; si < stages.length; si++) {
+      if (si > 0) stagesHTML += '<span class="pipe-trace-arrow">\u2192</span>';
+      const durSuffix = stages[si].dur != null ? ' ' + formatDuration(stages[si].dur) : '';
+      stagesHTML += '<span class="pipe-trace-stage ' + stages[si].cls + '" ' +
+        'onclick="pipeShowCallData(' + tc.index + ', \'' + escHtml(stages[si].label) + '\')">' +
+        escHtml(stages[si].label) + durSuffix + '</span>';
+    }
+
+    html += '<div class="pipe-trace-row">' +
+      '<span class="pipe-trace-idx">#' + tc.index + '</span>' +
+      '<span class="pipe-trace-name">' + escHtml(tc.name) + '</span>' +
+      '<div class="pipe-trace-stages">' + stagesHTML + '</div>' +
+      '<span class="' + (isErr ? 'pipe-trace-status-err' : 'pipe-trace-status-ok') + '">' +
+        (isErr ? '\u2717' : '\u2713') + '</span>' +
+      '<span class="pipe-trace-dur">' + formatDuration(tc.durationMs) + '</span>' +
+    '</div>';
+  }
+
+  html += '</div><div id="pipe-call-data-slot"></div></div></div>';
+  slot.innerHTML = html;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pipeShowCallData(index, stage) {
+  if (!pipeDetailData) return;
+  const tc = pipeDetailData.toolCalls.find(t => t.index === index);
+  if (!tc) return;
+
+  const slot = document.getElementById('pipe-call-data-slot');
+  if (!slot) return;
+
+  const viewId = 'pipe-' + index;
+
+  let html = '<div class="pipe-data-popup">';
+  html += '<div class="pipe-data-popup-header">' +
+    '<span class="pipe-data-popup-title">#' + index + ' ' + escHtml(tc.name) + ' \u2014 ' + escHtml(stage) + '</span>' +
+    '<button class="pipe-data-popup-close" onclick="this.closest(\'.pipe-data-popup\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-data-popup-body">';
+
+  html += buildDataViewer(viewId, tc.name, tc.params, tc.result, tc.durationMs);
+
+  if (tc.error) {
+    html += '<div class="pipe-data-section">Error</div>' +
+      '<div class="conv-tc-error">' + escHtml(tc.error) + '</div>';
+  }
+
+  html += '</div></div>';
+  slot.innerHTML = html;
+}
+
+// ===== presentForLLM simulation (client-side) =====
+// Mirrors src/engine/agent/tools/unified/presentation.ts KEEP_FIELDS
+const LLM_KEEP_FIELDS = {
+  cp: ['idMap'], rm: ['deleted'], mv: ['id','name'], tree: ['tree'],
+  grep: ['results','properties'], sed: ['replaced','details'], man: null,
+  inspect: null, jsx: null, describe: null, js: null,
+  edit: ['id','name','type','updated','results'],
+  set_text: ['id','name','type','updated','results'],
+  set_fill: ['id','name','type','updated','results'],
+  set_stroke: ['id','name','type','updated','results'],
+  set_layout: ['id','name','type','updated','results'],
+  find_nodes: ['results'], discover_props: null, replace_props: ['replaced','details'],
+  delete_node: ['deleted'], move_node: ['id','name'], clone_node: ['idMap'],
+};
+
+/** Simulate presentForLLM: flatten data, apply KEEP_FIELDS, add _meta. */
+function simulatePresent(raw, toolName, durationMs) {
+  if (!raw || typeof raw !== 'object') return raw;
+  let data = raw.data;
+  if (!data || typeof data !== 'object') {
+    return { ...(raw.error != null ? { error: raw.error } : {}), _meta: '[' + formatDuration(durationMs) + ']' };
+  }
+  // Apply KEEP_FIELDS
+  const keep = LLM_KEEP_FIELDS[toolName];
+  let cleaned;
+  if (keep === null || keep === undefined) {
+    cleaned = { ...data };
+  } else {
+    cleaned = {};
+    for (const f of keep) {
+      if (data[f] !== undefined && data[f] !== null) cleaned[f] = data[f];
+    }
+  }
+  // Strip internal fields
+  delete cleaned._stages;
+  delete cleaned._stderr;
+  if (raw.error != null) cleaned.error = raw.error;
+  cleaned._meta = '[' + formatDuration(durationMs) + ']';
+  if (raw._stderr) cleaned._stderr = raw._stderr;
+  return cleaned;
+}
+
+/** Global stringify mode */
+let globalStringify = false;
+
+/** Format data for display, respecting stringify toggle. */
+function formatDataView(obj, stringify) {
+  if (obj === null || obj === undefined) return '(empty)';
+  if (stringify) return JSON.stringify(obj);
+  return JSON.stringify(obj, null, 2);
+}
+
+/** Build a data viewer with Raw/LLM toggle and stringify switch. */
+function buildDataViewer(id, toolName, params, rawResult, durationMs) {
+  const raw = parseIfString(rawResult);
+  const presented = simulatePresent(raw, toolName, durationMs);
+  const rawStr = formatDataView(raw, globalStringify);
+  const presentStr = formatDataView(presented, globalStringify);
+  const isDifferent = rawStr !== presentStr;
+
+  return '<div class="data-view-bar">' +
+    '<button class="data-view-btn raw-btn active" onclick="switchDataView(this,\'' + id + '\',\'raw\')">Handler Raw</button>' +
+    '<button class="data-view-btn llm-btn" onclick="switchDataView(this,\'' + id + '\',\'llm\')">LLM View' +
+      (isDifferent ? ' <span class="data-diff-badge">diff</span>' : '') + '</button>' +
+    '<span class="data-view-spacer"></span>' +
+    '<label class="stringify-toggle"><input type="checkbox" ' + (globalStringify ? 'checked' : '') +
+      ' onchange="toggleStringify(this,\'' + id + '\',\'' + escHtml(toolName) + '\',' + (durationMs||0) + ')"> stringify</label>' +
+  '</div>' +
+  '<div class="pipe-data-section">Parameters</div>' +
+  '<pre class="pipe-data-json">' + escHtml(formatDataView(parseIfString(params), globalStringify)) + '</pre>' +
+  '<div class="pipe-data-section">Result</div>' +
+  '<pre class="pipe-data-json" id="data-result-' + id + '" data-raw=\'' + escAttr(JSON.stringify(raw)) + '\' data-presented=\'' + escAttr(JSON.stringify(presented)) + '\' data-view="raw">' +
+    escHtml(rawStr) + '</pre>';
+}
+
+function parseIfString(val) {
+  if (!val) return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return val; }
+  }
+  return val;
+}
+
+function escAttr(s) { return String(s||'').replace(/'/g, '&#39;').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+function switchDataView(btn, id, view) {
+  const el = document.getElementById('data-result-' + id);
+  if (!el) return;
+  // Toggle active button
+  btn.parentElement.querySelectorAll('.data-view-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  el.dataset.view = view;
+  const data = view === 'llm' ? JSON.parse(el.dataset.presented) : JSON.parse(el.dataset.raw);
+  el.textContent = formatDataView(data, globalStringify);
+}
+
+function toggleStringify(checkbox, id, toolName, durationMs) {
+  globalStringify = checkbox.checked;
+  const el = document.getElementById('data-result-' + id);
+  if (!el) return;
+  const view = el.dataset.view || 'raw';
+  const data = view === 'llm' ? JSON.parse(el.dataset.presented) : JSON.parse(el.dataset.raw);
+  el.textContent = formatDataView(data, globalStringify);
+  // Also update params
+  const paramsEl = el.previousElementSibling?.previousElementSibling?.previousElementSibling;
+  // skip — params don't change between views
+}
+
+// ===== Conversation Flow =====
+function renderConversation(history, events) {
+  const card = document.getElementById('conv-card');
+  const container = document.getElementById('conv-container');
+  container.innerHTML = '';
+
+  // Collect per-iteration layer data from context_usage events
+  const ctxEvents = (events || []).filter(e => e.type === 'context_usage' && e.usage?.layers);
+
+  // If we have layer data, show iteration tabs + layer-aware view
+  if (ctxEvents.length > 0) {
+    card.style.display = '';
+    // Tabs
+    const tabsDiv = document.createElement('div');
+    tabsDiv.className = 'conv-iter-tabs';
+    // "Final" tab for the classic flat view
+    for (const ce of ctxEvents) {
+      const tab = document.createElement('span');
+      tab.className = 'conv-iter-tab';
+      tab.dataset.iter = ce.iteration;
+      tab.textContent = 'Iter ' + ce.iteration;
+      tab.onclick = () => renderConvIteration(container, ce, tabsDiv);
+      tabsDiv.appendChild(tab);
+    }
+    const finalTab = document.createElement('span');
+    finalTab.className = 'conv-iter-tab';
+    finalTab.dataset.iter = 'final';
+    finalTab.textContent = 'Final';
+    finalTab.onclick = () => { renderConvFinal(container, history, tabsDiv); };
+    tabsDiv.appendChild(finalTab);
+    container.appendChild(tabsDiv);
+
+    // Default: show last iteration
+    const flowDiv = document.createElement('div');
+    flowDiv.className = 'conv-flow';
+    flowDiv.id = 'conv-flow-inner';
+    container.appendChild(flowDiv);
+    renderConvIteration(flowDiv, ctxEvents[ctxEvents.length - 1], tabsDiv);
+    return;
+  }
+
+  // Fallback: classic flat view (no layer data)
+  if (!history || history.length === 0) return;
+  card.style.display = '';
+  const flowDiv = document.createElement('div');
+  flowDiv.className = 'conv-flow';
+  container.appendChild(flowDiv);
+  renderConvMessages(flowDiv, history);
+}
+
+/** Render a single iteration's 4-layer prompt using conv-msg styling */
+function renderConvIteration(parentOrId, ctxEvent, tabsDiv) {
+  const flow = typeof parentOrId === 'string'
+    ? document.getElementById(parentOrId)
+    : document.getElementById('conv-flow-inner') || parentOrId;
+  flow.innerHTML = '';
+  // Highlight active tab
+  tabsDiv.querySelectorAll('.conv-iter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.iter == ctxEvent.iteration));
+
+  const L = ctxEvent.usage.layers;
+  const layerDefs = [
+    { key: 'systemPrompt', label: 'System Prompt', color: '#6366f1' },
+    { key: 'summary', label: 'Summary', color: '#f59e0b' },
+    { key: 'conversationHistory', label: 'Conversation History', color: '#22c55e' },
+    { key: 'turnMessages', label: 'Turn Messages', color: '#3b82f6' },
+  ];
+
+  for (const ld of layerDefs) {
+    const layer = L[ld.key];
+    if (!layer || (layer.msgs === 0 && layer.chars === 0)) continue;
+
+    // Layer separator header
+    const sep = document.createElement('div');
+    sep.className = 'conv-layer-sep';
+    sep.innerHTML = '<span class="conv-layer-dot" style="background:' + ld.color + '"></span>' +
+      '<span class="conv-layer-sep-label">' + ld.label + '</span>' +
+      '<span class="conv-layer-sep-meta">' + layer.chars + ' chars \u00b7 ' + layer.msgs + ' msg</span>';
+    flow.appendChild(sep);
+
+    // Render each message as a conv-msg with collapse/expand for long content
+    if (layer.messages) {
+      for (const m of layer.messages) {
+        const div = document.createElement('div');
+        div.className = 'conv-msg';
+        const avatarCls = m.role === 'system' ? 'system' : m.role === 'model' ? 'model' : m.role === 'tool' ? 'tool' : 'user';
+        const avatarIcon = m.role === 'system' ? 'S' : m.role === 'model' ? 'A' : m.role === 'tool' ? 'T' : 'U';
+        const roleLabel = m.role === 'system' ? 'System' : m.role === 'model' ? 'Agent' : m.role === 'tool' ? 'Tool' : 'User';
+        const metaHTML = '<span style="color:var(--text-dimmed);font-size:10px;margin-left:8px">' +
+          escHtml(m.id) + ' \u00b7 ' + m.chars + ' chars</span>';
+        const isLong = m.preview.length > 400;
+        const textCls = 'conv-text' + (isLong ? ' collapsed' : '');
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'conv-body';
+        bodyDiv.innerHTML = '<div class="conv-role">' + roleLabel + metaHTML + '</div>';
+        const textEl = document.createElement('div');
+        textEl.className = textCls;
+        textEl.textContent = m.preview;
+        bodyDiv.appendChild(textEl);
+        if (isLong) {
+          const toggle = document.createElement('div');
+          toggle.className = 'conv-text-toggle';
+          toggle.textContent = 'Show full content (' + m.chars + ' chars)';
+          toggle.onclick = () => {
+            const collapsed = textEl.classList.toggle('collapsed');
+            toggle.textContent = collapsed
+              ? 'Show full content (' + m.chars + ' chars)'
+              : 'Collapse';
+          };
+          bodyDiv.appendChild(toggle);
+        }
+        div.innerHTML = '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>';
+        div.appendChild(bodyDiv);
+        flow.appendChild(div);
+      }
+    }
+  }
+}
+
+/** Render "Final" tab — classic flat conversation history */
+function renderConvFinal(parentOrId, history, tabsDiv) {
+  const flow = document.getElementById('conv-flow-inner') ||
+    (typeof parentOrId === 'string' ? document.getElementById(parentOrId) : parentOrId);
+  flow.innerHTML = '';
+  tabsDiv.querySelectorAll('.conv-iter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.iter === 'final'));
+  if (history && history.length > 0) {
+    renderConvMessages(flow, history);
+  } else {
+    flow.innerHTML = '<div style="color:var(--text-dimmed);font-size:12px">No conversation history available</div>';
+  }
+}
+
+/** Classic flat message rendering (used by Final tab and fallback) */
+function renderConvMessages(container, history) {
+  let convMsgIdx = 0;
+  for (const msg of history) {
+    convMsgIdx++;
+    const isUser = msg.role === 'user';
+    const div = document.createElement('div');
+    div.className = 'conv-msg';
+    const avatarCls = isUser ? 'user' : 'model';
+    const avatarIcon = isUser ? 'U' : 'A';
+    let bodyHTML = '<div class="conv-role">' + (isUser ? 'User' : 'Agent') + '</div>';
+    if (msg.text) {
+      bodyHTML += '<div class="conv-text">' + escHtml(msg.text) + '</div>';
+    }
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      bodyHTML += '<div class="conv-toolcalls">';
+      for (let tci = 0; tci < msg.toolCalls.length; tci++) {
+        const tc = msg.toolCalls[tci];
+        const isErr = tc.status === 'error';
+        const viewId = 'conv-' + convMsgIdx + '-' + tci;
+        bodyHTML += '<details class="conv-tc">' +
+          '<summary>' +
+            '<span class="conv-tc-name">' + escHtml(tc.name || '?') + '</span>' +
+            '<span class="' + (isErr ? 'conv-tc-status-err' : 'conv-tc-status-ok') + '">' +
+              (isErr ? '\u2717 Error' : '\u2713 OK') + '</span>' +
+          '</summary>' +
+          '<div class="conv-tc-body">' +
+            buildDataViewer(viewId, tc.name, tc.parameters, tc.result, undefined) +
+            (tc.error ? '<div class="pipe-data-section">Error</div><div class="conv-tc-error">' + escHtml(tc.error) + '</div>' : '') +
+          '</div>' +
+        '</details>';
+      }
+      bodyHTML += '</div>';
+    }
+    div.innerHTML =
+      '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>' +
+      '<div class="conv-body">' + bodyHTML + '</div>';
+    container.appendChild(div);
+  }
+}
+
+// ===== LLM Context =====
+function renderLLMContext(events) {
+  const llmRequests = events.filter(e => e.type === 'llm_request');
+  if (llmRequests.length === 0) return;
+
+  const card = document.getElementById('llm-ctx-card');
+  card.style.display = '';
+  const container = document.getElementById('llm-ctx-container');
+  container.innerHTML = '';
+
+  // Pair with responses for token usage
+  const llmResponses = events.filter(e => e.type === 'llm_response');
+  const responseMap = {};
+  for (const r of llmResponses) {
+    responseMap[r.llmCallId] = r;
+  }
+
+  for (const req of llmRequests) {
+    const resp = responseMap[req.llmCallId];
+    const details = document.createElement('details');
+    details.className = 'llm-ctx-item';
+
+    // Summary line
+    const msgCount = req.messageCount || req.messages?.length || 0;
+    const toolCount = req.toolNames?.length || 0;
+    const usage = resp?.usage;
+    let metaStr = msgCount + ' msgs, ' + toolCount + ' tools';
+    if (usage) {
+      metaStr += ' | ' + (usage.promptTokens || 0) + ' prompt tok';
+      if (usage.cachedTokens) metaStr += ' (' + usage.cachedTokens + ' cached)';
+    }
+    if (req.config) {
+      metaStr += ' | think=' + (req.config.thinkingLevel || '?');
+    }
+
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<span class="llm-ctx-iter">Iter ' + req.iteration + '</span>' +
+      '<span class="llm-ctx-label">LLM Request</span>' +
+      '<span class="llm-ctx-meta">' + escHtml(metaStr) + '</span>';
+    details.appendChild(summary);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'llm-ctx-body';
+
+    // Messages table
+    let msgsHTML = '<div class="llm-ctx-msgs">';
+    if (req.messages && req.messages.length > 0) {
+      for (const m of req.messages) {
+        const roleCls = (m.role === 'system' ? 'system' : m.role === 'user' ? 'user' : m.role === 'model' || m.role === 'assistant' ? 'model' : 'tool');
+        const flags = [];
+        if (m.hidden) flags.push('hidden');
+        if (m.pinned) flags.push('📌');
+        msgsHTML += '<div class="llm-ctx-msg">' +
+          '<span class="llm-ctx-msg-role ' + roleCls + '">' + escHtml(m.role) + '</span>' +
+          '<span class="llm-ctx-msg-len">' + (m.contentLength || 0) + ' chars</span>' +
+          (flags.length ? '<span class="llm-ctx-msg-flags">' + flags.join(' ') + '</span>' : '') +
+        '</div>';
+      }
+    }
+    msgsHTML += '</div>';
+
+    // Tools available
+    let toolsHTML = '';
+    if (req.toolNames && req.toolNames.length > 0) {
+      toolsHTML = '<div class="llm-ctx-tools">' +
+        '<div class="llm-ctx-tools-label">Tools Available</div>' +
+        '<div class="llm-ctx-tool-tags">';
+      for (const t of req.toolNames) {
+        toolsHTML += '<span class="llm-ctx-tool-tag">' + escHtml(t) + '</span>';
+      }
+      toolsHTML += '</div></div>';
+    }
+
+    // Cache info
+    let cacheHTML = '';
+    if (req.cache) {
+      cacheHTML = '<div class="llm-ctx-cache">' +
+        'Cache: ' + req.cache.cacheableMessages + '/' + req.cache.totalMessages + ' msgs cacheable' +
+        ' (~' + req.cache.cacheableTokensEstimate + ' tok)' +
+      '</div>';
+    }
+
+    // Response shape
+    let respHTML = '';
+    if (resp) {
+      const shape = resp.responseShape || {};
+      respHTML = '<div class="llm-ctx-cache">' +
+        'Response: ' + formatDuration(resp.durationMs) +
+        ' | text=' + (shape.textLength || 0) + ' chars' +
+        ' | thoughts=' + (shape.thoughtsLength || 0) + ' chars' +
+        ' | tools=' + (shape.toolCallCount || 0);
+      if (shape.toolCallNames?.length) {
+        respHTML += ' (' + shape.toolCallNames.join(', ') + ')';
+      }
+      respHTML += '</div>';
+    }
+
+    body.innerHTML = msgsHTML + toolsHTML + cacheHTML + respHTML;
+    details.appendChild(body);
+    container.appendChild(details);
+  }
+}
+
+// ===== Tool call details =====
+function renderToolDetails(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return;
+  const card = document.getElementById('tools-card');
+  card.style.display = '';
+  const container = document.getElementById('tools-container');
+  container.innerHTML = '';
+
+  toolCalls.forEach((tc, i) => {
+    const details = document.createElement('details');
+    details.className = 'tool-detail';
+
+    const isError = tc.status === 'error';
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<span class="tool-idx">' + (i + 1) + '</span>' +
+      '<span class="tool-name">' + escHtml(tc.name || '?') + '</span>' +
+      '<span class="' + (isError ? 'tool-status-err' : 'tool-status-ok') + '">' + (isError ? 'Error' : 'OK') + '</span>' +
+      '<span class="tool-dur">' + formatDuration(tc.durationMs) + '</span>';
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'tool-body';
+
+    // Params
+    const paramsJSON = formatToolJSON(tc.params);
+    body.innerHTML = '<div class="tool-section-label">Parameters</div>' +
+      '<pre class="tool-json">' + escHtml(truncate(paramsJSON, 2000)) + '</pre>';
+    if (paramsJSON.length > 2000) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full (' + paramsJSON.length + ' chars)';
+      expandBtn.onclick = function() {
+        this.previousElementSibling.textContent = paramsJSON;
+        this.remove();
+      };
+      body.appendChild(expandBtn);
+    }
+
+    // Error
+    if (tc.error) {
+      body.innerHTML += '<div class="tool-section-label">Error</div>' +
+        '<div class="tool-error-banner">' + escHtml(tc.error) + '</div>';
+    }
+
+    // Result
+    const resultJSON = formatToolJSON(tc.result);
+    body.innerHTML += '<div class="tool-section-label">Result</div>' +
+      '<pre class="tool-json">' + escHtml(truncate(resultJSON, 2000)) + '</pre>';
+    if (resultJSON.length > 2000) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full (' + resultJSON.length + ' chars)';
+      expandBtn.onclick = function() {
+        this.previousElementSibling.textContent = resultJSON;
+        this.remove();
+      };
+      body.appendChild(expandBtn);
+    }
+
+    details.appendChild(body);
+    container.appendChild(details);
+  });
+}
+
+// ===== Footer =====
+function renderFooter(id, meta) {
+  const grid = document.getElementById('footer-grid');
+  grid.style.display = '';
+
+  // Screenshot
+  const img = document.getElementById('screenshot-img');
+  const emptyScreen = document.getElementById('screenshot-empty');
+  img.src = BASE + '/recordings/' + id + '/screenshot';
+  img.style.display = '';
+  emptyScreen.style.display = 'none';
+  img.onerror = function() {
+    this.style.display = 'none';
+    emptyScreen.style.display = '';
+  };
+
+  // Final text
+  document.getElementById('final-text').textContent = meta.finalText || '(no text response)';
+}
+
+// ===== Helpers =====
+function formatDuration(ms) {
+  if (ms === undefined || ms === null) return '?';
+  if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
+  return ms + 'ms';
+}
+
+function formatToolJSON(raw) {
+  if (!raw) return '(empty)';
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return raw;
+    }
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
+function truncate(str, max) {
+  if (str.length <= max) return str;
+  return str.slice(0, max) + '\n... (' + (str.length - max) + ' chars truncated)';
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ===== Init =====
+refreshRecordings();
+</script>
+</body>
+</html>

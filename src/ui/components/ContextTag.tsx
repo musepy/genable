@@ -24,11 +24,11 @@ export function ContextTag({ icon, label, onRemove }: ContextTagProps) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 6,
+        gap: tokens.space[1],
         padding: '4.5px 8.5px',
         background: 'var(--panel-translucent)',
-        border: '0.5px solid var(--gray-a4)',
-        borderRadius: 8,
+        border: 'var(--border-subtle)',
+        borderRadius: 'var(--radius-3)',
         cursor: 'default',
         transition: 'var(--transition-crisp)',
       }}
@@ -45,8 +45,8 @@ export function ContextTag({ icon, label, onRemove }: ContextTagProps) {
         </span>
       )}
       <span style={{
-        fontSize: 12,
-        fontWeight: 500,
+        fontSize: tokens.fontSize[1],
+        fontWeight: tokens.fontWeight.medium,
         lineHeight: '16px',
         color: 'var(--gray-a11)',
         whiteSpace: 'nowrap',

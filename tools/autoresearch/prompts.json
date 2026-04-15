@@ -1,0 +1,35 @@
+{
+  "description": "Standard test prompts for prompt quality evaluation. Each prompt tests different design capabilities.",
+  "prompts": [
+    {
+      "id": "login",
+      "prompt": "Design a login card with email input, password input, and a sign-in button",
+      "expectedMinNodes": 8,
+      "tags": ["form", "input", "button", "card"]
+    },
+    {
+      "id": "dashboard",
+      "prompt": "Design a dashboard with a sidebar navigation and 4 metric cards showing numbers",
+      "expectedMinNodes": 15,
+      "tags": ["layout", "navigation", "cards", "complex"]
+    },
+    {
+      "id": "pricing",
+      "prompt": "Design a pricing table with 3 tiers: Basic, Pro, Enterprise. Each has a price, feature list, and CTA button",
+      "expectedMinNodes": 20,
+      "tags": ["cards", "text", "button", "repetition"]
+    },
+    {
+      "id": "profile",
+      "prompt": "Design a user profile card with avatar, name, bio, and social stats (followers, following, posts)",
+      "expectedMinNodes": 10,
+      "tags": ["card", "text", "layout", "simple"]
+    },
+    {
+      "id": "settings",
+      "prompt": "Design a settings page with toggle switches for notifications, dark mode, and privacy options",
+      "expectedMinNodes": 12,
+      "tags": ["form", "toggle", "list", "medium"]
+    }
+  ]
+}

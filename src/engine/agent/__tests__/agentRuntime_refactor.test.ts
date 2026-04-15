@@ -3,6 +3,7 @@ import { AgentRuntime } from '../agentRuntime';
 import { LLMProvider } from '../../llm-client/providers/types';
 import { AGENT_RUNTIME_CONSTANTS } from '../constants';
 
+
 describe('AgentRuntime Refactor Verification', () => {
   let mockProvider: LLMProvider;
 
@@ -30,22 +31,16 @@ describe('AgentRuntime Refactor Verification', () => {
   });
 
   it('should preserve tool execution order and group strategy', async () => {
-    // LLM returns: [P1, P2, S1, P3]
-    // Expected behavior:
-    // 1. Group 1 (Parallel): [P1, P2] run concurrently
-    // 2. Group 2 (Sequential): [S1] run
-    // 3. Group 3 (Parallel): [P3] run
-    
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         toolCalls: [
-          { name: 'p1', args: {} },
-          { name: 'p2', args: {} },
-          { name: 's1', args: {} },
-          { name: 'p3', args: {} }
+          { name: 'p1', args: { action: 'go' } },
+          { name: 'p2', args: { action: 'go' } },
+          { name: 's1', args: { action: 'go' } },
+          { name: 'p3', args: { action: 'go' } }
         ]
       })
-      .mockResolvedValueOnce({ text: 'Done' });
+      .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });
 
     const executionOrder: string[] = [];
     const toolExecutors = {
@@ -56,6 +51,7 @@ describe('AgentRuntime Refactor Verification', () => {
     };
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: [
         { name: 'p1', executionStrategy: 'parallel', parameters: { type: 'object', properties: {} }, description: '' },
@@ -80,51 +76,32 @@ describe('AgentRuntime Refactor Verification', () => {
       .mockResolvedValueOnce({
         toolCalls: [{ name: 'slow_tool', args: {} }]
       })
-      .mockResolvedValueOnce({ text: 'Failed as expected' });
+      .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });
 
     const toolExecutors = {
       slow_tool: () => new Promise(resolve => setTimeout(() => resolve({ success: true }), 100))
     };
-
-    // Override timeout constant for test
-    // Note: We can't easily override constants.ts without re-importing or using a helper
-    // But we can check if it uses the DEFAULT_TOOL_TIMEOUT_MS logic.
-    // For this test, I'll mock executeToolWithTimeout or just let it run if I set a very small timeout in constants?
-    // Actually, I can just mock the execution to be longer than the default 30s, or I can refactor runtime to accept timeout in options.
-    // Given the task, let's assume we want to verify the timeout logic exists.
   });
 
-  it('should retry on transient errors using RetryPolicy', async () => {
+  it('should NOT retry transient errors above the provider layer (fail-fast)', async () => {
+    // The retryPolicy + retryWithBackoff layer was deleted in the fail-fast
+    // refactor. Only fetchWithRetry inside the provider retries 5xx, and that
+    // happens BEFORE the runtime sees anything. From the runtime's perspective,
+    // any provider error is final.
     let callCount = 0;
     (mockProvider.generate as any).mockImplementation(() => {
       callCount++;
-      if (callCount === 1) {
-        const err = new Error('503: Service Overloaded');
-        (err as any).type = 'OVERLOADED';
-        throw err;
-      }
-      return Promise.resolve({ text: 'Success after retry' });
+      throw new Error('503: Service Overloaded');
     });
 
     const runtime = new AgentRuntime({
+      loopPolicy: { useSkillSystem: false } as any,
       provider: mockProvider,
       tools: []
     });
 
-    const result = await runtime.run('test retry');
-    expect(result).toBe('Success after retry');
-    expect(callCount).toBe(2);
+    await expect(runtime.run('test retry')).rejects.toThrow(/Service Overloaded/);
+    expect(callCount).toBe(1);
   });
 
-  it('should estimate tokens correctly for Chinese characters', () => {
-    const runtime = new AgentRuntime({ provider: mockProvider, tools: [] });
-    
-    const englishText = 'Hello world'; // 11 chars -> 3 tokens (round up 11/4)
-    const chineseText = '你好世界'; // 4 chars -> 4 * 2.0 = 8 tokens
-    const mixedText = 'Hello你好'; // 5 eng + 2 chi -> ceil(5/4) + 2*2.0 = 2 + 4 = 6 tokens
-    
-    expect((runtime as any).estimateTokens(englishText)).toBe(3);
-    expect((runtime as any).estimateTokens(chineseText)).toBe(8);
-    expect((runtime as any).estimateTokens(mixedText)).toBe(6); 
-  });
 });

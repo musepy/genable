@@ -7,11 +7,9 @@
  */
 
 import { h } from 'preact';
-import { Plus, AlignJustify, Sun, Moon, X } from 'lucide-preact';
-import { emit } from '@create-figma-plugin/utilities';
-import { ImportJsonHandler } from '../../types';
-import { tokens, componentStyles } from '../design-system/tokens';
-import { t } from '../i18n';
+import { AlignJustify, Sun, Moon, X } from 'lucide-preact';
+import { tokens, motion } from '../design-system/tokens';
+import { useTranslations } from '../i18n';
 
 export interface HeaderProps {
   // Theme
@@ -36,6 +34,7 @@ export function Header({
   isSettingsOpen = false,
 }: HeaderProps) {
   
+  const t = useTranslations();
   // Derive CSS class for new chat button
   const getIconBtnClass = (visible: boolean, enabled: boolean): string => {
     let base = 'header-icon-btn';
@@ -49,54 +48,47 @@ export function Header({
       {/* Settings Title (Left Aligned) - Moved to start */}
       {isSettingsOpen && (
         <div style={{ 
-          fontSize: 13, // Standardized 13px
-          fontWeight: 400, // No bolding
-          color: 'var(--gray-11)', // Softened color
-          paddingLeft: 'var(--space-3)' // 12px header + 12px local = 24px total
+          fontSize: tokens.fontSize[2],
+          fontWeight: tokens.fontWeight.regular,
+          color: 'var(--gray-11)',
+          paddingLeft: tokens.grid.blockPad
         }}>
-          Settings
+          {t.settings}
         </div>
       )}
 
-      {/* New Design button - Hidden in settings */}
-      {!isSettingsOpen && (
-        <button 
-          className={"header-chip " + (newChatEnabled ? "" : "disabled")}
-          style={{ display: newChatVisible ? 'inline-flex' : 'none' }}
-          onClick={onNewChat}
-          aria-label={t.newDesign}
-          aria-disabled={!newChatEnabled}
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          <span>{t.newDesign}</span>
-        </button>
-      )}
+      {/* New Design button - Fades out when settings open */}
+      <button
+        className={"header-chip " + (newChatEnabled ? "" : "disabled")}
+        style={{
+          display: newChatVisible ? 'inline-flex' : 'none',
+          ...motion.fade(!isSettingsOpen),
+        }}
+        onClick={onNewChat}
+        aria-label={t.newDesign}
+        aria-disabled={!newChatEnabled}
+      >
+        <span>+ {t.newDesign}</span>
+      </button>
       
-      {/* Spacer */}
-      <div className="header-spacer" />
+      <div style={{ flex: 1 }} />
 
-      {/* Theme Toggle - Hidden in settings */}
-      {!isSettingsOpen && (
-        <button 
-          className="header-icon-btn"
-          onClick={onToggleTheme}
-          title={t.themeLabel(theme)}
-          aria-label={t.themeLabel(theme)}
-        >
-          {theme === 'dark' ? (
-            <Moon size={16} strokeWidth={2} />
-          ) : (
-            <Sun size={16} strokeWidth={2} />
-          )}
-        </button>
-      )}
+      {/* Theme Toggle - Fades out when settings open */}
+      <button
+        className="header-icon-btn"
+        onClick={onToggleTheme}
+        title={theme === 'dark' ? t.light : t.dark}
+        aria-label={theme === 'dark' ? t.light : t.dark}
+        style={motion.fade(!isSettingsOpen)}
+      >
+        {theme === 'dark' ? <Sun size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
+      </button>
 
-      {/* Settings Button */}
       <button
         className={`header-icon-btn ${isSettingsOpen ? 'is-active' : ''}`}
         onClick={onSettingsClick}
-        title={isSettingsOpen ? "Close Settings" : "Settings"}
-        aria-label={isSettingsOpen ? "Close Settings" : "Settings"}
+        title={isSettingsOpen ? t.closeSettings : t.settings}
+        aria-label={isSettingsOpen ? t.closeSettings : t.settings}
         style={{ transition: 'transform 0.3s ease' }}
       >
         <div style={{ 

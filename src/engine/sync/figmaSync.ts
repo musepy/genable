@@ -4,13 +4,14 @@
  */
 
 import { TokenMode } from './tokenParser';
-import { parseColor, rgbToHex, rgbaToHex, RGBA } from '../../utils/colorUtils';
+import { parseHexToRGBA, rgbaToHex } from '../../utils/colorUtils';
+import type { RGBA } from '../../utils/colorUtils';
 
 export class FigmaSync {
   /**
    * Sync parsed tokens to Figma Local Variables.
    */
-  static async syncTokens(modes: TokenMode[], collectionName: string = 'Design Tokens'): Promise<{ success: boolean; message: string }> {
+  static async syncTokens(modes: TokenMode[], collectionName: string = 'Design Tokens'): Promise<{ message: string; error?: boolean }> {
     try {
       let collection = (await figma.variables.getLocalVariableCollectionsAsync())
         .find(c => c.name === collectionName);
@@ -156,10 +157,10 @@ export class FigmaSync {
         }
       }
 
-      return { success: true, message: `Successfully synced ${modes.length} modes to "${collectionName}".` };
+      return { message: `Successfully synced ${modes.length} modes to "${collectionName}".` };
     } catch (error: any) {
       console.error('[FigmaSync] Sync failed:', error);
-      return { success: false, message: error.message || 'Unknown error during sync' };
+      return { message: error.message || 'Unknown error during sync', error: true };
     }
   }
 
@@ -248,7 +249,7 @@ export class FigmaSync {
 
   private static parseValueForFigma(value: string, type: VariableResolvedDataType): any {
     if (type === 'COLOR') {
-       return parseColor(value);
+       return parseHexToRGBA(value);
     }
     if (type === 'FLOAT') {
       return parseFloat(value.replace('px', ''));
@@ -269,7 +270,7 @@ export class FigmaSync {
     if (type === 'COLOR') {
       const rgba = val as RGBA;
       if (!rgba) return '#000000';
-      return rgba.a === 1 ? rgbToHex(rgba.r, rgba.g, rgba.b) : rgbaToHex(rgba.r, rgba.g, rgba.b, rgba.a);
+      return rgbaToHex(rgba);
     }
     if (type === 'FLOAT') {
        return `${val}px`;

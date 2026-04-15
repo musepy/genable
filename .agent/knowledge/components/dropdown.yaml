@@ -1,4 +1,5 @@
 name: Dropdown Menu
+description: Use when showing a popover list of options triggered by a button or input — composed of a container frame holding stacked menu items.
 structure:
   type: FRAME
   layoutMode: VERTICAL

@@ -51,12 +51,12 @@ export function Button({
     secondary: {
       background: tokens.colors.grayMuted,
       color: tokens.colors.textPrimary,
-      border: `1px solid ${tokens.colors.grayBorder}`,
+      border: 'var(--border-default)',
     },
     outline: {
       background: 'transparent',
       color: tokens.colors.textPrimary,
-      border: `1px solid ${tokens.colors.grayBorder}`,
+      border: 'var(--border-default)',
     },
     ghost: {
       background: 'transparent',
@@ -99,18 +99,8 @@ export function Button({
     baseStyle.borderRadius = 'var(--radius-full)';
   }
 
-  // Hover effects simulated for inline styles (optional, but good for completeness if we could use CSS classes)
-  // Since we use inline styles with preact, simple hovers are hard without state. 
-  // relying on `styles-module` or simple css classes in styles.css would be better, 
-  // but existing codebase uses inline styles heavily. 
-  // We will trust the existing global css or simple active states.
-  
-  // CSS class for pressed state support
-  const variantClass = `btn-${variant}`;
-
   return (
     <button
-      className={variantClass}
       style={{
         ...baseStyle,
         ...variantStyles[variant],

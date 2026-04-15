@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-03-20T10:28:53.716Z",
+  "gitCommit": "947d1e6",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "kimi-k2.5",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "trigger-1774002496541",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 1,
+          "fillCompleteness": 1,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 1,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0.8,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 36.068
+        },
+        "score": 88,
+        "issues": []
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 88,
+    "minScore": 88,
+    "maxScore": 88,
+    "totalDurationSec": 36.068,
+    "totalNodes": 0,
+    "totalIssues": 0
+  }
+}

@@ -1,4 +1,5 @@
 name: Tab List
+description: Use when rendering just the horizontal row of tab headers without content — a fill-width row of tab buttons.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

@@ -4,44 +4,38 @@
  */
 
 export const AGENT_RUNTIME_CONSTANTS = {
-  /** Default maximum number of iterations for the agentic loop */
-  DEFAULT_MAX_ITERATIONS: 40,
+  /**
+   * Safety-net iteration ceiling. NOT a behavioral limit.
+   * The agent stops when it produces a text-only response (natural turn end).
+   * This ceiling exists only to prevent runaway token spend.
+   */
+  DEFAULT_MAX_ITERATIONS: 200,
   
-  /** Default maximum tokens before triggering context compression */
+  /** Default maximum prompt tokens before triggering context compression (real LLM token count) */
   DEFAULT_MAX_CONTEXT_TOKENS: 200000,
   
-  /** Rough token estimation factor (1 token ≈ 4 characters) */
-  ESTIMATION_CHARACTERS_PER_TOKEN: 4,
-
-  /** Adjust factor for Chinese characters (actual observed ratio ~2.0 for modern LLMs) */
-  ESTIMATION_CHINESE_CHAR_MULTIPLIER: 2.0,
-  
-  /** Factor of max context tokens to trigger compression (e.g., 0.7 = 70%) */
-  CONTEXT_COMPRESSION_LIMIT_FACTOR: 0.8,
-  
-  /** Factor of max context tokens to trigger proactive compression (e.g., 0.75 = 75%) */
-  CONTEXT_PROACTIVE_COMPRESSION_FACTOR: 0.85,
-  
-  /** Minimum number of messages to keep during context continuity */
-  MIN_MESSAGES_TO_KEEP: 10,
-  
-  /** Minimum number of messages before redundant error cleanup is allowed */
-  REDUNDANT_ERROR_DROP_THRESHOLD: 10,
-
   /** Maximum consecutive identical tool calls or pattern matches before loop error */
-  LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for inspectDesign
+  LOOP_DETECTION_THRESHOLD: 4,  // Increased from 3 -> allow more retries for read
 
-  /** Default timeout for a single tool execution in milliseconds */
-  DEFAULT_TOOL_TIMEOUT_MS: 30000,
+  /**
+   * Total budget (ms) for a single LLM generation. Hard ceiling — when exceeded,
+   * AgentRuntime aborts the LLM stream via AbortController. This is the ONLY
+   * wall-clock limit on tool work; per-tool timeouts were removed because they
+   * generated fake errors without actually stopping work (orphan-frame bug).
+   */
+  TOTAL_GENERATION_BUDGET_MS: 300000,
 
-  /** Max time (ms) for thinking without action before timeout */
-  THINKING_TIMEOUT_MS: 60000,
-
-  /** Max consecutive iterations with no tool calls before error */
+  /** @deprecated Rambling guard removed — text-only response is implicit completion. */
   MAX_THINKING_ONLY_ITERATIONS: 4,
-  
-  /** Minimum text length to consider as "rambling" (chars). Gemini streams text before tool calls, so this must be high enough to not abort before tool calls arrive. */
+
+  /** @deprecated Rambling guard removed — maxOutputTokens provides hard limit. */
   RAMBLING_TEXT_THRESHOLD: 1500,
+
+  /** Consecutive iterations where ALL tool calls fail before injecting planning fallback */
+  CONSECUTIVE_FAILURE_THRESHOLD: 3,
+
+  /** @deprecated No longer used — text-only response is now implicit completion. */
+  MAX_TEXT_ONLY_COMPLETION_RETRIES: 2,
 } as const;
 
 export const IPC_CONSTANTS = {

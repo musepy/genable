@@ -6,14 +6,20 @@
 
 ---
 
-## 🌟 Key Features (v1.0.0)
+## 🌟 Key Features (v1.3.0)
 
 -   **Agentic Orchestration:** Moves beyond single-shot generation to a multi-phase agent loop (Planning → Execution → Verification).
+-   **Robust Runtime:** Refactored architecture with modular context management and a failure-aware loop policy for high reliability.
 -   **Transparent Reasoning:** Real-time visualization of the agent's "thinking" process through iteration cards.
 -   **Pure Trust Engine:** Respects LLM design intent by preserving stylistic choices (strokes, fills) on generic frames.
 -   **Remote Logging System:** Custom WebSocket-based logging server for real-time debugging within Figma’s restricted sandbox.
--   **Semantic Error Recovery:** Autonomous self-correction through a structured feedback loop and semantic error mapping.
--   **Native Figma Quality:** Outputs production-ready Auto Layout frames, responsive text, and vector networks.
+-   **High-Fidelity Rendering:** Optimized pipeline preserving shadows, blurs, and complex layout properties.
+
+---
+
+> [!TIP]
+> **Project Status**: Check [PROGRESS.md](./PROGRESS.md) for the latest development status and roadmap.
+
 
 ---
 

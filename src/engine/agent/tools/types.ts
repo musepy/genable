@@ -15,28 +15,18 @@ export interface ToolDefinition {
     properties: Record<string, ToolParameter>;
     required?: string[];
   };
-  errors?: Record<string, string>;
   /**
-   * Strategy for executing this tool. 
+   * Strategy for executing this tool.
    * 'parallel': Can be executed concurrently with other parallel tools (no side effects).
    * 'sequential': Must be executed one-by-one (has side effects like creating nodes).
    */
   executionStrategy: 'parallel' | 'sequential';
+
   /**
-   * Category for phase-based tool grouping in prompts.
-   * - 'read': Get information from Figma state
-   * - 'knowledge': Search design knowledge base
-   * - 'plan': ReAct planning tools
-   * - 'create': Create new nodes
-   * - 'modify': Modify existing nodes
-   * - 'validate': Validate designs
+   * Whether this tool mutates Figma state (creates/modifies/deletes nodes).
+   * Used by noop detection to decide whether to check for no-change results.
    */
-  category?: 'read' | 'plan' | 'create' | 'modify' | 'validate' | 'knowledge' | 'control';
-  /**
-   * Tool names this tool commonly follows (dependency hints for LLM).
-   * Example: setNodeLayout typically follows createNode.
-   */
-  dependencies?: string[];
+  mutates?: boolean;
 }
 
 export interface ToolParameter {
@@ -54,15 +44,19 @@ export interface ToolParameter {
 
 /**
  * Standardized response format from a tool execution.
+ * Error present = failure. Absence of error = success.
+ *
+ * Flat error string (OpenPencil convention):
+ *   { error: "Node '0:5' not found" }
+ * No nested { code, message } — LLM reads one string, done.
  */
 export interface ToolResponse<T = any> {
-  success: boolean;
   data?: T;
-  error?: {
-    code: string;
-    message: string;
-    details?: any;
-  };
+  error?: string;
+  /** Pre-built stderr from command source. presentForLLM passes it through. */
+  _stderr?: string;
+  /** Pipeline stages for dashboard auto-visualization. Stripped by presentForLLM. */
+  _stages?: Array<{ label: string; file: string; durationMs?: number; meta?: Record<string, unknown> }>;
 }
 
 /**
@@ -74,10 +68,20 @@ export interface ToolContext {
   userId?: string;
 }
 
+export type RuntimeValidationMode = 'EXECUTION';
+
+export interface RuntimeRequiredParamSpec {
+  name: string;
+  trim?: boolean;
+  check?: 'required';
+}
+
+
 /**
  * Type for a tool execution function.
+ * Return null to signal "not handled locally, fall through to IPC".
  */
 export type ToolExecutor<P = any, R = any> = (
   params: P,
   context?: ToolContext
-) => Promise<ToolResponse<R>>;
+) => Promise<ToolResponse<R> | null>;

@@ -1,13 +1,27 @@
 /**
  * @file globals.css.ts
  * @description Global CSS styles and component classes
+ *
+ * CONVENTION: CSS classes are ONLY for things inline styles can't do:
+ *   - Pseudo-states (:hover, :active, :focus)
+ *   - Pseudo-elements (::after for skeleton shimmer)
+ *   - Animations (@keyframes)
+ *   - State variants (.is-closing, .disabled, .is-selected)
+ *
+ * Everything else → inline style with `tokens` object.
  */
 
 export const globalStyles = `
   /* --- Global Styles --- */
   * { box-sizing: border-box; }
   :root {
-    --border-main: 0.5px solid var(--gray-a4);
+    --border-main: var(--border-subtle);
+  }
+
+  html, body, #create-figma-plugin {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
   }
 
   body { 
@@ -40,11 +54,11 @@ export const globalStyles = `
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    padding: 0 var(--space-3);
+    padding: 0 10px; /* 10px padding aligns text to 22px when container pad is 12px */
     height: 32px;
     background: transparent;
     color: var(--gray-11);
-    border: 0.5px solid var(--gray-a4);
+    border: var(--border-subtle);
     border-radius: var(--radius-5); /* Standardized to 12px */
     font-size: var(--typography-font-size-1); /* Unified from 13px */
     font-weight: var(--font-weight-regular);
@@ -65,10 +79,6 @@ export const globalStyles = `
   .header-chip.is-disabled {
     opacity: 0.5;
     cursor: default;
-  }
-
-  .header-spacer {
-    flex: 1;
   }
 
   .header-icon-btn {
@@ -94,16 +104,10 @@ export const globalStyles = `
     background: var(--gray-a4);
   }
 
-  .card {
-    background: var(--color-surface);
-    border-radius: var(--radius-5);
-    box-shadow: var(--color-shadow);
-  }
-
   .chip {
     background: transparent;
     color: var(--gray-11);
-    border: 0.5px solid var(--gray-a4);
+    border: var(--border-subtle);
     transition: background 150ms ease, border-color 150ms ease;
   }
   .chip:hover {
@@ -124,34 +128,16 @@ export const globalStyles = `
     filter: brightness(1.1);
   }
 
-  /* Button pressed states - Figma design sync */
-  .btn-primary:active,
-  .btn-primary.is-pressed {
-    filter: brightness(0.9);
-    transform: scale(0.98);
-  }
-  .btn-outline:active,
-  .btn-outline.is-pressed {
-    background: var(--gray-a3);
-    border-color: var(--gray-8);
-  }
-  .btn-ghost:active,
-  .btn-ghost.is-pressed {
-    background: var(--gray-a4);
-  }
-
-  .error-banner {
-    background: var(--error-1);
-    border: 0.5px solid var(--error-6);
-    border-radius: var(--radius-5);
-    color: var(--error-11);
+  /* --- Masking & Fading --- */
+  .messages-mask {
+    /* mask removed: it fades out bottom content and blocks text selection */
   }
 
   .popover-content {
     background: var(--color-surface);
     border-radius: var(--radius-6); /* Outer radius 16px to support nested 12px + 4px margin */
-    border: 0.5px solid var(--gray-a4);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.08);
+    border: var(--border-subtle);
+    box-shadow: var(--shadow-md);
     zIndex: 100;
     overflow: hidden;
     opacity: 1;
@@ -190,19 +176,31 @@ export const globalStyles = `
   }
 
   /* iOS Continuous Corners */
-  .card, .popover-content, .popover-item, .chip, .message-bubble, .header-icon-btn, .header-chip, .submit-btn-active, .submit-btn-disabled {
+  .popover-content, .popover-item, .chip, .header-icon-btn, .header-chip, .submit-btn-active, .submit-btn-disabled {
     corner-shape: var(--corner-shape);
   }
 
-  /* --- Motion & Animations --- */
-  @keyframes slideInFromRight {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
+  /* --- Thinking Shimmer (moved from ThinkingStream.tsx) --- */
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .thinking-shimmer {
+    background: linear-gradient(90deg, var(--accent-11), var(--accent-8), var(--accent-11));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 2s ease-in-out infinite;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'Inter', var(--font-sans, system-ui, sans-serif);
   }
 
-  @keyframes slideOutToRight {
-    from { transform: translateX(0); }
-    to { transform: translateX(100%); }
+  /* --- Motion & Animations --- */
+  @keyframes tool-slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
   }
 
   @keyframes skeleton-pulse {
@@ -234,14 +232,6 @@ export const globalStyles = `
       transparent
     );
     animation: skeleton-shimmer 1.5s infinite;
-  }
-
-  .slide-in-right {
-    animation: slideInFromRight 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-
-  .slide-out-right {
-    animation: slideOutToRight 250ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
   }
 
   /* --- Settings Specific Styles --- */
@@ -277,74 +267,6 @@ export const globalStyles = `
   .settings-container.is-closing {
     animation: slideOut 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
     pointer-events: none;
-  }
-
-  .api-stack-container {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    padding: var(--space-3); /* Standard 12px margin from edge */
-  }
-
-  .api-module-box {
-    border: var(--border-main);
-    border-radius: var(--radius-5);
-    background: transparent; /* Seamless with container */
-    overflow: hidden;
-    transition: border-color 200ms ease;
-  }
-
-  .api-module-box.is-selected {
-    /* Border remains standard per user request */
-  }
-
-  .api-module-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2); /* 8px left/right inner */
-    cursor: pointer;
-    background: transparent;
-    transition: background 150ms ease;
-  }
-
-  .api-module-header:hover {
-    background: var(--gray-a2);
-  }
-
-  .api-module-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--gray-12);
-    display: flex;
-    align-items: center;
-  }
-
-  .api-module-content {
-    background: transparent; /* No internal color fill */
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows 300ms cubic-bezier(0.16, 1, 0.3, 1), 
-                opacity 300ms ease;
-    opacity: 0;
-    overflow: hidden; /* Ensure content is hidden when collapsed */
-  }
-
-  .api-module-box.is-expanded .api-module-content {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    /* Removed border-top separator */
-  }
-
-  .api-expand-inner {
-    min-height: 0; 
-    overflow: hidden;
-    padding: var(--space-1) var(--space-2) var(--space-3) var(--space-2); /* 8px horizontal alignment */
-    /* Removed scale effect from here */
-  }
-
-  .api-module-box.is-expanded .api-expand-inner {
-    transform: scale(1);
   }
 
   .settings-footer {

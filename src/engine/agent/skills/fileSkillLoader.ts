@@ -18,12 +18,11 @@ try {
 }
 
 import { parseYamlFrontmatter } from './frontmatter';
-import { 
-  SkillDefinition, 
-  SkillCategory, 
-  SkillPriority, 
-  ContextInjectionType,
-  SkillContext 
+import {
+  SkillDefinition,
+  SkillCategory,
+  SkillPriority,
+  SkillContext
 } from './types';
 import { ToolDefinition } from '../tools/types';
 
@@ -54,10 +53,35 @@ interface SkillFrontmatter {
   description?: string;
   category?: SkillCategory;
   priority?: number;
-  injectionType?: ContextInjectionType;
   tools?: string[];
-  triggerPatterns?: string[];
   enabledByDefault?: boolean;
+}
+
+/**
+ * Normalize legacy tool names in skill prose to unified tool names.
+ * This prevents old prompts from nudging the model toward deprecated calls.
+ *
+ * NOTE: Knowledge files should use current tool names directly.
+ * This is a safety net for any remaining legacy references.
+ */
+function sanitizeLegacyToolReferences(text: string): string {
+  if (!text) return text;
+  return text
+    // CLI run() wrapper → direct tool calls
+    .replace(/run\(\{command:\s*"man\s+/g, 'knowledge("')
+    .replace(/run\(\{command:\s*"grep\s+/g, 'find_nodes({query: "')
+    .replace(/run\(\{command:\s*"sed\s+/g, 'replace_props({node: "')
+    .replace(/run\(\{command:\s*"rm\s+/g, 'delete_node({node: "')
+    .replace(/run\(\{command:\s*"mv\s+/g, 'move_node({node: "')
+    .replace(/run\(\{command:\s*"cp\s+/g, 'clone_node({node: "')
+    // Standalone CLI command names in code blocks/examples
+    .replace(/\bmk\s+\//g, 'jsx  /')
+    .replace(/\bcat\s+\//g, 'inspect /')
+    .replace(/\btree\s+\//g, 'inspect /')
+    .replace(/\bls\s+\//g, 'inspect /')
+    .replace(/\bman\s+(\w)/g, 'knowledge("$1')
+    // Render is fully removed
+    .replace(/\brender\b/gi, 'jsx');
 }
 
 /**
@@ -164,9 +188,7 @@ export function loadSkillContent(skill: SkillMetadata): SkillDefinition | null {
       .filter((t): t is ToolDefinition => t !== undefined);
 
     const context: SkillContext = {
-      injectionType: fm.injectionType || 'dynamic',
-      systemPromptSection: body.trim(),
-      triggerPatterns: fm.triggerPatterns,
+      systemPromptSection: sanitizeLegacyToolReferences(body.trim()),
     };
 
     return {

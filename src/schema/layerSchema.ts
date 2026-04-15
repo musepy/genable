@@ -10,34 +10,35 @@
  */
 
 import * as v from 'valibot';
-import { PROPS, NODE_TYPES, LAYOUT_MODES, SIZING_MODES } from '../constants/figma-api';
-import { Normalizer } from '../engine/pipeline/Normalizer';
+import { NODE_TYPES, getEnumInputs } from '../constants/figma-api';
 
 // ==========================================
 // PRIMITIVE SCHEMAS
 // ==========================================
 
-/**
- * Layout sizing modes
- */
-export const LayoutSizingSchema = v.picklist([SIZING_MODES.FILL, SIZING_MODES.HUG, SIZING_MODES.FIXED]);
+// Derive enum picklists from PROP_METADATA (single source of truth)
+const enumPicklist = (prop: string) =>
+  v.picklist(getEnumInputs(prop) as [string, ...string[]]);
+
+export const LayoutSizingSchema = enumPicklist('layoutSizingHorizontal');
 export type LayoutSizing = v.InferOutput<typeof LayoutSizingSchema>;
 
-/**
- * Layout directions
- */
-export const LayoutModeSchema = v.picklist([LAYOUT_MODES.VERTICAL, LAYOUT_MODES.HORIZONTAL, LAYOUT_MODES.NONE]);
+export const LayoutModeSchema = enumPicklist('layoutMode');
 export type LayoutMode = v.InferOutput<typeof LayoutModeSchema>;
 
-/**
- * Axis alignment options
- */
-export const AxisAlignSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN', 'BASELINE']);
+export const PrimaryAxisAlignSchema = enumPicklist('primaryAxisAlignItems');
+export const CounterAxisAlignSchema = enumPicklist('counterAxisAlignItems');
+
+export const LayoutPositioningSchema = enumPicklist('layoutPositioning');
 
 /**
- * Stroke alignment
+ * Constraint axes (allow canonical and common alias labels from design tools)
+ * Not derived — constraints are an object type, not a simple enum in PROP_METADATA.
  */
-export const StrokeAlignSchema = v.picklist(['INSIDE', 'OUTSIDE', 'CENTER']);
+export const HorizontalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'LEFT', 'RIGHT', 'LEFT_RIGHT']);
+export const VerticalConstraintSchema = v.picklist(['MIN', 'CENTER', 'MAX', 'STRETCH', 'SCALE', 'TOP', 'BOTTOM', 'TOP_BOTTOM']);
+
+export const StrokeAlignSchema = enumPicklist('strokeAlign');
 
 export const SemanticTypeSchema = v.optional(v.string());
 
@@ -72,6 +73,28 @@ export const PaddingSchema = v.union([
 ]);
 
 /**
+ * Gradient color stop
+ */
+export const GradientStopSchema = v.object({
+    position: v.number(),  // 0.0 to 1.0
+    color: v.string()      // hex color, e.g. "#FF0000" or "#FF000080"
+});
+
+/**
+ * Gradient fill definition (linear, radial, angular, diamond)
+ */
+export const GradientFillSchema = v.object({
+    type: v.picklist(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
+    stops: v.array(GradientStopSchema),
+    angle: v.optional(v.number())  // degrees: 0=left→right, 90=top→bottom, 180=right→left
+});
+
+/**
+ * A fill item: either a hex color string or a gradient object
+ */
+export const FillItemSchema = v.union([v.string(), GradientFillSchema]);
+
+/**
  * Effect schema (shadows, blurs)
  */
 export const EffectSchema = v.object({
@@ -95,51 +118,60 @@ export const EffectSchema = v.object({
  */
 export const NodeLayerPropsSchema = v.looseObject({
     // Common
-    [PROPS.name]: v.optional(v.string()),
-    [PROPS.semantic]: SemanticTypeSchema,
-    [PROPS.width]: v.optional(v.number()),
-    [PROPS.height]: v.optional(v.number()),
+    name: v.optional(v.string()),
+    semantic: SemanticTypeSchema,
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
 
     // Layout sizing
-    [PROPS.layoutSizingHorizontal]: v.optional(LayoutSizingSchema),
-    [PROPS.layoutSizingVertical]: v.optional(LayoutSizingSchema),
+    layoutSizingHorizontal: v.optional(LayoutSizingSchema),
+    layoutSizingVertical: v.optional(LayoutSizingSchema),
+    layoutPositioning: v.optional(LayoutPositioningSchema),
+    layoutGrow: v.optional(v.union([v.number(), v.string()])),
+    layoutAlign: v.optional(enumPicklist('layoutAlign')),
+    constraints: v.optional(v.object({
+        horizontal: v.optional(HorizontalConstraintSchema),
+        vertical: v.optional(VerticalConstraintSchema)
+    })),
+    x: v.optional(v.union([v.number(), v.string()])),
+    y: v.optional(v.union([v.number(), v.string()])),
 
     // Frame-specific: AutoLayout
-    [PROPS.layoutMode]: v.optional(LayoutModeSchema),
-    [PROPS.gap]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.padding]: v.optional(PaddingSchema),
-    [PROPS.paddingTop]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.paddingRight]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.paddingBottom]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.paddingLeft]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.primaryAxisAlignItems]: v.optional(AxisAlignSchema),
-    [PROPS.counterAxisAlignItems]: v.optional(AxisAlignSchema),
-    
+    layoutMode: v.optional(LayoutModeSchema),
+    gap: v.optional(v.union([v.number(), v.string()])),
+    padding: v.optional(PaddingSchema),
+    paddingTop: v.optional(v.union([v.number(), v.string()])),
+    paddingRight: v.optional(v.union([v.number(), v.string()])),
+    paddingBottom: v.optional(v.union([v.number(), v.string()])),
+    paddingLeft: v.optional(v.union([v.number(), v.string()])),
+    primaryAxisAlignItems: v.optional(PrimaryAxisAlignSchema),
+    counterAxisAlignItems: v.optional(CounterAxisAlignSchema),
+
     // Appearance
-    [PROPS.fills]: v.optional(v.array(v.string())),
-    [PROPS.strokes]: v.optional(v.array(v.string())),
-    [PROPS.strokeWeight]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.strokeAlign]: v.optional(StrokeAlignSchema),
-    [PROPS.cornerRadius]: v.optional(v.union([v.number(), v.string()])),
-    [PROPS.cornerSmoothing]: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
-    [PROPS.effects]: v.optional(v.array(EffectSchema)),
+    fills: v.optional(v.array(FillItemSchema)),
+    strokes: v.optional(v.array(v.string())),
+    strokeWeight: v.optional(v.union([v.number(), v.string()])),
+    strokeAlign: v.optional(StrokeAlignSchema),
+    cornerRadius: v.optional(v.union([v.number(), v.string()])),
+    cornerSmoothing: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
+    effects: v.optional(v.array(EffectSchema)),
 
     // Text-specific
-    [PROPS.characters]: v.optional(v.string()),
-    [PROPS.fontFamily]: v.optional(v.string()),
-    [PROPS.fontWeight]: v.optional(v.string()),
-    [PROPS.fontSize]: v.optional(v.number()),
-    [PROPS.lineHeight]: v.optional(LineHeightSchema),
+    characters: v.optional(v.string()),
+    fontFamily: v.optional(v.string()),
+    fontWeight: v.optional(v.string()),
+    fontSize: v.optional(v.number()),
+    lineHeight: v.optional(LineHeightSchema),
 
     // Icon-specific (for Iconify integration)
-    [PROPS.iconName]: v.optional(v.string()),  // Format: "prefix:name" e.g. "mdi:home"
-    [PROPS.svgContent]: v.optional(v.string()), // Embedded SVG (after prefetch). INTERNAL, not from LLM.
-    
+    iconName: v.optional(v.string()),  // Format: "prefix:name" e.g. "mdi:home"
+    svgContent: v.optional(v.string()), // Embedded SVG (after prefetch). INTERNAL, not from LLM.
+
     // V4: State & Interactive
     state: v.optional(v.picklist(['default', 'hover', 'active', 'disabled'])),
 
     // V5: Token Slot System (DTSS Strategy B)
-    [PROPS.variant]: v.optional(v.string())
+    variant: v.optional(v.string())
 });
 
 export type NodeLayerProps = v.InferOutput<typeof NodeLayerPropsSchema>;
@@ -150,15 +182,21 @@ export type NodeLayerProps = v.InferOutput<typeof NodeLayerPropsSchema>;
 export const NodeLayerSchema: v.GenericSchema<any> = v.lazy(() =>
     v.object({
         type: v.picklist([
-            NODE_TYPES.FRAME, 
-            NODE_TYPES.TEXT, 
-            NODE_TYPES.VECTOR, 
-            NODE_TYPES.RECTANGLE, 
-            NODE_TYPES.LINE, 
-            NODE_TYPES.ELLIPSE, 
-            NODE_TYPES.GROUP, 
-            NODE_TYPES.SECTION, 
-            NODE_TYPES.ICON
+            NODE_TYPES.FRAME,
+            NODE_TYPES.TEXT,
+            NODE_TYPES.VECTOR,
+            NODE_TYPES.RECTANGLE,
+            NODE_TYPES.LINE,
+            NODE_TYPES.ELLIPSE,
+            NODE_TYPES.GROUP,
+            NODE_TYPES.SECTION,
+            NODE_TYPES.ICON,
+            NODE_TYPES.COMPONENT,
+            NODE_TYPES.COMPONENT_SET,
+            NODE_TYPES.INSTANCE,
+            NODE_TYPES.STAR,
+            NODE_TYPES.POLYGON,
+            NODE_TYPES.BOOLEAN_OPERATION,
         ]),
         id: v.optional(v.string()), // Unique identifier for reconciliation
         props: NodeLayerPropsSchema,
@@ -183,15 +221,21 @@ export const FlatNodeSchema = v.object({
     id: v.string(), // Semantic ID, e.g., 'header-nav-logo'
     parent: v.nullable(v.string()), // ID of the parent node, or null for root
     type: v.picklist([
-        NODE_TYPES.FRAME, 
-        NODE_TYPES.TEXT, 
-        NODE_TYPES.VECTOR, 
-        NODE_TYPES.RECTANGLE, 
-        NODE_TYPES.LINE, 
-        NODE_TYPES.ELLIPSE, 
-        NODE_TYPES.GROUP, 
-        NODE_TYPES.SECTION, 
-        NODE_TYPES.ICON
+        NODE_TYPES.FRAME,
+        NODE_TYPES.TEXT,
+        NODE_TYPES.VECTOR,
+        NODE_TYPES.RECTANGLE,
+        NODE_TYPES.LINE,
+        NODE_TYPES.ELLIPSE,
+        NODE_TYPES.GROUP,
+        NODE_TYPES.SECTION,
+        NODE_TYPES.ICON,
+        NODE_TYPES.COMPONENT,
+        NODE_TYPES.COMPONENT_SET,
+        NODE_TYPES.INSTANCE,
+        NODE_TYPES.STAR,
+        NODE_TYPES.POLYGON,
+        NODE_TYPES.BOOLEAN_OPERATION,
     ]),
     props: NodeLayerPropsSchema
 });
@@ -211,7 +255,6 @@ export type FlatNode = v.InferOutput<typeof FlatNodeSchema>;
  * Validation result type
  */
 export interface ValidationResult<T> {
-    success: boolean;
     data?: T;
     errors?: string[];
 }
@@ -226,7 +269,7 @@ export function validateNodeLayer(input: unknown): ValidationResult<NodeLayer> {
     const result = v.safeParse(NodeLayerSchema, input);
 
     if (result.success) {
-        return { success: true, data: result.output as NodeLayer };
+        return { data: result.output as NodeLayer };
     }
 
     // Format errors for debugging
@@ -236,7 +279,7 @@ export function validateNodeLayer(input: unknown): ValidationResult<NodeLayer> {
         return `[${path}] ${issue.message}`;
     });
 
-    return { success: false, errors };
+    return { errors };
 }
 
 /**
@@ -245,7 +288,7 @@ export function validateNodeLayer(input: unknown): ValidationResult<NodeLayer> {
 export function validateNodeLayerStrict(input: unknown): NodeLayer {
     const result = validateNodeLayer(input);
 
-    if (!result.success) {
+    if (result.errors) {
         const errorMsg = result.errors?.join('\n') || 'Unknown validation error';
         throw new Error(`NodeLayer validation failed:\n${errorMsg}`);
     }
@@ -258,34 +301,4 @@ export function validateNodeLayerStrict(input: unknown): NodeLayer {
  */
 export function isValidNodeLayer(input: unknown): input is NodeLayer {
     return v.safeParse(NodeLayerSchema, input).success;
-}
-
-// ==========================================
-// VALIDATION FUNCTIONS
-// ==========================================
-
-/**
- * Coerce LLM output to valid schema
- * Now delegates to the centralized Normalizer service.
- */
-export function coerceNodeLayer(input: unknown, observer?: { log: (phase: string, msg: string, details?: any) => void }): NodeLayer {
-    // Normalizer handles structure, lifting, aliases and types
-    return Normalizer.normalize(input);
-}
-
-/**
- * Validate with auto-coercion
- * First tries to coerce, then validates
- */
-export function validateWithCoercion(input: unknown): ValidationResult<NodeLayer> {
-    try {
-        const coerced = coerceNodeLayer(input);
-        return validateNodeLayer(coerced);
-    } catch (e) {
-        // Handle coercion errors specifically
-        return {
-            success: false,
-            errors: [`Coercion failed: ${e}`]
-        };
-    }
 }

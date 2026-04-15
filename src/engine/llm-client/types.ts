@@ -3,25 +3,8 @@
  * @description Shared types for Gemini service
  */
 
-import { NodeLayer } from '../../schema/layerSchema';
 import { ThinkingLevel } from './config';
 export type { ThinkingLevel };
-
-export interface LintWarning {
-  message?: string;
-  severity: 'error' | 'warning';
-  nodeId?: string;
-  nodePath?: string;
-  nodeName?: string;
-  ruleId?: string;
-  rule?: string;
-  semanticContext?: string;
-  humanMessage?: string;
-  machineReadable?: {
-    expected?: string;
-    [key: string]: any;
-  };
-}
 
 /**
  * Extended types for experimental Gemini features (Thinking)
@@ -67,34 +50,6 @@ export interface GenerateLayoutOptions {
   responseSchema?: Record<string, any>;
   /** Design system ID for tool execution context */
   designSystemId?: string;
-}
-
-/**
- * [PLAYBOOK Phase 2.2] Extended options for Self-Correction Loop
- */
-export interface GenerateLayoutWithRetryOptions extends GenerateLayoutOptions {
-  /** Enable self-correction loop (default: true) */
-  enableRetry?: boolean;
-  /** Maximum retry attempts (default: 1) */
-  maxRetries?: number;
-  /** Design system for lint validation (default: 'shadcn') */
-  designSystemId?: string;
-  /** Callback when retry is triggered */
-  onRetry?: (warnings: LintWarning[], attempt: number) => void;
-}
-
-/**
- * [PLAYBOOK Phase 2.2] Result type for generateLayoutWithRetry
- */
-export interface GenerateLayoutWithRetryResult {
-  data: NodeLayer;
-  rawText: string;
-  /** Number of retry attempts made (0 = first attempt succeeded) */
-  retryCount: number;
-  /** Final lint warnings (after all retries) */
-  finalWarnings: LintWarning[];
-  /** Whether errors remained after all retries */
-  hasRemainingErrors: boolean;
 }
 
 /**

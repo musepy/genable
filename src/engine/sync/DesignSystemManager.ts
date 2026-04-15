@@ -4,10 +4,10 @@
  */
 
 import { RADIX_SCALES } from '../../constants/radixColors';
-import { parseColor } from '../../utils/colorUtils';
+import { parseHexToRGBA } from '../../utils/colorUtils';
 import { TokenMode, TokenParser } from './tokenParser';
 import { FigmaSync } from './figmaSync';
-import { EXTRA_RADIUS_TOKENS, EXTRA_SCALING_TOKENS } from '../../constants/extraTokens'; // Kept for reference but unused in sync
+
 
 interface SnapshotMetadata {
   version: string;
@@ -25,7 +25,7 @@ export class DesignSystemManager {
   /**
    * Orchestrate the entire sync process.
    */
-  static async sync(semanticModes: TokenMode[]): Promise<{ success: boolean; message: string }> {
+  static async sync(semanticModes: TokenMode[]): Promise<{ message: string; error?: boolean }> {
     try {
       console.log('[DesignSystemManager] Starting Sync with modes:', semanticModes.length);
 
@@ -62,18 +62,18 @@ export class DesignSystemManager {
       const result = await FigmaSync.syncTokens(themeModes, this.THEME_COLLECTION_NAME);
 
       // 5. Commit Snapshot
-      if (result.success) {
+      if (!result.error) {
           const hash = this.calculateHash(semanticModes);
           await this.commitSnapshot('theme', `Full Coverage Sync: ${new Date().toLocaleString()}`, hash);
       }
 
-      return { 
-        success: result.success, 
-        message: `Design System Synced with 100% coverage: ${result.message}` 
+      return {
+        message: `Design System Synced with 100% coverage: ${result.message}`,
+        error: result.error,
       };
     } catch (e: any) {
       console.error('[DesignSystemManager] Sync failed:', e);
-      return { success: false, message: e.message || 'Design System sync failed' };
+      return { message: e.message || 'Design System sync failed', error: true };
     }
   }
 
@@ -144,7 +144,7 @@ export class DesignSystemManager {
           variable = figma.variables.createVariable(varName, collection!, 'COLOR');
           existingVars.push(variable);
         }
-        const color = parseColor(hex);
+        const color = parseHexToRGBA(hex);
         if (color) variable.setValueForMode(modeId, color);
       });
     };

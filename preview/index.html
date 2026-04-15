@@ -124,6 +124,28 @@
     <div class="controls">
       <button onclick="toggleTheme()">Toggle Theme</button>
       <button onclick="simulateSelection()">Mock Selection</button>
+      <button onclick="runFlowSimulation()">Run Flow</button>
+      <button onclick="runErrorSimulation()">Run Error</button>
+      <button onclick="resetFlowSimulation()">Reset</button>
+    </div>
+
+    <div class="controls" style="bottom: 70px">
+      <select id="recording-select" style="background:#4a4a4a;color:#fff;border:none;padding:8px;border-radius:6px;font-size:12px;max-width:200px">
+        <option value="">-- select recording --</option>
+      </select>
+      <select id="replay-speed" style="background:#4a4a4a;color:#fff;border:none;padding:8px;border-radius:6px;font-size:12px">
+        <option value="0">Instant</option>
+        <option value="1">1x</option>
+        <option value="5" selected>5x</option>
+        <option value="10">10x</option>
+      </select>
+      <button onclick="replayRecording()">Replay</button>
+      <button onclick="refreshRecordings()">Refresh</button>
+      <label style="background:#4a4a4a;color:#fff;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12px">
+        Load .json
+        <input type="file" accept=".json" onchange="loadRecordingFile(this)" style="display:none">
+      </label>
+      <span id="recording-status" style="color:#888;font-size:11px;align-self:center"></span>
     </div>
 
     <script type="module" src="./main.tsx"></script>

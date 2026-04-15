@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentRuntime } from '../agentRuntime';
 import { LLMProvider } from '../../llm-client/providers/types';
+import { EmptyResponseError } from '../../llm-client/providers/shared/providerErrors';
 
-
-
-describe('Agent Silent Failure Repro', () => {
+/**
+ * Fail-fast contract: a provider that throws EmptyResponseError surfaces
+ * directly to the caller. The runtime no longer retries empty responses
+ * (the old emptyResponseHook was deleted in the fail-fast refactor).
+ */
+describe('Agent fail-fast on empty response', () => {
   let mockProvider: LLMProvider;
 
   beforeEach(() => {
@@ -30,30 +34,22 @@ describe('Agent Silent Failure Repro', () => {
     } as any;
   });
 
-  it('reproduces silent failure when provider returns empty response', async () => {
-    // Simulating Gemini returning a completely empty response (which happens if stream yields nothing)
-    (mockProvider.generate as any).mockResolvedValue({
-      text: '',
-      thoughts: undefined,
-      toolCalls: undefined,
-      fullParts: undefined
-    });
+  it('surfaces EmptyResponseError immediately, no retry', async () => {
+    // Real providers throw EmptyResponseError from finalize() — simulate that here.
+    (mockProvider.generate as any).mockRejectedValue(
+      new EmptyResponseError('gemini', 'Provider returned no text or tool calls'),
+    );
 
     const runtime = new AgentRuntime({
       provider: mockProvider,
       systemPrompt: 'You are helpful',
       tools: [],
-      // Mock callbacks to see if they get called
       onIteration: vi.fn(),
-      onThinking: vi.fn(),
-      ipcBridge: { callTool: vi.fn(), dispose: vi.fn() } as any
+      ipcBridge: { callTool: vi.fn(), dispose: vi.fn() } as any,
     });
 
-    // The user experiences "Agent starting..." then nothing.
-    // This translates to run() resolving quickly with empty content.
-    // CURRENT BUG FIX: It should now throw an error instead of failing silently.
-    await expect(runtime.run('Hello')).rejects.toThrow('LLM Provider returned an empty response');
-    
+    await expect(runtime.run('Hello')).rejects.toBeInstanceOf(EmptyResponseError);
+    // Single call, no retry layer above.
     expect(mockProvider.generate).toHaveBeenCalledTimes(1);
   });
 });

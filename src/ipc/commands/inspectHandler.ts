@@ -1,0 +1,139 @@
+/**
+ * @file inspectHandler.ts
+ * @description First-class inspect tool — reads design nodes via skeleton (tree) or full (detail) mode.
+ *
+ * Two modes:
+ *   - tree (default): skeleton JSON with role, summary, children
+ *   - detail: full properties, optional screenshot
+ *
+ * Pure read — no quality scoring. Use `describe` for lint/validation.
+ */
+
+import type { ToolResponse } from '../../engine/agent/tools/types';
+import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
+import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
+import { resolvePathToNode, buildNodeRef } from './pathResolver';
+import { exportNodeToBase64 } from './shared';
+import { logger } from '../../utils/logger';
+import { PipelineTracer } from './pipelineTracer';
+
+export async function handleInspect(parameters: any): Promise<ToolResponse> {
+  const ref = parameters.node || parameters.path;
+  const mode = parameters.mode || 'tree';
+  const depth = Math.min(parameters.depth || 5, 10);
+  const wantScreenshot = parameters.screenshot && mode === 'detail';
+
+  if (!ref) {
+    return {
+      error: 'Missing required "node" parameter. Use inspect({node: "/"}) for page root.',
+    };
+  }
+
+  const tracer = new PipelineTracer();
+
+  tracer.enter('handleInspect()', 'inspectHandler.ts');
+  const resolved = await resolvePathToNode(ref);
+  if (!resolved.ok) return resolved.response;
+  tracer.exit({ mode });
+
+  let result: ToolResponse;
+
+  if (mode === 'detail') {
+    tracer.enter('readHandler()', 'readHandlers.ts');
+    result = buildDetailResult(resolved, depth, wantScreenshot);
+    if (wantScreenshot && !resolved.isPage) {
+      await attachScreenshot(result, resolved.node);
+    }
+    tracer.exit();
+  } else {
+    // tree mode (default) — skeleton JSON
+    tracer.enter('readHandler()', 'readHandlers.ts');
+    result = buildTreeResult(resolved, depth);
+    tracer.exit();
+  }
+
+  result._stages = tracer.collect();
+  return result;
+}
+
+// ── Tree mode: skeleton JSON ──
+
+function buildTreeResult(
+  resolved: Extract<Awaited<ReturnType<typeof resolvePathToNode>>, { ok: true }>,
+  depth: number,
+): ToolResponse {
+  if (resolved.isPage) {
+    const page = resolved.page;
+    const children = page.children.map((child: SceneNode) => {
+      const serialized = NodeSerializer.serializeWithCompression(child, {
+        maxDepth: depth,
+        pruneDefaults: true,
+      });
+      return JsonNodeSerializer.serialize(serialized, { maxDepth: depth, skeleton: true });
+    });
+
+    return {
+      data: {
+        page: page.name,
+        count: page.children.length,
+        children,
+      },
+    };
+  }
+
+  const node = resolved.node;
+  const serialized = NodeSerializer.serializeWithCompression(node, {
+    maxDepth: depth,
+    pruneDefaults: true,
+  });
+  const tree = JsonNodeSerializer.serialize(serialized, { maxDepth: depth, skeleton: true });
+
+  return { data: tree };
+}
+
+// ── Detail mode: full properties ──
+
+function buildDetailResult(
+  resolved: Extract<Awaited<ReturnType<typeof resolvePathToNode>>, { ok: true }>,
+  depth: number,
+  _wantScreenshot: boolean,
+): ToolResponse {
+  if (resolved.isPage) {
+    const page = resolved.page;
+    const topLevel = page.children.map((n: SceneNode) => {
+      const minimal = NodeSerializer.serializeMinimal(n, false);
+      return JsonNodeSerializer.serialize(minimal, { minimal: true });
+    });
+    return {
+      data: {
+        page: page.name,
+        childCount: page.children.length,
+        children: topLevel,
+      },
+    };
+  }
+
+  const node = resolved.node;
+  const serialized = NodeSerializer.serializeWithCompression(node, {
+    maxDepth: depth,
+    pruneDefaults: true,
+  });
+  const detail = JsonNodeSerializer.serialize(serialized, { maxDepth: depth });
+
+  return { data: detail };
+}
+
+// ── Screenshot attachment ──
+
+async function attachScreenshot(result: ToolResponse, node: SceneNode): Promise<void> {
+  if (!node.visible || node.width <= 0 || node.height <= 0) return;
+  try {
+    const ssResult = await exportNodeToBase64(node);
+    if (result.data && ssResult.__image) {
+      result.data.__image = ssResult.__image;
+    }
+  } catch (e: any) {
+    logger.info(`Screenshot failed for ${buildNodeRef(node)}: ${e?.message}`);
+  }
+}
+

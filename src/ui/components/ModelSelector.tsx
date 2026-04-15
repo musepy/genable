@@ -20,18 +20,20 @@ interface ModelItem {
   displayName: string;
 }
 
-interface ModelSelectorProps {
+export interface ModelSelectorProps {
   models: ModelItem[];
   selectedModel: string;
   onSelect: (modelName: string) => void;
   isLoading?: boolean;
+  showFreeOnly?: boolean;
 }
 
 export function ModelSelector({
   models,
   selectedModel,
   onSelect,
-  isLoading
+  isLoading,
+  showFreeOnly = false
 }: ModelSelectorProps) {
   const [hoveredModel, setHoveredModel] = useState<number | null>(null);
   
@@ -43,7 +45,7 @@ export function ModelSelector({
         style={{ 
           display: 'flex', 
           flexDirection: 'column',
-          gap: 4,
+          gap: tokens.space[1],
         }}
       >
         {/* Skeleton 占位器 - 3 个模型的骨架 */}
@@ -67,12 +69,12 @@ export function ModelSelector({
   if (models.length === 0) {
     return (
     <div style={{ 
-        padding: 12, 
+        padding: tokens.space[3], 
         border: 'var(--border-main)', 
         borderRadius: 'var(--radius-5)', 
         textAlign: 'center',
         color: 'var(--gray-9)',
-        fontSize: 12,
+        fontSize: tokens.fontSize[1],
       }}>
         Enter API Key to load models
       </div>
@@ -81,6 +83,7 @@ export function ModelSelector({
 
   // Sort: selected first, then by version
   const sortedModels = sortModels(models, selectedModel);
+  const filteredModels = showFreeOnly ? sortedModels.filter(m => (m as any).isFree) : sortedModels;
 
   return (
     <div 
@@ -89,13 +92,13 @@ export function ModelSelector({
       style={{ 
         display: 'flex', 
         flexDirection: 'column',
-        gap: 4, // Reduced from 12px for a more compact list
+        gap: tokens.space[1],
       }}
     >
-      {sortedModels.map((model, index) => {
+      {filteredModels.map((model, index) => {
         const normalize = (name: string) => name.toLowerCase().replace(/models\//, '').replace(/[^a-z0-9]/g, '');
         const isSelected = normalize(selectedModel) === normalize(model.name);
-        const shouldHighlight = isSelected || (index === 0 && !sortedModels.some(m => normalize(selectedModel) === normalize(m.name)));
+        const shouldHighlight = isSelected || (index === 0 && !filteredModels.some(m => normalize(selectedModel) === normalize(m.name)));
         
         return (
           <div
@@ -121,7 +124,7 @@ export function ModelSelector({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              padding: `var(--space-1) var(--space-3) var(--space-1) var(--space-2)`, // Reduced vertical padding to 4px
+              padding: `var(--space-1) ${tokens.grid.blockPad}px var(--space-1) ${tokens.grid.blockPad}px`,
               minHeight: 32,
               borderRadius: 'var(--radius-4)', // Slightly smaller radius for more compact look
               cursor: 'pointer',
@@ -131,9 +134,9 @@ export function ModelSelector({
             }}
           >
             <span style={{ 
-              fontSize: 12, // Standardized to 12px to match Popover
+              fontSize: tokens.fontSize[1],
               color: 'var(--gray-11)',
-              fontWeight: 400, // No bolding even when highlighted
+              fontWeight: tokens.fontWeight.regular,
               lineHeight: '16px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',

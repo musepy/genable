@@ -35,6 +35,7 @@ export function calculateTimeoutMs(profile: LLMPerformanceProfile): number {
   const thinkingOverhead: Record<string, number> = {
     'minimal': 5000,
     'low': 15000,
+    'medium': 20000,
     'high': 30000,
   };
   return baseMs + (thinkingOverhead[profile.thinkingLevel] ?? 15000) + profile.safetyBufferMs;
@@ -60,7 +61,7 @@ export const PERFORMANCE_PROFILES: Record<string, LLMPerformanceProfile> = {
     // FIX: Increased from 32768 to 65536 to prevent MALFORMED_FUNCTION_CALL
     // when generating complex layouts with many nodes
     maxOutputTokens: 65536,
-    thinkingLevel: 'low',
+    thinkingLevel: 'medium',
     safetyBufferMs: 25000
   },
   /** High complexity, deep thinking, long timeout (May exceed 90s) */

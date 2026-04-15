@@ -1,4 +1,5 @@
 name: Toast
+description: Use when showing a transient notification message after a user action — composed of optional icon, content text, and close button in a horizontal row.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

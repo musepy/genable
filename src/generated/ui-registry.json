@@ -101,7 +101,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-06T07:45:25.975Z"
+    "timestamp": "2026-02-28T04:08:27.001Z"
   },
   "onboarding": {
     "name": "Onboarding View",
@@ -112,14 +112,14 @@
           "name": "div",
           "width": 0,
           "height": 0,
-          "layoutMode": "HORIZONTAL",
+          "layoutMode": "VERTICAL",
           "gap": 0,
-          "primaryAxisAlignItems": "CENTER",
-          "counterAxisAlignItems": "CENTER",
-          "paddingTop": 24,
-          "paddingRight": 24,
-          "paddingBottom": 24,
-          "paddingLeft": 24
+          "primaryAxisAlignItems": "MIN",
+          "counterAxisAlignItems": "MIN",
+          "paddingTop": 16,
+          "paddingRight": 16,
+          "paddingBottom": 16,
+          "paddingLeft": 16
         },
         "children": [
           {
@@ -137,17 +137,47 @@
               {
                 "type": "RECTANGLE",
                 "props": {
-                  "name": "div",
+                  "name": "h2",
                   "width": 0,
                   "height": 0,
-                  "layoutMode": "VERTICAL",
-                  "gap": 0,
-                  "primaryAxisAlignItems": "MIN",
-                  "counterAxisAlignItems": "MIN",
-                  "paddingTop": 24,
-                  "paddingRight": 24,
-                  "paddingBottom": 24,
-                  "paddingLeft": 24
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "characters": "Setup Connection",
+                  "fontSize": 14,
+                  "fontWeight": "500",
+                  "fontFamily": ""
+                }
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "HORIZONTAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "MIN",
+              "counterAxisAlignItems": "MIN",
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            },
+            "children": [
+              {
+                "type": "FRAME",
+                "props": {
+                  "name": "button",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": 0,
+                  "paddingRight": 0,
+                  "paddingBottom": 8,
+                  "paddingLeft": 0
                 },
                 "children": [
                   {
@@ -156,38 +186,127 @@
                       "name": "div",
                       "width": 0,
                       "height": 0,
-                      "layoutMode": "HORIZONTAL",
-                      "gap": 0,
-                      "primaryAxisAlignItems": "MIN",
-                      "counterAxisAlignItems": "CENTER",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
-                      "paddingLeft": null
-                    },
-                    "children": [
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "h3",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "Connect Gemini AI",
-                          "fontSize": 16,
-                          "fontWeight": "600",
-                          "fontFamily": "Inter"
-                        }
-                      }
-                    ]
+                      "paddingLeft": null,
+                      "cornerRadius": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "TEXT",
+                "props": {
+                  "name": "button",
+                  "width": 0,
+                  "height": 0,
+                  "paddingTop": 0,
+                  "paddingRight": 0,
+                  "paddingBottom": 8,
+                  "paddingLeft": 0,
+                  "characters": "OpenRouter",
+                  "fontSize": 12,
+                  "fontWeight": "500",
+                  "fontFamily": ""
+                }
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "layoutMode": "VERTICAL",
+              "gap": 0,
+              "primaryAxisAlignItems": "MIN",
+              "counterAxisAlignItems": "MIN",
+              "paddingTop": null,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "SPACE_BETWEEN",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                },
+                "children": [
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "span",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null,
+                      "characters": "API Key",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "fontFamily": ""
+                    }
                   },
                   {
                     "type": "RECTANGLE",
                     "props": {
-                      "name": "p",
+                      "name": "a",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
+                      "paddingLeft": null
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "MIN",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null
+                },
+                "children": [
+                  {
+                    "type": "FRAME",
+                    "props": {
+                      "name": "input",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": 0,
+                      "paddingRight": 48,
+                      "paddingBottom": 0,
+                      "paddingLeft": 12
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "div",
                       "width": 0,
                       "height": 0,
                       "paddingTop": null,
@@ -197,17 +316,17 @@
                     },
                     "children": [
                       {
-                        "type": "RECTANGLE",
+                        "type": "TEXT",
                         "props": {
-                          "name": "a",
+                          "name": "button",
                           "width": 0,
                           "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "Google AI Studio",
-                          "fontSize": null,
+                          "paddingTop": 0,
+                          "paddingRight": 4,
+                          "paddingBottom": 0,
+                          "paddingLeft": 4,
+                          "characters": "Show",
+                          "fontSize": 12,
                           "fontWeight": "",
                           "fontFamily": ""
                         }
@@ -222,102 +341,52 @@
                   "name": "div",
                   "width": 0,
                   "height": 0,
-                  "paddingTop": 0,
-                  "paddingRight": 24,
-                  "paddingBottom": 24,
-                  "paddingLeft": 24
-                },
-                "children": [
-                  {
-                    "type": "RECTANGLE",
-                    "props": {
-                      "name": "div",
-                      "width": 0,
-                      "height": 0,
-                      "layoutMode": "VERTICAL",
-                      "gap": 0,
-                      "primaryAxisAlignItems": "MIN",
-                      "counterAxisAlignItems": "MIN",
-                      "paddingTop": null,
-                      "paddingRight": null,
-                      "paddingBottom": null,
-                      "paddingLeft": null
-                    },
-                    "children": [
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "div",
-                          "width": 0,
-                          "height": 0,
-                          "layoutMode": "HORIZONTAL",
-                          "gap": 0,
-                          "primaryAxisAlignItems": "MIN",
-                          "counterAxisAlignItems": "CENTER",
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null
-                        },
-                        "children": [
-                          {
-                            "type": "FRAME",
-                            "props": {
-                              "name": "input",
-                              "width": 0,
-                              "height": 0,
-                              "paddingTop": 0,
-                              "paddingRight": 16,
-                              "paddingBottom": 0,
-                              "paddingLeft": 16
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "characters": "Keys are stored locally in Figma client storage.",
+                  "fontSize": 10,
+                  "fontWeight": "",
+                  "fontFamily": ""
+                }
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 16,
+              "paddingRight": null,
+              "paddingBottom": null,
+              "paddingLeft": null
+            },
+            "children": [
               {
                 "type": "RECTANGLE",
                 "props": {
-                  "name": "div",
+                  "name": "button",
                   "width": 0,
                   "height": 0,
-                  "layoutMode": "HORIZONTAL",
-                  "gap": 0,
-                  "primaryAxisAlignItems": "MIN",
-                  "counterAxisAlignItems": "CENTER",
                   "paddingTop": 0,
-                  "paddingRight": 24,
-                  "paddingBottom": 24,
-                  "paddingLeft": 24
-                },
-                "children": [
-                  {
-                    "type": "RECTANGLE",
-                    "props": {
-                      "name": "button",
-                      "width": 0,
-                      "height": 0,
-                      "paddingTop": 0,
-                      "paddingRight": 24,
-                      "paddingBottom": 0,
-                      "paddingLeft": 24,
-                      "characters": "Connect & Start",
-                      "fontSize": null,
-                      "fontWeight": "500",
-                      "fontFamily": "Inter"
-                    }
-                  }
-                ]
+                  "paddingRight": 16,
+                  "paddingBottom": 0,
+                  "paddingLeft": 16,
+                  "characters": "Connect & Start",
+                  "fontSize": 12,
+                  "fontWeight": "500",
+                  "fontFamily": "Inter"
+                }
               }
             ]
           }
         ]
       }
     ],
-    "timestamp": "2026-02-06T07:45:26.025Z"
+    "timestamp": "2026-02-28T04:08:27.418Z"
   },
   "button": {
     "name": "Standard Button",
@@ -339,7 +408,7 @@
         }
       }
     ],
-    "timestamp": "2026-02-06T07:45:26.033Z"
+    "timestamp": "2026-02-28T04:08:27.499Z"
   },
   "prompt-input": {
     "name": "Prompt Input",
@@ -465,7 +534,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-06T07:45:26.052Z"
+    "timestamp": "2026-02-28T04:08:27.540Z"
   },
   "settings-panel": {
     "name": "Settings Panel",
@@ -496,10 +565,10 @@
               "gap": 0,
               "primaryAxisAlignItems": "MIN",
               "counterAxisAlignItems": "MIN",
-              "paddingTop": null,
-              "paddingRight": null,
-              "paddingBottom": null,
-              "paddingLeft": null
+              "paddingTop": 16,
+              "paddingRight": 16,
+              "paddingBottom": 16,
+              "paddingLeft": 16
             },
             "children": [
               {
@@ -520,6 +589,10 @@
                       "name": "div",
                       "width": 0,
                       "height": 0,
+                      "layoutMode": "HORIZONTAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "MIN",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
@@ -527,15 +600,15 @@
                     },
                     "children": [
                       {
-                        "type": "RECTANGLE",
+                        "type": "FRAME",
                         "props": {
-                          "name": "div",
+                          "name": "button",
                           "width": 0,
                           "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null
+                          "paddingTop": 0,
+                          "paddingRight": 0,
+                          "paddingBottom": 8,
+                          "paddingLeft": 0
                         },
                         "children": [
                           {
@@ -547,142 +620,27 @@
                               "paddingTop": null,
                               "paddingRight": null,
                               "paddingBottom": null,
-                              "paddingLeft": null
-                            },
-                            "children": [
-                              {
-                                "type": "RECTANGLE",
-                                "props": {
-                                  "name": "span",
-                                  "width": 0,
-                                  "height": 0,
-                                  "paddingTop": null,
-                                  "paddingRight": null,
-                                  "paddingBottom": null,
-                                  "paddingLeft": null
-                                }
-                              }
-                            ]
+                              "paddingLeft": null,
+                              "cornerRadius": 2
+                            }
                           }
                         ]
                       },
                       {
-                        "type": "RECTANGLE",
+                        "type": "TEXT",
                         "props": {
-                          "name": "div",
+                          "name": "button",
                           "width": 0,
                           "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null
-                        },
-                        "children": [
-                          {
-                            "type": "RECTANGLE",
-                            "props": {
-                              "name": "div",
-                              "width": 0,
-                              "height": 0,
-                              "paddingTop": null,
-                              "paddingRight": null,
-                              "paddingBottom": null,
-                              "paddingLeft": null
-                            },
-                            "children": [
-                              {
-                                "type": "RECTANGLE",
-                                "props": {
-                                  "name": "div",
-                                  "width": 0,
-                                  "height": 0,
-                                  "paddingTop": null,
-                                  "paddingRight": null,
-                                  "paddingBottom": null,
-                                  "paddingLeft": null
-                                },
-                                "children": [
-                                  {
-                                    "type": "RECTANGLE",
-                                    "props": {
-                                      "name": "div",
-                                      "width": 0,
-                                      "height": 0,
-                                      "layoutMode": "HORIZONTAL",
-                                      "gap": 0,
-                                      "primaryAxisAlignItems": "MIN",
-                                      "counterAxisAlignItems": "CENTER",
-                                      "paddingTop": null,
-                                      "paddingRight": null,
-                                      "paddingBottom": null,
-                                      "paddingLeft": null
-                                    },
-                                    "children": [
-                                      {
-                                        "type": "FRAME",
-                                        "props": {
-                                          "name": "input",
-                                          "width": 0,
-                                          "height": 0,
-                                          "paddingTop": 0,
-                                          "paddingRight": 16,
-                                          "paddingBottom": 0,
-                                          "paddingLeft": 16
-                                        }
-                                      }
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "RECTANGLE",
-                                "props": {
-                                  "name": "div",
-                                  "width": 0,
-                                  "height": 0,
-                                  "paddingTop": null,
-                                  "paddingRight": null,
-                                  "paddingBottom": null,
-                                  "paddingLeft": null
-                                },
-                                "children": [
-                                  {
-                                    "type": "RECTANGLE",
-                                    "props": {
-                                      "name": "label",
-                                      "width": 0,
-                                      "height": 0,
-                                      "paddingTop": null,
-                                      "paddingRight": null,
-                                      "paddingBottom": null,
-                                      "paddingLeft": null,
-                                      "characters": "available",
-                                      "fontSize": 11,
-                                      "fontWeight": "400",
-                                      "fontFamily": ""
-                                    }
-                                  },
-                                  {
-                                    "type": "RECTANGLE",
-                                    "props": {
-                                      "name": "div",
-                                      "width": 0,
-                                      "height": 0,
-                                      "paddingTop": 12,
-                                      "paddingRight": 12,
-                                      "paddingBottom": 12,
-                                      "paddingLeft": 12,
-                                      "characters": "Enter API Key to load models",
-                                      "fontSize": 12,
-                                      "fontWeight": "",
-                                      "fontFamily": ""
-                                    }
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
+                          "paddingTop": 0,
+                          "paddingRight": 0,
+                          "paddingBottom": 8,
+                          "paddingLeft": 0,
+                          "characters": "OpenRouter",
+                          "fontSize": 12,
+                          "fontWeight": "500",
+                          "fontFamily": ""
+                        }
                       }
                     ]
                   },
@@ -692,6 +650,10 @@
                       "name": "div",
                       "width": 0,
                       "height": 0,
+                      "layoutMode": "VERTICAL",
+                      "gap": 0,
+                      "primaryAxisAlignItems": "MIN",
+                      "counterAxisAlignItems": "MIN",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
@@ -716,6 +678,10 @@
                               "name": "div",
                               "width": 0,
                               "height": 0,
+                              "layoutMode": "HORIZONTAL",
+                              "gap": 0,
+                              "primaryAxisAlignItems": "SPACE_BETWEEN",
+                              "counterAxisAlignItems": "CENTER",
                               "paddingTop": null,
                               "paddingRight": null,
                               "paddingBottom": null,
@@ -731,31 +697,37 @@
                                   "paddingTop": null,
                                   "paddingRight": null,
                                   "paddingBottom": null,
+                                  "paddingLeft": null,
+                                  "characters": "API Key",
+                                  "fontSize": 12,
+                                  "fontWeight": "500",
+                                  "fontFamily": ""
+                                }
+                              },
+                              {
+                                "type": "RECTANGLE",
+                                "props": {
+                                  "name": "a",
+                                  "width": 0,
+                                  "height": 0,
+                                  "paddingTop": null,
+                                  "paddingRight": null,
+                                  "paddingBottom": null,
                                   "paddingLeft": null
                                 }
                               }
                             ]
-                          }
-                        ]
-                      },
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "div",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null
-                        },
-                        "children": [
+                          },
                           {
                             "type": "RECTANGLE",
                             "props": {
                               "name": "div",
                               "width": 0,
                               "height": 0,
+                              "layoutMode": "HORIZONTAL",
+                              "gap": 0,
+                              "primaryAxisAlignItems": "MIN",
+                              "counterAxisAlignItems": "CENTER",
                               "paddingTop": null,
                               "paddingRight": null,
                               "paddingBottom": null,
@@ -763,94 +735,16 @@
                             },
                             "children": [
                               {
-                                "type": "RECTANGLE",
+                                "type": "FRAME",
                                 "props": {
-                                  "name": "div",
+                                  "name": "input",
                                   "width": 0,
                                   "height": 0,
-                                  "paddingTop": null,
-                                  "paddingRight": null,
-                                  "paddingBottom": null,
-                                  "paddingLeft": null
-                                },
-                                "children": [
-                                  {
-                                    "type": "RECTANGLE",
-                                    "props": {
-                                      "name": "div",
-                                      "width": 0,
-                                      "height": 0,
-                                      "layoutMode": "HORIZONTAL",
-                                      "gap": 0,
-                                      "primaryAxisAlignItems": "MIN",
-                                      "counterAxisAlignItems": "CENTER",
-                                      "paddingTop": null,
-                                      "paddingRight": null,
-                                      "paddingBottom": null,
-                                      "paddingLeft": null
-                                    },
-                                    "children": [
-                                      {
-                                        "type": "FRAME",
-                                        "props": {
-                                          "name": "input",
-                                          "width": 0,
-                                          "height": 0,
-                                          "paddingTop": 0,
-                                          "paddingRight": 16,
-                                          "paddingBottom": 0,
-                                          "paddingLeft": 16
-                                        }
-                                      }
-                                    ]
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "RECTANGLE",
-                                "props": {
-                                  "name": "div",
-                                  "width": 0,
-                                  "height": 0,
-                                  "paddingTop": null,
-                                  "paddingRight": null,
-                                  "paddingBottom": null,
-                                  "paddingLeft": null
-                                },
-                                "children": [
-                                  {
-                                    "type": "RECTANGLE",
-                                    "props": {
-                                      "name": "label",
-                                      "width": 0,
-                                      "height": 0,
-                                      "paddingTop": null,
-                                      "paddingRight": null,
-                                      "paddingBottom": null,
-                                      "paddingLeft": null,
-                                      "characters": "available",
-                                      "fontSize": 11,
-                                      "fontWeight": "400",
-                                      "fontFamily": ""
-                                    }
-                                  },
-                                  {
-                                    "type": "RECTANGLE",
-                                    "props": {
-                                      "name": "div",
-                                      "width": 0,
-                                      "height": 0,
-                                      "paddingTop": 12,
-                                      "paddingRight": 12,
-                                      "paddingBottom": 12,
-                                      "paddingLeft": 12,
-                                      "characters": "Enter API Key to load models",
-                                      "fontSize": 12,
-                                      "fontWeight": "",
-                                      "fontFamily": ""
-                                    }
-                                  }
-                                ]
+                                  "paddingTop": 0,
+                                  "paddingRight": 12,
+                                  "paddingBottom": 0,
+                                  "paddingLeft": 12
+                                }
                               }
                             ]
                           }
@@ -889,6 +783,40 @@
                     }
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "type": "RECTANGLE",
+            "props": {
+              "name": "div",
+              "width": 0,
+              "height": 0,
+              "paddingTop": 12,
+              "paddingRight": 0,
+              "paddingBottom": 12,
+              "paddingLeft": 0
+            },
+            "children": [
+              {
+                "type": "RECTANGLE",
+                "props": {
+                  "name": "div",
+                  "width": 0,
+                  "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "CENTER",
+                  "counterAxisAlignItems": "CENTER",
+                  "paddingTop": null,
+                  "paddingRight": null,
+                  "paddingBottom": null,
+                  "paddingLeft": null,
+                  "characters": "© 2026 Genable",
+                  "fontSize": null,
+                  "fontWeight": "500",
+                  "fontFamily": ""
+                }
               },
               {
                 "type": "RECTANGLE",
@@ -896,6 +824,10 @@
                   "name": "div",
                   "width": 0,
                   "height": 0,
+                  "layoutMode": "HORIZONTAL",
+                  "gap": 0,
+                  "primaryAxisAlignItems": "CENTER",
+                  "counterAxisAlignItems": "CENTER",
                   "paddingTop": null,
                   "paddingRight": null,
                   "paddingBottom": null,
@@ -905,88 +837,50 @@
                   {
                     "type": "RECTANGLE",
                     "props": {
-                      "name": "div",
+                      "name": "a",
                       "width": 0,
                       "height": 0,
                       "layoutMode": "HORIZONTAL",
                       "gap": 0,
-                      "primaryAxisAlignItems": "CENTER",
+                      "primaryAxisAlignItems": "MIN",
                       "counterAxisAlignItems": "CENTER",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
+                      "paddingLeft": null
+                    }
+                  },
+                  {
+                    "type": "RECTANGLE",
+                    "props": {
+                      "name": "span",
+                      "width": 0,
+                      "height": 0,
+                      "paddingTop": null,
+                      "paddingRight": null,
+                      "paddingBottom": null,
                       "paddingLeft": null,
-                      "characters": "© 2026 Genable",
+                      "characters": "|",
                       "fontSize": null,
-                      "fontWeight": "500",
+                      "fontWeight": "",
                       "fontFamily": ""
                     }
                   },
                   {
                     "type": "RECTANGLE",
                     "props": {
-                      "name": "div",
+                      "name": "span",
                       "width": 0,
                       "height": 0,
-                      "layoutMode": "HORIZONTAL",
-                      "gap": 0,
-                      "primaryAxisAlignItems": "CENTER",
-                      "counterAxisAlignItems": "CENTER",
                       "paddingTop": null,
                       "paddingRight": null,
                       "paddingBottom": null,
-                      "paddingLeft": null
-                    },
-                    "children": [
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "a",
-                          "width": 0,
-                          "height": 0,
-                          "layoutMode": "HORIZONTAL",
-                          "gap": 0,
-                          "primaryAxisAlignItems": "MIN",
-                          "counterAxisAlignItems": "CENTER",
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null
-                        }
-                      },
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "span",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "|",
-                          "fontSize": null,
-                          "fontWeight": "",
-                          "fontFamily": ""
-                        }
-                      },
-                      {
-                        "type": "RECTANGLE",
-                        "props": {
-                          "name": "span",
-                          "width": 0,
-                          "height": 0,
-                          "paddingTop": null,
-                          "paddingRight": null,
-                          "paddingBottom": null,
-                          "paddingLeft": null,
-                          "characters": "v1.0.0",
-                          "fontSize": null,
-                          "fontWeight": "",
-                          "fontFamily": ""
-                        }
-                      }
-                    ]
+                      "paddingLeft": null,
+                      "characters": "v1.0.0",
+                      "fontSize": null,
+                      "fontWeight": "",
+                      "fontFamily": ""
+                    }
                   }
                 ]
               }
@@ -995,7 +889,7 @@
         ]
       }
     ],
-    "timestamp": "2026-02-06T07:45:26.085Z"
+    "timestamp": "2026-02-28T04:08:27.612Z"
   },
   "chat-message": {
     "name": "Chat Message",
@@ -1031,6 +925,6 @@
         ]
       }
     ],
-    "timestamp": "2026-02-06T07:45:26.088Z"
+    "timestamp": "2026-02-28T04:08:27.618Z"
   }
 }

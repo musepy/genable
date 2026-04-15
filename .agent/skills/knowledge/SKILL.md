@@ -1,26 +1,9 @@
 ---
 id: design-knowledge
 name: Design Knowledge
-description: Search design patterns, component anatomy, and layout rules
+description: Use when you need to search for design patterns, component anatomy, style guides, or layout rules from the knowledge library before making decisions.
 category: knowledge
 priority: 3
-injectionType: dynamic
-tools:
-  - searchDesignKnowledge
-  - getComponentAnatomy
-  - getFigmaLayoutRules
-triggerPatterns:
-  - pattern
-  - best practice
-  - how to
-  - anatomy
-  - structure
-  - layout rule
-  - guideline
-  - 模式
-  - 最佳实践
-  - 结构
-  - 规则
 enabledByDefault: true
 ---
 
@@ -28,21 +11,19 @@ enabledByDefault: true
 
 Access design knowledge when you need guidance:
 
-- `searchDesignKnowledge`: Find UI patterns, color schemes, typography rules
-- `getComponentAnatomy`: Get structural blueprint for common components
-- `getFigmaLayoutRules`: Get specific layout Do's and Don'ts
+- `man [topic]` — browse available help topics and guidelines
+- `man properties` — property reference for mk command
+- `man components` — component workflow guide
+- `man style-tags` — available style guide tags
+- `man style dark-mode,dashboard` — get a specific style guide
 
-Use knowledge tools BEFORE creating complex components to ensure best practices.
+Use `man` BEFORE creating complex components to ensure best practices.
 
 ### Examples
 
 **Create a pricing table:**
 ```
-getComponentAnatomy({componentName: "pricing table"})
-→ {layers: [...], variants: [...]}
-
-searchDesignKnowledge({domain: "landing", query: "pricing"})
-→ {patterns: [...]}
-
-createNode(...)
+man progressive-creation
+man style minimal,saas
 ```
+Then create with `mk` commands following the style guide's tokens.

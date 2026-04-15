@@ -1,0 +1,150 @@
+{
+  "timestamp": "2026-03-20T14:36:52.384Z",
+  "gitCommit": "8e70971",
+  "gitBranch": "feat/dogfood-ui",
+  "model": "unknown",
+  "results": [
+    {
+      "promptId": "login",
+      "eval": {
+        "triggerId": "error",
+        "model": "unknown",
+        "metrics": {
+          "layoutCompleteness": 0,
+          "fillCompleteness": 0,
+          "textCompleteness": 0,
+          "sizingCompleteness": 0,
+          "spacingCompleteness": 0,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 0
+        },
+        "score": 0,
+        "issues": [
+          "Timed out after 180s for trigger-1774016601062"
+        ]
+      }
+    },
+    {
+      "promptId": "dashboard",
+      "eval": {
+        "triggerId": "error",
+        "model": "unknown",
+        "metrics": {
+          "layoutCompleteness": 0,
+          "fillCompleteness": 0,
+          "textCompleteness": 0,
+          "sizingCompleteness": 0,
+          "spacingCompleteness": 0,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 0
+        },
+        "score": 0,
+        "issues": [
+          "Timed out after 180s for trigger-1774016781134"
+        ]
+      }
+    },
+    {
+      "promptId": "pricing",
+      "eval": {
+        "triggerId": "error",
+        "model": "unknown",
+        "metrics": {
+          "layoutCompleteness": 0,
+          "fillCompleteness": 0,
+          "textCompleteness": 0,
+          "sizingCompleteness": 0,
+          "spacingCompleteness": 0,
+          "toolEfficiency": 0,
+          "errorFreeRate": 0,
+          "nodeCount": 0,
+          "maxDepth": 0,
+          "durationSec": 0
+        },
+        "score": 0,
+        "issues": [
+          "Timed out after 180s for trigger-1774016961196"
+        ]
+      }
+    },
+    {
+      "promptId": "profile",
+      "eval": {
+        "triggerId": "trigger-1774017141249",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.9,
+          "fillCompleteness": 0.75,
+          "textCompleteness": 1,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.7,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.4444444444444444,
+          "nodeCount": 15,
+          "maxDepth": 3,
+          "durationSec": 96.158
+        },
+        "score": 84.9,
+        "issues": [
+          "Frame \"Avatar Container\" has 1 children but no auto-layout"
+        ]
+      }
+    },
+    {
+      "promptId": "settings",
+      "eval": {
+        "triggerId": "trigger-1774017243311",
+        "model": "kimi-k2.5",
+        "metrics": {
+          "layoutCompleteness": 0.6818181818181821,
+          "fillCompleteness": 0.6931818181818182,
+          "textCompleteness": 0.9375,
+          "sizingCompleteness": 1,
+          "spacingCompleteness": 0.5625,
+          "toolEfficiency": 1,
+          "errorFreeRate": 0.9,
+          "nodeCount": 88,
+          "maxDepth": 4,
+          "durationSec": 164.838
+        },
+        "score": 80.5,
+        "issues": [
+          "Frame \"Toggle Switch - Email\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Push\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Dark Mode\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Profile\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Activity\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Data\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Email\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Push\" has 1 children but no auto-layout",
+          "Frame \"Section - Appearance\" has 2 children but no auto-layout",
+          "Frame \"Toggle Row - Dark Mode\" has 2 children but no auto-layout",
+          "Frame \"Toggle Info - Dark Mode\" has 2 children but no auto-layout",
+          "Frame \"Toggle Switch - Dark Mode\" has 1 children but no auto-layout",
+          "Frame \"Section - Privacy\" has 3 children but no auto-layout",
+          "Frame \"Toggle Row - Profile\" has 2 children but no auto-layout",
+          "Frame \"Toggle Info - Profile\" has 2 children but no auto-layout",
+          "Frame \"Toggle Switch - Profile\" has 1 children but no auto-layout",
+          "Frame \"Toggle Row - Activity\" has 2 children but no auto-layout",
+          "Frame \"Toggle Info - Activity\" has 2 children but no auto-layout",
+          "Frame \"Toggle Switch - Activity\" has 1 children but no auto-layout",
+          "Frame \"Toggle Switch - Activity\" has 1 children but no auto-layout"
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "meanScore": 33.08,
+    "minScore": 0,
+    "maxScore": 84.9,
+    "totalDurationSec": 260.996,
+    "totalNodes": 103,
+    "totalIssues": 24
+  }
+}

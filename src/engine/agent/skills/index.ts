@@ -34,24 +34,10 @@ export async function initializeSkills(): Promise<void> {
     for (const skill of skills) {
       skillRegistry.register(skill);
     }
-    
+
     console.log(`[Skills] Initialized ${skills.length} skills from ${skillsDir}`);
   } catch (error) {
     console.warn('[Skills] Failed to load skills:', error);
     console.log('[Skills] Running with no skills loaded');
   }
-}
-
-/**
- * Get all tools from active skills.
- */
-export function getActiveAgentTools() {
-  return skillRegistry.getActiveTools();
-}
-
-/**
- * Get all executors from active skills.
- */
-export function getActiveExecutors() {
-  return skillRegistry.getActiveExecutors();
 }

@@ -18,6 +18,8 @@ import {
   FileText,
   ShoppingCart,
   CheckSquare,
+  Palette,
+  Brain,
   LucideProps,
 } from 'lucide-preact';
 
@@ -30,6 +32,8 @@ const iconMap: Record<string, ComponentType<LucideProps>> = {
   FileText,
   ShoppingCart,
   CheckSquare,
+  Palette,
+  Brain,
 };
 
 export interface PromptSuggestion {
@@ -85,8 +89,8 @@ export function PromptChips({
               flex: '0 0 auto',
               maxWidth: 120,
               background: 'transparent', // P0: De-noise - was tokens.colors.card
-              border: `0.5px solid ${tokens.colors.grayBorder}`,
-              boxShadow: tokens.colors.shadow,
+              border: 'var(--border-subtle)',
+              boxShadow: tokens.colors.shadowSm,
               borderRadius: 'var(--radius-5)', // Unified to 12px
               padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
               cursor: enabled ? 'pointer' : 'default',

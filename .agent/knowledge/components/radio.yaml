@@ -1,4 +1,5 @@
 name: Radio
+description: Use when offering a single-choice selection from a group of mutually exclusive options — composed of a circle marker and adjacent label.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

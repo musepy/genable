@@ -13,21 +13,24 @@ import { SettingsPanel } from './ui/SettingsPanel'
 import { OnboardingView } from './ui/components/OnboardingView'
 import { Button } from './ui/components/Button'
 import { PromptInput } from './ui/components/PromptInput'
-import { MessageRenderer } from './ui/components/MessageRenderer'
 import { DeveloperPanel } from './ui/components/DeveloperPanel'
+
+// i18n
+import { LocaleContext } from './ui/i18n'
 
 // Global UI Layout & Styles
 import { Header } from './ui/components/Header'
 import { Iso } from './ui/components/layout/Iso'
-import { Stack } from './ui/components/layout/Stack'
 import { tokens, cssTokens, globalStyles } from './ui/design-system/tokens'
-import { thinkingStreamCss } from './ui/components/ThinkingStream'
+// ThinkingStream CSS moved to globalStyles.ts
 import { ToastProvider } from './ui/components/ui'
 import uiRegistry from './generated/ui-registry.json'
 import { on, emit } from '@create-figma-plugin/utilities'
 import { CaptureUIHandler, SendCapturedUIHandler } from './types'
 import { DomCapture } from './ui/utils/DomCapture'
 import { TokenResolver } from './ui/utils/TokenResolver'
+import { WINDOW_WIDTH, getIdealHeight } from './ui/constants/layout'
+import { ResizeHandler } from './types'
 
 // Global Styles
 const containerStyle: h.JSX.CSSProperties = {
@@ -44,11 +47,8 @@ const mainContentStyle: h.JSX.CSSProperties = {
   flex: 1,
   display: 'flex',
   flexDirection: 'column',
-  overflowY: 'auto',
-  overflowX: 'hidden',
-  scrollBehavior: 'smooth',
+  minHeight: 0, // CRITICAL for Flexbox shrinking
   position: 'relative',
-  isolation: 'isolate',
 }
 
 function PluginContent() {
@@ -57,16 +57,30 @@ function PluginContent() {
   
   // 2. Settings & Auth
   const settings = useModelSettings()
-  const { 
-    apiKey, setApiKey, modelName, setModelName, 
+  const {
+    locale, localePref, setLocalePref,
+    apiKey, setApiKey, modelName, setModelName,
     providerName, setProviderName,
     suggestedModels, fetchStatus, settingsError,
-    hasConfig, setHasConfig, isInitialized, showSettings, setShowSettings,
-    handleSaveSettings, handleFetchModels
+    hasConfig, isInitialized, showSettings, setShowSettings,
+    handleSaveSettings, completeOnboarding, handleFetchModels,
+    logout, restoreSavedSession
   } = settings
 
   // Key for remounting ChatFeature (replaces window.location.reload)
   const [chatKey, setChatKey] = useState(0)
+
+  // Dev bridge model switching — exposed via window global for cross-component access
+  useEffect(() => {
+    (window as any).__GENABLE_SWITCH_PROVIDER__ = (provider: string, model: string) => {
+      const validProviders = ['gemini', 'openrouter', 'dashscope'] as const
+      if (validProviders.includes(provider as any)) {
+        setProviderName(provider as any)
+        setModelName(model)
+      }
+    }
+    return () => { delete (window as any).__GENABLE_SWITCH_PROVIDER__ }
+  }, [setProviderName, setModelName])
 
   // 3. Theme & UI Animation State
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system')
@@ -75,7 +89,7 @@ function PluginContent() {
   // Inject CSS
   useEffect(() => {
     const styleEl = document.createElement('style')
-    styleEl.textContent = cssTokens + globalStyles + thinkingStreamCss
+    styleEl.textContent = cssTokens + globalStyles
     document.head.appendChild(styleEl)
     return () => { document.head.removeChild(styleEl) }
   }, [])
@@ -131,6 +145,37 @@ function PluginContent() {
     return uncapture;
   }, []);
 
+  // L3: Window Resize Recovery
+  // When Figma compresses the plugin iframe (console drag, window resize),
+  // it does NOT restore the iframe height automatically. We detect this
+  // via window 'resize' event and request the ideal height back.
+  useEffect(() => {
+    const idealHeight = getIdealHeight();
+    let compressed = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleResize = () => {
+      const h = window.innerHeight;
+      if (h < idealHeight - 5) {
+        compressed = true;
+      }
+      // When resize events stop (user stopped dragging), check if we need to restore
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (compressed) {
+          emit<ResizeHandler>('RESIZE', { height: idealHeight });
+          compressed = false;
+        }
+      }, 400);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, []);
+
   const renderCaptureSandbox = () => {
     if (!captureTarget) return null;
 
@@ -149,6 +194,8 @@ function PluginContent() {
           settingsError={settingsError}
           onFetchModels={() => handleFetchModels()}
           onSave={handleSaveSettings}
+          onLogout={logout}
+          onRestoreSession={restoreSavedSession}
           localComponents={pluginData.localComponents}
         />
       );
@@ -166,7 +213,7 @@ function PluginContent() {
     } else if (captureTarget === 'button') {
       content = <Button>Capture Candidate</Button>;
     } else if (captureTarget === 'developer-panel') {
-      content = <DeveloperPanel />;
+      content = <DeveloperPanel onLogout={() => {}} onRestoreSession={() => {}} />;
     } else if (captureTarget === 'prompt-input') {
       content = (
         <PromptInput 
@@ -177,13 +224,6 @@ function PluginContent() {
           canSubmit={true} 
         />
       );
-    } else if (captureTarget === 'chat-message') {
-      content = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <MessageRenderer content="Hello!" />
-          <MessageRenderer content="Hi there, I am Genable." />
-        </div>
-      );
     }
     // Add more components as needed
 
@@ -192,7 +232,7 @@ function PluginContent() {
         position: 'absolute', 
         left: -5000, 
         top: 0, 
-        width: 340, 
+        width: WINDOW_WIDTH, 
         opacity: 0,
         pointerEvents: 'none' 
       }}>
@@ -209,16 +249,9 @@ function PluginContent() {
 
   // L3: Dogfood Tools State
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
-  const [editorMode, setEditorMode] = useState<'figma' | 'dev'>('figma');
   
   useEffect(() => {
     (window as any).toggleDeveloperPanel = () => setShowDeveloperTools(prev => !prev);
-    
-    const unbind = on('SET_EDITOR_MODE', (data: { editorType: 'figma' | 'dev' }) => {
-      console.log('[UI] Editor Mode:', data.editorType);
-      setEditorMode(data.editorType);
-    });
-    return unbind;
   }, []);
 
   // 4. Router / Switcher
@@ -232,7 +265,10 @@ function PluginContent() {
       return (
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={mainContentStyle}>
-            <DeveloperPanel />
+            <DeveloperPanel
+              onLogout={logout}
+              onRestoreSession={restoreSavedSession}
+            />
             <VerticalSpace space="large" />
             <Button variant="secondary" fullWidth onClick={() => setShowDeveloperTools(false)}>
               Back to Chat
@@ -249,11 +285,11 @@ function PluginContent() {
       return (
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <OnboardingView
-            onComplete={(key) => {
-              setApiKey(key);
-              setHasConfig(true);
-              handleSaveSettings(); // Will save with current state
-            }}
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            providerName={providerName}
+            setProviderName={setProviderName}
+            onComplete={completeOnboarding}
             onFetchModels={(key) => handleFetchModels(key)}
             isLoading={fetchStatus === 'fetching'}
             error={settingsError}
@@ -283,6 +319,7 @@ function PluginContent() {
   }
 
   return (
+    <LocaleContext.Provider value={locale}>
     <div style={containerStyle}>
       <Header
         theme={theme}
@@ -325,6 +362,8 @@ function PluginContent() {
             settingsError={settingsError}
             onFetchModels={() => handleFetchModels()}
             onSave={handleSaveSettings}
+            onLogout={logout}
+            onRestoreSession={restoreSavedSession}
             onClose={() => {
               handleSaveSettings();
               setIsSettingsClosing(true);
@@ -334,12 +373,15 @@ function PluginContent() {
               }, 200);
             }}
             localComponents={pluginData.localComponents}
+            localePref={localePref}
+            setLocalePref={setLocalePref}
           />
         </div>
       )}
 
       {renderCaptureSandbox()}
     </div>
+    </LocaleContext.Provider>
   )
 }
 

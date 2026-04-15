@@ -1,4 +1,5 @@
 name: Checkbox
+description: Use when offering a binary on/off toggle for a single option in forms or settings — composed of a box and adjacent label aligned center.
 structure:
   type: FRAME
   layoutMode: HORIZONTAL

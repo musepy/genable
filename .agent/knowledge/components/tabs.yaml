@@ -1,4 +1,5 @@
 name: Tabs
+description: Use when switching between multiple content panes that share the same space — composed of a tab list row and the active tab content area stacked below.
 structure:
   type: FRAME
   layoutMode: VERTICAL

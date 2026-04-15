@@ -1,0 +1,325 @@
+[
+  {
+    "functionDeclarations": [
+      {
+        "name": "complete_task",
+        "description": "[REQUIRED] Signal task completion. You MUST call this tool to end execution. Do NOT just stop responding - explicitly call this tool with a summary.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string",
+              "description": "Summary of what was accomplished"
+            },
+            "verification": {
+              "type": "string",
+              "description": "Optional: how user can verify the result"
+            }
+          },
+          "required": [
+            "summary"
+          ]
+        }
+      },
+      {
+        "name": "inspectDesign",
+        "description": "\n[SUPER TOOL] Unified read tool for Figma state.\n\nMODE OPTIONS:\n- \"selection\": Get currently selected nodes (names, types, IDs)\n- \"hierarchy\": Get full DSL tree of a node and children (requires nodeId)\n- \"node\": Get DSL of a single node (requires nodeId)\n\nREPLACES: getSelection, getDeepHierarchy, getNodeDSL\nUse this instead of those tools.\n",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "selection",
+                "hierarchy",
+                "node"
+              ],
+              "description": "What to inspect"
+            },
+            "nodeId": {
+              "type": "string",
+              "description": "Required for hierarchy/node modes. ID of node to inspect."
+            },
+            "depth": {
+              "type": "number",
+              "description": "For hierarchy mode: max depth (default 5, max 10)"
+            }
+          },
+          "required": [
+            "mode"
+          ]
+        }
+      },
+      {
+        "name": "generateDesign",
+        "description": "\n[ONE-SHOT] Generate a complete UI component or layout in a single call.\nOutput ALL nodes as a flat list with parent references. The system reconstructs and renders the full tree.\n\nThis is the PREFERRED tool for creating new designs. Use createNode only for single-node edits.\nYou can freely specify fontFamily for TEXT nodes (any Google Font, e.g. \"Roboto\", \"Poppins\", \"Noto Sans SC\").\n\n## Output Format Rules\n1. First node MUST have parent: null (root).\n2. Every other node references its parent by id.\n3. ALL styling (fills, cornerRadius, gap, padding, fontSize, etc.) MUST go inside 'props'.\n4. TEXT nodes MUST have characters in 'props'. If the text includes formatting with newlines, you MUST output a real physical newline (i.e. `\\n` in JSON), NOT a literal escaped string `\\\\n`.\n5. Root node MUST have explicit width and height in 'props'.\n6. ICON nodes MUST have iconName in 'props' (format: \"prefix:name\", e.g., \"lucide:home\", \"mdi:account\").\n7. GRADIENT FILLS: In 'props.fills', use hex strings for solid colors, or objects for gradients: {\"type\":\"GRADIENT_LINEAR\",\"stops\":[{\"position\":0,\"color\":\"#C0C0C0\"},{\"position\":1,\"color\":\"#808080\"}],\"angle\":135}\n",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "parentId": {
+              "type": "string",
+              "description": "Real Figma parent ID to attach this component to. If omitted, adds to current page."
+            },
+            "nodes": {
+              "type": "array",
+              "description": "Flat list of all nodes with parent references",
+              "items": {
+                "type": "object",
+                "description": "A node: {id, parent, type, props}",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Semantic ID (e.g., \"email-label\", \"submit-btn\")"
+                  },
+                  "parent": {
+                    "type": "string",
+                    "description": "Parent node ID. For root node, use \"root\" or empty string."
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "FRAME | TEXT | RECTANGLE | ELLIPSE | LINE | ICON. Do NOT use VECTOR — use RECTANGLE for shapes, ELLIPSE for circles, ICON with iconName for icons."
+                  },
+                  "props": {
+                    "type": "object",
+                    "description": "All visual and layout properties for the node (width, height, fills, padding, characters, layoutMode, constraints, iconName, etc)."
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "props"
+                ]
+              }
+            },
+            "stepId": {
+              "type": "string",
+              "description": "Plan step ID. MANDATORY if this call executes a task from your plan. Ensures progress is automatically marked as completed."
+            }
+          },
+          "required": [
+            "nodes"
+          ]
+        }
+      },
+      {
+        "name": "patchNode",
+        "description": "[STATE-DRIVEN] Update a single node's PROPERTIES (state).\n  \n  Does NOT handle structure changes (add/remove children).\n  Simply merges the provided props into the target node.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "nodeId": {
+              "type": "string",
+              "description": "ID of the node to update"
+            },
+            "props": {
+              "type": "object",
+              "description": "Properties to merge (fills, cornerRadius, layoutMode, etc.)",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Layer name"
+                },
+                "layoutMode": {
+                  "type": "string",
+                  "description": "HORIZONTAL | VERTICAL | NONE"
+                },
+                "width": {
+                  "type": "number",
+                  "description": "Width in px"
+                },
+                "height": {
+                  "type": "number",
+                  "description": "Height in px"
+                },
+                "characters": {
+                  "type": "string",
+                  "description": "Text content (for TEXT nodes)"
+                },
+                "fills": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Hex color string"
+                  },
+                  "description": "Background colors (e.g. [\"#FFFFFF\"])"
+                }
+              }
+            },
+            "stepId": {
+              "type": "string",
+              "description": "Optional step ID from planDesign"
+            }
+          },
+          "required": [
+            "nodeId",
+            "props"
+          ]
+        }
+      },
+      {
+        "name": "batchOperations",
+        "description": "\n[SUPER TOOL] Execute multiple Figma operations in a single ordered call.\nUse opId-based references (nodeRef/parentRef) to chain operations without guessing IDs.\nIf referencing existing nodes, pass nodeId/parentId directly (do NOT use nodeRef/parentRef).\nCROSS-TURN CONTINUITY: Response includes idMap mapping opId -> real nodeId. In subsequent turns, use REAL nodeIds from that map, NOT virtual opIds.\nOperations always execute sequentially.\n\nEXAMPLE (Hierarchical Row):\n{\n  \"operations\": [\n    {\n      \"opId\": \"row-container\",\n      \"action\": \"createNode\",\n      \"params\": {\n        \"type\": \"FRAME\",\n        \"name\": \"Data Row\",\n        \"props\": { \"layoutMode\": \"HORIZONTAL\", \"gap\": 12, \"padding\": 16 },\n        \"children\": [\n          { \"opId\": \"col-1\", \"action\": \"createNode\", \"params\": { \"type\": \"TEXT\", \"name\": \"Label\", \"props\": { \"characters\": \"Metric Name\" } } },\n          { \"opId\": \"col-2\", \"action\": \"createNode\", \"params\": { \"type\": \"TEXT\", \"name\": \"Value\", \"props\": { \"characters\": \"1,234\" } } }\n        ]\n      }\n    }\n  ]\n}\n",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "operations": {
+              "type": "array",
+              "description": "Ordered list of operations to execute",
+              "items": {
+                "type": "object",
+                "description": "Single operation definition",
+                "required": [
+                  "opId",
+                  "action",
+                  "params"
+                ],
+                "properties": {
+                  "opId": {
+                    "type": "string",
+                    "description": "Unique operation ID (Virtual ID) for intra-batch references. Use this as a handle for nodes created in this batch."
+                  },
+                  "action": {
+                    "type": "string",
+                    "description": "Operation type to execute",
+                    "enum": [
+                      "createNode",
+                      "setNodeLayout",
+                      "setNodeStyles",
+                      "updateNodeProperties",
+                      "createIcon",
+                      "deleteNode",
+                      "applyDesignPatch",
+                      "patchNode"
+                    ]
+                  },
+                  "params": {
+                    "type": "object",
+                    "description": "Parameters for the action. Use nodeRef/parentRef for opId references.",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "description": "Node type (e.g. FRAME, TEXT)"
+                      },
+                      "parentId": {
+                        "type": "string",
+                        "description": "Real Figma parent ID"
+                      },
+                      "parentRef": {
+                        "type": "string",
+                        "description": "Virtual ID (opId) of the parent created in this batch"
+                      },
+                      "nodeId": {
+                        "type": "string",
+                        "description": "Real Figma node ID"
+                      },
+                      "nodeRef": {
+                        "type": "string",
+                        "description": "Virtual ID (opId) of the node to modify"
+                      },
+                      "props": {
+                        "type": "object",
+                        "description": "Any valid Figma properties (fills, padding, gap, characters, etc.)"
+                      },
+                      "stepId": {
+                        "type": "string",
+                        "description": "Optional step ID pass-through"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Layer name"
+                      },
+                      "layoutMode": {
+                        "type": "string",
+                        "description": "HORIZONTAL | VERTICAL | NONE"
+                      },
+                      "width": {
+                        "type": "number",
+                        "description": "Width in px"
+                      },
+                      "height": {
+                        "type": "number",
+                        "description": "Height in px"
+                      },
+                      "characters": {
+                        "type": "string",
+                        "description": "Text content (for TEXT nodes)"
+                      },
+                      "fills": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "description": "Hex color string"
+                        },
+                        "description": "Background colors (e.g. [\"#FFFFFF\"])"
+                      },
+                      "iconName": {
+                        "type": "string",
+                        "description": "For ICON nodes"
+                      },
+                      "size": {
+                        "type": "number",
+                        "description": "For ICON nodes"
+                      },
+                      "color": {
+                        "type": "string",
+                        "description": "For ICON/TEXT nodes"
+                      }
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Why this operation is being performed. Helps maintain context and avoid redundant loops."
+                  },
+                  "preconditions": {
+                    "type": "object",
+                    "description": "Optional validation rules to check before execution.",
+                    "properties": {
+                      "nodeType": {
+                        "type": "string",
+                        "description": "Expected node type (e.g. FRAME, TEXT)"
+                      },
+                      "parentHasAutoLayout": {
+                        "type": "boolean",
+                        "description": "Requires parent to have auto-layout"
+                      }
+                    }
+                  },
+                  "dependsOn": {
+                    "type": "array",
+                    "description": "Optional list of opIds that must succeed before this operation",
+                    "items": {
+                      "type": "string",
+                      "description": "opId dependency"
+                    }
+                  }
+                }
+              }
+            },
+            "strategy": {
+              "type": "string",
+              "description": "Execution strategy (sequential only)",
+              "enum": [
+                "sequential"
+              ]
+            },
+            "onError": {
+              "type": "string",
+              "description": "Error handling strategy for dependent operations",
+              "enum": [
+                "skip-dependents",
+                "continue"
+              ]
+            },
+            "stepId": {
+              "type": "string",
+              "description": "Optional step ID from planDesign to mark as completed upon success"
+            }
+          },
+          "required": [
+            "operations"
+          ]
+        }
+      }
+    ]
+  }
+]

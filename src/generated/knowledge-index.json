@@ -1,0 +1,1021 @@
+[
+  {
+    "id": "guideline:card-layout",
+    "name": "Card Layout Design Guideline",
+    "description": "Use when designing product grids, blog post lists, team grids, pricing cards, feature showcases, or gallery layouts — covers card spacing, wrap layout, responsive grid, and visual hierarchy.",
+    "category": "guideline",
+    "tags": [
+      "card",
+      "grid",
+      "layout",
+      "product",
+      "gallery",
+      "pricing",
+      "responsive"
+    ]
+  },
+  {
+    "id": "guideline:chart",
+    "name": "Chart Design Guideline",
+    "description": "Use when designing data visualization containers — bar charts, line charts, pie/donut charts, or area charts built from basic Figma shapes with axes, legends, and color encoding.",
+    "category": "guideline",
+    "tags": [
+      "chart",
+      "data-viz",
+      "bar",
+      "line",
+      "pie",
+      "visualization",
+      "axes"
+    ]
+  },
+  {
+    "id": "guideline:dashboard",
+    "name": "Dashboard Design Guideline",
+    "description": "Use when designing admin panels, analytics dashboards, SaaS dashboards, or data-dense monitoring screens — covers sidebar, top bar, KPI cards, widget grids, and 1440x900 desktop layout.",
+    "category": "guideline",
+    "tags": [
+      "dashboard",
+      "analytics",
+      "admin",
+      "sidebar",
+      "kpi",
+      "widget",
+      "saas"
+    ]
+  },
+  {
+    "id": "guideline:form",
+    "name": "Form Design Guideline",
+    "description": "Use when designing login, signup, checkout, settings, contact, or multi-step wizard forms — covers field layout, labels, validation, error states, button hierarchy, and card spacing.",
+    "category": "guideline",
+    "tags": [
+      "form",
+      "input",
+      "validation",
+      "login",
+      "signup",
+      "settings",
+      "layout"
+    ]
+  },
+  {
+    "id": "guideline:landing-page",
+    "name": "Landing Page Design Guideline",
+    "description": "Use when designing marketing pages, SaaS homepages, product launches, service pages, or waitlist screens — covers hero, features, CTA sections, 1440px layout, and conversion patterns.",
+    "category": "guideline",
+    "tags": [
+      "landing-page",
+      "marketing",
+      "hero",
+      "cta",
+      "saas",
+      "homepage"
+    ]
+  },
+  {
+    "id": "guideline:mobile",
+    "name": "Mobile App Design Guideline",
+    "description": "Use when designing iOS or Android app screens, mobile web views, or phone-size UI mockups — covers 390x844 viewport, touch targets, status bars, bottom sheets, and responsive sizing.",
+    "category": "guideline",
+    "tags": [
+      "mobile",
+      "ios",
+      "android",
+      "app",
+      "touch",
+      "viewport",
+      "phone"
+    ]
+  },
+  {
+    "id": "guideline:navigation",
+    "name": "Navigation Design Guideline",
+    "description": "Use when designing top navbars, sidebars, tab bars, breadcrumbs, or mobile bottom navigation — covers wayfinding structure, fill sizing, active states, and menu patterns.",
+    "category": "guideline",
+    "tags": [
+      "navigation",
+      "navbar",
+      "sidebar",
+      "tabs",
+      "breadcrumb",
+      "wayfinding",
+      "menu"
+    ]
+  },
+  {
+    "id": "guideline:table",
+    "name": "Table Design Guideline",
+    "description": "Use when designing data tables, spreadsheet views, admin lists, transaction logs, or inventory tables — covers column sizing, headers, row actions, sorting, and pagination.",
+    "category": "guideline",
+    "tags": [
+      "table",
+      "data",
+      "admin",
+      "list",
+      "row",
+      "column",
+      "sorting"
+    ]
+  },
+  {
+    "id": "help:component-workflow",
+    "name": "Component Workflow",
+    "description": "Use when building reusable components and instances — covers the components-first ordering, ID tracking, and override mechanism.",
+    "category": "help",
+    "tags": [
+      "component",
+      "instance",
+      "create_component",
+      "override",
+      "component-prop",
+      "workflow"
+    ]
+  },
+  {
+    "id": "help:componentization",
+    "name": "Componentization Workflow",
+    "description": "Use when creating reusable components, converting frames to components, or assembling designs with component instances and component properties (TEXT/BOOLEAN).",
+    "category": "help",
+    "tags": [
+      "component",
+      "instance",
+      "componentize",
+      "reusable",
+      "component-prop",
+      "workflow"
+    ]
+  },
+  {
+    "id": "help:creation-flow",
+    "name": "Creation Flow (4-Step Gate)",
+    "description": "Use when starting a jsx creation task — section-by-section workflow: jsx one block, describe to verify, edit or re-jsx to fix, repeat. Load before first jsx call.",
+    "category": "help",
+    "tags": [
+      "jsx",
+      "describe",
+      "creation",
+      "verification",
+      "gate",
+      "workflow"
+    ]
+  },
+  {
+    "id": "help:error-catalog",
+    "name": "Error Catalog (Known Patterns)",
+    "description": "Use when debugging a tool error or unexpected behavior — catalogs known error patterns like XML_PARSE_ERROR, object-Object leakage, LLM truncation, and gradient escaping issues.",
+    "category": "help",
+    "tags": [
+      "error",
+      "debug",
+      "catalog",
+      "pattern",
+      "troubleshooting"
+    ]
+  },
+  {
+    "id": "help:intent-detection",
+    "name": "Intent Detection",
+    "description": "Use when starting a turn — determines whether to inspect existing canvas first or start fresh with jsx.",
+    "category": "help",
+    "tags": [
+      "intent",
+      "create",
+      "edit",
+      "selection",
+      "turn-start"
+    ]
+  },
+  {
+    "id": "help:interaction-model",
+    "name": "Interaction & Turn Management",
+    "description": "Use when needing user clarification or managing conversational turns — covers ask_user usage and anti-loop rules.",
+    "category": "help",
+    "tags": [
+      "ask_user",
+      "clarification",
+      "turn",
+      "turn-end",
+      "anti-loop",
+      "conversation"
+    ]
+  },
+  {
+    "id": "help:layout-quality",
+    "name": "Layout Quality Patterns",
+    "description": "Use when fixing common layout failures — toggle rows, sibling cards, space-between patterns, and explicit gap rules.",
+    "category": "help",
+    "tags": [
+      "layout",
+      "quality",
+      "space-between",
+      "gap",
+      "sibling-cards",
+      "toggle-row",
+      "patterns"
+    ]
+  },
+  {
+    "id": "help:layout-strategy",
+    "name": "Layout Strategy (Parent/Child & Nesting)",
+    "description": "Use when deciding parent-child layout, nesting depth, and sizing relations — covers fill/hug/explicit-px tradeoffs.",
+    "category": "help",
+    "tags": [
+      "layout",
+      "sizing",
+      "fill",
+      "hug",
+      "nesting",
+      "auto-layout",
+      "parent-child"
+    ]
+  },
+  {
+    "id": "help:naming-icons",
+    "name": "Naming, Content & Icons",
+    "description": "Use when naming nodes or adding icons — covers semantic naming, icon prefix syntax, and content placeholder rules.",
+    "category": "help",
+    "tags": [
+      "naming",
+      "icon",
+      "content",
+      "placeholder",
+      "conventions"
+    ]
+  },
+  {
+    "id": "help:response-style",
+    "name": "Response Style (CLI, not chatbot)",
+    "description": "Use when writing text responses to the user — keeps replies terse, outcome-focused, and information-dense instead of verbose chatbot narration.",
+    "category": "help",
+    "tags": [
+      "response",
+      "terse",
+      "format",
+      "cli",
+      "output"
+    ]
+  },
+  {
+    "id": "help:sandbox-sop",
+    "name": "Sandbox Rules and Component SOPs",
+    "description": "Use when using the js tool, converting frames to components/instances, hitting Blocked/parenting-cycle errors, or planning multi-step component-to-instance replacement workflows.",
+    "category": "help",
+    "tags": [
+      "js",
+      "sandbox",
+      "component",
+      "instance",
+      "sop",
+      "workflow"
+    ]
+  },
+  {
+    "id": "help:style-collaboration",
+    "name": "Style Collaboration Playbook",
+    "description": "Use when style is under-specified before the first jsx call — semantic product-to-style matching + ask_user template + post-pick action.",
+    "category": "help",
+    "tags": [
+      "style",
+      "ask_user",
+      "aesthetic",
+      "collaboration",
+      "pre-jsx"
+    ]
+  },
+  {
+    "id": "help:text-sizing",
+    "name": "Text Sizing & Overflow",
+    "description": "Use when sizing text nodes — covers w:fill vs hug, truncation, and multiline strategies.",
+    "category": "help",
+    "tags": [
+      "text",
+      "sizing",
+      "w-fill",
+      "truncation",
+      "maxLines",
+      "wrap",
+      "overflow"
+    ]
+  },
+  {
+    "id": "skill:agent-page",
+    "name": "Agent Page — Visual Design System Dashboard",
+    "description": "Use when initializing or managing the .agent Figma page that holds the visual design system dashboard — Palette (color/spacing/typography) and Guide (usage docs) via component templates.",
+    "category": "skill"
+  },
+  {
+    "id": "skill:component-set",
+    "name": "Component Set Creation",
+    "description": "Use when creating a Figma ComponentSet with a variant matrix — clone cascading for diffs and combine_components to assemble the final set, avoiding known pitfalls.",
+    "category": "skill"
+  },
+  {
+    "id": "skill:design-system",
+    "name": "Design System Creation",
+    "description": "Use when creating or managing Figma design systems — variable collections, modes (light/dark), component variants, and variable bindings for brand tokens and themes.",
+    "category": "skill"
+  },
+  {
+    "id": "skill:design-knowledge",
+    "name": "Design Knowledge",
+    "description": "Use when you need to search for design patterns, component anatomy, style guides, or layout rules from the knowledge library before making decisions.",
+    "category": "skill"
+  },
+  {
+    "id": "skill:rich-text",
+    "name": "Rich Text Styling",
+    "description": "Use when applying mixed inline styles (bold, color, weight) within a single text node via markdown markup — the runtime parses it and applies per-character ranges.",
+    "category": "skill"
+  },
+  {
+    "id": "style:bold-editorial",
+    "name": "Bold Editorial Style Guide",
+    "description": "Use when designing content platforms, magazine layouts, blogs, or portfolio sites — high-contrast black-on-white base with oversized Sora display, vibrant red accents, and minimal decoration so content speaks.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "editorial",
+      "high-contrast",
+      "serif",
+      "blog",
+      "portfolio",
+      "red-accent",
+      "typography"
+    ]
+  },
+  {
+    "id": "style:corporate-blue-light",
+    "name": "Corporate Blue Light Style Guide",
+    "description": "Use when designing enterprise SaaS, B2B dashboards, CRM, or admin panels needing trust and clarity — clean white backgrounds with subtle grey surfaces and blue accents for primary actions.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "corporate",
+      "saas",
+      "blue",
+      "crm",
+      "admin",
+      "enterprise",
+      "b2b"
+    ]
+  },
+  {
+    "id": "style:fintech-dark",
+    "name": "Fintech Dark Style Guide",
+    "description": "Use when designing trading terminals, asset management, risk dashboards, or data-dense fintech UI — deep blue-grey palette with electric blue accents and Space Grotesk for precise numerical data readability.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "fintech",
+      "trading",
+      "dashboard",
+      "blue",
+      "finance",
+      "data-dense",
+      "monochrome"
+    ]
+  },
+  {
+    "id": "style:terminal-dark",
+    "name": "Terminal Dark Style Guide",
+    "description": "Use when designing CLI tooling, API docs, code editors, or DevOps panels — near-black backgrounds with monospace type, zero border radius, and green accents evoking terminal and IDE aesthetics.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "terminal",
+      "developer",
+      "monospace",
+      "cli",
+      "api",
+      "devops",
+      "green-accent"
+    ]
+  },
+  {
+    "id": "style:warm-organic",
+    "name": "Warm Organic Style Guide",
+    "description": "Use when designing health, lifestyle, or wellness apps — warm earth tones with terracotta accents, generous rounded corners, and soft shadows create a calming approachable feel with DM Sans readability.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "wellness",
+      "warm",
+      "earth-tone",
+      "terracotta",
+      "rounded",
+      "lifestyle",
+      "organic"
+    ]
+  },
+  {
+    "id": "style:amber-crt",
+    "name": "Amber CRT Style Guide",
+    "description": "Use when designing retro terminal, CLI beautifier, developer nostalgia, or geek-oriented tooling UI — pure black background with amber monospace text and zero corner radius channeling 80s cathode-ray monitors.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "retro",
+      "terminal",
+      "monospace",
+      "amber",
+      "developer",
+      "industrial"
+    ]
+  },
+  {
+    "id": "style:arctic-minimal",
+    "name": "Arctic Minimal Style Guide",
+    "description": "Use when designing writing tools, note-taking apps, or focus-oriented productivity UI — near-monochrome glacial grey-blue with heavy whitespace and typographic rhythm conveying calm focus.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "minimal",
+      "monochrome",
+      "writing",
+      "productivity",
+      "calm",
+      "cool"
+    ]
+  },
+  {
+    "id": "style:bubblegum-pop",
+    "name": "Bubblegum Pop Style Guide",
+    "description": "Use when designing gamified learning, kids apps, check-in streaks, or Gen-Z social UI — bold rose-red primary with oversized pill shapes and colored drop shadows for playful energy.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "playful",
+      "vibrant",
+      "rose-red",
+      "pill",
+      "rounded",
+      "gamification",
+      "social"
+    ]
+  },
+  {
+    "id": "style:candy-pastel",
+    "name": "Candy Pastel Style Guide",
+    "description": "Use when designing Gen-Z social apps, personal finance, or habit-tracking mobile UI — lavender purple main tone with pink gradients and pill-shaped rounded corners for friendly approachability.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "pastel",
+      "lavender",
+      "rounded",
+      "pill",
+      "mobile",
+      "gen-z",
+      "playful"
+    ]
+  },
+  {
+    "id": "style:clinical-teal",
+    "name": "Clinical Teal Style Guide",
+    "description": "Use when designing healthcare, telemedicine, fitness tracking, or insurtech UI — clean white base with calm teal accents, generous spacing, and pill shapes conveying professional trust without feeling sterile.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "healthcare",
+      "teal",
+      "wellness",
+      "clean",
+      "trust",
+      "telemedicine",
+      "calm"
+    ]
+  },
+  {
+    "id": "style:coral-commerce",
+    "name": "Coral Commerce Style Guide",
+    "description": "Use when designing lifestyle e-commerce, subscription boxes, gift marketplaces, or food delivery UI — soft coral red-orange conveys shopping joy without feeling cheap, rounded shapes for friendly browsing.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "ecommerce",
+      "coral",
+      "warm",
+      "rounded",
+      "consumer",
+      "shopping",
+      "friendly"
+    ]
+  },
+  {
+    "id": "style:cream-literary",
+    "name": "Cream Literary Style Guide",
+    "description": "Use when designing reading apps, personal blogs, writing tools, or indie publishing UI — warm cream background with deep brown text mimics old book pages, uses whitespace instead of dividers.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "cream",
+      "reading",
+      "blog",
+      "serif",
+      "editorial",
+      "warm",
+      "writing"
+    ]
+  },
+  {
+    "id": "style:electric-cobalt",
+    "name": "Electric Cobalt Style Guide",
+    "description": "Use when designing AI products, cloud platforms, developer marketing sites, or new-wave SaaS — saturated cobalt blue blocks on pale blue-grey base for aggressive young \"future tech\" feel.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "cobalt",
+      "blue",
+      "ai",
+      "cloud",
+      "developer",
+      "saas",
+      "bold"
+    ]
+  },
+  {
+    "id": "style:forest-calm",
+    "name": "Forest Calm Style Guide",
+    "description": "Use when designing meditation apps, nature education, gardening tools, or slow-living community UI — deep forest green with cream white base and low-saturation tones for a slow-breathing Nordic calm.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "nature",
+      "green",
+      "wellness",
+      "meditation",
+      "earth-tone",
+      "calm",
+      "organic"
+    ]
+  },
+  {
+    "id": "style:glassmorphism-violet",
+    "name": "Glassmorphism Violet Style Guide",
+    "description": "Use when designing modern mobile apps, music players, or social products chasing visual impact — purple glassmorphism with semi-transparent layering over dark base for young vibrant feel.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "glassmorphism",
+      "purple",
+      "violet",
+      "mobile",
+      "music",
+      "social",
+      "vibrant"
+    ]
+  },
+  {
+    "id": "style:material-ocean",
+    "name": "Material Ocean Style Guide",
+    "description": "Use when designing tooling SaaS, project management, or cloud consoles needing high info density and clarity — deep ocean blue base with cyan accents, layered shadows, uniform 8px corners in Material Design style.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "material",
+      "ocean",
+      "blue",
+      "cyan",
+      "saas",
+      "dashboard",
+      "cloud"
+    ]
+  },
+  {
+    "id": "style:midnight-gold",
+    "name": "Midnight Gold Style Guide",
+    "description": "Use when designing luxury e-commerce, high-end membership, or boutique hotel booking UI chasing premium feel — pure black base with restrained gold accents, precise spacing, subtle metallic texture.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "luxury",
+      "gold",
+      "black",
+      "elegant",
+      "ecommerce",
+      "premium",
+      "minimal"
+    ]
+  },
+  {
+    "id": "style:monochrome-ink",
+    "name": "Monochrome Ink Style Guide",
+    "description": "Use when designing photography portfolios, designer showcases, or gallery sites — pure grayscale with stroke-based hierarchy and no color (even states) so images become the only color source.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "monochrome",
+      "grayscale",
+      "portfolio",
+      "gallery",
+      "photography",
+      "minimal"
+    ]
+  },
+  {
+    "id": "style:neo-brutalist",
+    "name": "Neo Brutalist Style Guide",
+    "description": "Use when designing indie products, creative tools, or personal sites breaking conventional visual language — thick black borders, solid color blocks, offset drop shadows for raw direct impact.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "brutalist",
+      "bold",
+      "sharp-corners",
+      "indie",
+      "creative",
+      "high-contrast"
+    ]
+  },
+  {
+    "id": "style:neon-cyber",
+    "name": "Neon Cyber Style Guide",
+    "description": "Use when designing cyberpunk, gaming, esports, music visualization, or sci-fi product UI — black background with magenta and cyan accents, geometric shapes, subtle neon glow.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "neon",
+      "cyberpunk",
+      "gaming",
+      "magenta",
+      "cyan",
+      "geometric",
+      "vibrant"
+    ]
+  },
+  {
+    "id": "style:notion-zen",
+    "name": "Notion Zen Style Guide",
+    "description": "Use when designing note-taking, knowledge management, or document collaboration tools where content is the interface — near-monochrome black/white/grey with zero shadows, gradients, or decoration.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "notion",
+      "zen",
+      "monochrome",
+      "notes",
+      "knowledge",
+      "productivity",
+      "flat"
+    ]
+  },
+  {
+    "id": "style:rose-gold-elegant",
+    "name": "Rose Gold Elegant Style Guide",
+    "description": "Use when designing beauty e-commerce, women-focused communities, wedding planning, or boutique coffee UI chasing refinement — rose gold paired with deep grey, low-saturation warmth, no cloying sweetness.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "rose-gold",
+      "elegant",
+      "beauty",
+      "ecommerce",
+      "wedding",
+      "warm",
+      "luxury"
+    ]
+  },
+  {
+    "id": "style:slate-data",
+    "name": "Slate Data Style Guide",
+    "description": "Use when designing BI tools, data viz platforms, monitoring walls, or DevOps dashboards — dark slate base with just-enough sky blue accents and sans-for-UI mono-for-numbers dual-font system.",
+    "category": "style",
+    "tags": [
+      "dark-mode",
+      "slate",
+      "data",
+      "dashboard",
+      "bi",
+      "devops",
+      "monospace",
+      "analyst"
+    ]
+  },
+  {
+    "id": "style:sunset-warm",
+    "name": "Sunset Warm Style Guide",
+    "description": "Use when designing social platforms, food apps, travel booking, or event promotion UI needing emotional warmth — sunset orange-red on warm white base with gradients guiding visual flow.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "sunset",
+      "orange",
+      "warm",
+      "social",
+      "food",
+      "travel",
+      "playful"
+    ]
+  },
+  {
+    "id": "style:swiss-grid",
+    "name": "Swiss Grid Style Guide",
+    "description": "Use when designing architecture firms, design studios, or museum sites chasing rational aesthetics — strict Swiss International Style grid with red accents, extreme type contrast, and negative space.",
+    "category": "style",
+    "tags": [
+      "light-mode",
+      "swiss",
+      "grid",
+      "geometric",
+      "architecture",
+      "museum",
+      "red-accent",
+      "minimal"
+    ]
+  },
+  {
+    "id": "anatomy:avatar",
+    "name": "Avatar",
+    "description": "Use when showing a user profile picture, initials circle, or entity identity marker — typically circular with fixed dimensions and a single child image.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:badge",
+    "name": "Badge",
+    "description": "Use when labeling a status, count, or category next to another element — a small pill-shaped tag with a single label child centered inside.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:bar-chart",
+    "name": "Bar Chart",
+    "description": "Use when visualizing comparative categorical data — composed of header, chart canvas with rect bars, and legend.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:button",
+    "name": "Button",
+    "description": "Use when offering a clickable action trigger such as submit, continue, or cancel — composed of an optional leading icon, a label, and an optional trailing icon aligned center.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:card",
+    "name": "Card",
+    "description": "Use when grouping related content into a surface container — composed of optional header, content area, and footer with vertical stacking.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:checkbox",
+    "name": "Checkbox",
+    "description": "Use when offering a binary on/off toggle for a single option in forms or settings — composed of a box and adjacent label aligned center.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:dialog",
+    "name": "Dialog",
+    "description": "Use when requesting user confirmation or showing a focused modal message — composed of optional icon, title, message body, and action button row.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:divider",
+    "name": "Divider",
+    "description": "Use when separating sections or groups with a thin horizontal or vertical line — a fill-width rule with no children.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:dropdown",
+    "name": "Dropdown Menu",
+    "description": "Use when showing a popover list of options triggered by a button or input — composed of a container frame holding stacked menu items.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:feature-grid",
+    "name": "Feature Grid",
+    "description": "Use when showcasing product features in a marketing or landing page section — composed of a section header and a grid container of feature tiles.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:form",
+    "name": "Form",
+    "description": "Use when building a complete form layout with multiple input fields — composed of a stacked fields section and a submit action row.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:form-field",
+    "name": "Form Field",
+    "description": "Use when assembling a complete form input group — composed of a label, an input control, and optional helper or error text stacked vertically.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:hero-section",
+    "name": "Hero Section",
+    "description": "Use when creating the above-the-fold banner of a landing page — composed of content block (headline, subhead, CTA) and optional visual or image area.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:input",
+    "name": "Input Field",
+    "description": "Use when collecting text input from the user — composed of a label and an input container with placeholder text or value.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:line-chart",
+    "name": "Line Chart",
+    "description": "Use when visualizing trends over time or continuous series — composed of header, chart canvas with line strokes and axes, and legend.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:list",
+    "name": "List",
+    "description": "Use when displaying a stacked vertical collection of similar items — a fill-width container that holds multiple list items.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:list-item",
+    "name": "List Item",
+    "description": "Use when rendering one row inside a list — composed of optional leading icon, content block, and trailing action aligned center in a horizontal row.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:modal",
+    "name": "Modal",
+    "description": "Use when overlaying a focused task container on top of the page — composed of header, content body, and footer with action buttons.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:nav-bar",
+    "name": "Navigation Bar",
+    "description": "Use when building the top-level app navigation row — composed of logo, navigation links, and actions with space-between distribution.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:pie-chart",
+    "name": "Pie Chart",
+    "description": "Use when visualizing proportions as parts of a whole — composed of a circular canvas with slices and a vertical legend alongside.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:pricing-table",
+    "name": "Pricing Table",
+    "description": "Use when presenting multiple SaaS pricing tiers side by side — composed of 3 pricing cards (basic, pro, enterprise) arranged horizontally and centered.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:radio",
+    "name": "Radio",
+    "description": "Use when offering a single-choice selection from a group of mutually exclusive options — composed of a circle marker and adjacent label.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:sidebar",
+    "name": "Sidebar",
+    "description": "Use when building the vertical side navigation for a dashboard or app shell — composed of header (logo), nav links, and footer (user profile) filling full height.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:switch",
+    "name": "Switch",
+    "description": "Use when offering an instant on/off toggle in settings — a fixed-size pill track with a sliding thumb indicating state.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:tab-list",
+    "name": "Tab List",
+    "description": "Use when rendering just the horizontal row of tab headers without content — a fill-width row of tab buttons.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:table",
+    "name": "Table",
+    "description": "Use when displaying structured tabular data with columns and rows — composed of a header row and a body of data rows, filling container width.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:tabs",
+    "name": "Tabs",
+    "description": "Use when switching between multiple content panes that share the same space — composed of a tab list row and the active tab content area stacked below.",
+    "category": "anatomy"
+  },
+  {
+    "id": "anatomy:toast",
+    "name": "Toast",
+    "description": "Use when showing a transient notification message after a user action — composed of optional icon, content text, and close button in a horizontal row.",
+    "category": "anatomy"
+  },
+  {
+    "id": "ref:colors",
+    "name": "Color Palettes by Product Type",
+    "description": "Use when picking a starting color palette for a specific product type (SaaS, e-commerce, health, fintech, etc.) — primary/secondary/CTA/background/text/border hex values for 95 product types.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:typography",
+    "name": "Font Pairings and Typography",
+    "description": "Use when choosing heading and body font pairings for a new design — mood-tagged Google Fonts combinations with best-for guidance and category labels.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:styles",
+    "name": "Visual Style Definitions",
+    "description": "Use when choosing a visual style direction (minimalism, neumorphism, glassmorphism, etc.) — color palettes, effects, accessibility ratings, and complexity for each style.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:charts",
+    "name": "Chart Type Recommendations",
+    "description": "Use when picking the right chart type for a data pattern — trend, comparison, distribution, composition, or relationship — with secondary options and accessibility notes.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:landing",
+    "name": "Landing Page Patterns",
+    "description": "Use when structuring a landing page — section order patterns, primary CTA placement, color strategy, and conversion optimization tactics for common page archetypes.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:products",
+    "name": "Product Type Design Trends",
+    "description": "Use when you know a product type (CRM, social app, fitness tracker, etc.) and need starting design recommendations — primary style, landing pattern, dashboard style, color focus.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:reasoning",
+    "name": "UI Design Reasoning Rules",
+    "description": "Use when deciding design patterns and anti-patterns for a specific UI category — recommended pattern, style priority, color/typography mood, and pitfalls to avoid.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:ux-guidelines",
+    "name": "UX Design Guidelines",
+    "description": "Use when you need UX best practices — do/dont rules for forms, navigation, accessibility, responsive design, and error handling.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:web-interface",
+    "name": "Web Interface Guidelines",
+    "description": "Use when designing web-specific layouts — interaction patterns, responsive breakpoints, spacing systems, and performance conventions for browser UI.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-flutter",
+    "name": "flutter Design Guidelines",
+    "description": "Use when building UI in the flutter framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-html-tailwind",
+    "name": "html-tailwind Design Guidelines",
+    "description": "Use when building UI in the html-tailwind framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-jetpack-compose",
+    "name": "jetpack-compose Design Guidelines",
+    "description": "Use when building UI in the jetpack-compose framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-nextjs",
+    "name": "nextjs Design Guidelines",
+    "description": "Use when building UI in the nextjs framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-nuxt-ui",
+    "name": "nuxt-ui Design Guidelines",
+    "description": "Use when building UI in the nuxt-ui framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-nuxtjs",
+    "name": "nuxtjs Design Guidelines",
+    "description": "Use when building UI in the nuxtjs framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-react-native",
+    "name": "react-native Design Guidelines",
+    "description": "Use when building UI in the react-native framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-react",
+    "name": "react Design Guidelines",
+    "description": "Use when building UI in the react framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-shadcn",
+    "name": "shadcn Design Guidelines",
+    "description": "Use when building UI in the shadcn framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-svelte",
+    "name": "svelte Design Guidelines",
+    "description": "Use when building UI in the svelte framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-swiftui",
+    "name": "swiftui Design Guidelines",
+    "description": "Use when building UI in the swiftui framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  },
+  {
+    "id": "ref:stack-vue",
+    "name": "vue Design Guidelines",
+    "description": "Use when building UI in the vue framework — framework-specific do/dont rules, code examples, and best practices.",
+    "category": "reference"
+  }
+]

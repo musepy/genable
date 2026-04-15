@@ -13,8 +13,6 @@ export type { ThinkingLevel } from './config';
 // Types
 export type {
   GenerateLayoutOptions,
-  GenerateLayoutWithRetryOptions,
-  GenerateLayoutWithRetryResult,
 } from './types';
 
 // Model utilities
@@ -30,7 +28,13 @@ export type { LLMModel, RawGeminiModel } from './modelFilter';
 // Core generation
 export { GeminiProvider } from './providers/gemini';
 export { OpenRouterProvider } from './providers/openrouter';
-export { OPENROUTER_CONFIG } from './config';
+export { DashScopeProvider } from './providers/dashscope';
+export { AnthropicProvider } from './providers/anthropic';
+export { ProxyProvider } from './providers/proxy';
+export { OPENROUTER_CONFIG, DASHSCOPE_CONFIG, ANTHROPIC_CONFIG } from './config';
+
+// Gemini format utilities (shared by GeminiProvider + ProxyProvider)
+export { mapGeminiPartsToLLMResponse, mapLLMMessageToGeminiContent, buildGeminiGenerationConfig, buildGeminiToolsPayload, ensureBase64 } from './providers/gemini/geminiFormat';
 
 
 

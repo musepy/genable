@@ -1,4 +1,5 @@
 name: Bar Chart
+description: Use when visualizing comparative categorical data — composed of header, chart canvas with rect bars, and legend.
 structure:
   type: FRAME
   layoutMode: VERTICAL

@@ -21,6 +21,8 @@ export interface LLMMessage {
   content: string | Part[];
   hidden?: boolean; // If true, this message is excluded from the current context sent to LLM
   summaryOf?: string[]; // IDs of original messages that this message summarizes
+  pinned?: boolean; // If true, this message survives context compression (e.g., original user request)
+  synthetic?: boolean; // If true, this message was injected by the runtime (not from the user or LLM)
 }
 
 export interface Part {
@@ -28,13 +30,20 @@ export interface Part {
   functionCall?: {
     name: string;
     args: any;
+    id?: string;
   };
   functionResponse?: {
     name: string;
     response: any;
+    id?: string;
   };
   /** Unique identifier for tool call, required for OpenAI-compatible APIs */
   tool_call_id?: string;
+  /** Inline binary data (e.g. image) for multimodal messages */
+  inlineData?: {
+    mimeType: string;  // e.g. 'image/jpeg'
+    data: string;      // base64 encoded
+  };
   /** Thought flag for Gemini 3 thinking process content */
   thought?: boolean;
   /** Thought signature for Gemini 3 function calling - must be returned in next turn */
@@ -57,6 +66,54 @@ export interface LLMToolResult {
   response: any;
   id?: string; // Original tool call ID
   thought_signature?: string;
+  /** Image attachment extracted from tool result, injected as inlineData part */
+  imageAttachment?: {
+    mimeType: string;
+    data: string;
+  };
+}
+
+/**
+ * Reason the LLM stopped generating.
+ *
+ * Strict union — only LLM API "real" finish reasons are allowed. Providers
+ * MUST NOT fabricate values like 'timeout' to signal transport errors —
+ * those are thrown as typed ProviderErrors from `providerErrors.ts`.
+ *
+ * - 'stop'           — model finished naturally
+ * - 'length'         — model hit max_tokens (real LLM-level truncation)
+ * - 'tool_calls'     — model emitted tool calls and stopped
+ * - 'content_filter' — provider-side safety filter blocked output
+ */
+export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter';
+
+/**
+ * Normalize a raw upstream finish_reason string to our strict FinishReason
+ * union. Returns undefined for unknown/missing values (the runtime then
+ * treats it as "natural stop").
+ *
+ * Maps legacy and provider-specific aliases:
+ * - OpenAI legacy: 'function_call' → 'tool_calls'
+ * - Anthropic:    'end_turn' → 'stop', 'max_tokens' → 'length', 'tool_use' → 'tool_calls'
+ */
+export function normalizeFinishReason(raw: string | null | undefined): FinishReason | undefined {
+  if (!raw) return undefined;
+  switch (raw) {
+    case 'stop':
+    case 'end_turn':
+      return 'stop';
+    case 'length':
+    case 'max_tokens':
+      return 'length';
+    case 'tool_calls':
+    case 'tool_use':
+    case 'function_call':
+      return 'tool_calls';
+    case 'content_filter':
+      return 'content_filter';
+    default:
+      return undefined;
+  }
 }
 
 export interface LLMResponse {
@@ -66,10 +123,14 @@ export interface LLMResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** Tokens served from provider KV cache (if reported). */
+    cachedTokens?: number;
   };
   thoughts?: string;
   /** Full original parts from the provider to ensure exact history reconstruction */
   fullParts?: Part[];
+  /** Why the model stopped. See FinishReason. */
+  finishReason?: FinishReason;
 }
 
 export interface LLMGenerateOptions {
@@ -84,13 +145,11 @@ export interface LLMGenerateOptions {
   /** Constrained response schema (optional) */
   responseSchema?: Record<string, any>;
   /** Thinking level for models that support it */
-  thinkingLevel?: 'minimal' | 'low' | 'high';
+  thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
   /** Configuration for tool calling behavior (optional) */
   toolConfig?: LLMToolConfig;
   /** AbortSignal for cancelling streaming requests */
   abortSignal?: AbortSignal;
-  /** Stream timeout in milliseconds (optional, provider-specific default if not set) */
-  streamTimeoutMs?: number;
 }
 
 /**
@@ -107,10 +166,26 @@ export interface LLMToolConfig {
   allowedTools?: string[];
 }
 
+export interface LLMProviderCapabilities {
+  /** Provider can return incremental text chunks in a single generation turn. */
+  supportsTextStreaming: boolean;
+  /** Provider can return incremental reasoning/thought chunks in a single generation turn. */
+  supportsReasoningStreaming: boolean;
+  /** Model's context window size in tokens. Used for lazy compression decisions. */
+  contextWindow: number;
+}
+
+export const DEFAULT_PROVIDER_CAPABILITIES: LLMProviderCapabilities = {
+  supportsTextStreaming: false,
+  supportsReasoningStreaming: false,
+  contextWindow: 1_000_000,
+};
+
 export interface LLMProvider {
   name: string;
   generate(options: LLMGenerateOptions): Promise<LLMResponse>;
   generateStream?(options: LLMGenerateOptions): AsyncIterable<LLMResponse>;
+  getCapabilities?(): LLMProviderCapabilities;
   
   /**
    * Format an LLM response into a message for history record.
@@ -160,6 +235,8 @@ export function formatResponseDefault(response: LLMResponse): LLMMessage {
 
 /**
  * Default implementation for formatToolResults (standard tool results -> message mapping)
+ * NOTE: thought_signature is NOT included in functionResponse per Gemini API protocol.
+ * thoughtSignature is only allowed in model turns (functionCall, thought, text parts).
  */
 export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
   return {
@@ -167,7 +244,17 @@ export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
     role: 'tool',
     content: results.map(tr => ({
       functionResponse: { name: tr.name, response: tr.response },
-      ...(tr.thought_signature && { thought_signature: tr.thought_signature })
+      tool_call_id: tr.id,
+      // thought_signature intentionally omitted - not allowed in functionResponse
     }))
   };
+}
+
+/**
+ * Default implementation for getToolSystemInstruction.
+ * Tool calling protocol is now part of CORE prompt (merged during prompt consolidation).
+ * Returns empty — no separate tool instruction needed.
+ */
+export function getToolSystemInstructionDefault(_tools: ToolDefinition[]): string {
+  return '';
 }

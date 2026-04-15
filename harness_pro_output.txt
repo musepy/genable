@@ -1,0 +1,14 @@
+file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/node_modules/vitest/dist/chunks/cac.BGonGPac.js:404
+          throw new CACError(`Unknown option \`${name.length > 1 ? `--${name}` : `-${name}`}\``);
+                ^
+
+CACError: Unknown option `--env`
+    at Command.checkUnknownOptions (file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/node_modules/vitest/dist/chunks/cac.BGonGPac.js:404:17)
+    at CAC.runMatchedCommand (file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/node_modules/vitest/dist/chunks/cac.BGonGPac.js:604:13)
+    at CAC.parse (file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/node_modules/vitest/dist/chunks/cac.BGonGPac.js:545:12)
+    at file:///Users/daxiaoxiao/Projects/figma%20gen%20plugin/figma-ai-generator-dogfood/node_modules/vitest/dist/cli.js:28:13
+    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:578:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:116:5)
+
+Node.js v22.14.0

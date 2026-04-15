@@ -1,13 +1,14 @@
-import { MODEL_FAMILIES } from './providers';
+import { MODEL_FAMILIES, type ModelFamily } from './providers';
 
-export const MODEL_DISPLAY_LABELS = {
+export const MODEL_DISPLAY_LABELS: Record<ModelFamily, string> = {
   [MODEL_FAMILIES.GEMINI_2_5_FLASH]: 'Gemini 2.5 Flash',
   [MODEL_FAMILIES.GEMINI_2_5_PRO]: 'Gemini 2.5 Pro',
   [MODEL_FAMILIES.GEMINI_2_5_FLASH_PREVIEW_05_20]: '2.5 Flash',
+  [MODEL_FAMILIES.GEMINI_3_FLASH_PREVIEW]: 'Gemini 3 Flash',
   [MODEL_FAMILIES.GEMINI_2_5_PRO_PREVIEW_05_06]: '2.5 Pro',
   [MODEL_FAMILIES.CLAUDE_3_5_SONNET]: 'Claude 3.5 Sonnet',
   [MODEL_FAMILIES.GPT_4O]: 'GPT-4o',
   [MODEL_FAMILIES.DEEPSEEK_R1_FREE]: 'DeepSeek R1',
   [MODEL_FAMILIES.GEMINI_2_0_FLASH_FREE]: '2.0 Flash',
   [MODEL_FAMILIES.DEEPSEEK_CHIMERA_FREE]: 'DeepSeek Chimera'
-} as const;
+};

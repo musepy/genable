@@ -1,19 +1,75 @@
+const fs = require('fs')
 const path = require('path')
+
+/**
+ * [Figma Sandbox Defense] esbuild plugin — same as in build-figma-plugin.main.js
+ * Sanitizes forbidden patterns synchronously in onEnd, before Figma can reload.
+ */
+const figmaSandboxSanitizer = {
+  name: 'figma-sandbox-sanitizer',
+  setup(build) {
+    build.onEnd((result) => {
+      if (result.errors.length > 0) return
+
+      const outfile = build.initialOptions.outfile
+      if (!outfile || !fs.existsSync(outfile)) return
+
+      let content = fs.readFileSync(outfile, 'utf8')
+      let modified = false
+
+      const patterns = [
+        { regex: /import\s*\(/g, replacement: 'imp_ort(' },
+        { regex: /import\.\s*meta/g, replacement: 'imp_ort.meta' },
+        { regex: /eval\s*\(/g, replacement: 'ev_al(' },
+        { regex: /new\s*Function\s*\(/g, replacement: 'new Fun_ction(' }
+      ]
+
+      for (const { regex, replacement } of patterns) {
+        const replaced = content.replace(regex, replacement)
+        if (replaced !== content) {
+          content = replaced
+          modified = true
+        }
+      }
+
+      if (modified) {
+        fs.writeFileSync(outfile, content)
+      }
+    })
+  }
+}
 
 module.exports = function (buildOptions) {
   // Resolve preact/compat paths for aliasing React → Preact
   const preactCompat = path.dirname(require.resolve('preact/compat/package.json'))
 
+  // Inject environment variables for multi-port MCP support
+  const envDefines = {
+    'process.env.MCP_WS_PORTS': JSON.stringify(process.env.MCP_WS_PORTS || '3458,3459,3461'),
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
+  }
+
   return {
     ...buildOptions,
     define: {
-      global: 'window'
+      global: 'window',
+      __DEV__: JSON.stringify(buildOptions.dev || false),
+      ...envDefines
     },
     // Ensure ALL react imports (including jsx-runtime) are aliased to preact/compat
     // The built-in preact-compat plugin only handles "react" and "react-dom",
     // but react-markdown@10 imports from "react/jsx-runtime" which was falling
     // through to real React, causing insertBefore errors due to vnode mismatch.
     plugins: [
+      {
+        name: 'csv-text-loader',
+        setup(build) {
+          build.onLoad({ filter: /\.csv$/ }, async (args) => {
+            const text = await fs.promises.readFile(args.path, 'utf8')
+            return { contents: `export default ${JSON.stringify(text)}`, loader: 'js' }
+          })
+        }
+      },
       {
         name: 'preact-compat-jsx-runtime',
         setup(build) {
@@ -27,7 +83,8 @@ module.exports = function (buildOptions) {
           }))
         }
       },
-      ...(buildOptions.plugins || [])
+      ...(buildOptions.plugins || []),
+      figmaSandboxSanitizer
     ]
   }
 }

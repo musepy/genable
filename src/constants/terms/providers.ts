@@ -1,17 +1,22 @@
 export const PROVIDER_NAMES = {
   GEMINI: 'Gemini',
-  OPENROUTER: 'OpenRouter'
+  OPENROUTER: 'OpenRouter',
+  DASHSCOPE: 'DashScope',
+  CLAUDE: 'Claude',
 } as const;
 
 export const PROVIDER_IDS = {
   GEMINI: 'gemini',
-  OPENROUTER: 'openrouter'
+  OPENROUTER: 'openrouter',
+  DASHSCOPE: 'dashscope',
+  CLAUDE: 'claude',
 } as const;
 
 export const MODEL_FAMILIES = {
   GEMINI_2_5_FLASH: 'gemini-2.5-flash',
   GEMINI_2_5_PRO: 'gemini-2.5-pro',
   GEMINI_2_5_FLASH_PREVIEW_05_20: 'gemini-2.5-flash-preview-05-20',
+  GEMINI_3_FLASH_PREVIEW: 'gemini-3-flash-preview',
   GEMINI_2_5_PRO_PREVIEW_05_06: 'gemini-2.5-pro-preview-05-06',
   CLAUDE_3_5_SONNET: 'anthropic/claude-3.5-sonnet',
   GPT_4O: 'openai/gpt-4o',

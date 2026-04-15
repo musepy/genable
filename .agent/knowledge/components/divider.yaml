@@ -1,4 +1,5 @@
 name: Divider
+description: Use when separating sections or groups with a thin horizontal or vertical line — a fill-width rule with no children.
 structure:
   type: FRAME
   layoutMode: NONE

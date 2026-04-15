@@ -73,6 +73,10 @@ async function main() {
       id: 'onboarding', 
       name: 'Onboarding View', 
       render: () => h(OnboardingView, { 
+        apiKey: '',
+        setApiKey: () => {},
+        providerName: 'gemini',
+        setProviderName: () => {},
         onComplete: () => {}, 
         onFetchModels: () => {}, 
         isLoading: false 
@@ -102,8 +106,11 @@ async function main() {
         setApiKey: () => {},
         modelName: 'gemini-pro',
         setModelName: () => {},
+        providerName: 'gemini',
+        setProviderName: () => {},
         suggestedModels: [],
         fetchStatus: 'idle',
+        settingsError: null,
         onFetchModels: () => {},
         onSave: () => {},
         localComponents: []

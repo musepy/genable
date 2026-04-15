@@ -22,18 +22,19 @@ export function Input({
   };
 
   const inputBaseStyle: h.JSX.CSSProperties = {
-    height: tokens.size.input.lg, // Standard touch target
+    height: tokens.size.input.sm, // Compact input (32px)
     width: '100%',
-    padding: `0 ${tokens.space[4]}px`,
-    paddingRight: rightElement ? 48 : tokens.space[4],
+    padding: `0 ${tokens.grid.blockPad}px`,
+    paddingRight: rightElement ? 48 : tokens.grid.blockPad,
     fontSize: tokens.fontSize[1],
     fontFamily: tokens.font.sans,
     background: 'transparent', // Transparent to avoid dark mode issues
     color: tokens.colors.textPrimary,
-    border: `1px solid ${tokens.colors.grayBorder}`,
-    borderRadius: 'var(--radius-5)', // Unified to 12px
+    border: 'none',
+    boxShadow: 'inset 0 0 0 0.5px var(--border-default)',
+    borderRadius: 'var(--radius-3)', // Flatter design
     outline: 'none',
-    transition: 'border-color var(--duration-normal) var(--ease-default)',
+    transition: 'border-color 200ms var(--ease-in-out), box-shadow 200ms var(--ease-in-out)',
     ...(style as any),
   };
 

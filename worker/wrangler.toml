@@ -1,0 +1,10 @@
+name = "figma-ai-generator"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "USERS"
+id = "7b1a845ee3b54021ac3804f3b20428a4"
+
+# 部署后执行：
+# wrangler secret put GEMINI_API_KEY

@@ -358,4 +358,33 @@ describe('expandShorthands', () => {
     expect(result.radius).toBeUndefined();
     expect(result.fill).toBeUndefined();
   });
+
+  // ── Arc (ellipse) ─────────────────────────────────────────────────────
+
+  describe('arc', () => {
+    it('arc="0 270" → arcData in radians, solid', () => {
+      const result = expandShorthands({ arc: '0 270' });
+      expect(result.arcData.startingAngle).toBeCloseTo(0);
+      expect(result.arcData.endingAngle).toBeCloseTo(4.712, 2);
+      expect(result.arcData.innerRadius).toBe(0);
+    });
+
+    it('arc="0 270 0.5" → donut ring', () => {
+      const result = expandShorthands({ arc: '0 270 0.5' });
+      expect(result.arcData.innerRadius).toBe(0.5);
+    });
+
+    it('raw arcData object passthrough', () => {
+      const raw = { startingAngle: 0, endingAngle: Math.PI, innerRadius: 0.3 };
+      const result = expandShorthands({ arc: raw });
+      expect(result.arcData).toEqual(raw);
+    });
+
+    it('innerRadius shorthand → full circle donut', () => {
+      const result = expandShorthands({ innerRadius: 0.4 });
+      expect(result.arcData.startingAngle).toBe(0);
+      expect(result.arcData.endingAngle).toBeCloseTo(2 * Math.PI);
+      expect(result.arcData.innerRadius).toBe(0.4);
+    });
+  });
 });

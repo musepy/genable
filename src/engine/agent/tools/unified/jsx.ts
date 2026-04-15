@@ -22,6 +22,7 @@ Attributes: same shorthands (w, h, bg, layout, gap, p, corner, fill, size, weigh
 Text: <text size={24}>content here</text>
 Instance: <instance ref="Button" variant="Size=Large"/>
 Self-closing: <line w="fill" stroke="#E5E7EB"/> (divider — use line not rect for dividers/separators)
+Arc/Ring: <ellipse w={120} h={120} arc="0 270" fill="#4F46E5"/> (degrees; arc="start end innerRadius?" — innerRadius 0-1 for donut/ring)
 Grid: <frame layout="grid" cols={3} rows={2} gap={16} w={720} h={400}>...children fill cells in insertion order...</frame> (always set w AND h explicitly — grid rows divide height equally)
 
 Use jsx for tree creation. Use edit for property updates on existing nodes.`,

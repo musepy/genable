@@ -378,6 +378,32 @@ const EXPANDERS: Record<string, Expander> = {
     return mapped ? { textAutoResize: mapped } : {};
   },
 
+  // ── Arc (ellipse only) ─────────────────────────────────────────────────
+  // Figma arcData uses radians; shorthand accepts degrees for LLM ergonomics.
+  // arc="0 270"         → semicircle from 0° to 270°, solid
+  // arc="0 270 0.5"     → ring (donut) with 50% inner radius
+  // arc={{startingAngle:0, endingAngle:4.71, innerRadius:0.5}} → raw radians
+  // innerRadius=0.5     → donut ring only (keeps full circle)
+  arc: (v) => {
+    if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      return { arcData: v }; // raw ArcData object passthrough
+    }
+    const parts = String(v).trim().split(/[\s,]+/).map(Number);
+    if (parts.length < 2 || parts.some(isNaN)) return {};
+    const DEG = Math.PI / 180;
+    return {
+      arcData: {
+        startingAngle: parts[0] * DEG,
+        endingAngle: parts[1] * DEG,
+        innerRadius: parts[2] ?? 0,
+      },
+    };
+  },
+
+  innerRadius: (v) => ({
+    arcData: { startingAngle: 0, endingAngle: 2 * Math.PI, innerRadius: Number(v) },
+  }),
+
   // ── Transform ─────────────────────────────────────────────────────────
   // CSS rotate is clockwise-positive; Figma rotation is counter-clockwise-positive
   rotate: (v) => ({ rotation: -(Number(v)) }),

@@ -1284,6 +1284,12 @@ export const PROPERTY_META: Record<string, PropMeta> = {
   paragraphSpacing: { type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   paragraphIndent: { type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
 
+  // Arc (ellipse)
+  arcData: {
+    type: 'object',
+    defaultValue: { startingAngle: 0, endingAngle: 2 * Math.PI, innerRadius: 0 },
+  },
+
   // Misc
   rotation: { type: 'scalar', defaultValue: 0, min: -360, max: 360 },
   strokeAlign: { type: 'enum', enumMap: { INSIDE: 'INSIDE', OUTSIDE: 'OUTSIDE', CENTER: 'CENTER' }, defaultValue: 'INSIDE' },

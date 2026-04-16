@@ -4,11 +4,13 @@
  */
 
 import { h } from 'preact';
-import { useState, useEffect, useRef } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { Code, Plus, Search } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
 import { useTranslations } from '../i18n';
 import skillRegistry from '../../generated/skills-registry.json';
+import { Input } from './Input';
+import { usePopover } from '../hooks/usePopover';
 
 interface ActionPopoverProps {
   onSerializeSelection: () => void;
@@ -43,77 +45,42 @@ function searchSkills(query: string): SkillSummary[] {
 
 export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }: ActionPopoverProps) {
   const t = useTranslations();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
+  const { isOpen, isClosing, ref, close, toggle, popoverClass } = usePopover();
   const [skillQuery, setSkillQuery] = useState('');
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen || isClosing) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        handleClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, isClosing]);
-
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      setIsOpen(false);
-      setIsClosing(false);
-    }, 150);
-  };
 
   const handleAction = (action: () => void) => {
     action();
-    handleClose();
+    close();
   };
 
   const skillResults = searchSkills(skillQuery)
 
   return (
-    <div ref={popoverRef} style={{ position: 'relative' }}>
+    <div ref={ref} style={{ position: 'relative' }}>
       {/* Trigger Button */}
       <button
-        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className="header-icon-btn"
+        onClick={() => !disabled && toggle()}
         style={{
-          width: 32,
-          height: 32,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'transparent',
-          border: 'none',
-          borderRadius: 'var(--radius-5)',
-          cursor: disabled ? 'default' : 'pointer',
-          color: tokens.colors.textSecondary,
           transition: 'var(--transition-normal)',
           transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
           opacity: disabled ? 0.5 : 1,
           flexShrink: 0,
         }}
-        onMouseEnter={(e) => {
-          if (!disabled) e.currentTarget.style.background = tokens.colors.alpha[2];
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
-        }}
+        disabled={disabled}
         aria-label={t.moreActions}
         aria-expanded={isOpen}
       >
-        <Plus size={20} strokeWidth={1.5} />
+        <Plus size={16} strokeWidth={1.5} />
       </button>
 
       {/* Popover Content */}
       {isOpen && (
         <div
-          className={isClosing ? 'popover-content-exit' : 'popover-content'}
+          className={popoverClass}
           style={{
             position: 'absolute',
-            bottom: 'calc(100% + 8px)',
+            bottom: `calc(100% + ${tokens.space[2]}px)`,
             left: 0,
             width: 260,
             zIndex: tokens.zIndex.popover,
@@ -132,40 +99,23 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
               <div style={{
                 marginTop: tokens.space[1],
                 paddingTop: tokens.space[1],
-                borderTop: `1px solid ${tokens.colors.alpha[3]}`,
+                borderTop: 'var(--border-subtle)',
               }}>
-                <div style={{ position: 'relative', marginBottom: tokens.space[1] }}>
-                  <Search
-                    size={12}
-                    strokeWidth={2}
-                    style={{
-                      position: 'absolute',
-                      left: tokens.space[2],
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: tokens.colors.textSecondary,
-                      pointerEvents: 'none',
-                    }}
-                  />
-                  <input
+                <div style={{ marginBottom: tokens.space[1] }}>
+                  <Input
                     value={skillQuery}
                     onInput={(e) => setSkillQuery((e.currentTarget as HTMLInputElement).value)}
                     placeholder={t.searchSkills}
+                    leftElement={<Search size={12} strokeWidth={2} style={{ color: tokens.colors.textSecondary }} />}
                     style={{
-                      width: '100%',
                       height: 30,
-                      border: `1px solid ${tokens.colors.alpha[4]}`,
                       borderRadius: 'var(--radius-4)',
                       background: tokens.colors.surface,
-                      color: tokens.colors.textPrimary,
-                      fontSize: tokens.fontSize[1],
-                      padding: `0 ${tokens.space[2]}px 0 ${tokens.space[4] + tokens.space[2]}px`,
-                      outline: 'none',
                     }}
                   />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 180, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1], maxHeight: 180, overflowY: 'auto' }}>
                   {skillResults.length === 0 ? (
                     <div style={{
                       color: tokens.colors.textSecondary,
@@ -178,19 +128,8 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
                     skillResults.map(skill => (
                       <button
                         key={skill.id}
-                        className="popover-item"
+                        className="popover-item popover-item-multi"
                         onClick={() => handleAction(() => onInsertSkill(skill.id))}
-                        style={{
-                          width: '100%',
-                          height: 'auto',
-                          minHeight: 34,
-                          justifyContent: 'flex-start',
-                          background: 'transparent',
-                          border: 'none',
-                          textAlign: 'left',
-                          paddingTop: 6,
-                          paddingBottom: 6,
-                        }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
                           <span style={{

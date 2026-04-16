@@ -8,25 +8,15 @@
  */
 
 import { h } from 'preact';
-import { useState, useEffect, useRef } from 'preact/hooks';
-import { Settings, ChevronRight, Check } from 'lucide-preact';
+import { useState, useEffect } from 'preact/hooks';
+import { Settings, ChevronRight, ChevronDown, Check } from 'lucide-preact';
+import { usePopover } from '../hooks/usePopover';
 import { tokens } from '../design-system/tokens';
 import { useTranslations } from '../i18n';
 
 const modelSelectorGhost = {
-  display: 'inline-flex' as const,
-  alignItems: 'center' as const,
-  gap: tokens.space[1],
-  padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--gray-11)',
-  fontSize: tokens.fontSize[1],
-  fontWeight: tokens.fontWeight.regular,
-  cursor: 'pointer',
-  transition: 'var(--transition-crisp)',
-  whiteSpace: 'nowrap' as const,
-  borderRadius: 'var(--radius-5)',
+  opacity: 1,
+  height: tokens.size.button.md,
 };
 const modelSelectorChip = {
   display: 'inline-flex' as const,
@@ -35,9 +25,9 @@ const modelSelectorChip = {
   gap: tokens.space[1],
   padding: `0 ${tokens.space[2]}px`,
   height: tokens.size.button.md,
-  background: 'transparent',
+  // background left to .chip class so :hover works
   color: tokens.colors.textPrimary,
-  border: '1px solid transparent',
+  border: 'none',
   borderRadius: 'var(--radius-5)',
   fontSize: tokens.fontSize[1],
   fontWeight: tokens.fontWeight.regular,
@@ -88,34 +78,12 @@ export function ModelPopover({
   providerName = 'gemini', // [NEW]
 }: ModelPopoverProps) {
   const t = useTranslations();
-  const [isOpen, setIsOpen] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
+  const { isOpen, isClosing, ref, close, toggle, popoverClass } = usePopover();
   const [localApiKey, setLocalApiKey] = useState(apiKey);
-  const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLocalApiKey(apiKey);
   }, [apiKey]);
-
-  useEffect(() => {
-    if (!isOpen || isClosing) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        handleClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, isClosing]);
-
-  // Smooth close with exit animation
-  const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(() => {
-      setIsOpen(false);
-      setIsClosing(false);
-    }, 100); // Match popoverOut duration
-  };
 
   // Use dynamic models from props
   const sortedModels = sortModels(availableModels.length > 0 ? availableModels : (SUPPORTED_MODELS[providerName] || SUPPORTED_MODELS.gemini), currentModel);
@@ -123,7 +91,7 @@ export function ModelPopover({
 
   const handleSelect = (modelName: string) => {
     onSelectModel(modelName);
-    handleClose();
+    close();
   };
 
   const handleApiKeySubmit = () => {
@@ -150,9 +118,7 @@ export function ModelPopover({
     : modelSelectorChip;
   const triggerStyle = {
     ...triggerBaseStyle,
-    cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.5 : 1,
-    transition: 'var(--transition-crisp)',
   };
   
   // Popover position based on placement
@@ -163,38 +129,25 @@ export function ModelPopover({
     ? { right: 0, left: 'auto' }
     : { left: 0, right: 'auto' };
 
-  // Arrow icon with smooth rotation
   const arrowIcon = (
-    <svg 
-      width="10" 
-      height="10" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2.5"
+    <ChevronDown
+      size={14}
+      strokeWidth={2}
       style={{
         transition: 'var(--transition-normal)',
         transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
       }}
-    >
-      <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
+    />
   );
 
   return (
-    <div ref={popoverRef} style={{ position: 'relative' }}>
+    <div ref={ref} style={{ position: 'relative' }}>
       {/* Trigger - variant based style */}
       <button
         className={variant === 'ghost' ? 'ghost-btn' : 'chip'}
         style={triggerStyle as h.JSX.CSSProperties}
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        onMouseEnter={(e) => {
-          if (disabled) return;
-          e.currentTarget.style.background = tokens.colors.alpha[2];
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
-        }}
+        onClick={() => !disabled && toggle()}
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
@@ -212,7 +165,7 @@ export function ModelPopover({
       {/* Popover Content */}
       {isOpen && (
         <div
-          className={isClosing ? 'popover-content-exit' : 'popover-content'}
+          className={popoverClass}
           style={{
             position: 'absolute',
             ...popoverPositionStyle,
@@ -289,7 +242,7 @@ export function ModelPopover({
               // API Key Settings link
               <div 
                 className="popover-item"
-                onClick={() => { handleClose(); onOpenSettings?.(); }}
+                onClick={() => { close(); onOpenSettings?.(); }}
                 style={{ height: tokens.space[6] }} // Ensure base height
               >
                 <Settings size={14} strokeWidth={2} />

@@ -126,6 +126,36 @@ Present the full audit report:
 - [If no ask_user calls: check whether style selection is being triggered at all]
 ```
 
+## Data source distinction (critical)
+
+Two different places hold different types of information. Looking in the wrong one causes misdiagnosis.
+
+| Source | Contains | Does NOT contain |
+|---|---|---|
+| `.toolCallDetails[]` | Tool call params, results, errors from actual tool execution | Hook-injected messages (hints, rejects, skip reasons) |
+| `.runtimeEvents[]` | `trigger_fired` events, hook synthetic messages, iteration lifecycle | Tool call params/results |
+
+**Lesson learned (2026-04-15)**: T_delete_rebuild hook was firing correctly (21×/batch in runtimeEvents) but was misdiagnosed as "dead" because the audit only checked toolCallDetails.
+
+### Auditing hook activity
+
+```bash
+# Count trigger_fired events by hook name
+jq '[.runtimeEvents[] | select(.type == "trigger_fired") | .hookName] | group_by(.) | map("\(.[0])×\(length)") | join(", ")' "$META"
+```
+
+Known hook names: `inspectGate`, `jsxMarkupSize`, `deleteRebuild`, `loopDetection`, `stepWarning`, `budget`.
+
+### capRejects vs errors
+
+`toolCallSummary.capRejects` counts T4/T5/T6 cap rejections (retry signals, not failures). `toolCallSummary.errors` excludes these. When comparing error rates across batches, always check both:
+
+```bash
+jq '{errors: .toolCallSummary.errors, capRejects: .toolCallSummary.capRejects, total: .toolCallSummary.total}' "$META"
+```
+
+**Known gap**: `inspectGate` skips are still counted as errors, not capRejects (pending fix).
+
 ## Notes
 
 - If a trigger has `status: "error"` or `status: "timeout"`, flag it immediately before the table.

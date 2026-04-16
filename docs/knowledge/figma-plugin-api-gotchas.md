@@ -239,7 +239,7 @@ return {
 }
 ```
 
-## 17. figma.notify() 抛 "not implemented"
+## 17. figma.notify() 抛 "not implemented" [仅 js tool sandbox]
 
 ```js
 // WRONG
@@ -249,7 +249,7 @@ figma.notify('Done!')  // 抛错
 return 'Done!'
 ```
 
-## 18. getPluginData / setPluginData 不可用
+## 18. getPluginData / setPluginData 不可用 [仅 js tool sandbox]
 
 ```js
 // WRONG
@@ -413,3 +413,42 @@ avatar.cornerRadius = 50
 - 内容可能溢出但不想截断 → `false`
 
 **LLM 影响**：LLM 几乎不会主动设 `clipsContent: false`，导致阴影被默默裁掉——属于属性遗漏问题。
+
+## 34. setBoundVariable('characters') 与 node.characters 互斥
+
+两者是模式切换，不能共存：
+- `node.characters = "xxx"` → 静默解除 variable 绑定，`boundVariables` 变为 `{}`
+- `setBoundVariable('characters', strVar)` → 覆盖静态文本，节点变为 variable 驱动
+
+**最后写入的操作决定模式，解绑不报错。**
+
+```js
+// 绑定后赋值 → 绑定丢失
+text.setBoundVariable('characters', strVar)
+text.characters = "override"  // boundVariables.characters 消失
+
+// 赋值后绑定 → 静态值被覆盖
+text.characters = "static"
+text.setBoundVariable('characters', strVar)  // 文本变为 variable 值
+```
+
+⚠️ executor 中如果 `characters` 赋值和 `setBoundVariable` 在同一批次，必须保证 bind 在 characters 之后。
+
+## 35. isExposedInstance 写入前置条件
+
+`isExposedInstance` 只能写在 ComponentNode/ComponentSetNode 的直接子 InstanceNode（primary instance）上，且有额外前置条件：
+
+```js
+// WRONG — 没有 componentPropertyReferences，报错
+instance.isExposedInstance = true
+// Error: "Can only expose instances that have exposed nested instances
+//         or children with component property references."
+
+// CORRECT — 先绑定 component property，再 expose
+comp.addComponentProperty("label", "TEXT", "default")
+textChild.componentPropertyReferences = { characters: "label#1:2" }
+instance.isExposedInstance = true  // ✅
+```
+
+inherited instance（id 含 `;`，如 `I1491:180;1487:183`）写入直接抛异常：
+`"Can only expose primary instances."`

@@ -1,6 +1,6 @@
 # CLAUDE.md — Figma AI Generator Plugin
 
-Figma plugin that uses an agentic AI loop (Gemini Flash) to generate UI designs from natural language prompts.
+Figma plugin that uses an agentic AI loop (multi-model: Gemini Flash, Claude, Kimi K2.5, DashScope) to generate UI designs from natural language prompts.
 
 > **Error Catalog**: `.agent/error-catalog.md` — known error patterns, check when debugging.
 
@@ -29,17 +29,18 @@ Safety hooks (2):
 - **loopDetectionHook** — fingerprints tool call signatures; identical pattern 4+ times → abort
 
 ### Context Management (Layered)
-Context is structured in 3 layers, NOT a flat message array:
+Context is structured in 4 layers, NOT a flat message array:
 
 ```
-Layer 1: staticSystemPrompt  — set once at construction, never changes
-Layer 2: summary             — rolling summary of previous turns, updated at turn boundaries
-Layer 3: turnMessages        — current turn only, cleared at next run() start
+Layer 1: staticSystemPrompt   — set once at construction, never changes (KV-cache friendly)
+Layer 2: summary              — compressed history of oldest turns (only when budget exceeded)
+Layer 3: conversationHistory  — previous turns' full messages (kept as long as context allows)
+Layer 4: turnMessages         — current turn only, moved to history at turn end
 ```
 
-Each LLM call receives `[systemPrompt, summary, ...turnMessages]`. Context is always bounded (~12K tokens) regardless of conversation length. No `hidden`/`pinned` flags, no reactive compression.
+Each LLM call receives `[systemPrompt, summary, ...conversationHistory, ...turnMessages]`. Context budget = **70% of model context window** (e.g. ~140K for Claude 200K, ~7K for Flash 8K). Lazy compression — only compresses oldest turns when budget exceeded.
 
-At turn end: `endTurn()` summarizes current turn → appends to `summary` → `turnMessages` stay for debrief, cleared at next `run()`.
+Two-tier compression: `turnResultCompressor.ts` compresses consumed tool results intra-turn; `contextSummarizer.ts` compresses oldest conversation turns at turn boundaries.
 
 ### Entry Point
 ```
@@ -55,8 +56,8 @@ AgentOrchestrator.generate(prompt)  →  AgentRuntime  →  agent.run(prompt)
 
 ### Key Directories
 - `src/engine/agent/` — Agent runtime, loop policy, loop detection, hooks
-- `src/engine/agent/tools/` — 4 unified tool definitions (create, edit, read, query_knowledge)
-- `src/engine/agent/context/` — Context summarizer (`contextSummarizer.ts`), tool result cleaner
+- `src/engine/agent/tools/` — 28 unified tool definitions (jsx, inspect, edit, find_nodes, variables, components, setters, etc.)
+- `src/engine/agent/context/` — 4-layer context manager, summarizer, turn result compressor, tool result cleaner
 - `src/engine/llm-client/` — LLM providers, prompt composition
 - `src/engine/actions/` — Typed action executor (sequential, with topological sort and rollback)
 - `src/engine/agent/skills/` + `.agent/skills/*/SKILL.md` — Skill system (regex trigger + BM25 knowledge)
@@ -74,7 +75,7 @@ Two config layers:
 - **Type check**: `npx tsc --noEmit`
 - **Test**: `npx vitest run` (NOT jest)
 - **Lint**: `npx eslint "src/**/*.{ts,tsx}"`
-- **LLM providers**: Gemini Flash (primary), OpenRouter (alternative), DashScope/Kimi K2.5 (via Cloudflare Worker proxy)
+- **LLM providers**: Gemini Flash (primary), Anthropic Claude (OAuth + API key), OpenRouter, DashScope/Kimi K2.5 (via Cloudflare Worker proxy)
 - **UI framework**: Preact with `@create-figma-plugin/ui`
 
 ## Local E2E Testing (Dev Bridge)

@@ -420,6 +420,25 @@ const EXPANDERS: Record<string, Expander> = {
     return mapped ? { textAutoResize: mapped } : {};
   },
 
+  // ── Vector paths (vector node) ─────────────────────────────────────────
+  // path="M 0 0 L 10 10 Z"              → single path, NONZERO winding
+  // paths=["M...", "M..."]              → multiple paths, all NONZERO
+  // paths=[{windingRule:'EVENODD', data:'M...'}]  → raw VectorPath[] passthrough
+  // Only absolute SVG commands (M L C Q Z) are supported by Figma.
+  path: (v) => {
+    if (typeof v !== 'string' || !v.trim()) return {};
+    return { vectorPaths: [{ windingRule: 'NONZERO', data: v.trim() }] };
+  },
+
+  paths: (v) => {
+    if (!Array.isArray(v) || v.length === 0) return {};
+    const normalized = v.map((item) => {
+      if (typeof item === 'string') return { windingRule: 'NONZERO', data: item };
+      return item; // raw VectorPath object pass-through
+    });
+    return { vectorPaths: normalized };
+  },
+
   // ── Arc (ellipse only) ─────────────────────────────────────────────────
   // Figma arcData uses radians; shorthand accepts degrees for LLM ergonomics.
   // arc="0 270"         → semicircle from 0° to 270°, solid

@@ -1307,6 +1307,9 @@ export const PROPERTY_META: Record<string, PropMeta> = {
     defaultValue: { startingAngle: 0, endingAngle: 2 * Math.PI, innerRadius: 0 },
   },
 
+  // Vector paths (vector node)
+  vectorPaths: { type: 'array', defaultValue: [] },
+
   // Misc
   rotation: { type: 'scalar', defaultValue: 0, min: -360, max: 360 },
   strokeAlign: { type: 'enum', enumMap: { INSIDE: 'INSIDE', OUTSIDE: 'OUTSIDE', CENTER: 'CENTER' }, defaultValue: 'INSIDE' },

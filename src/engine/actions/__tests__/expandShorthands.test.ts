@@ -436,4 +436,34 @@ describe('expandShorthands', () => {
         .toMatchObject({ textDecorationThickness: raw });
     });
   });
+
+  // ── Vector paths ──────────────────────────────────────────────────────
+
+  describe('path / paths', () => {
+    it('path="M 0 0 L 10 10 Z" → vectorPaths with NONZERO winding', () => {
+      const result = expandShorthands({ path: 'M 0 0 L 10 10 Z' });
+      expect(result.vectorPaths).toEqual([
+        { windingRule: 'NONZERO', data: 'M 0 0 L 10 10 Z' },
+      ]);
+    });
+
+    it('empty path string ignored', () => {
+      expect(expandShorthands({ path: '   ' })).toEqual({});
+    });
+
+    it('paths=[strings] → wrapped VectorPath array', () => {
+      const result = expandShorthands({ paths: ['M 0 0 L 10 0', 'M 5 0 L 5 10'] });
+      expect(result.vectorPaths).toHaveLength(2);
+      expect(result.vectorPaths[0]).toEqual({ windingRule: 'NONZERO', data: 'M 0 0 L 10 0' });
+    });
+
+    it('paths=[VectorPath objects] → passthrough', () => {
+      const raw = [{ windingRule: 'EVENODD', data: 'M 0 0 L 10 10 Z' }];
+      expect(expandShorthands({ paths: raw })).toMatchObject({ vectorPaths: raw });
+    });
+
+    it('empty paths array ignored', () => {
+      expect(expandShorthands({ paths: [] })).toEqual({});
+    });
+  });
 });

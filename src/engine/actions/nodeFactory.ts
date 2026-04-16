@@ -635,10 +635,43 @@ export async function updateNode(
   node: SceneNode,
   props: Record<string, any>,
 ): Promise<NodeResult> {
+  const preWarnings: Warning[] = [];
+  let workingProps = props;
+
+  // Handle mainComponent swap before stripDenied removes it.
+  // Uses swapComponent() for smart override preservation (size/colors/text
+  // matching by child name survive). Destructive assignment is rarely desired.
+  if (
+    node.type === 'INSTANCE' &&
+    typeof workingProps.mainComponent === 'string'
+  ) {
+    const ref = workingProps.mainComponent;
+    const target = await resolveComponent(ref);
+    if (!target) {
+      preWarnings.push({
+        code: 'COMPONENT_NOT_FOUND',
+        severity: 'warning',
+        message: `Cannot resolve component "${ref}" for mainComponent swap`,
+      });
+    } else {
+      try {
+        (node as InstanceNode).swapComponent(target);
+      } catch (e: any) {
+        preWarnings.push({
+          code: 'COMPONENT_SWAP_FAILED',
+          severity: 'warning',
+          message: `swapComponent failed: ${e?.message ?? e}`,
+        });
+      }
+    }
+    const { mainComponent, ...rest } = workingProps;
+    workingProps = rest;
+  }
+
   const { warnings } = node.type === 'TEXT'
-    ? await applyTextProps(node as TextNode, stripDenied(props))
-    : await applyProps(node, stripDenied(props));
-  return { nodeId: node.id, warnings };
+    ? await applyTextProps(node as TextNode, stripDenied(workingProps))
+    : await applyProps(node, stripDenied(workingProps));
+  return { nodeId: node.id, warnings: [...preWarnings, ...warnings] };
 }
 
 /**

@@ -11,6 +11,7 @@
  */
 
 import { effectSpec } from '../../domain/property-specs';
+import { parseHexToRGBA } from '../../utils/colorUtils';
 
 // ─── Value Maps ──────────────────────────────────────────────────────────────
 
@@ -361,6 +362,47 @@ const EXPANDERS: Record<string, Expander> = {
     return { textDecoration: DECO_MAP[norm(String(v))] ?? String(v).toUpperCase() };
   },
 
+  // Style: 'solid' | 'wavy' | 'dotted'
+  decorationStyle: (v) => ({ textDecorationStyle: String(v).toUpperCase() }),
+
+  // Thickness/Offset: number → {value:N,unit:'PIXELS'}, 'auto' → {unit:'AUTO'}
+  decorationThickness: (v) => {
+    if (v === 'auto' || String(v).toUpperCase() === 'AUTO') {
+      return { textDecorationThickness: { unit: 'AUTO' } };
+    }
+    if (typeof v === 'object' && v !== null) return { textDecorationThickness: v };
+    const n = Number(v);
+    if (!isNaN(n)) return { textDecorationThickness: { value: n, unit: 'PIXELS' } };
+    return {};
+  },
+
+  decorationOffset: (v) => {
+    if (v === 'auto' || String(v).toUpperCase() === 'AUTO') {
+      return { textDecorationOffset: { unit: 'AUTO' } };
+    }
+    if (typeof v === 'object' && v !== null) return { textDecorationOffset: v };
+    const n = Number(v);
+    if (!isNaN(n)) return { textDecorationOffset: { value: n, unit: 'PIXELS' } };
+    return {};
+  },
+
+  // Color: hex → {value: SolidPaint}, 'auto' → {value: 'AUTO'}
+  decorationColor: (v) => {
+    if (v === 'auto' || String(v).toUpperCase() === 'AUTO') {
+      return { textDecorationColor: { value: 'AUTO' } };
+    }
+    if (typeof v === 'object' && v !== null) return { textDecorationColor: v };
+    if (typeof v === 'string' && v.startsWith('#')) {
+      const rgba = parseHexToRGBA(v);
+      return {
+        textDecorationColor: {
+          value: { type: 'SOLID', color: { r: rgba.r, g: rgba.g, b: rgba.b }, opacity: rgba.a },
+        },
+      };
+    }
+    return {};
+  },
+
   truncate: (v) => {
     if (v === true || String(v).toLowerCase() === 'true') {
       return { textTruncation: 'ENDING', textAutoResize: 'NONE' };
@@ -382,13 +424,22 @@ const EXPANDERS: Record<string, Expander> = {
   // Figma arcData uses radians; shorthand accepts degrees for LLM ergonomics.
   // arc="0 270"         → semicircle from 0° to 270°, solid
   // arc="0 270 0.5"     → ring (donut) with 50% inner radius
+  // arc="ring 0.5"      → full circle donut (shortcut for arc="0 360 0.5")
   // arc={{startingAngle:0, endingAngle:4.71, innerRadius:0.5}} → raw radians
-  // innerRadius=0.5     → donut ring only (keeps full circle)
+  // Note: no standalone `innerRadius` shorthand — conflicts with STAR.innerRadius.
   arc: (v) => {
     if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
       return { arcData: v }; // raw ArcData object passthrough
     }
-    const parts = String(v).trim().split(/[\s,]+/).map(Number);
+    const s = String(v).trim();
+    // "ring 0.5" shortcut → full circle with inner radius
+    const ringMatch = /^ring\s+([\d.]+)$/i.exec(s);
+    if (ringMatch) {
+      return {
+        arcData: { startingAngle: 0, endingAngle: 2 * Math.PI, innerRadius: Number(ringMatch[1]) },
+      };
+    }
+    const parts = s.split(/[\s,]+/).map(Number);
     if (parts.length < 2 || parts.some(isNaN)) return {};
     const DEG = Math.PI / 180;
     return {
@@ -399,10 +450,6 @@ const EXPANDERS: Record<string, Expander> = {
       },
     };
   },
-
-  innerRadius: (v) => ({
-    arcData: { startingAngle: 0, endingAngle: 2 * Math.PI, innerRadius: Number(v) },
-  }),
 
   // ── Transform ─────────────────────────────────────────────────────────
   // CSS rotate is clockwise-positive; Figma rotation is counter-clockwise-positive

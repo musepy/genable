@@ -1284,6 +1284,23 @@ export const PROPERTY_META: Record<string, PropMeta> = {
   paragraphSpacing: { type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
   paragraphIndent: { type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
 
+  // Text decoration (advanced)
+  textDecorationStyle: { type: 'enum', enumMap: { SOLID: 'SOLID', WAVY: 'WAVY', DOTTED: 'DOTTED' }, defaultValue: 'SOLID' },
+  textDecorationThickness: { type: 'object' },
+  textDecorationOffset: { type: 'object' },
+  textDecorationColor: { type: 'object' },
+  textDecorationSkipInk: { type: 'scalar', defaultValue: true },
+
+  // Text advanced typography
+  listSpacing: { type: 'scalar', defaultValue: 0, min: 0, max: 1000 },
+  hangingPunctuation: { type: 'scalar', defaultValue: false },
+  hangingList: { type: 'scalar', defaultValue: false },
+  leadingTrim: { type: 'enum', enumMap: { NONE: 'NONE', CAP_HEIGHT: 'CAP_HEIGHT' }, defaultValue: 'NONE' },
+
+  // Star / Polygon
+  pointCount: { type: 'scalar', defaultValue: 5, min: 3, max: 100 },
+  innerRadius: { type: 'scalar', defaultValue: 0.382, min: 0, max: 1 },
+
   // Arc (ellipse)
   arcData: {
     type: 'object',

@@ -380,11 +380,60 @@ describe('expandShorthands', () => {
       expect(result.arcData).toEqual(raw);
     });
 
-    it('innerRadius shorthand → full circle donut', () => {
-      const result = expandShorthands({ innerRadius: 0.4 });
+    it('arc="ring 0.4" → full circle donut', () => {
+      const result = expandShorthands({ arc: 'ring 0.4' });
       expect(result.arcData.startingAngle).toBe(0);
       expect(result.arcData.endingAngle).toBeCloseTo(2 * Math.PI);
       expect(result.arcData.innerRadius).toBe(0.4);
+    });
+
+    it('bare innerRadius passes through (STAR acuteness, not ellipse)', () => {
+      // innerRadius must NOT expand into arcData — it's a native STAR property
+      const result = expandShorthands({ innerRadius: 0.5 });
+      expect(result.innerRadius).toBe(0.5);
+      expect(result.arcData).toBeUndefined();
+    });
+  });
+
+  // ── Text decoration (advanced) ────────────────────────────────────────
+
+  describe('decorationStyle / Thickness / Offset / Color', () => {
+    it('decorationStyle: "wavy" → textDecorationStyle: WAVY', () => {
+      expect(expandShorthands({ decorationStyle: 'wavy' }))
+        .toMatchObject({ textDecorationStyle: 'WAVY' });
+    });
+
+    it('decorationThickness: 2 → {value:2, unit:PIXELS}', () => {
+      expect(expandShorthands({ decorationThickness: 2 }))
+        .toMatchObject({ textDecorationThickness: { value: 2, unit: 'PIXELS' } });
+    });
+
+    it('decorationThickness: "auto" → {unit:AUTO}', () => {
+      expect(expandShorthands({ decorationThickness: 'auto' }))
+        .toMatchObject({ textDecorationThickness: { unit: 'AUTO' } });
+    });
+
+    it('decorationOffset: 4 → {value:4, unit:PIXELS}', () => {
+      expect(expandShorthands({ decorationOffset: 4 }))
+        .toMatchObject({ textDecorationOffset: { value: 4, unit: 'PIXELS' } });
+    });
+
+    it('decorationColor: "#FF0000" → wrapped SolidPaint', () => {
+      const result = expandShorthands({ decorationColor: '#FF0000' });
+      expect(result.textDecorationColor.value.type).toBe('SOLID');
+      expect(result.textDecorationColor.value.color.r).toBeCloseTo(1);
+      expect(result.textDecorationColor.value.color.g).toBe(0);
+    });
+
+    it('decorationColor: "auto" → {value:AUTO}', () => {
+      expect(expandShorthands({ decorationColor: 'auto' }))
+        .toMatchObject({ textDecorationColor: { value: 'AUTO' } });
+    });
+
+    it('raw object passthrough for decorationThickness', () => {
+      const raw = { value: 3, unit: 'PERCENT' };
+      expect(expandShorthands({ decorationThickness: raw }))
+        .toMatchObject({ textDecorationThickness: raw });
     });
   });
 });

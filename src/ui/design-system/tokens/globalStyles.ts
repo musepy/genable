@@ -66,17 +66,14 @@ export const globalStyles = `
     cursor: pointer;
     transition: background 150ms ease, border-color 150ms ease;
   }
-  .header-chip:hover:not(.disabled),
-  .header-chip.is-hover:not(.disabled) {
+  .header-chip:hover:not(.disabled) {
     background: var(--gray-a2);
     border-color: var(--gray-a5);
   }
-  .header-chip:active:not(.disabled),
-  .header-chip.is-pressed:not(.disabled) {
+  .header-chip:active:not(.disabled) {
     background: var(--gray-a4);
   }
-  .header-chip.disabled,
-  .header-chip.is-disabled {
+  .header-chip.disabled {
     opacity: 0.5;
     cursor: default;
   }
@@ -94,14 +91,16 @@ export const globalStyles = `
     cursor: pointer;
     transition: var(--transition-crisp);
   }
-  .header-icon-btn:hover,
-  .header-icon-btn.is-hover {
+  .header-icon-btn:hover {
     background: var(--gray-a2);
     color: var(--text-primary);
   }
-  .header-icon-btn:active,
-  .header-icon-btn.is-pressed {
+  .header-icon-btn:active {
     background: var(--gray-a4);
+  }
+  .header-icon-btn.is-active {
+    background: var(--gray-a2);
+    color: var(--text-primary);
   }
 
   .chip {
@@ -114,18 +113,150 @@ export const globalStyles = `
     background: var(--gray-a2);
     border-color: var(--gray-a5);
   }
-  .chip.active {
-    background: var(--accent-9);
-    color: var(--accent-contrast);
-    border-color: var(--accent-9);
+  .chip:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .ghost-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    background: transparent;
+    color: var(--gray-11);
+    border: none;
+    border-radius: var(--radius-5);
+    font-size: var(--typography-font-size-1);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--typography-line-height-1);
+    cursor: pointer;
+    transition: var(--transition-crisp);
+    white-space: nowrap;
+  }
+  .ghost-btn:hover:not(:disabled) {
+    background: var(--gray-a2);
+    color: var(--text-primary);
+  }
+  .ghost-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .card-interactive {
+    transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .card-interactive:hover {
+    background: var(--gray-a2);
+    border-color: var(--gray-a5);
+  }
+  .card-interactive:active {
+    background: var(--gray-a3);
+  }
+
+  .model-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 32px;
+    padding: var(--space-1) 10px;
+    border-radius: var(--radius-4);
+    cursor: pointer;
+    background: transparent;
+    transition: var(--transition-crisp);
+    gap: var(--space-2);
+    color: var(--gray-11);
+  }
+  .model-item:hover {
+    background: var(--gray-a2);
+  }
+  .model-item.is-selected {
+    color: var(--text-primary);
+  }
+
+  .focusable {
+    outline: none;
+  }
+  .focusable-input {
+    box-shadow: inset 0 0 0 0.5px var(--gray-a4);
+    transition: box-shadow 150ms ease, background 150ms ease;
+  }
+  .focusable-input:focus,
+  .focusable-input:focus-visible {
+    box-shadow: inset 0 0 0 1px var(--accent-a8), 0 0 0 3px var(--accent-a2);
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: var(--transition-crisp);
+    flex-shrink: 0;
   }
 
   .submit-btn-active {
     background: var(--gray-12);
     color: var(--color-background);
+    border: 1.5px solid var(--gray-12);
+    cursor: pointer;
   }
   .submit-btn-active:hover {
     filter: brightness(1.1);
+  }
+  .submit-btn-disabled {
+    background: var(--gray-a4);
+    color: var(--color-background);
+    border: none;
+    cursor: default;
+  }
+
+  /* Inline text action — StatusBlock Continue/Stop/Interrupt */
+  .text-action {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-3);
+    font-size: var(--typography-font-size-1);
+    font-weight: var(--font-weight-regular);
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    transition: var(--transition-crisp);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .text-action:hover {
+    background: var(--gray-a2);
+  }
+  .text-action.danger {
+    color: var(--error-11);
+  }
+  .text-action.danger:hover {
+    background: var(--error-3);
+  }
+
+  /* Settings provider tab */
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) 0;
+    background: transparent;
+    border: none;
+    font-size: var(--typography-font-size-1);
+    font-weight: var(--font-weight-regular);
+    cursor: pointer;
+    color: var(--gray-9);
+    transition: var(--transition-crisp);
+    position: relative;
+  }
+  .tab-btn.active {
+    color: var(--gray-12);
   }
 
   /* --- Masking & Fading --- */
@@ -175,8 +306,33 @@ export const globalStyles = `
     background: var(--gray-a2); /* Sync with + button and Header */
   }
 
+  .popover-item-multi {
+    width: 100%;
+    height: auto;
+    min-height: 34px;
+    justify-content: flex-start;
+    background: transparent;
+    border: none;
+    text-align: left;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .header-chip:focus-visible,
+  .header-icon-btn:focus-visible,
+  .icon-btn:focus-visible,
+  .chip:focus-visible,
+  .ghost-btn:focus-visible,
+  .card-interactive:focus-visible,
+  .model-item:focus-visible,
+  .popover-item:focus-visible,
+  .text-action:focus-visible,
+  .tab-btn:focus-visible {
+    box-shadow: 0 0 0 3px var(--accent-a2);
+  }
+
   /* iOS Continuous Corners */
-  .popover-content, .popover-item, .chip, .header-icon-btn, .header-chip, .submit-btn-active, .submit-btn-disabled {
+  .popover-content, .popover-item, .popover-item-multi, .chip, .ghost-btn, .card-interactive, .model-item, .header-icon-btn, .header-chip, .icon-btn, .submit-btn-active, .submit-btn-disabled, .focusable-input, .text-action, .tab-btn {
     corner-shape: var(--corner-shape);
   }
 

@@ -11,7 +11,6 @@ import { useModelSettings } from './hooks/useModelSettings'
 import { ChatFeature } from './features/chat'
 import { SettingsPanel } from './ui/SettingsPanel'
 import { OnboardingView } from './ui/components/OnboardingView'
-import { Button } from './ui/components/Button'
 import { PromptInput } from './ui/components/PromptInput'
 import { DeveloperPanel } from './ui/components/DeveloperPanel'
 
@@ -211,7 +210,7 @@ function PluginContent() {
         />
       );
     } else if (captureTarget === 'button') {
-      content = <Button>Capture Candidate</Button>;
+      content = <button className="chip">Capture Candidate</button>;
     } else if (captureTarget === 'developer-panel') {
       content = <DeveloperPanel onLogout={() => {}} onRestoreSession={() => {}} />;
     } else if (captureTarget === 'prompt-input') {
@@ -270,9 +269,9 @@ function PluginContent() {
               onRestoreSession={restoreSavedSession}
             />
             <VerticalSpace space="large" />
-            <Button variant="secondary" fullWidth onClick={() => setShowDeveloperTools(false)}>
+            <button className="chip" onClick={() => setShowDeveloperTools(false)} style={{ width: '100%', justifyContent: 'center' }}>
               Back to Chat
-            </Button>
+            </button>
           </div>
         </Iso>
       );

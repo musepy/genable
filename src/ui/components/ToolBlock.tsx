@@ -8,9 +8,22 @@
  */
 
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { tokens, motion } from '../design-system/tokens';
 import type { ToolCallRecord } from '../../types/chat';
+
+const BRAILLE_FRAMES = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+const BRAILLE_INTERVAL = 80;
+
+function useBrailleSpinner(active: boolean): string {
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setFrame(f => (f + 1) % BRAILLE_FRAMES.length), BRAILLE_INTERVAL);
+    return () => clearInterval(id);
+  }, [active]);
+  return active ? BRAILLE_FRAMES[frame] : '';
+}
 
 interface ToolBlockProps {
   tools: ToolCallRecord[];
@@ -43,12 +56,13 @@ export function ToolBlock({ tools }: ToolBlockProps) {
   const [showAll, setShowAll] = useState(false);
 
   const isRunning = tools.some(t => t.status === 'running' || t.status === 'pending');
+  const spinner = useBrailleSpinner(isRunning);
   const lastTool = tools[tools.length - 1];
   const count = tools.length;
 
   // Header text
   const headerText = isRunning
-    ? `${lastTool?.name}...`
+    ? `${spinner} ${lastTool?.name}...`
     : `${count} tool${count !== 1 ? 's' : ''}`;
 
   // Visible tools when expanded
@@ -63,7 +77,7 @@ export function ToolBlock({ tools }: ToolBlockProps) {
         style={{
           cursor: 'pointer',
           borderRadius: 'var(--radius-3)',
-          padding: '2px 10px',
+          padding: `${tokens.space[1]}px ${tokens.grid.blockPad}px`,
           transition: 'background 120ms',
         }}
         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--gray-3)' }}
@@ -84,8 +98,8 @@ export function ToolBlock({ tools }: ToolBlockProps) {
                   fontSize: tokens.fontSize[1],
                   lineHeight: tokens.lineHeight[2],
                   color: tokens.colors.textSecondary,
-                  padding: '0 10px 0 20px',
-                  borderRadius: '6px',
+                  padding: `0 ${tokens.grid.blockPad}px 0 ${tokens.space[5]}px`,
+                  borderRadius: 'var(--radius-3)',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -96,7 +110,7 @@ export function ToolBlock({ tools }: ToolBlockProps) {
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '' }}
               >
                 {tool.name}
-                {args && <span style={{ color: 'var(--gray-9)', marginLeft: 4 }}>{args}</span>}
+                {args && <span style={{ color: 'var(--gray-9)', marginLeft: tokens.space[1] }}>{args}</span>}
               </div>
             );
           })}
@@ -109,8 +123,8 @@ export function ToolBlock({ tools }: ToolBlockProps) {
                 fontSize: tokens.fontSize[1],
                 lineHeight: tokens.lineHeight[2],
                 color: 'var(--accent-11)',
-                padding: '0 10px 0 20px',
-                borderRadius: '6px',
+                padding: `0 ${tokens.grid.blockPad}px 0 ${tokens.space[5]}px`,
+                borderRadius: 'var(--radius-3)',
                 cursor: 'pointer',
                 transition: 'background 120ms',
               }}

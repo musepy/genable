@@ -277,7 +277,7 @@ const lightModeTokens = `
 
     /* Typography */
     --typography-font-family-code: 'Inter Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-    --typography-font-family-emphasis: 'Georgia', 'Times New Roman', serif;
+    --typography-font-family-emphasis: 'Georgia', 'Times New Roman', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
     --typography-font-family-quote: 'Georgia', 'Garamond', serif;
     --typography-font-family-text: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
     --typography-font-size-1: 12px;

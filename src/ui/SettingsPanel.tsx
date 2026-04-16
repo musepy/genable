@@ -11,7 +11,6 @@
 import { h } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { tokens, motion } from './design-system/tokens';
-import { Button } from './components/Button';
 import { Input } from './components/Input';
 import { ModelSelector } from './components/ModelSelector';
 import { useDebounce } from './hooks/useDebounce';
@@ -128,17 +127,8 @@ export function SettingsPanel({
                   key={p}
                   type="button"
                   onClick={() => setProviderName(p)}
-                  style={{
-                    padding: `0 0 ${tokens.space[2]}px 0`,
-                    border: 'none',
-                    background: 'transparent',
-                    color: isActive ? 'var(--gray-12)' : 'var(--gray-9)',
-                    fontSize: tokens.fontSize[1],
-                    fontWeight: tokens.fontWeight.medium,
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: `color ${motion.duration.crisp}ms var(--ease-in-out)`,
-                  }}
+                  className={isActive ? 'tab-btn active' : 'tab-btn'}
+                  style={{ position: 'relative' }}
                 >
                   {tabLabel}
                   <div style={{
@@ -160,7 +150,7 @@ export function SettingsPanel({
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
             {/* Input & Link */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[1], padding: `0 ${tokens.grid.blockPad}px` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.space[2], padding: `0 ${tokens.grid.blockPad}px` }}>
                 <span style={{ fontSize: tokens.fontSize[1], fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)' }}>{t.apiKey}</span>
                 <a
                   href={providerMeta.keyUrl}
@@ -197,19 +187,8 @@ export function SettingsPanel({
                   <button
                     type="button"
                     onClick={() => setShowFreeOnly(v => !v)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      padding: '3px 8px',
-                      borderRadius: 'var(--radius-3)',
-                      border: showFreeOnly ? '1px solid rgba(62,99,221,0.15)' : 'var(--border-subtle)',
-                      background: showFreeOnly ? 'var(--accent-3)' : 'transparent',
-                      color: showFreeOnly ? 'var(--accent-9)' : 'var(--gray-9)',
-                      fontSize: tokens.fontSize[1],
-                      fontFamily: 'inherit',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
+                    className="chip"
+                    style={showFreeOnly ? { background: 'var(--accent-3)', color: 'var(--accent-9)', borderColor: 'rgba(62,99,221,0.15)' } : undefined}
                   >
                     {t.free}
                   </button>
@@ -254,7 +233,7 @@ export function SettingsPanel({
                 style={{
                   position: 'absolute',
                   right: 0,
-                  top: `calc(100% + ${tokens.space[1]}px)`,
+                  top: `calc(100% + ${tokens.space[2]}px)`,
                   width: 160,
                   zIndex: tokens.zIndex.popover,
                   padding: tokens.space[1],
@@ -309,12 +288,12 @@ export function SettingsPanel({
       </div>
 
       {/* ===== FOOTER (Pinned to Bottom) ===== */}
-      <div className="settings-footer" style={{ borderTop: 'var(--border-main)', background: 'var(--color-background)', padding: '12px 0' }}>
-        <div style={{ fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+      <div className="settings-footer" style={{ borderTop: 'var(--border-main)', background: 'var(--color-background)', padding: `${tokens.space[3]}px 0` }}>
+        <div style={{ fontWeight: tokens.fontWeight.medium, color: 'var(--gray-11)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space[1] }}>
           © 2026 Genable
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <a href="https://github.com/Muse404" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.space[2] }}>
+          <a href="https://github.com/Muse404" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: tokens.space[1] }}>
             <Github size={12} />
             Muse404
           </a>

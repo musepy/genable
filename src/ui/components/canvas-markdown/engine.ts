@@ -77,7 +77,7 @@ export interface LayoutResult {
 // Constants
 // ============================================
 
-const FONT_SANS = 'Inter, -apple-system, BlinkMacSystemFont, sans-serif';
+const FONT_SANS = 'Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif';
 const FONT_MONO = '"SF Mono", Menlo, Monaco, monospace';
 
 // ---- Alignment Grid (mirrors tokens.grid) ----

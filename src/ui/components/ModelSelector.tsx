@@ -11,7 +11,6 @@
 
 import { h } from 'preact';
 import { Check } from 'lucide-preact';
-import { useState } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { sortModels } from '../constants/models';
 
@@ -35,8 +34,6 @@ export function ModelSelector({
   isLoading,
   showFreeOnly = false
 }: ModelSelectorProps) {
-  const [hoveredModel, setHoveredModel] = useState<number | null>(null);
-  
   if (isLoading) {
     return (
       <div 
@@ -114,29 +111,11 @@ export function ModelSelector({
                 onSelect(model.name);
               }
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--gray-a2)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: `var(--space-1) ${tokens.grid.blockPad}px var(--space-1) ${tokens.grid.blockPad}px`,
-              minHeight: 32,
-              borderRadius: 'var(--radius-4)', // Slightly smaller radius for more compact look
-              cursor: 'pointer',
-              background: 'transparent',
-              transition: 'var(--transition-crisp)',
-              gap: tokens.space[2],
-            }}
           >
             <span style={{ 
               fontSize: tokens.fontSize[1],
-              color: 'var(--gray-11)',
-              fontWeight: tokens.fontWeight.regular,
+              color: shouldHighlight ? tokens.colors.textPrimary : tokens.colors.textSecondary,
+              fontWeight: shouldHighlight ? tokens.fontWeight.medium : tokens.fontWeight.regular,
               lineHeight: '16px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -145,7 +124,7 @@ export function ModelSelector({
               {model.displayName || model.name}
             </span>
             {shouldHighlight && (
-              <Check size={14} strokeWidth={2.5} style={{ marginLeft: 'auto', color: 'var(--gray-11)' }} />
+              <Check size={14} strokeWidth={2.5} style={{ marginLeft: 'auto', color: tokens.colors.textPrimary }} />
             )}
           </div>
         );

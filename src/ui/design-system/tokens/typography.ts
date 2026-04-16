@@ -40,6 +40,6 @@ export const fontWeight = {
 } as const;
 
 export const font = {
-  sans: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  sans: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
   mono: '"Inter Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, monospace',
 } as const;

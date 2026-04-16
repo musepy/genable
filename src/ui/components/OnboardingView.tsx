@@ -125,7 +125,7 @@ export function OnboardingView({
           paddingLeft: pad,
           fontSize: tokens.fontSize[1],
           color: 'var(--gray-9)',
-          marginTop: tokens.space[1],
+          marginTop: 2,
           lineHeight: tokens.lineHeight[2],
         }}>
           {step === 'idle' && (
@@ -223,22 +223,13 @@ export function OnboardingView({
                 type="button"
                 onClick={handleSubmit}
                 disabled={!apiKey.trim() || isLoading}
+                className={`icon-btn ${apiKey.trim() ? 'submit-btn-active' : 'submit-btn-disabled'}`}
                 style={{
                   position: 'absolute',
                   right: 4,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  width: 32,
-                  height: 32,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  borderRadius: 'var(--radius-4)',
-                  background: apiKey.trim() ? 'var(--gray-12)' : 'transparent',
-                  color: apiKey.trim() ? 'var(--color-background)' : 'var(--gray-8)',
-                  cursor: apiKey.trim() ? 'pointer' : 'default',
-                  transition: 'var(--transition-crisp)',
+                  borderRadius: 'var(--radius-5)',
                 }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -247,7 +238,7 @@ export function OnboardingView({
               </button>
             </div>
             <div style={{
-              fontSize: 11,
+              fontSize: tokens.fontSize[1],
               color: 'var(--gray-9)',
               marginTop: tokens.space[2],
               paddingLeft: pad,

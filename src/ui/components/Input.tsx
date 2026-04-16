@@ -3,14 +3,19 @@ import { tokens } from '../design-system/tokens';
 
 interface InputProps extends h.JSX.InputHTMLAttributes<HTMLInputElement> {
   fullWidth?: boolean;
+  leftElement?: h.JSX.Element | null;
   rightElement?: h.JSX.Element | null; // For the "confirm" button inside the input
 }
 
 export function Input({
   fullWidth = true,
+  leftElement,
   rightElement,
+  className,
   style,
   onInput,
+  onFocus,
+  onBlur,
   ...props
 }: InputProps) {
   
@@ -25,16 +30,15 @@ export function Input({
     height: tokens.size.input.sm, // Compact input (32px)
     width: '100%',
     padding: `0 ${tokens.grid.blockPad}px`,
+    paddingLeft: leftElement ? 34 : tokens.grid.blockPad,
     paddingRight: rightElement ? 48 : tokens.grid.blockPad,
     fontSize: tokens.fontSize[1],
     fontFamily: tokens.font.sans,
     background: 'transparent', // Transparent to avoid dark mode issues
     color: tokens.colors.textPrimary,
     border: 'none',
-    boxShadow: 'inset 0 0 0 0.5px var(--border-default)',
     borderRadius: 'var(--radius-3)', // Flatter design
     outline: 'none',
-    transition: 'border-color 200ms var(--ease-in-out), box-shadow 200ms var(--ease-in-out)',
     ...(style as any),
   };
 
@@ -47,16 +51,28 @@ export function Input({
 
   return (
     <div style={containerStyle}>
+      {leftElement && (
+        <div style={{
+          position: 'absolute',
+          left: 10,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          {leftElement}
+        </div>
+      )}
       <input
+        className={`focusable focusable-input${className ? ` ${className}` : ''}`}
         style={inputBaseStyle}
         onInput={handleInput}
+        onFocus={onFocus}
+        onBlur={onBlur}
         {...props}
-        onFocus={(e) => {
-          (e.target as HTMLInputElement).style.borderColor = tokens.colors.ring;
-        }}
-        onBlur={(e) => {
-          (e.target as HTMLInputElement).style.borderColor = tokens.colors.grayBorder;
-        }}
       />
       {rightElement && (
         <div style={{

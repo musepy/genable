@@ -33,15 +33,7 @@ export function Header({
   onSettingsClick,
   isSettingsOpen = false,
 }: HeaderProps) {
-  
   const t = useTranslations();
-  // Derive CSS class for new chat button
-  const getIconBtnClass = (visible: boolean, enabled: boolean): string => {
-    let base = 'header-icon-btn';
-    if (!visible) return `${base} hidden`;
-    if (!enabled) return `${base} disabled`;
-    return base;
-  };
 
   return (
     <div className="header-container">

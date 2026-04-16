@@ -16,32 +16,10 @@
 
 import { h, ComponentChildren } from 'preact';
 import { useRef, useLayoutEffect } from 'preact/hooks';
+import { ArrowUp } from 'lucide-preact';
 import { ActionPopover } from './ActionPopover';
 import { tokens } from '../design-system/tokens';
 import { t } from '../i18n';
-
-const submitButtonBase = {
-  position: 'absolute' as const,
-  right: tokens.space[1],
-  bottom: tokens.space[1],
-  width: tokens.size.button.md,
-  height: tokens.size.button.md,
-  borderRadius: '50%',
-  display: 'flex' as const,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-  transition: 'var(--transition-crisp, all 150ms ease)',
-};
-const submitButtonActive = {
-  background: 'var(--accent-9)',
-  border: '1.5px solid var(--accent-9)',
-  cursor: 'pointer',
-};
-const submitButtonDisabled = {
-  background: 'var(--gray-a4)',
-  border: 'none',
-  cursor: 'default',
-};
 
 const inputAreaContainer = {
   position: 'relative' as const,
@@ -149,7 +127,7 @@ export function PromptInput({
           display: 'flex',
           flexWrap: 'wrap' as const,
           gap: tokens.space[3],
-          padding: `${tokens.space[3]}px ${tokens.space[3]}px 0`,
+          padding: `${tokens.space[3]}px ${tokens.grid.blockPad}px 0`,
         }}>
           {contextTags}
         </div>
@@ -168,61 +146,37 @@ export function PromptInput({
         readOnly={disabled}
       />
 
-      {/* Footer Row: [+] [Model ↑] ... [▶] */}
+      {/* Footer Row: [+] [Model v] [▶] */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: `${tokens.space[3]}px`,
+        gap: tokens.space[2],
+        padding: `${tokens.space[2]}px ${tokens.grid.blockPad}px`,
       }}>
-        {/* Left: Action Popover (+) */}
-        <ActionPopover 
-          onSerializeSelection={onPlusClick || (() => {})} 
+        <ActionPopover
+          onSerializeSelection={onPlusClick || (() => {})}
           onInsertSkill={onSkillSelect}
           disabled={disabled}
         />
 
-        {/* Right: Model Selector + Submit */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: tokens.space[3], 
-          minWidth: 0, 
-          flex: 1, 
-          justifyContent: 'flex-end' 
-        }}>
-          <div style={{ minWidth: 0, flexShrink: 1 }}>
-            {leftElement}
-          </div>
-
-          {/* Submit button — rounded square per Figma */}
-          <button
-            className={canSubmit ? 'submit-btn-active' : 'submit-btn-disabled'}
-            style={{
-              ...submitButtonBase,
-              ...(canSubmit ? submitButtonActive : submitButtonDisabled),
-              position: 'relative',
-              right: 'auto',
-              bottom: 'auto',
-              borderRadius: 'var(--radius-5)',
-              flexShrink: 0,
-            } as h.JSX.CSSProperties}
-            onClick={() => canSubmit && onSubmit()}
-            aria-disabled={!canSubmit}
-            aria-busy={loading}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface}
-              strokeWidth="3"
-            >
-               <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+        <div style={{ marginLeft: 'auto', minWidth: 0 }}>
+          {leftElement}
         </div>
+
+        <button
+          className={`icon-btn ${canSubmit ? 'submit-btn-active' : 'submit-btn-disabled'}`}
+          style={{ borderRadius: 'var(--radius-5)' } as h.JSX.CSSProperties}
+          onClick={() => canSubmit && onSubmit()}
+          disabled={!canSubmit}
+          aria-disabled={!canSubmit}
+          aria-busy={loading}
+        >
+          <ArrowUp
+            size={16}
+            strokeWidth={2}
+            color={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface}
+          />
+        </button>
       </div>
     </div>
   );

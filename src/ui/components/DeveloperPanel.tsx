@@ -19,19 +19,6 @@ const panelStyle: h.JSX.CSSProperties = {
   marginTop: tokens.space[4],
 };
 
-const buttonStyle: h.JSX.CSSProperties = {
-  padding: `${tokens.space[2]}px 0`,
-  background: 'transparent',
-  color: tokens.colors.textPrimary,
-  border: 'none',
-  borderBottom: '0.5px solid var(--border-default)',
-  borderRadius: 'var(--radius-3)',
-  cursor: 'pointer',
-  fontSize: tokens.fontSize[1],
-  fontWeight: tokens.fontWeight.medium,
-  textAlign: 'center',
-  transition: 'var(--transition-crisp)',
-};
 
 interface DeveloperPanelProps {
   onLogout?: () => void;
@@ -50,7 +37,7 @@ export function DeveloperPanel({
       </div>
 
       <button
-        style={{ ...buttonStyle, color: tokens.colors.accent }}
+        className="text-action danger"
         onClick={() => {
           if (confirm(t.clearKeysConfirm)) {
             onLogout?.();
@@ -61,7 +48,7 @@ export function DeveloperPanel({
       </button>
 
       <button
-        style={{ ...buttonStyle, borderBottom: 'none', color: tokens.colors.accent }}
+        className="text-action"
         onClick={() => onRestoreSession?.()}
       >
         {t.restoreSession}

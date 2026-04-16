@@ -55,6 +55,8 @@ function buildKnownPropKeys(): ReadonlySet<string> {
     'textStyle', 'fillStyle', 'strokeStyle', 'effectStyle',
     // Hyperlink — handled by hyperlinkHandler
     'hyperlink',
+    // Instance swap — handled by updateNode's resolveAndSwap path
+    'mainComponent',
   ]);
 
   // Add all design-visible properties discovered from plugin-api.d.ts registry

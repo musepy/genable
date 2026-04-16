@@ -182,7 +182,7 @@ export class AgentRuntime {
           };
           const result = await this.hookRunner.run('beforeToolExec', ctx);
           if (result.action === 'skip' || result.action === 'abort') {
-            return { action: result.action, reason: result.reason };
+            return { action: result.action, reason: result.reason, code: result.code };
           }
           return undefined;
         },
@@ -733,9 +733,12 @@ export class AgentRuntime {
         this.runStats.toolCallCount += toolCallsForExecution.length;
         const dispatchResult = await this.toolDispatcher.dispatch(toolCallsForExecution, iteration);
 
-        // State tracking from RAW results (decoupled from presentForLLM)
+        // State tracking from RAW results (decoupled from presentForLLM).
+        // Cap rejects (code === 'CAP_REJECT') are runtime-synthesized retry
+        // instructions — not genuine tool failures — so they are excluded
+        // from the error count.
         for (const raw of dispatchResult.rawResults) {
-          if (raw.error) this.runStats.toolErrorCount++;
+          if (raw.error && raw.code !== 'CAP_REJECT') this.runStats.toolErrorCount++;
           this.collectCreatedNodes(raw.result);
         }
 

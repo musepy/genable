@@ -74,6 +74,12 @@ export interface AgentRuntimeToolResultEvent extends AgentRuntimeBaseEvent {
     durationMs: number;
     /** Present = failure (ToolResponse convention). Absent = success. */
     error?: string;
+    /**
+     * Machine-readable discriminator for runtime-synthesized errors
+     * (e.g. "CAP_REJECT" from a cap-style hook skip). Absent for genuine
+     * tool failures. See `triggers/toolPlanTriggers.ts`.
+     */
+    code?: string;
     raw: any;
   };
 }

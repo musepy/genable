@@ -12,6 +12,12 @@ export interface ToolCallRecord {
     endTime?: number;
     result?: any;
     error?: string;
+    /**
+     * Discriminator for runtime-synthesized errors (e.g. "CAP_REJECT"). Absent
+     * for genuine tool failures. Consumers use this to exclude runtime rejects
+     * from tool-failure metrics.
+     */
+    code?: string;
 }
 
 export interface IterationRecord {

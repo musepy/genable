@@ -203,6 +203,7 @@ export function useChat({
           status: (event.toolResult.error ? 'error' : 'success') as ToolCallRecord['status'],
           endTime: tc.startTime + event.toolResult.durationMs,
           error: event.toolResult.error,
+          code: event.toolResult.code,
           result: event.toolResult.raw,
         })
         updateStreamingMessage(msg => ({

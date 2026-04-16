@@ -226,11 +226,16 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
       const lastModel = [...stateRef.current.history].reverse().find(m => m.role === 'model')
       const finalText = lastModel?.text || ''
 
-      // Collect tool call details (including per-call results for debugging)
+      // Collect tool call details (including per-call results for debugging).
+      // Cap rejects (code === 'CAP_REJECT') are runtime-synthesized retry
+      // instructions, not genuine tool failures — excluded from `errors` and
+      // surfaced separately as `capRejects` for accurate quality metrics.
       const allToolCalls = stateRef.current.history.flatMap(m => m.toolCalls || [])
+      const isCapReject = (tc: typeof allToolCalls[number]) => tc.code === 'CAP_REJECT'
       const toolCallSummary = {
         total: allToolCalls.length,
-        errors: allToolCalls.filter(tc => tc.status === 'error').length,
+        errors: allToolCalls.filter(tc => tc.status === 'error' && !isCapReject(tc)).length,
+        capRejects: allToolCalls.filter(isCapReject).length,
       }
       const toolCallDetails = allToolCalls.map(tc => {
         let params: string | undefined
@@ -244,6 +249,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           params,
           result,
           error: tc.error,
+          code: tc.code,
         }
       })
 
@@ -345,7 +351,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           finalText: `Agent did not complete within ${RESULT_TIMEOUT_MS / 1000}s`,
           durationMs: RESULT_TIMEOUT_MS,
           modelName: stateRef.current.modelName,
-          toolCallSummary: { total: 0, errors: 0 },
+          toolCallSummary: { total: 0, errors: 0, capRejects: 0 },
         }),
       }).catch(() => {})
     }, RESULT_TIMEOUT_MS)

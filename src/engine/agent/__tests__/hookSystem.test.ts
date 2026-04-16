@@ -202,6 +202,74 @@ describe('HookRunner', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('thrower'), expect.anything());
     warnSpy.mockRestore();
   });
+
+  it('emits trigger_fired event when a hook injects a hint', async () => {
+    // Observability: downstream tooling (dev-bridge analysis) should be able
+    // to count hook activations without parsing the injected message stream.
+    const registry = new HookRegistry();
+    const emitted: any[] = [];
+    registry.register({
+      id: 'hinter',
+      event: 'afterToolExec',
+      priority: 10,
+      fn: async () => ({ action: 'continue', injectMessage: 'retry please' }),
+    });
+
+    const runner = new HookRunner(registry, (e) => emitted.push(e));
+    await runner.run('afterToolExec', makeCtx());
+    const fires = emitted.filter((e) => e.type === 'trigger_fired');
+    expect(fires).toHaveLength(1);
+    expect(fires[0]).toEqual(
+      expect.objectContaining({
+        hookId: 'hinter',
+        event: 'afterToolExec',
+        action: 'continue',
+        injected: true,
+      }),
+    );
+  });
+
+  it('emits trigger_fired with code on skip rejects', async () => {
+    const registry = new HookRegistry();
+    const emitted: any[] = [];
+    registry.register({
+      id: 'capper',
+      event: 'beforeToolExec',
+      priority: 10,
+      fn: async () => ({ action: 'skip', reason: 'too big', code: 'CAP_REJECT' }),
+    });
+
+    const runner = new HookRunner(registry, (e) => emitted.push(e));
+    const result = await runner.run('beforeToolExec', makeCtx());
+    expect(result.action).toBe('skip');
+    expect(result.code).toBe('CAP_REJECT');
+
+    const fires = emitted.filter((e) => e.type === 'trigger_fired');
+    expect(fires).toHaveLength(1);
+    expect(fires[0]).toEqual(
+      expect.objectContaining({
+        hookId: 'capper',
+        action: 'skip',
+        code: 'CAP_REJECT',
+        injected: false,
+      }),
+    );
+  });
+
+  it('does not emit trigger_fired on plain continue (no hint, no skip)', async () => {
+    const registry = new HookRegistry();
+    const emitted: any[] = [];
+    registry.register({
+      id: 'noop',
+      event: 'afterToolExec',
+      priority: 10,
+      fn: async () => ({ action: 'continue' }),
+    });
+
+    const runner = new HookRunner(registry, (e) => emitted.push(e));
+    await runner.run('afterToolExec', makeCtx());
+    expect(emitted.filter((e) => e.type === 'trigger_fired')).toHaveLength(0);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════

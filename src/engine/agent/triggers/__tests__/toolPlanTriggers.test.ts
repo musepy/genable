@@ -17,6 +17,7 @@ import {
   countJsxNodes,
   JSX_MARKUP_CHAR_CAP,
   JSX_SUBTREE_NODE_CAP,
+  CAP_REJECT_CODE,
 } from '../toolPlanTriggers';
 import { LLMToolCall } from '../../../llm-client/providers/types';
 
@@ -108,6 +109,13 @@ describe('T4: jsxMarkupSizeTrigger', () => {
     expect(result!.reason).toContain('Split');
   });
 
+  it('stamps code=CAP_REJECT so metrics can exclude the reject from errors', async () => {
+    const markup = 'a'.repeat(1501);
+    const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
+    const result = await invoke(trigger, ctx);
+    expect(result?.code).toBe(CAP_REJECT_CODE);
+  });
+
   it('ignores non-jsx tool calls', async () => {
     const ctx = makeCtx({
       currentToolCall: call('edit', { node: '1:2', props: { x: 'a'.repeat(5000) } }),
@@ -153,6 +161,13 @@ describe('T5: jsxNodeCountTrigger', () => {
     expect(result!.reason).toContain('Decompose');
   });
 
+  it('stamps code=CAP_REJECT on node-count rejects', async () => {
+    const markup = '<frame/>'.repeat(61);
+    const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
+    const result = await invoke(trigger, ctx);
+    expect(result?.code).toBe(CAP_REJECT_CODE);
+  });
+
   it('counts mixed tag types together', async () => {
     // 20 frame + 20 text + 21 icon = 61 → reject
     const markup = '<frame/>'.repeat(20) + '<text/>'.repeat(20) + '<icon/>'.repeat(21);
@@ -193,6 +208,16 @@ describe('T6: editUnknownIdTrigger', () => {
     expect(result!.reason).toContain("'999:999'");
     expect(result!.reason).toContain('find_nodes');
     expect(result!.reason).toContain('get_selection');
+  });
+
+  it('stamps code=CAP_REJECT on unknown-id rejects', async () => {
+    const state = createTurnState();
+    const trigger = createEditUnknownIdTrigger(state);
+    const ctx = makeCtx({
+      currentToolCall: call('edit', { node: '999:999', props: { corner: 8 } }),
+    });
+    const result = await invoke(trigger, ctx);
+    expect(result?.code).toBe(CAP_REJECT_CODE);
   });
 
   it('passes edit targeting a known node ID', async () => {
@@ -485,6 +510,52 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
     // This documents current behavior — a single delete can produce multiple
     // hints until it ages out of the window. Acceptable for now.
     expect(r2?.injectMessage).toBeDefined();
+  });
+
+  // ─── Real-traffic replay: trigger-1776240047149 (P3) ─────────────
+  // Sequence observed in dogfood batch 2026-04-15:
+  //   iter 8:  delete_node({node: "1581:6759"})
+  //   iter 9:  delete_node({node: "1581:6760"})
+  //   iter 10: jsx({parentId: "1581:6758", ...}) → creates root "1581:6764"
+  //
+  // Neither deleted id matches the jsx's parentId exactly, but all three
+  // share the "1581:" file prefix. The prefix-fallback branch of the hook
+  // MUST fire under this shape — this is the dominant real-world pattern.
+  it('replays real P3 batch: two deletes then jsx with prefix-match parent', async () => {
+    const state = createTurnState();
+    const observer = createKnownIdObserver(state);
+    const trigger = createDeleteRebuildTrigger(state);
+
+    await invoke(
+      observer,
+      makeCtx({
+        currentToolCall: call('delete_node', { node: '1581:6759' }),
+        toolResult: { data: { deleted: 'Hero Image', id: '1581:6759' } },
+      }),
+    );
+    await invoke(
+      observer,
+      makeCtx({
+        currentToolCall: call('delete_node', { node: '1581:6760' }),
+        toolResult: { data: { deleted: 'Hero Image', id: '1581:6760' } },
+      }),
+    );
+
+    const jsxResult = await invoke(
+      trigger,
+      makeCtx({
+        currentToolCall: call('jsx', {
+          markup: '<frame/>',
+          parentId: '1581:6758',
+        }),
+        toolResult: {
+          data: { id: '1581:6764', createdIds: ['1581:6764', '1581:6765'] },
+        },
+      }),
+    );
+
+    expect(jsxResult?.action).toBe('continue');
+    expect(jsxResult?.injectMessage).toContain('deleted a subtree');
   });
 });
 

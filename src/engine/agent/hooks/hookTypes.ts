@@ -52,6 +52,12 @@ export interface HookResult {
   modifiedResult?: any;
   /** Reason string when action is `abort`. */
   reason?: string;
+  /**
+   * Machine-readable discriminator for the hook outcome (e.g. "CAP_REJECT").
+   * Propagated onto the synthesized tool result so downstream metrics can
+   * distinguish a runtime-reject from a genuine tool failure.
+   */
+  code?: string;
 }
 
 // ---------------------------------------------------------------------------

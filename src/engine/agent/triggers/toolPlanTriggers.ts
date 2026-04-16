@@ -17,6 +17,9 @@
  *
  * Each reject carries a concrete hint that teaches the correct alternative,
  * so the model learns to comply on the retry.
+ *
+ * Cap rejects carry `code: CAP_REJECT` so downstream metrics can distinguish
+ * them from genuine tool failures (the LLM-facing `error` text is unchanged).
  */
 import { HookRegistration, HookContext, HookResult } from '../hooks/hookTypes';
 import { TurnState, extractKnownIdsFromResult } from './turnState';
@@ -29,6 +32,11 @@ export const JSX_MARKUP_CHAR_CAP = 1500;
 export const JSX_SUBTREE_NODE_CAP = 60;
 /** Look-back window for delete→rebuild heuristic (number of tool calls). */
 export const DELETE_REBUILD_WINDOW = 3;
+/**
+ * Machine-readable discriminator stamped on cap-reject results. Metrics
+ * layers exclude this from genuine-failure counts (see `useDevBridge.ts`).
+ */
+export const CAP_REJECT_CODE = 'CAP_REJECT';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,6 +97,7 @@ export function createJsxMarkupSizeTrigger(): HookRegistration {
 
       return {
         action: 'skip',
+        code: CAP_REJECT_CODE,
         reason:
           `jsx markup is ${len} chars (max ${JSX_MARKUP_CHAR_CAP}). ` +
           `Split into steps: first create the root frame with ONE jsx call, ` +
@@ -118,6 +127,7 @@ export function createJsxNodeCountTrigger(): HookRegistration {
 
       return {
         action: 'skip',
+        code: CAP_REJECT_CODE,
         reason:
           `jsx subtree has ${count} nodes (max ${JSX_SUBTREE_NODE_CAP}). ` +
           `Decompose: create the top-level structure, then progressively add children. ` +
@@ -151,6 +161,7 @@ export function createEditUnknownIdTrigger(state: TurnState): HookRegistration {
       const displayId = unknown.length === 1 ? unknown[0] : unknown.join(', ');
       return {
         action: 'skip',
+        code: CAP_REJECT_CODE,
         reason:
           `Node '${displayId}' not found in this session. ` +
           `Call find_nodes({query: ...}) or get_selection() to locate it first.`,

@@ -39,6 +39,11 @@ export interface ToolLogEntry {
   isNoop: boolean;
   /** Present = failure (ToolResponse convention). Absent = success. */
   error?: string;
+  /**
+   * Machine-readable discriminator for runtime-synthesized errors (e.g.
+   * "CAP_REJECT" from a hook skip). Absent for genuine tool failures.
+   */
+  code?: string;
 }
 
 /** Per-tool raw result — unprocessed by presentForLLM. For runtime state tracking. */
@@ -48,6 +53,8 @@ export interface RawToolResult {
   result: any;
   durationMs: number;
   error?: string;
+  /** Discriminator for runtime-synthesized errors (see ToolLogEntry.code). */
+  code?: string;
 }
 
 export interface ToolDispatchResult {
@@ -62,6 +69,12 @@ export interface ToolDispatchResult {
 export interface ToolInterceptResult {
   action: 'continue' | 'skip' | 'abort';
   reason?: string;
+  /**
+   * Machine-readable discriminator for the skip/abort action
+   * (e.g. "CAP_REJECT"). Attached to the synthesized error result so metrics
+   * layers can tell a runtime-reject apart from a tool failure.
+   */
+  code?: string;
   /** For afterToolExec: override the tool result. */
   modifiedResult?: any;
 }
@@ -203,11 +216,16 @@ export class ToolDispatcher {
         }
         if (intercept?.action === 'skip') {
           const skipReason = intercept.reason || `Tool "${toolName}" was blocked.`;
+          const skipCode = intercept.code;
           const skipDurationMs = Date.now() - startedAt;
+          // Synthesized error carries both the human-readable reason (for LLM
+          // retry) and an optional `code` discriminator so metrics consumers
+          // can exclude runtime rejects from genuine tool-failure counts.
+          const skipRaw = skipCode ? { error: skipReason, code: skipCode } : { error: skipReason };
           toolResults.push({
             name: toolName,
             id: tc.id,
-            response: { error: skipReason },
+            response: skipRaw,
             thought_signature: tc.thought_signature,
           });
           // Emit events so UI/dev-bridge update status (not stuck on "running")
@@ -218,6 +236,7 @@ export class ToolDispatcher {
               callId: tc.id, toolName, args: tc.args,
               startedAt, durationMs: skipDurationMs,
               isDuplicate, isNoop: false, error: skipReason,
+              code: skipCode,
             },
           });
           this.config.emitRuntimeEvent({
@@ -227,10 +246,11 @@ export class ToolDispatcher {
             toolResult: {
               id: tc.id, name: toolName, durationMs: skipDurationMs,
               error: skipReason, isDuplicate, isNoop: false,
-              raw: { error: skipReason },
+              code: skipCode,
+              raw: skipRaw,
             },
           });
-          rawResults.push({ name: toolName, id: tc.id, result: { error: skipReason }, durationMs: skipDurationMs, error: skipReason });
+          rawResults.push({ name: toolName, id: tc.id, result: skipRaw, durationMs: skipDurationMs, error: skipReason, code: skipCode });
           continue;
         }
       }

@@ -66,6 +66,21 @@ export class HookRunner {
           aggregated.modifiedResult = result.modifiedResult;
         }
 
+        // Observability: emit a trigger_fired event whenever a hook produces
+        // a hint or terminates tool execution. Lets dev-bridge consumers see
+        // hook activity without parsing message streams.
+        if (result.injectMessage || result.action === 'skip' || result.action === 'abort') {
+          this.emitEvent?.({
+            type: 'trigger_fired',
+            hookId: hook.id,
+            event,
+            action: result.action,
+            code: result.code,
+            reason: result.reason,
+            injected: Boolean(result.injectMessage),
+          });
+        }
+
         // Terminal actions: abort or skip → stop running more hooks
         if (result.action === 'abort' || result.action === 'skip') {
           return {
@@ -73,6 +88,7 @@ export class HookRunner {
             action: result.action,
             reason: result.reason,
             injectMessage: result.injectMessage,
+            code: result.code,
           };
         }
       } catch (error) {

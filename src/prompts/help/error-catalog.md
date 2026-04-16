@@ -1,8 +1,9 @@
 ---
-id: error-catalog
-title: Error Catalog (Known Error Patterns)
-keywords: [error, catalog, debug, pattern, XML_PARSE_ERROR, object-Object, truncation, gradient, TRUNC, TYPE, metadata, scalar, LLM, retry, workaround]
-whenToUse: When debugging a tool error or unexpected behavior that might match a known pattern
+id: help:error-catalog
+name: Error Catalog (Known Patterns)
+description: Use when debugging a tool error or unexpected behavior — catalogs known error patterns like XML_PARSE_ERROR, object-Object leakage, LLM truncation, and gradient escaping issues.
+category: help
+tags: [error, debug, catalog, pattern, troubleshooting]
 ---
 
 # Error Catalog

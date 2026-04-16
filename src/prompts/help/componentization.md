@@ -1,16 +1,9 @@
 ---
-id: componentization
-title: Componentization — Create Components & Assemble with Instances
-whenToUse: Creating reusable components, converting frames to components, using instances, component properties
-keywords:
-  - component
-  - instance
-  - componentize
-  - reusable
-  - component prop
-  - TEXT prop
-  - BOOLEAN prop
-  - instance ref
+id: help:componentization
+name: Componentization Workflow
+description: Use when creating reusable components, converting frames to components, or assembling designs with component instances and component properties (TEXT/BOOLEAN).
+category: help
+tags: [component, instance, componentize, reusable, component-prop, workflow]
 ---
 
 ## Componentization SOP — Shortest Path

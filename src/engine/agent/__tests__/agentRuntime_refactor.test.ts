@@ -18,8 +18,8 @@ describe('AgentRuntime Refactor Verification', () => {
           type: 'tool_call',
           id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
           name: tc.name,
-          input: tc.args,
-          thoughtSignature: tc.thought_signature
+          input: tc.input,
+          thoughtSignature: tc.thoughtSignature
         })) : res.text
       })),
       formatToolResults: vi.fn().mockImplementation(results => ({
@@ -29,7 +29,7 @@ describe('AgentRuntime Refactor Verification', () => {
           id: tr.id || '',
           name: tr.name,
           data: tr.response,
-          thoughtSignature: tr.thought_signature
+          thoughtSignature: tr.thoughtSignature
         }))
       })),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Rules')
@@ -40,10 +40,10 @@ describe('AgentRuntime Refactor Verification', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         toolCalls: [
-          { name: 'p1', args: { action: 'go' } },
-          { name: 'p2', args: { action: 'go' } },
-          { name: 's1', args: { action: 'go' } },
-          { name: 'p3', args: { action: 'go' } }
+          { type: 'tool_call', id: 'p1_1', name: 'p1', input: { action: 'go' } },
+          { type: 'tool_call', id: 'p2_1', name: 'p2', input: { action: 'go' } },
+          { type: 'tool_call', id: 's1_1', name: 's1', input: { action: 'go' } },
+          { type: 'tool_call', id: 'p3_1', name: 'p3', input: { action: 'go' } }
         ]
       })
       .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });
@@ -80,7 +80,7 @@ describe('AgentRuntime Refactor Verification', () => {
   it('should handle tool timeouts', async () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
-        toolCalls: [{ name: 'slow_tool', args: {} }]
+        toolCalls: [{ type: 'tool_call', id: 'slow_1', name: 'slow_tool', input: {} }]
       })
       .mockResolvedValueOnce({ text: 'Done', toolCalls: [] });
 

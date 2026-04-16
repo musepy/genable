@@ -6,7 +6,7 @@
  * All tools are first-class — no CLI parsing, no `run` wrapper, no chains.
  */
 
-import { LLMToolCall, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
+import { ToolCallBlock, LLMToolResult, LLMMessage } from '../llm-client/providers/types';
 import { getOverflow } from './overflowStore';
 
 import type { ToolExecutor } from './tools/types';
@@ -81,13 +81,13 @@ export interface ToolInterceptResult {
 
 export interface ToolDispatcherConfig {
   generateId: (prefix: string) => string;
-  normalizeToolCallId: (tc: LLMToolCall, fallbackPrefix: string) => string;
+  normalizeToolCallId: (tc: ToolCallBlock, fallbackPrefix: string) => string;
   emitRuntimeEvent: (event: RuntimeEventPayload) => void;
   throwIfCanceled: (iteration?: number) => void;
-  onToolCall?: (tc: LLMToolCall) => void;
-  onToolResult?: (tc: LLMToolCall, result: any) => void;
-  beforeToolExec?: (tc: LLMToolCall) => Promise<ToolInterceptResult | void>;
-  afterToolExec?: (tc: LLMToolCall, result: any) => Promise<ToolInterceptResult | void>;
+  onToolCall?: (tc: ToolCallBlock) => void;
+  onToolResult?: (tc: ToolCallBlock, result: any) => void;
+  beforeToolExec?: (tc: ToolCallBlock) => Promise<ToolInterceptResult | void>;
+  afterToolExec?: (tc: ToolCallBlock, result: any) => Promise<ToolInterceptResult | void>;
   /** Provider-specific tool results formatter. */
   formatToolResults: (results: LLMToolResult[]) => LLMMessage;
 }
@@ -111,8 +111,8 @@ export class ToolDispatcher {
     this.callSignatureMap.clear();
   }
 
-  private isDuplicateCall(tc: LLMToolCall): boolean {
-    const sig = `${tc.name}:${JSON.stringify(tc.args)}`;
+  private isDuplicateCall(tc: ToolCallBlock): boolean {
+    const sig = `${tc.name}:${JSON.stringify(tc.input)}`;
     const count = (this.callSignatureMap.get(sig) || 0) + 1;
     this.callSignatureMap.set(sig, count);
     return count > 1;
@@ -171,7 +171,7 @@ export class ToolDispatcher {
    * error classification, and result cleaning.
    */
   public async dispatch(
-    toolCalls: LLMToolCall[],
+    toolCalls: ToolCallBlock[],
     iteration: number,
   ): Promise<ToolDispatchResult> {
     const toolResults: LLMToolResult[] = [];
@@ -185,10 +185,10 @@ export class ToolDispatcher {
       // ── Expand $LAST variable in string args ──
       if (this.lastNodeId) {
         const lastRef = this.lastNodeId;
-        if (tc.args) {
+        if (tc.input) {
           for (const field of LAST_EXPANDABLE_FIELDS) {
-            if (typeof tc.args[field] === 'string' && tc.args[field].includes('$LAST')) {
-              tc.args[field] = tc.args[field].replace(/\$LAST/g, lastRef);
+            if (typeof tc.input[field] === 'string' && tc.input[field].includes('$LAST')) {
+              tc.input[field] = tc.input[field].replace(/\$LAST/g, lastRef);
             }
           }
         }
@@ -201,7 +201,7 @@ export class ToolDispatcher {
         type: 'tool_call',
         iteration: iteration + 1,
         phase: 'execution',
-        toolCall: { id: tc.id, name: toolName, args: tc.args },
+        toolCall: { id: tc.id, name: toolName, args: tc.input },
       });
       this.config.onToolCall?.(tc);
 
@@ -226,14 +226,14 @@ export class ToolDispatcher {
             name: toolName,
             id: tc.id,
             response: skipRaw,
-            thought_signature: tc.thought_signature,
+            thought_signature: tc.thoughtSignature,
           });
           // Emit events so UI/dev-bridge update status (not stuck on "running")
           this.config.emitRuntimeEvent({
             type: 'tool_log',
             iteration: iteration + 1,
             logEntry: {
-              callId: tc.id, toolName, args: tc.args,
+              callId: tc.id, toolName, args: tc.input,
               startedAt, durationMs: skipDurationMs,
               isDuplicate, isNoop: false, error: skipReason,
               code: skipCode,
@@ -250,7 +250,7 @@ export class ToolDispatcher {
               raw: skipRaw,
             },
           });
-          rawResults.push({ name: toolName, id: tc.id, result: skipRaw, durationMs: skipDurationMs, error: skipReason, code: skipCode });
+          rawResults.push({ name: toolName, id: tc.id, result: skipRaw, durationMs: skipDurationMs, error: skipReason, code: skipCode  });
           continue;
         }
       }
@@ -280,7 +280,7 @@ export class ToolDispatcher {
       const logEntry: ToolLogEntry = {
         callId: tc.id,
         toolName,
-        args: tc.args,
+        args: tc.input,
         startedAt,
         durationMs,
         isDuplicate,
@@ -325,7 +325,7 @@ export class ToolDispatcher {
         name: toolName,
         id: tc.id,
         response: presented,
-        thought_signature: tc.thought_signature,
+        thought_signature: tc.thoughtSignature,
         imageAttachment,
       });
     }
@@ -352,7 +352,7 @@ export class ToolDispatcher {
    *   - TOTAL_GENERATION_BUDGET_MS (5min, AgentRuntime aborts the LLM stream)
    *   - IPC bridge deadlock backstop (ipcBridge.ts internal request timeout)
    */
-  private async executeToolWithTimeout(tc: LLMToolCall): Promise<any> {
+  private async executeToolWithTimeout(tc: ToolCallBlock): Promise<any> {
     try {
       return await this.executeTool(tc);
     } catch (e: any) {
@@ -364,7 +364,7 @@ export class ToolDispatcher {
     }
   }
 
-  private async executeTool(tc: LLMToolCall): Promise<any> {
+  private async executeTool(tc: ToolCallBlock): Promise<any> {
     this.config.throwIfCanceled();
 
     // ── Unknown tool guard ──
@@ -379,10 +379,10 @@ export class ToolDispatcher {
       let result: any;
       const toolExec = this.toolExecutors[tc.name];
       if (toolExec) {
-        result = await toolExec(tc.args);
+        result = await toolExec(tc.input);
       }
       if (result == null && this.ipcBridge) {
-        result = await this.ipcBridge.callTool(tc.name, tc.args);
+        result = await this.ipcBridge.callTool(tc.name, tc.input);
       }
       if (result == null) {
         return { error: `Tool "${tc.name}" not available.` };

@@ -1,10 +1,10 @@
 /**
  * @file responseAccumulator.ts
  * @description Accumulates streaming LLM response chunks into a single LLMResponse.
- * Provider-agnostic — operates on the common LLMResponse/LLMToolCall/ContentBlock types.
+ * Provider-agnostic — operates on the common LLMResponse/ToolCallBlock/ContentBlock types.
  */
 
-import { LLMResponse, LLMToolCall, ContentBlock, FinishReason } from '../types';
+import { LLMResponse, ToolCallBlock, ContentBlock, FinishReason } from '../types';
 
 /**
  * Accumulates streaming response chunks (text, thoughts, tool calls, fullBlocks).
@@ -16,7 +16,7 @@ import { LLMResponse, LLMToolCall, ContentBlock, FinishReason } from '../types';
 export class ResponseAccumulator {
   private text: string = '';
   private thoughts: string = '';
-  private toolCalls: LLMToolCall[] = [];
+  private toolCalls: ToolCallBlock[] = [];
   private fullBlocks: ContentBlock[] = [];
   private usage?: LLMResponse['usage'];
   private finishReason?: FinishReason;
@@ -46,13 +46,8 @@ export class ResponseAccumulator {
     if (sharedSig) {
       // Propagate signature to tool calls missing it
       for (const tc of this.toolCalls) {
-        if (!tc.thought_signature) {
-          tc.thought_signature = sharedSig;
-          if (tc.metadata) {
-            tc.metadata.thought_signature = sharedSig;
-          } else {
-            tc.metadata = { thought_signature: sharedSig };
-          }
+        if (!tc.thoughtSignature) {
+          tc.thoughtSignature = sharedSig;
         }
       }
 
@@ -90,5 +85,5 @@ export class ResponseAccumulator {
 
   getText(): string { return this.text; }
   getThoughts(): string { return this.thoughts; }
-  getToolCalls(): LLMToolCall[] { return this.toolCalls; }
+  getToolCalls(): ToolCallBlock[] { return this.toolCalls; }
 }

@@ -47,7 +47,7 @@ export class ProxyProvider implements LLMProvider {
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig, onProgress, onThinking, abortSignal } = options;
 
-    const body = this.buildRequestBody({ messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig });
+    const body = this.buildRequestBody({ system: options.system, messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig });
 
     if (onProgress || onThinking) {
       return this.generateStreaming(body, onProgress, onThinking, abortSignal);
@@ -74,6 +74,7 @@ export class ProxyProvider implements LLMProvider {
   // ── Request Building ─────────────────────────────────────────────────────────
 
   private buildRequestBody(opts: {
+    system?: string;
     messages: LLMMessage[];
     tools?: ToolDefinition[];
     temperature?: number;
@@ -82,10 +83,7 @@ export class ProxyProvider implements LLMProvider {
     responseSchema?: Record<string, any>;
     toolConfig?: LLMGenerateOptions['toolConfig'];
   }): Record<string, any> {
-    const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig } = opts;
-
-    const systemMessages = messages.filter(m => m.role === 'system');
-    const chatMessages = messages.filter(m => m.role !== 'system');
+    const { system, messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig } = opts;
 
     const generationConfig = buildGeminiGenerationConfig({
       modelName: this.modelName, temperature, maxTokens, thinkingLevel, responseSchema,
@@ -95,15 +93,13 @@ export class ProxyProvider implements LLMProvider {
     const toolsResult = buildGeminiToolsPayload(tools, toolConfig);
 
     // System instruction — raw API requires {role, parts} format
-    const systemInstruction = systemMessages.length > 0
-      ? { role: 'user', parts: [{ text: systemMessages
-          .map(m => typeof m.content === 'string' ? m.content : (m.content as any[]).map(p => p.text).join('\n'))
-          .join('\n\n') }] }
+    const systemInstruction = system
+      ? { role: 'user', parts: [{ text: system }] }
       : undefined;
 
     return {
       model: this.modelName,
-      contents: chatMessages.map(m => mapLLMMessageToGeminiContent(m)),
+      contents: messages.map(m => mapLLMMessageToGeminiContent(m)),
       ...(systemInstruction && { systemInstruction }),
       generationConfig,
       ...(toolsResult && { tools: toolsResult.tools, toolConfig: toolsResult.toolConfig }),

@@ -26,7 +26,7 @@ describe('AgentRuntime Loop Detection', () => {
       generate: vi.fn(),
       formatToolResults: vi.fn().mockImplementation((results) => ({ role: 'tool', content: results })),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions'),
-      formatToolCalls: vi.fn().mockImplementation((calls) => ({ role: 'model', content: Array.isArray(calls) ? calls.map((c: any) => ({ type: 'tool_call', id: c.id || '', name: c.name, input: c.args })) : [{ type: 'tool_call', id: calls.id || '', name: calls.name, input: calls.args }] })),
+      formatToolCalls: vi.fn().mockImplementation((calls) => ({ role: 'model', content: Array.isArray(calls) ? calls.map((c: any) => ({ type: 'tool_call', id: c.id || '', name: c.name, input: c.input })) : [{ type: 'tool_call', id: calls.id || '', name: calls.name, input: calls.input }] })),
       formatResponse: vi.fn().mockImplementation((res) => ({ role: 'model', content: res.text || '', toolCalls: res.toolCalls }))
     };
     
@@ -57,9 +57,9 @@ describe('AgentRuntime Loop Detection', () => {
     // Previously, 12-char truncation would make them all "Header Cell "
     
     const toolCalls = [
-        { id: '1', name: 'createNode', args: { name: 'Header Cell 1', parentId: 'parent-123' } },
-        { id: '2', name: 'createNode', args: { name: 'Header Cell 2', parentId: 'parent-123' } },
-        { id: '3', name: 'createNode', args: { name: 'Header Cell 3', parentId: 'parent-123' } }
+        { type: 'tool_call' as const, id: '1', name: 'createNode', input: { name: 'Header Cell 1', parentId: 'parent-123' } },
+        { type: 'tool_call' as const, id: '2', name: 'createNode', input: { name: 'Header Cell 2', parentId: 'parent-123' } },
+        { type: 'tool_call' as const, id: '3', name: 'createNode', input: { name: 'Header Cell 3', parentId: 'parent-123' } }
     ];
 
     // Mock the provider to return these calls in sequence
@@ -93,7 +93,7 @@ describe('AgentRuntime Loop Detection', () => {
   });
 
   it('should NOT distinguish truly identical calls (Loop Detection should still work)', async () => {
-    const identicalCall = { id: '1', name: 'createNode', args: { name: 'Identical Name', parentId: 'parent-123' } };
+    const identicalCall = { type: 'tool_call' as const, id: '1', name: 'createNode', input: { name: 'Identical Name', parentId: 'parent-123' } };
 
     mockProvider.generate.mockResolvedValue({
       text: 'Stuck...',

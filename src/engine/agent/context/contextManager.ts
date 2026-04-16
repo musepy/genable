@@ -50,30 +50,27 @@ export class ContextManager {
 
   /**
    * Assemble the prompt from 4-layer context.
-   * Layers: system → summary (compressed) → conversation history (full) → current turn.
+   * Returns system prompt (layers 1+2) separately from messages (layers 3+4),
+   * so providers can pass system via their native system parameter.
    *
    * Includes an intra-turn budget gate: if the current turn has grown beyond
    * the context budget, older model+tool message pairs are compressed in-place
    * before assembling. This prevents unbounded context growth within a single
    * turn (e.g. 18 JSX iterations accumulating ~126K chars of functionCall args).
    */
-  assemblePrompt(): LLMMessage[] {
+  assemblePrompt(): { system: string; messages: LLMMessage[] } {
     // ── Intra-turn budget gate ──
     // Compress oldest consumed model+tool pairs when context exceeds budget.
     // This is the "fail fast" defense — prevent sending over-budget prompts to the LLM.
     this.compressTurnIfOverBudget();
 
+    // Layers 1+2: system prompt + summary concatenated into a single string
+    const systemParts: string[] = [];
+    if (this.systemPrompt) systemParts.push(this.systemPrompt);
+    if (this.summary) systemParts.push(this.summary);
+    const system = systemParts.join('\n\n');
+
     const messages: LLMMessage[] = [];
-
-    // Layer 1: static system prompt
-    if (this.systemPrompt) {
-      messages.push({ id: 'sys_static', role: 'system', content: this.systemPrompt });
-    }
-
-    // Layer 2: compressed summary (only present if some history was compressed)
-    if (this.summary) {
-      messages.push({ id: 'ctx_summary', role: 'system', content: this.summary });
-    }
 
     // Layer 3: uncompressed conversation history (previous turns, full detail)
     messages.push(...this.conversationHistory);
@@ -81,7 +78,7 @@ export class ContextManager {
     // Layer 4: current turn messages
     messages.push(...this.turnMessages);
 
-    return messages;
+    return { system, messages };
   }
 
   /**

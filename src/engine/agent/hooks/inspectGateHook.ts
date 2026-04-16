@@ -66,7 +66,7 @@ export function createInspectGateHook(
       const tc = ctx.currentToolCall;
       if (!tc || !mutationTools.has(tc.name)) return;
 
-      const nodeIds = extractTargetNodeIds(tc.name, tc.args);
+      const nodeIds = extractTargetNodeIds(tc.name, tc.input);
       if (nodeIds.length === 0) return;
 
       const uninspected = nodeIds.filter(id => !tracker.isInspected(id));
@@ -95,7 +95,7 @@ export function createInspectGateHook(
       // Only consume on success (no error in result)
       if (ctx.toolResult?.error) return;
 
-      const nodeIds = extractTargetNodeIds(tc.name, tc.args);
+      const nodeIds = extractTargetNodeIds(tc.name, tc.input);
       for (const id of nodeIds) {
         tracker.consumeInspection(id);
       }

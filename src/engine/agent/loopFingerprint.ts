@@ -12,16 +12,16 @@
  *     authoritative gate for that.
  */
 
-import type { LLMToolCall } from '../llm-client/providers/types';
+import type { ToolCallBlock } from '../llm-client/providers/types';
 import type { LoopFingerprint } from './loopDetector';
 
-export function buildLoopFingerprint(toolCalls: LLMToolCall[]): LoopFingerprint {
+export function buildLoopFingerprint(toolCalls: ToolCallBlock[]): LoopFingerprint {
   const names: string[] = [];
   const parts: string[] = [];
 
   for (const tc of toolCalls) {
     names.push(tc.name);
-    parts.push(`${tc.name}[${stableStringify(tc.args ?? {})}]`);
+    parts.push(`${tc.name}[${stableStringify(tc.input ?? {})}]`);
   }
 
   return {

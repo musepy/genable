@@ -4,7 +4,7 @@
  * Shared by GeminiProvider (SDK) and ProxyProvider (raw HTTP).
  */
 
-import { LLMResponse, LLMToolCall, LLMToolResult, ContentBlock, LLMMessage } from '../types';
+import { LLMResponse, ToolCallBlock, LLMToolResult, ContentBlock, LLMMessage } from '../types';
 import { ToolDefinition } from '../../../agent/tools/types';
 import { isGemini3Model } from '../../modelFilter';
 import { GEMINI_CONFIG } from '../../config';
@@ -35,7 +35,7 @@ export function mapGeminiPartsToLLMResponse(
 ): LLMResponse {
   let text = '';
   let thoughts = '';
-  const toolCalls: LLMToolCall[] = [];
+  const toolCalls: ToolCallBlock[] = [];
   const fullBlocks: ContentBlock[] = [];
 
   const sigPart = parts.find((p: any) => p.thoughtSignature || p.thought_signature);
@@ -45,15 +45,15 @@ export function mapGeminiPartsToLLMResponse(
     const sig = part.thoughtSignature || part.thought_signature || sharedSignature;
 
     if (part.functionCall) {
-      const tc: LLMToolCall = {
+      const tc: ToolCallBlock = {
+        type: 'tool_call' as const,
         id: part.functionCall.id || randomId('call_'),
         name: part.functionCall.name,
-        args: part.functionCall.args,
-        metadata: sig ? { thought_signature: sig } : undefined,
-        thought_signature: sig,
+        input: part.functionCall.args,
+        thoughtSignature: sig,
       };
       toolCalls.push(tc);
-      fullBlocks.push({ type: 'tool_call', id: tc.id!, name: part.functionCall.name, input: part.functionCall.args, thoughtSignature: sig });
+      fullBlocks.push({ type: 'tool_call', id: tc.id, name: part.functionCall.name, input: part.functionCall.args, thoughtSignature: sig });
     } else if (part.thought) {
       const thoughtText = typeof part.thought === 'string' ? part.thought : (part.text || '');
       if (thoughtText) thoughts += thoughtText;
@@ -132,6 +132,7 @@ export function formatToolResultsGemini(results: LLMToolResult[]): LLMMessage {
       id: tr.id || '',
       name: tr.name,
       data: tr.response,
+      isError: tr.isError,
       thoughtSignature: tr.thought_signature,
     });
     if (tr.imageAttachment) {

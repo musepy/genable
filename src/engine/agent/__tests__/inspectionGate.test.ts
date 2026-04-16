@@ -96,9 +96,9 @@ describe('InspectGateHook', () => {
   const findHook = (id: string) => gate.hooks.find(h => h.id === id)!;
 
   describe('beforeToolExec gate', () => {
-    const runGate = (toolName: string, args: any) =>
+    const runGate = (toolName: string, input: any) =>
       findHook('builtin:inspectGate').fn(makeCtx({
-        currentToolCall: { id: 'tc_1', name: toolName, args },
+        currentToolCall: { type: 'tool_call', id: 'tc_1', name: toolName, input },
       }));
 
     it('skips mutation on uninspected node', async () => {
@@ -156,16 +156,16 @@ describe('InspectGateHook', () => {
       expect(result?.action).toBe('skip');
     });
 
-    it('handles missing args gracefully', async () => {
+    it('handles missing input gracefully', async () => {
       const result = await runGate('edit', undefined);
       expect(result).toBeUndefined(); // no node IDs → nothing to gate
     });
   });
 
   describe('afterToolExec dirty flag', () => {
-    const runDirty = (toolName: string, args: any, toolResult: any) =>
+    const runDirty = (toolName: string, input: any, toolResult: any) =>
       findHook('builtin:inspectGate:dirty').fn(makeCtx({
-        currentToolCall: { id: 'tc_1', name: toolName, args },
+        currentToolCall: { type: 'tool_call', id: 'tc_1', name: toolName, input },
         toolResult,
       }));
 
@@ -206,9 +206,9 @@ describe('InspectStubHook', () => {
 
   const findHook = () => stub.hooks.find(h => h.id === 'builtin:inspectStub')!;
 
-  const runStub = (toolName: string, args: any, toolResult: any) =>
+  const runStub = (toolName: string, input: any, toolResult: any) =>
     findHook().fn(makeCtx({
-      currentToolCall: { id: 'tc_1', name: toolName, args },
+      currentToolCall: { type: 'tool_call', id: 'tc_1', name: toolName, input },
       toolResult,
     }));
 

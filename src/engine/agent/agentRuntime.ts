@@ -14,7 +14,7 @@
  * only compress when you must.
  */
 
-import { LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
+import { LLMProvider, LLMMessage, LLMResponse, ToolCallBlock } from '../llm-client/providers/types';
 import { ToolDefinition, allToolDefinitions, ToolExecutor } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
@@ -48,8 +48,8 @@ export interface AgentRuntimeOptions {
   maxIterations?: number;
   systemPrompt?: string;
   behaviorConfig?: Partial<AgentBehaviorConfig>;
-  onToolCall?: (toolCall: LLMToolCall) => void;
-  onToolResult?: (toolCall: LLMToolCall, result: any) => void;
+  onToolCall?: (toolCall: ToolCallBlock) => void;
+  onToolResult?: (toolCall: ToolCallBlock, result: any) => void;
   onIterationStart?: (iteration: number, taskInfo?: { taskId: string; taskTitle: string }) => void;
   onIteration?: (iteration: number, response: LLMResponse, taskInfo?: { taskId: string; taskTitle: string }) => void;
   taskId?: string;
@@ -335,7 +335,7 @@ export class AgentRuntime {
 
   // ─── ID generation ───────────────────────────────────────────
 
-  private normalizeToolCallId(tc: LLMToolCall, fallbackPrefix = 'tool'): string {
+  private normalizeToolCallId(tc: ToolCallBlock, fallbackPrefix = 'tool'): string {
     if (typeof tc.id === 'string' && tc.id.trim().length > 0) return tc.id;
     return this.generateId(fallbackPrefix);
   }
@@ -371,7 +371,7 @@ export class AgentRuntime {
 
     const markup = `user-bubble\n  user-name: You\n  user-text: ${text}`;
     await this.toolDispatcher.dispatch(
-      [{ id: this.generateId('user-msg'), name: 'render', args: { markup, parentId: panelId } }],
+      [{ type: 'tool_call' as const, id: this.generateId('user-msg'), name: 'render', input: { markup, parentId: panelId } }],
       iteration,
     );
   }
@@ -418,7 +418,7 @@ export class AgentRuntime {
 
     const markup = markupLines.join('\n');
     await this.toolDispatcher.dispatch(
-      [{ id: this.generateId('bubble'), name: 'render', args: { markup, parentId: panelId } }],
+      [{ type: 'tool_call' as const, id: this.generateId('bubble'), name: 'render', input: { markup, parentId: panelId } }],
       iteration,
     );
   }
@@ -511,7 +511,6 @@ export class AgentRuntime {
               id: this.generateId('tok'),
               role: 'user',
               content: `[System: Design tokens detected — ${summary}]`,
-              hidden: true,
             });
           }
         }
@@ -561,11 +560,12 @@ export class AgentRuntime {
         throw new Error(beforeIterResult.reason || 'Aborted by beforeIteration hook');
       }
 
-      const prompt = this.contextManager.assemblePrompt();
+      const { system, messages: prompt } = this.contextManager.assemblePrompt();
       const currentTokens = this.contextManager.getLastPromptTokens();
 
       // Debug: dump full LLM prompt for each iteration (visible in Figma DevTools Console)
-      console.log(`\n${'='.repeat(60)}\n[Iteration ${iteration + 1}/${this.maxIterations}] LLM Prompt (${prompt.length} messages)\n${'='.repeat(60)}`);
+      console.log(`\n${'='.repeat(60)}\n[Iteration ${iteration + 1}/${this.maxIterations}] LLM Prompt (${prompt.length} messages, system: ${system.length} chars)\n${'='.repeat(60)}`);
+      console.log(`  [system] ${system.slice(0, 500)}`);
       for (const m of prompt) {
         const contentPreview = typeof m.content === 'string'
           ? m.content.slice(0, 500)
@@ -625,8 +625,8 @@ export class AgentRuntime {
         abortController.abort();
       }, AGENT_RUNTIME_CONSTANTS.TOTAL_GENERATION_BUDGET_MS);
 
-      let toolCallsForExecution: LLMToolCall[] = [];
-      let rawToolCallsForLoopDetection: LLMToolCall[] = [];
+      let toolCallsForExecution: ToolCallBlock[] = [];
+      let rawToolCallsForLoopDetection: ToolCallBlock[] = [];
       let response: LLMResponse;
 
       try {
@@ -634,6 +634,7 @@ export class AgentRuntime {
         const genResult = await this.llmCoordinator.generate(
           {
             messages: prompt,
+            system,
             tools: this.options.tools,
             toolConfig: { mode: 'AUTO' as ToolCallMode },
             maxOutputTokens: this.loopPolicy.maxOutputTokens,
@@ -751,7 +752,7 @@ export class AgentRuntime {
 
         // ──── HOOK: afterIteration ────
         // Use raw results for hooks (not presented format)
-        const iterationToolResults: Array<{ toolCall: LLMToolCall; result: any }> = [];
+        const iterationToolResults: Array<{ toolCall: ToolCallBlock; result: any }> = [];
         for (let i = 0; i < toolCallsForExecution.length && i < dispatchResult.rawResults.length; i++) {
           iterationToolResults.push({
             toolCall: toolCallsForExecution[i],
@@ -799,7 +800,6 @@ export class AgentRuntime {
               id: this.generateId('nudge'),
               role: 'user',
               content: 'Do not ask questions in plain text — the user cannot reply inline. Use the ask_user tool to present options. Pick the single most important question and call ask_user with 2-4 options.',
-              synthetic: true,
             });
             iteration++;
             continue;

@@ -9,7 +9,7 @@
  * Reset on turn start (wired into builtin hooks reset()).
  * Pure data container — logic lives in toolPlanTriggers.ts.
  */
-import { LLMToolCall } from '../../llm-client/providers/types';
+import { ToolCallBlock } from '../../llm-client/providers/types';
 
 /** Max entries to retain in the recent-calls window. Small on purpose. */
 export const RECENT_TOOL_CALL_WINDOW = 5;
@@ -31,7 +31,7 @@ export interface TurnState {
   /** Ring buffer of recent tool calls (max RECENT_TOOL_CALL_WINDOW). */
   recentToolCalls: RecentToolCall[];
   /** Observe a tool call. Pushes to recentToolCalls, trims window. */
-  recordCall(tc: LLMToolCall, parentHint?: string): void;
+  recordCall(tc: ToolCallBlock, parentHint?: string): void;
   /** Mark IDs as known (from jsx/inspect/find_nodes results). */
   addKnownIds(ids: Iterable<string>): void;
   /** Clear all state. Called at turn boundary. */
@@ -46,11 +46,11 @@ export function createTurnState(): TurnState {
   return {
     knownNodeIds,
     recentToolCalls,
-    recordCall(tc: LLMToolCall, parentHint?: string) {
+    recordCall(tc: ToolCallBlock, parentHint?: string) {
       seq += 1;
       recentToolCalls.push({
         name: tc.name,
-        args: tc.args,
+        args: tc.input,
         parentHint,
         seq,
       });

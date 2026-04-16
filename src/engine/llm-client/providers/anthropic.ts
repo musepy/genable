@@ -8,7 +8,7 @@
 
 import {
   LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolResult,
-  formatResponseDefault, formatToolResultsDefault, getToolSystemInstructionDefault,
+  ToolCallBlock, formatResponseDefault, formatToolResultsDefault, getToolSystemInstructionDefault,
   ContentBlock, normalizeFinishReason,
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
@@ -23,20 +23,10 @@ import {
 // Wire format: LLMMessage[] → Anthropic Messages API
 // ═══════════════════════════════════════════════════════════════
 
-function mapMessagesToAnthropic(messages: LLMMessage[]): { system?: string; messages: any[] } {
-  let system: string | undefined;
+function mapMessagesToAnthropic(messages: LLMMessage[]): any[] {
   const mapped: any[] = [];
 
   for (const m of messages) {
-    // System messages → top-level system parameter
-    if (m.role === 'system') {
-      const text = typeof m.content === 'string'
-        ? m.content
-        : (m.content as ContentBlock[]).filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
-      system = system ? `${system}\n\n${text}` : text;
-      continue;
-    }
-
     // Tool results → user message with tool_result content blocks
     if (m.role === 'tool' && Array.isArray(m.content)) {
       for (const block of m.content) {
@@ -121,7 +111,7 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): { system?: string; mess
     }
   }
 
-  return { system, messages: merged };
+  return merged;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -130,16 +120,17 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): { system?: string; mess
 
 function mapAnthropicToLLMResponse(data: any): LLMResponse {
   const textParts: string[] = [];
-  const toolCalls: { id: string; name: string; args: any }[] = [];
+  const toolCalls: ToolCallBlock[] = [];
 
   for (const block of data.content || []) {
     if (block.type === 'text') {
       textParts.push(block.text);
     } else if (block.type === 'tool_use') {
       toolCalls.push({
+        type: 'tool_call' as const,
         id: block.id,
         name: block.name,
-        args: block.input,
+        input: block.input,
       });
     }
   }
@@ -186,7 +177,7 @@ export class AnthropicProvider implements LLMProvider {
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, toolConfig, abortSignal } = options;
 
-    const { system, messages: anthropicMessages } = mapMessagesToAnthropic(messages);
+    const anthropicMessages = mapMessagesToAnthropic(messages);
 
     const body: any = {
       model: this.modelName,
@@ -194,7 +185,7 @@ export class AnthropicProvider implements LLMProvider {
       messages: anthropicMessages,
     };
 
-    if (system) body.system = system;
+    if (options.system) body.system = options.system;
     if (temperature !== undefined) body.temperature = temperature;
 
     if (tools && tools.length > 0) {

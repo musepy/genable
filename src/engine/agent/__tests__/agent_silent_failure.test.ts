@@ -22,8 +22,8 @@ describe('Agent fail-fast on empty response', () => {
           type: 'tool_call',
           id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
           name: tc.name,
-          input: tc.args,
-          thoughtSignature: tc.thought_signature
+          input: tc.input,
+          thoughtSignature: tc.thoughtSignature
         })) : res.text
       })),
       formatToolResults: vi.fn().mockImplementation(results => ({
@@ -33,7 +33,7 @@ describe('Agent fail-fast on empty response', () => {
           id: tr.id || '',
           name: tr.name,
           data: tr.response,
-          thoughtSignature: tr.thought_signature
+          thoughtSignature: tr.thoughtSignature
         }))
       })),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Rules')

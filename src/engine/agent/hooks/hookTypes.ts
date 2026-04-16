@@ -8,7 +8,7 @@
  * middleware.
  */
 
-import { LLMToolCall, LLMMessage } from '../../llm-client/providers/types';
+import { ToolCallBlock, LLMMessage } from '../../llm-client/providers/types';
 import { AgentLoopPolicy } from '../agentLoopPolicy';
 
 // ---------------------------------------------------------------------------
@@ -74,16 +74,16 @@ export interface HookContext {
   /** LLM finish reason (available in afterLLMResponse+). */
   finishReason?: string;
   /** All tool calls from this iteration (available in afterLLMResponse+). */
-  toolCalls?: LLMToolCall[];
+  toolCalls?: ToolCallBlock[];
   /** The current tool call being processed (beforeToolExec / afterToolExec). */
-  currentToolCall?: LLMToolCall;
+  currentToolCall?: ToolCallBlock;
   /** The current tool result (afterToolExec only). */
   toolResult?: any;
   /**
    * All tool results from this iteration (afterIteration only).
    * Each entry has the tool call and its result for iteration-level analysis.
    */
-  iterationToolResults?: Array<{ toolCall: LLMToolCall; result: any }>;
+  iterationToolResults?: Array<{ toolCall: ToolCallBlock; result: any }>;
   /** Direct access to the messages array for reading/injecting messages. */
   messages: LLMMessage[];
   /** Current loop policy (thresholds, budgets). */

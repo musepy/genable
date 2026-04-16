@@ -7,7 +7,7 @@
  * behavior inheritance, executor assembly. The runtime itself is unchanged.
  */
 
-import type { LLMProvider, LLMToolCall, LLMResponse } from '../llm-client/providers/types';
+import type { LLMProvider, ToolCallBlock, LLMResponse } from '../llm-client/providers/types';
 import type { ToolDefinition, ToolExecutor } from './tools/types';
 import type { AgentBehaviorConfig } from './agentBehaviorConfig';
 import type { AgentLoopPolicy } from './agentLoopPolicy';
@@ -32,8 +32,8 @@ export interface AgentConfig {
   onRuntimeEvent?: (event: AgentRuntimeEvent) => void;
   contextWindow?: number;
   loopPolicy?: Partial<AgentLoopPolicy>;
-  onToolCall?: (tc: LLMToolCall) => void;
-  onToolResult?: (tc: LLMToolCall, result: any) => void;
+  onToolCall?: (tc: ToolCallBlock) => void;
+  onToolResult?: (tc: ToolCallBlock, result: any) => void;
   onIterationStart?: (iteration: number) => void;
   onIteration?: (iteration: number, response: LLMResponse) => void;
 }

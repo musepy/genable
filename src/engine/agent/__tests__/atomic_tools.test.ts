@@ -35,29 +35,29 @@ describe('Atomic Tools Interactions', () => {
           .mockResolvedValueOnce({
             text: 'Creating structure...',
             toolCalls: [
-                { name: 'createNode', args: { type: 'FRAME', name: 'Parent' } }
+                { type: 'tool_call', id: 'tc_1', name: 'createNode', input: { type: 'FRAME', name: 'Parent' } }
             ]
           })
           // Turn 2: Create child using returned parent ID
           .mockResolvedValueOnce({
             text: 'Creating child...',
             toolCalls: [
-                { name: 'createNode', args: { type: 'FRAME', name: 'Child', parentId: '1:0' } }
+                { type: 'tool_call', id: 'tc_2', name: 'createNode', input: { type: 'FRAME', name: 'Child', parentId: '1:0' } }
             ]
           })
           // Turn 3: Try to set Child to HUG (Fail expected - no Auto Layout context)
           .mockResolvedValueOnce({
             text: 'Setting layout...',
             toolCalls: [
-                { name: 'setNodeLayout', args: { nodeId: '1:1', sizing: 'HUG' } }
+                { type: 'tool_call', id: 'tc_3', name: 'setNodeLayout', input: { nodeId: '1:1', sizing: 'HUG' } }
             ]
           })
           // Turn 4: Fix Parent + Retry Child (Success expected)
           .mockResolvedValueOnce({
             text: 'Fixing parent and retrying...',
             toolCalls: [
-                { name: 'setNodeLayout', args: { nodeId: '1:0', layoutMode: 'HORIZONTAL' } },
-                { name: 'setNodeLayout', args: { nodeId: '1:1', sizing: 'HUG' } }
+                { type: 'tool_call', id: 'tc_4', name: 'setNodeLayout', input: { nodeId: '1:0', layoutMode: 'HORIZONTAL' } },
+                { type: 'tool_call', id: 'tc_5', name: 'setNodeLayout', input: { nodeId: '1:1', sizing: 'HUG' } }
             ]
           })
           .mockResolvedValueOnce({
@@ -79,8 +79,8 @@ describe('Atomic Tools Interactions', () => {
             type: 'tool_call',
             id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
             name: tc.name,
-            input: tc.args,
-            thoughtSignature: tc.thought_signature
+            input: tc.input,
+            thoughtSignature: tc.thoughtSignature
           })) : res.text
         })),
         formatToolResults: vi.fn().mockImplementation(results => ({
@@ -90,7 +90,7 @@ describe('Atomic Tools Interactions', () => {
             id: tr.id || '',
             name: tr.name,
             data: tr.response,
-            thoughtSignature: tr.thought_signature
+            thoughtSignature: tr.thoughtSignature
           }))
         })),
         getToolSystemInstruction: vi.fn().mockReturnValue('')
@@ -203,14 +203,14 @@ describe('Atomic Tools Interactions', () => {
           .mockResolvedValueOnce({
             text: 'Creating node...',
             toolCalls: [
-                { name: 'createNode', args: { type: 'FRAME', name: 'Test Frame' } }
+                { type: 'tool_call', id: 'tc_g1', name: 'createNode', input: { type: 'FRAME', name: 'Test Frame' } }
             ]
           })
           // Turn 2: Try to use a guessed ID (simulating LLM hallucination)
           .mockResolvedValueOnce({
             text: 'Setting layout with guessed ID...',
             toolCalls: [
-                { name: 'setNodeLayout', args: { nodeId: 'guessed-123', layoutMode: 'VERTICAL' } }
+                { type: 'tool_call', id: 'tc_g2', name: 'setNodeLayout', input: { nodeId: 'guessed-123', layoutMode: 'VERTICAL' } }
             ]
           })
           .mockResolvedValueOnce({
@@ -232,8 +232,8 @@ describe('Atomic Tools Interactions', () => {
             type: 'tool_call',
             id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
             name: tc.name,
-            input: tc.args,
-            thoughtSignature: tc.thought_signature
+            input: tc.input,
+            thoughtSignature: tc.thoughtSignature
           })) : res.text
         })),
         formatToolResults: vi.fn().mockImplementation(results => ({
@@ -243,7 +243,7 @@ describe('Atomic Tools Interactions', () => {
             id: tr.id || '',
             name: tr.name,
             data: tr.response,
-            thoughtSignature: tr.thought_signature
+            thoughtSignature: tr.thoughtSignature
           }))
         })),
         getToolSystemInstruction: vi.fn().mockReturnValue('')

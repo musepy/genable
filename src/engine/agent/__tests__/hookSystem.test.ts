@@ -323,7 +323,7 @@ describe('Builtin: loopDetectionHook', () => {
 
     const ctx = makeCtx({
       responseText: 'Some text',
-      toolCalls: [{ id: '1', name: 'createNode', args: { name: 'test' } }],
+      toolCalls: [{ type: 'tool_call', id: '1', name: 'createNode', input: { name: 'test' } }],
     });
     const result = await runner.run('afterLLMResponse', ctx);
     expect(result.action).toBe('continue');
@@ -341,7 +341,7 @@ describe('emptyArgsGuard', () => {
     registry.registerAll(guard.hooks);
     const runner = new HookRunner(registry);
 
-    const emptyToolCalls = [{ id: '1', name: 'run', args: null }];
+    const emptyToolCalls = [{ type: 'tool_call', id: '1', name: 'run', input: null as any }];
 
     // Iterations 1-3: continue with injected message
     for (let i = 0; i < 3; i++) {
@@ -365,15 +365,15 @@ describe('emptyArgsGuard', () => {
 
     // 2 empty iterations
     for (let i = 0; i < 2; i++) {
-      await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ id: '1', name: 'run', args: null }] }));
+      await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ type: 'tool_call', id: '1', name: 'run', input: null as any }] }));
     }
 
     // Valid args → reset
-    await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ id: '1', name: 'run', args: { command: 'ls /' } }] }));
+    await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ type: 'tool_call', id: '1', name: 'run', input: { command: 'ls /' } }] }));
 
     // 3 more empty → should NOT abort (count was reset)
     for (let i = 0; i < 3; i++) {
-      const result = await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ id: '1', name: 'run', args: null }] }));
+      const result = await runner.run('afterLLMResponse', makeCtx({ toolCalls: [{ type: 'tool_call', id: '1', name: 'run', input: null as any }] }));
       expect(result.action).toBe('continue');
     }
   });
@@ -384,7 +384,7 @@ describe('emptyArgsGuard', () => {
     registry.registerAll(guard.hooks);
     const runner = new HookRunner(registry);
 
-    const ctx = makeCtx({ currentToolCall: { id: '1', name: 'run', args: {} } });
+    const ctx = makeCtx({ currentToolCall: { type: 'tool_call', id: '1', name: 'run', input: {} } });
     const result = await runner.run('beforeToolExec', ctx);
     expect(result.action).toBe('skip');
   });
@@ -397,7 +397,7 @@ describe('consecutiveFailureGuard', () => {
     registry.registerAll(guard.hooks);
     const runner = new HookRunner(registry);
 
-    const failResults = [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: 'failed' } }];
+    const failResults = [{ toolCall: { type: 'tool_call', id: '1', name: 'run', input: {} }, result: { error: 'failed' } }];
 
     // 2 failures → no message (threshold is 3)
     for (let i = 0; i < 2; i++) {
@@ -423,19 +423,19 @@ describe('consecutiveFailureGuard', () => {
     // 2 failures
     for (let i = 0; i < 2; i++) {
       await runner.run('afterIteration', makeCtx({
-        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: 'failed' } }],
+        iterationToolResults: [{ toolCall: { type: 'tool_call', id: '1', name: 'run', input: {} }, result: { error: 'failed' } }],
       }));
     }
 
     // 1 success → reset
     await runner.run('afterIteration', makeCtx({
-      iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: {} }],
+      iterationToolResults: [{ toolCall: { type: 'tool_call', id: '1', name: 'run', input: {} }, result: {} }],
     }));
 
     // 2 more failures → no inject (count reset)
     for (let i = 0; i < 2; i++) {
       const ctx = makeCtx({
-        iterationToolResults: [{ toolCall: { id: '1', name: 'run', args: {} }, result: { error: 'failed' } }],
+        iterationToolResults: [{ toolCall: { type: 'tool_call', id: '1', name: 'run', input: {} }, result: { error: 'failed' } }],
       });
       await runner.run('afterIteration', ctx);
       expect(ctx.messages).toHaveLength(0);
@@ -452,7 +452,7 @@ describe('partialFailureGuard', () => {
 
     const ctx = makeCtx({
       iterationToolResults: [{
-        toolCall: { id: '1', name: 'jsx', args: {} },
+        toolCall: { type: 'tool_call', id: '1', name: 'jsx', input: {} },
         result: {
           error: 'PARTIAL_FAILURE',
           data: { errors: [{ op: 'create /Card/Title', error: 'Font not found' }] },
@@ -474,7 +474,7 @@ describe('partialFailureGuard', () => {
 
     const ctx = makeCtx({
       iterationToolResults: [{
-        toolCall: { id: '1', name: 'jsx', args: {} },
+        toolCall: { type: 'tool_call', id: '1', name: 'jsx', input: {} },
         result: {},
       }],
     });

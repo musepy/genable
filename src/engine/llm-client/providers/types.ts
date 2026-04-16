@@ -3,9 +3,11 @@
  * @description Common interfaces for LLM Providers — tagged-union content blocks,
  * provider-neutral message format, and shared adapters.
  *
- * ContentBlock replaces the old Gemini-style Part (optional fields).
- * Every block has a `type` discriminator — access via `block.type === 'tool_call'`,
- * not by checking which optional field exists.
+ * Design principles (aligned with pimono/Claude Code):
+ * - ContentBlock: tagged union with `type` discriminator
+ * - ToolCallBlock: single type for both dispatch and message history
+ * - System prompt: separated from message array via LLMGenerateOptions.system
+ * - Message metadata: only `summaryOf` (context compression bookkeeping)
  */
 
 import { ToolDefinition, ToolResponse } from '../../agent/tools/types';
@@ -32,6 +34,7 @@ export interface ToolResultBlock {
   id: string;
   name: string;
   data: any;
+  isError?: boolean;
   thoughtSignature?: string;
 }
 
@@ -59,28 +62,18 @@ export interface LLMMessage {
   id: string;
   role: MessageRole;
   content: string | ContentBlock[];
-  hidden?: boolean;
   summaryOf?: string[];
-  pinned?: boolean;
-  synthetic?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Tool call / result (intermediate types for runtime dispatch)
+// Tool result (intermediate type for raw tool output before formatting)
 // ═══════════════════════════════════════════════════════════════
-
-export interface LLMToolCall {
-  id?: string;
-  name: string;
-  args: any;
-  metadata?: Record<string, any>;
-  thought_signature?: string;
-}
 
 export interface LLMToolResult {
   name: string;
   response: any;
   id?: string;
+  isError?: boolean;
   thought_signature?: string;
   imageAttachment?: {
     mimeType: string;
@@ -92,10 +85,6 @@ export interface LLMToolResult {
 // LLM Response
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Strict union — only LLM API "real" finish reasons.
- * Providers MUST NOT fabricate values like 'timeout'.
- */
 export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter';
 
 export function normalizeFinishReason(raw: string | null | undefined): FinishReason | undefined {
@@ -120,7 +109,7 @@ export function normalizeFinishReason(raw: string | null | undefined): FinishRea
 
 export interface LLMResponse {
   text: string;
-  toolCalls?: LLMToolCall[];
+  toolCalls?: ToolCallBlock[];
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -133,6 +122,7 @@ export interface LLMResponse {
 }
 
 export interface LLMGenerateOptions {
+  system?: string;
   messages: LLMMessage[];
   tools?: ToolDefinition[];
   temperature?: number;
@@ -175,7 +165,7 @@ export interface LLMProvider {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Default formatters (shared by providers that don't need custom logic)
+// Default formatters
 // ═══════════════════════════════════════════════════════════════
 
 function randomId(prefix: string): string {
@@ -186,15 +176,7 @@ export function formatResponseDefault(response: LLMResponse): LLMMessage {
   if (response.toolCalls && response.toolCalls.length > 0) {
     const content: ContentBlock[] = [];
     if (response.text) content.push({ type: 'text', text: response.text });
-
-    content.push(...response.toolCalls.map(tc => ({
-      type: 'tool_call' as const,
-      id: tc.id || randomId('call'),
-      name: tc.name,
-      input: tc.args,
-      thoughtSignature: tc.thought_signature,
-    })));
-
+    content.push(...response.toolCalls);
     return { id: randomId('gen'), role: 'model', content };
   }
   return { id: randomId('gen'), role: 'model', content: response.text || '' };
@@ -209,6 +191,7 @@ export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
       id: tr.id || '',
       name: tr.name,
       data: tr.response,
+      isError: tr.isError,
     })),
   };
 }
@@ -218,7 +201,7 @@ export function getToolSystemInstructionDefault(_tools: ToolDefinition[]): strin
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Type guards (for consumers that switch on block.type)
+// Type guards
 // ═══════════════════════════════════════════════════════════════
 
 export function isTextBlock(b: ContentBlock): b is TextBlock { return b.type === 'text'; }

@@ -174,7 +174,7 @@ function extractToolResults(content: string | ContentBlock[], turn: TurnDigest):
       continue;
     }
 
-    const ok = resp.error == null;
+    const ok = block.isError === true ? false : (resp.error == null);
     const brief = ok
       ? summarizeSuccessResult(name, resp)
       : summarizeFailResult(name, resp);

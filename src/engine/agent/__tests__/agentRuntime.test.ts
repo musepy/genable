@@ -17,8 +17,8 @@ describe('AgentRuntime', () => {
           type: 'tool_call',
           id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
           name: tc.name,
-          input: tc.args,
-          thoughtSignature: tc.thought_signature
+          input: tc.input,
+          thoughtSignature: tc.thoughtSignature
         })) : res.text
       })),
       formatToolResults: vi.fn().mockImplementation(results => ({
@@ -28,7 +28,7 @@ describe('AgentRuntime', () => {
           id: tr.id || '',
           name: tr.name,
           data: tr.response,
-          thoughtSignature: tr.thought_signature
+          thoughtSignature: tr.thoughtSignature
         }))
       })),
       getCapabilities: vi.fn().mockReturnValue({
@@ -63,7 +63,7 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'Thinking...',
-        toolCalls: [{ name: 'get_info', args: { query: 'test' } }]
+        toolCalls: [{ type: 'tool_call', id: 'tc_1', name: 'get_info', input: { query: 'test' } }]
       })
       // Round 2: Model gives final answer (no tool calls = implicit completion)
       .mockResolvedValueOnce({
@@ -104,7 +104,7 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'start task',
-        toolCalls: [{ name: 'task_start', args: { title: 'Legacy call' } }]
+        toolCalls: [{ type: 'tool_call', id: 'tc_2', name: 'task_start', input: { title: 'Legacy call' } }]
       })
       .mockResolvedValueOnce({
         text: 'Recovered',
@@ -141,7 +141,7 @@ describe('AgentRuntime', () => {
   it('should return graceful message when max iterations reached', async () => {
     (mockProvider.generate as any).mockResolvedValue({
       text: 'Thinking...',
-      toolCalls: [{ name: 'loop', args: {} }]
+      toolCalls: [{ type: 'tool_call', id: 'tc_3', name: 'loop', input: {} }]
     });
 
     const events: any[] = [];
@@ -182,7 +182,7 @@ describe('AgentRuntime', () => {
     // With elastic iterations, the agent returns gracefully instead of throwing
     (mockProvider.generate as any).mockResolvedValue({
       text: 'Doing same thing...',
-      toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
+      toolCalls: [{ type: 'tool_call', id: 'tc_4', name: 'inspectDesign', input: { mode: 'hierarchy', nodeId: '1:1' } }]
     });
 
     const mockIpcBridge = {
@@ -231,7 +231,7 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'Mutate design',
-        toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
+        toolCalls: [{ type: 'tool_call', id: 'tc_5', name: 'patchNode', input: { nodeId: '1:1', props: { width: 100 } } }]
       })
       .mockResolvedValueOnce({
         text: 'Mutated and done',
@@ -261,11 +261,11 @@ describe('AgentRuntime', () => {
     (mockProvider.generate as any)
       .mockResolvedValueOnce({
         text: 'Mutate',
-        toolCalls: [{ name: 'patchNode', args: { nodeId: '1:1', props: { width: 100 } } }]
+        toolCalls: [{ type: 'tool_call', id: 'tc_5', name: 'patchNode', input: { nodeId: '1:1', props: { width: 100 } } }]
       })
       .mockResolvedValueOnce({
         text: 'Let me verify',
-        toolCalls: [{ name: 'inspectDesign', args: { mode: 'hierarchy', nodeId: '1:1' } }]
+        toolCalls: [{ type: 'tool_call', id: 'tc_4', name: 'inspectDesign', input: { mode: 'hierarchy', nodeId: '1:1' } }]
       })
       .mockResolvedValueOnce({
         text: 'Verified and done',

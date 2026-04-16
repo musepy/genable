@@ -30,7 +30,7 @@ describe('Agent Architecture Contract Tests', () => {
                     id: tr.id || '',
                     name: tr.name,
                     data: tr.response,
-                    thoughtSignature: tr.thought_signature
+                    thoughtSignature: tr.thoughtSignature
                 }))
             })),
             getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions'),
@@ -92,9 +92,9 @@ describe('Agent Architecture Contract Tests', () => {
 
         await runtime2.run('execution request');
         const executionCall = (mockProvider.generate as Mock).mock.calls[0][0];
-        // System prompt should be present as the first message
-        const sysMsg = executionCall.messages.find((m: any) => m.id === 'sys_static');
-        expect(sysMsg).toBeDefined();
-        expect(sysMsg.role).toBe('system');
+        // System prompt should be passed as a separate string, not in messages array
+        expect(executionCall.system).toBeDefined();
+        expect(typeof executionCall.system).toBe('string');
+        expect(executionCall.system.length).toBeGreaterThan(0);
     });
 });

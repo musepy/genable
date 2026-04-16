@@ -5,7 +5,7 @@
  * sanitization. Pure class with injected dependencies, no reference to AgentRuntime.
  */
 
-import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, LLMToolCall } from '../llm-client/providers/types';
+import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, ToolCallBlock } from '../llm-client/providers/types';
 import { ToolDefinition } from './tools';
 import { ToolCallMode } from './agentLoopPolicy';
 import { ToolResultCleaner } from './context/toolResultCleaner';
@@ -24,6 +24,7 @@ interface RuntimeEventPayload {
 
 export interface LLMGenerationRequest {
   messages: LLMMessage[];
+  system?: string;
   tools: ToolDefinition[];
   toolConfig: { mode: ToolCallMode };
   maxOutputTokens: number;
@@ -36,15 +37,15 @@ export interface LLMGenerationResult {
   /** The raw LLM response with toolCalls replaced by sanitized versions for history. */
   response: LLMResponse;
   /** Original tool calls with normalized IDs, for execution. */
-  toolCallsForExecution: LLMToolCall[];
+  toolCallsForExecution: ToolCallBlock[];
   /** Raw tool calls before normalization, for loop detection. */
-  rawToolCallsForLoopDetection: LLMToolCall[];
+  rawToolCallsForLoopDetection: ToolCallBlock[];
 }
 
 export interface LLMGenerationCoordinatorConfig {
   throttleMs: number;
   generateId: (prefix: string) => string;
-  normalizeToolCallId: (tc: LLMToolCall, fallbackPrefix: string) => string;
+  normalizeToolCallId: (tc: ToolCallBlock, fallbackPrefix: string) => string;
   emitRuntimeEvent: (event: RuntimeEventPayload) => void;
   throwIfCanceled: (iteration?: number) => void;
   /** Called when the LLM starts producing output (text or thinking). */
@@ -115,10 +116,8 @@ export class LLMGenerationCoordinator {
         id: m.id,
         role: m.role,
         contentLength: typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length,
-        hidden: m.hidden,
-        pinned: m.pinned,
       })),
-      messageCount: request.messages.filter(m => !m.hidden).length,
+      messageCount: request.messages.length,
       toolNames: request.tools.map(t => t.name),
       config: {
         maxOutputTokens: request.maxOutputTokens,
@@ -132,6 +131,7 @@ export class LLMGenerationCoordinator {
       // Single direct call. Provider layer (fetchWithRetry) is the ONLY retry
       // layer in the system. Any error here is final → throw to AgentRuntime.
       response = await this.provider.generate({
+        system: request.system,
         messages: request.messages,
         tools: request.tools,
         toolConfig: request.toolConfig,

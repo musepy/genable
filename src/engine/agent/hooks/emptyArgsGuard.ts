@@ -34,7 +34,7 @@ function createEmptyArgsCounterHook(state: EmptyArgsState): HookRegistration {
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       if (!ctx.toolCalls || ctx.toolCalls.length === 0) return;
 
-      const emptyArgsCalls = ctx.toolCalls.filter(tc => isEmptyArgs(tc.args));
+      const emptyArgsCalls = ctx.toolCalls.filter(tc => isEmptyArgs(tc.input));
       if (emptyArgsCalls.length === 0) {
         state.emptyArgsCount = 0;
         return;
@@ -69,7 +69,7 @@ function createEmptyArgsSkipHook(): HookRegistration {
     priority: 10,
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       if (!ctx.currentToolCall) return;
-      if (isEmptyArgs(ctx.currentToolCall.args)) {
+      if (isEmptyArgs(ctx.currentToolCall.input)) {
         return {
           action: 'skip',
           reason: `Tool call "${ctx.currentToolCall.name}" has empty arguments.`,

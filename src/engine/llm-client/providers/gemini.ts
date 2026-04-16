@@ -46,8 +46,8 @@ export class GeminiProvider implements LLMProvider {
 
     GeminiLogger.info(`generate() called, tools=${tools?.length || 0}, toolConfig=${JSON.stringify(toolConfig)}`);
 
-    const config = this.buildConfig({ messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig });
-    const contents = messages.filter(m => m.role !== 'system').map(m => mapLLMMessageToGeminiContent(m));
+    const config = this.buildConfig({ system: options.system, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig });
+    const contents = messages.map(m => mapLLMMessageToGeminiContent(m));
 
     if (onProgress || onThinking) {
       return this.generateStreaming(contents, config, onProgress, onThinking, abortSignal);
@@ -93,7 +93,7 @@ export class GeminiProvider implements LLMProvider {
   // ── Config Building ──────────────────────────────────────────────────────────
 
   private buildConfig(opts: {
-    messages: LLMMessage[];
+    system?: string;
     tools?: ToolDefinition[];
     temperature?: number;
     maxTokens?: number;
@@ -101,7 +101,7 @@ export class GeminiProvider implements LLMProvider {
     responseSchema?: Record<string, any>;
     toolConfig?: LLMGenerateOptions['toolConfig'];
   }): any {
-    const { messages, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig } = opts;
+    const { system, tools, temperature, maxTokens, thinkingLevel, responseSchema, toolConfig } = opts;
 
     const config: any = {
       ...buildGeminiGenerationConfig({
@@ -111,11 +111,8 @@ export class GeminiProvider implements LLMProvider {
     };
 
     // System instruction — SDK requires string format
-    const systemMessages = messages.filter(m => m.role === 'system');
-    if (systemMessages.length > 0) {
-      config.systemInstruction = systemMessages
-        .map(m => typeof m.content === 'string' ? m.content : (m.content as any[]).map(p => p.text).join('\n'))
-        .join('\n\n');
+    if (system) {
+      config.systemInstruction = system;
     }
 
     // Tools + tool config

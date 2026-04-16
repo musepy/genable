@@ -19,8 +19,8 @@ describe('AgentRuntime Rambling Mitigation', () => {
                 type: 'tool_call' as const,
                 id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
                 name: tc.name,
-                input: tc.args,
-                thoughtSignature: tc.thought_signature
+                input: tc.input,
+                thoughtSignature: tc.thoughtSignature
             })) || [])
         ]
       })),
@@ -31,7 +31,7 @@ describe('AgentRuntime Rambling Mitigation', () => {
           id: tr.id || '',
           name: tr.name,
           data: tr.response,
-          thoughtSignature: tr.thought_signature
+          thoughtSignature: tr.thoughtSignature
         }))
       })),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions')
@@ -44,7 +44,7 @@ describe('AgentRuntime Rambling Mitigation', () => {
     (mockProvider.generate as any)
       .mockResolvedValue({
         text: 'Progress: **Repeating Header**\nDoing stuff...',
-        toolCalls: [{ name: 'noop', args: {} }]
+        toolCalls: [{ type: 'tool_call', id: 'noop_1', name: 'noop', input: {} }]
       });
 
     const runtime = new AgentRuntime({

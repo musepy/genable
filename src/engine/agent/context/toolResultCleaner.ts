@@ -7,7 +7,7 @@
  * Only sanitizeToolCallsForHistory() remains (context management concern).
  */
 
-import { LLMToolCall } from '../../llm-client/providers/types';
+import { ToolCallBlock } from '../../llm-client/providers/types';
 import { ToolDefinition, ToolParameter } from '../tools/types';
 import { CONTEXT_CONSTANTS } from './constants';
 
@@ -21,33 +21,33 @@ export class ToolResultCleaner {
   /**
    * Sanitizes tool calls for history to prevent context bloat.
    */
-  public sanitizeToolCallsForHistory(toolCalls: LLMToolCall[]): LLMToolCall[] {
+  public sanitizeToolCallsForHistory(toolCalls: ToolCallBlock[]): ToolCallBlock[] {
     return toolCalls.map(tc => {
       // Strip XML from edit history — tool result already has success/idMap feedback.
-      if (tc.name === 'edit' && typeof tc.args?.xml === 'string' && tc.args.xml.length > 500) {
+      if (tc.name === 'edit' && typeof tc.input?.xml === 'string' && tc.input.xml.length > 500) {
         return {
           ...tc,
-          args: {
-            ...(tc.args?.parentId && { parentId: tc.args.parentId }),
+          input: {
+            ...(tc.input?.parentId && { parentId: tc.input.parentId }),
           }
         };
       }
 
       // Unwrap "run" tool — extract the actual command name from the CLI string
-      const commandName = tc.name === 'run' && typeof tc.args?.command === 'string'
-        ? tc.args.command.trim().split(/\s/)[0]
+      const commandName = tc.name === 'run' && typeof tc.input?.command === 'string'
+        ? tc.input.command.trim().split(/\s/)[0]
         : tc.name;
 
       const def = this.toolMap.get(commandName);
       if (!def) return tc;
-      let sanitizedArgs = this.sanitizeArgsBySchema(tc.args, def.parameters as ToolParameter);
+      let sanitizedArgs = this.sanitizeArgsBySchema(tc.input, def.parameters as ToolParameter);
 
       const argsJson = JSON.stringify(sanitizedArgs);
       if (argsJson.length > CONTEXT_CONSTANTS.MAX_HISTORY_ARGS_CHARS) {
         sanitizedArgs = this.truncateArgs(tc.name, sanitizedArgs, argsJson.length);
       }
 
-      return { ...tc, args: sanitizedArgs };
+      return { ...tc, input: sanitizedArgs };
     });
   }
 

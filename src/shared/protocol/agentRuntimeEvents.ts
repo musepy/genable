@@ -174,8 +174,6 @@ export interface AgentRuntimeLLMRequestEvent extends AgentRuntimeBaseEvent {
     id: string;
     role: string;
     contentLength: number;
-    hidden?: boolean;
-    pinned?: boolean;
   }[];
   messageCount: number;
   toolNames: string[];

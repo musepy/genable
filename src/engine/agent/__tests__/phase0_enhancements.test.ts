@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createStepWarningHook } from '../hooks/stepWarningHook';
 import { HookContext } from '../hooks/hookTypes';
 import { ToolDispatcher, ToolLogEntry } from '../toolDispatcher';
-import type { LLMToolCall } from '../../llm-client/providers/types';
+import type { ToolCallBlock } from '../../llm-client/providers/types';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ function makeDispatcher(overrides: Partial<any> = {}): {
   const events: any[] = [];
   const config = {
     generateId: (prefix: string) => `${prefix}_1`,
-    normalizeToolCallId: (tc: LLMToolCall, fallback: string) => tc.id || `${fallback}_1`,
+    normalizeToolCallId: (tc: ToolCallBlock, fallback: string) => tc.id || `${fallback}_1`,
     emitRuntimeEvent: (event: any) => events.push(event),
     throwIfCanceled: () => {},
     formatToolResults: (results: any[]) => ({
@@ -149,7 +149,7 @@ describe('ToolLogEntry emission', () => {
     const { dispatcher, events } = makeDispatcher();
 
     await dispatcher.dispatch(
-      [{ name: 'echo', args: { msg: 'hello' }, id: 'call_1' } as LLMToolCall],
+      [{ type: 'tool_call', name: 'echo', input: { msg: 'hello' }, id: 'call_1' } as ToolCallBlock],
       0,
     );
 
@@ -174,10 +174,10 @@ describe('ToolLogEntry emission', () => {
 describe('Duplicate call detection', () => {
   it('should mark second identical call as duplicate', async () => {
     const { dispatcher, events } = makeDispatcher();
-    const tc: LLMToolCall = { name: 'echo', args: { msg: 'same' }, id: 'c1' } as LLMToolCall;
+    const tc: ToolCallBlock = { type: 'tool_call', name: 'echo', input: { msg: 'same' }, id: 'c1' };
 
     await dispatcher.dispatch([tc], 0);
-    await dispatcher.dispatch([{ ...tc, id: 'c2' } as LLMToolCall], 1);
+    await dispatcher.dispatch([{ ...tc, id: 'c2' }], 1);
 
     const logEvents = events.filter(e => e.type === 'tool_log');
     expect(logEvents[0].logEntry.isDuplicate).toBe(false);
@@ -188,11 +188,11 @@ describe('Duplicate call detection', () => {
     const { dispatcher, events } = makeDispatcher();
 
     await dispatcher.dispatch(
-      [{ name: 'echo', args: { msg: 'a' }, id: 'c1' } as LLMToolCall],
+      [{ type: 'tool_call', name: 'echo', input: { msg: 'a' }, id: 'c1' } as ToolCallBlock],
       0,
     );
     await dispatcher.dispatch(
-      [{ name: 'echo', args: { msg: 'b' }, id: 'c2' } as LLMToolCall],
+      [{ type: 'tool_call', name: 'echo', input: { msg: 'b' }, id: 'c2' } as ToolCallBlock],
       1,
     );
 
@@ -203,11 +203,11 @@ describe('Duplicate call detection', () => {
 
   it('should reset duplicate tracking on resetCallTracking()', async () => {
     const { dispatcher, events } = makeDispatcher();
-    const tc: LLMToolCall = { name: 'echo', args: { msg: 'same' }, id: 'c1' } as LLMToolCall;
+    const tc: ToolCallBlock = { type: 'tool_call', name: 'echo', input: { msg: 'same' }, id: 'c1' };
 
     await dispatcher.dispatch([tc], 0);
     dispatcher.resetCallTracking();
-    await dispatcher.dispatch([{ ...tc, id: 'c2' } as LLMToolCall], 1);
+    await dispatcher.dispatch([{ ...tc, id: 'c2' }], 1);
 
     const logEvents = events.filter(e => e.type === 'tool_log');
     expect(logEvents[0].logEntry.isDuplicate).toBe(false);
@@ -224,7 +224,7 @@ describe('Noop detection', () => {
     const { dispatcher, events } = makeDispatcher();
 
     await dispatcher.dispatch(
-      [{ name: 'edit-noop', args: {}, id: 'c1' } as LLMToolCall],
+      [{ type: 'tool_call', name: 'edit-noop', input: {}, id: 'c1' } as ToolCallBlock],
       0,
     );
 
@@ -240,7 +240,7 @@ describe('Noop detection', () => {
     const events: any[] = [];
     const config = {
       generateId: (prefix: string) => `${prefix}_1`,
-      normalizeToolCallId: (tc: LLMToolCall, fallback: string) => tc.id || `${fallback}_1`,
+      normalizeToolCallId: (tc: ToolCallBlock, fallback: string) => tc.id || `${fallback}_1`,
       emitRuntimeEvent: (event: any) => events.push(event),
       throwIfCanceled: () => {},
       formatToolResults: (results: any[]) => ({
@@ -258,7 +258,7 @@ describe('Noop detection', () => {
     );
 
     await dispatcher.dispatch(
-      [{ name: 'rm', args: { path: '/test' }, id: 'c1' } as LLMToolCall],
+      [{ type: 'tool_call', name: 'rm', input: { path: '/test' }, id: 'c1' } as ToolCallBlock],
       0,
     );
 
@@ -270,7 +270,7 @@ describe('Noop detection', () => {
     const { dispatcher, events } = makeDispatcher();
 
     await dispatcher.dispatch(
-      [{ name: 'edit-real', args: {}, id: 'c1' } as LLMToolCall],
+      [{ type: 'tool_call', name: 'edit-real', input: {}, id: 'c1' } as ToolCallBlock],
       0,
     );
 

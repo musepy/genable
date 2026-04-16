@@ -19,7 +19,7 @@ import { AgentRuntime } from '../agentRuntime';
 import { GeminiProvider } from '../../llm-client/providers/gemini';
 import { agentTools } from '../tools';
 import { ToolExecutor } from '../tools/types';
-import { LLMResponse, LLMToolCall } from '../../llm-client/providers/types';
+import { LLMResponse, ToolCallBlock } from '../../llm-client/providers/types';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -416,14 +416,14 @@ describe('Agent Real API Harness', () => {
         }
       },
 
-      onToolCall: (toolCall: LLMToolCall) => {
+      onToolCall: (toolCall: ToolCallBlock) => {
         toolCallStartMs = Date.now();
       },
 
-      onToolResult: (toolCall: LLMToolCall, result: any) => {
+      onToolResult: (toolCall: ToolCallBlock, result: any) => {
         const tc: ToolCallTrace = {
           name: toolCall.name,
-          argsPreview: JSON.stringify(toolCall.args).slice(0, 150),
+          argsPreview: JSON.stringify(toolCall.input).slice(0, 150),
           resultSuccess: result?.error == null,
           resultPreview: JSON.stringify(result).slice(0, 200),
           durationMs: Date.now() - toolCallStartMs,

@@ -14,7 +14,7 @@ import {
   LLMGenerateOptions,
   LLMResponse,
   LLMMessage,
-  LLMToolCall,
+  ToolCallBlock,
   LLMToolResult,
   LLMProviderCapabilities,
   formatResponseDefault,
@@ -68,7 +68,7 @@ export class DashScopeProvider implements LLMProvider {
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, responseSchema, toolConfig, onProgress, onThinking, abortSignal } = options;
-    const body = this.buildRequestBody({ messages, tools, temperature, maxTokens, responseSchema, toolConfig });
+    const body = this.buildRequestBody({ system: options.system, messages, tools, temperature, maxTokens, responseSchema, toolConfig });
 
     if ((onProgress || onThinking) && this.workerUrl) {
       return this.generateStreaming(body, onProgress, onThinking, abortSignal);
@@ -95,6 +95,7 @@ export class DashScopeProvider implements LLMProvider {
   // ── Request Building ─────────────────────────────────────────────────────────
 
   private buildRequestBody(opts: {
+    system?: string;
     messages: LLMMessage[];
     tools?: ToolDefinition[];
     temperature?: number;
@@ -102,7 +103,7 @@ export class DashScopeProvider implements LLMProvider {
     responseSchema?: Record<string, any>;
     toolConfig?: LLMGenerateOptions['toolConfig'];
   }): Record<string, any> {
-    const { messages, tools, temperature, maxTokens, responseSchema, toolConfig } = opts;
+    const { system, messages, tools, temperature, maxTokens, responseSchema, toolConfig } = opts;
 
     // Kimi K2.5 known issue: temperature < 1.0 causes empty tool_calls
     // (finish_reason=tool_calls but args=None). Official recommendation: 1.0.
@@ -110,9 +111,15 @@ export class DashScopeProvider implements LLMProvider {
     const isKimiModel = this.modelName.toLowerCase().includes('kimi');
     const defaultTemp = isKimiModel ? 0.7 : 0.4;
 
+    // System prompt → first message (OpenAI format)
+    const openAIMessages = mapMessagesToOpenAI(messages);
+    if (system) {
+      openAIMessages.unshift({ role: 'system', content: system });
+    }
+
     const body: any = {
       model: this.modelName,
-      messages: mapMessagesToOpenAI(messages),
+      messages: openAIMessages,
       temperature: temperature ?? defaultTemp,
       ...(maxTokens && { max_tokens: maxTokens }),
     };
@@ -270,11 +277,11 @@ export class DashScopeProvider implements LLMProvider {
     // Finalize accumulated tool calls → inject into accumulator
     const finalResponse = accumulator.finalize();
     if (toolCallAccumulator.size > 0 && (!finalResponse.toolCalls || finalResponse.toolCalls.length === 0)) {
-      const toolCalls: LLMToolCall[] = [];
+      const toolCalls: ToolCallBlock[] = [];
       for (const [, tc] of toolCallAccumulator) {
         let parsedArgs: any;
         try { parsedArgs = JSON.parse(tc.args); } catch { parsedArgs = tc.args; }
-        toolCalls.push({ id: tc.id, name: tc.name, args: parsedArgs });
+        toolCalls.push({ type: 'tool_call' as const, id: tc.id, name: tc.name, input: parsedArgs });
       }
       finalResponse.toolCalls = toolCalls.length > 0 ? toolCalls : undefined;
     }
@@ -283,13 +290,13 @@ export class DashScopeProvider implements LLMProvider {
     // Discard broken tool calls at source so they never reach the agent loop.
     if (finalResponse.toolCalls) {
       finalResponse.toolCalls = finalResponse.toolCalls.filter(tc => {
-        const hasArgs = tc.args != null
-          && typeof tc.args === 'object'
-          && Object.keys(tc.args).length > 0;
-        if (!hasArgs) {
+        const hasInput = tc.input != null
+          && typeof tc.input === 'object'
+          && Object.keys(tc.input).length > 0;
+        if (!hasInput) {
           console.warn(`[DashScope] Discarding empty tool call: ${tc.name} (known Kimi K2.5 issue)`);
         }
-        return hasArgs;
+        return hasInput;
       });
       if (finalResponse.toolCalls.length === 0) finalResponse.toolCalls = undefined;
     }
@@ -321,12 +328,12 @@ export class DashScopeProvider implements LLMProvider {
   private mapToLLMResponse(data: any): LLMResponse {
     const response = mapOpenAIToLLMResponse(data);
 
-    // Guard: discard tool calls with empty args (Kimi K2.5 known issue)
+    // Guard: discard tool calls with empty input (Kimi K2.5 known issue)
     if (response.toolCalls) {
       response.toolCalls = response.toolCalls.filter(tc => {
-        const hasArgs = tc.args != null && typeof tc.args === 'object' && Object.keys(tc.args).length > 0;
-        if (!hasArgs) console.warn(`[DashScope] Discarding empty tool call: ${tc.name}`);
-        return hasArgs;
+        const hasInput = tc.input != null && typeof tc.input === 'object' && Object.keys(tc.input).length > 0;
+        if (!hasInput) console.warn(`[DashScope] Discarding empty tool call: ${tc.name}`);
+        return hasInput;
       });
       if (response.toolCalls.length === 0) response.toolCalls = undefined;
     }

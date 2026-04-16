@@ -29,8 +29,14 @@ export class OpenRouterProvider implements LLMProvider {
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
     const { messages, tools, temperature, maxTokens, responseSchema, toolConfig, models, abortSignal } = options;
 
+    // System prompt → first message (OpenAI format)
+    const openAIMessages = mapMessagesToOpenAI(messages);
+    if (options.system) {
+      openAIMessages.unshift({ role: 'system', content: options.system });
+    }
+
     const body: any = {
-      messages: mapMessagesToOpenAI(messages),
+      messages: openAIMessages,
       temperature: temperature ?? 0.7,
       max_tokens: maxTokens,
     };

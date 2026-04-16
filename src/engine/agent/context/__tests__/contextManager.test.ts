@@ -20,16 +20,16 @@ describe('ContextManager', () => {
 
   describe('assemblePrompt', () => {
     it('returns system prompt as layer 1', () => {
-      const prompt = cm.assemblePrompt();
-      expect(prompt).toHaveLength(1);
-      expect(prompt[0]).toMatchObject({ id: 'sys_static', role: 'system', content: 'You are a design agent.' });
+      const { system, messages } = cm.assemblePrompt();
+      expect(system).toBe('You are a design agent.');
+      expect(messages).toHaveLength(0);
     });
 
     it('includes turnMessages as layer 4', () => {
       cm.pushToTurn(msg('user', 'Hello'));
-      const prompt = cm.assemblePrompt();
-      expect(prompt).toHaveLength(2);
-      expect(prompt[1].content).toBe('Hello');
+      const { messages } = cm.assemblePrompt();
+      expect(messages).toHaveLength(1);
+      expect(messages[0].content).toBe('Hello');
     });
 
     it('includes conversation history as layer 3 after endTurn', () => {
@@ -39,18 +39,19 @@ describe('ContextManager', () => {
       cm.startTurn();
       cm.pushToTurn(msg('user', 'Turn 2'));
 
-      const prompt = cm.assemblePrompt();
-      // system + 2 history msgs + 1 turn msg
-      expect(prompt).toHaveLength(4);
-      expect(prompt[1].content).toBe('Turn 1');
-      expect(prompt[2].content).toBe('Reply 1');
-      expect(prompt[3].content).toBe('Turn 2');
+      const { messages } = cm.assemblePrompt();
+      // 2 history msgs + 1 turn msg
+      expect(messages).toHaveLength(3);
+      expect(messages[0].content).toBe('Turn 1');
+      expect(messages[1].content).toBe('Reply 1');
+      expect(messages[2].content).toBe('Turn 2');
     });
 
     it('omits system prompt if empty', () => {
       const empty = new ContextManager({ systemPrompt: '', contextBudgetChars: 100_000 });
-      const prompt = empty.assemblePrompt();
-      expect(prompt).toHaveLength(0);
+      const { system, messages } = empty.assemblePrompt();
+      expect(system).toBe('');
+      expect(messages).toHaveLength(0);
     });
   });
 
@@ -166,8 +167,8 @@ describe('ContextManager', () => {
       const history = tiny.getConversationHistory();
       // Either compressed away (length 0) or still there if summary + history < budget
       // The key behavior: no crash, and assemblePrompt works
-      const prompt = tiny.assemblePrompt();
-      expect(prompt.length).toBeGreaterThan(0);
+      const { system, messages } = tiny.assemblePrompt();
+      expect(system.length + messages.length).toBeGreaterThan(0);
     });
   });
 

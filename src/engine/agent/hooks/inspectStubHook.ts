@@ -45,7 +45,7 @@ export function createInspectStubHook(tracker: InspectionTracker): {
       // Don't stub errors
       if (ctx.toolResult?.error) return;
 
-      const nodeId = tc.args?.node;
+      const nodeId = tc.input?.node;
       if (!nodeId || typeof nodeId !== 'string') return;
 
       // Always mark as inspected (even if stubbed)

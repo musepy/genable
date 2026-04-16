@@ -6,7 +6,7 @@
  * Eliminates ~110 lines of duplicated mapMessages/mapToLLMResponse code per provider.
  */
 
-import type { LLMMessage, LLMToolCall, ContentBlock, FinishReason } from '../types';
+import type { LLMMessage, ToolCallBlock, ContentBlock, FinishReason } from '../types';
 import { normalizeFinishReason } from '../types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -85,17 +85,18 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
  */
 export function mapOpenAIToLLMResponse(data: any): {
   text: string;
-  toolCalls?: LLMToolCall[];
+  toolCalls?: ToolCallBlock[];
   finishReason?: FinishReason;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number };
 } {
   const choice = data.choices?.[0];
   const message = choice?.message;
 
-  const rawToolCalls: LLMToolCall[] | undefined = message?.tool_calls?.map((tc: any) => ({
+  const rawToolCalls: ToolCallBlock[] | undefined = message?.tool_calls?.map((tc: any) => ({
+    type: 'tool_call' as const,
     id: tc.id,
     name: tc.function.name,
-    args: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments,
+    input: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments,
   }));
 
   return {

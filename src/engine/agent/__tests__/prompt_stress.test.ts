@@ -21,7 +21,7 @@ import { AgentRuntime } from '../agentRuntime';
 import { DashScopeProvider } from '../../llm-client/providers/dashscope';
 import { agentTools } from '../tools';
 import { ToolExecutor } from '../tools/types';
-import { LLMResponse, LLMToolCall } from '../../llm-client/providers/types';
+import { LLMResponse, ToolCallBlock } from '../../llm-client/providers/types';
 import { serializeTools } from '../../llm-client/context/toolSerializer';
 import catalog from '../../../generated/prompt-catalog.json';
 
@@ -504,16 +504,16 @@ function createStressHarness(testName: string) {
     onIterationStart: (iteration) => {
       currentIteration = iteration;
     },
-    onToolCall: (tc: LLMToolCall) => {
+    onToolCall: (tc: ToolCallBlock) => {
       toolCallStart = Date.now();
     },
-    onToolResult: (tc: LLMToolCall, result: any) => {
+    onToolResult: (tc: ToolCallBlock, result: any) => {
       const record: ToolCallRecord = {
         turn: currentTurn,
         iteration: currentIteration,
         name: tc.name,
-        args: tc.args,
-        xml: tc.args?.xml || tc.args?.ops,
+        args: tc.input,
+        xml: tc.input?.xml || tc.input?.ops,
         resultSuccess: result?.error == null,
         resultData: result?.data,
         durationMs: Date.now() - toolCallStart,

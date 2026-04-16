@@ -19,7 +19,7 @@ import { AgentRuntime } from '../agentRuntime';
 import { GeminiProvider } from '../../llm-client/providers/gemini';
 import { agentTools } from '../tools';
 import { ToolExecutor } from '../tools/types';
-import { LLMToolCall } from '../../llm-client/providers/types';
+import { ToolCallBlock } from '../../llm-client/providers/types';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -108,7 +108,7 @@ Your goal is to complete the user's request immediately using the tools provided
       loopPolicy: { useSkillSystem: false, verificationFixLimit: 3 },
 
       onIterationStart: () => {},
-      onToolCall: (toolCall: LLMToolCall) => {
+      onToolCall: (toolCall: ToolCallBlock) => {
         toolHistory.push(toolCall.name);
         console.log(`[Tool Called] -> ${toolCall.name}`);
       },

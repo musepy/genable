@@ -90,7 +90,7 @@ export function createJsxMarkupSizeTrigger(): HookRegistration {
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       const tc = ctx.currentToolCall;
       if (!tc || tc.name !== 'jsx') return;
-      const markup = tc.args?.markup;
+      const markup = tc.input?.markup;
       if (typeof markup !== 'string') return;
       const len = markup.length;
       if (len <= JSX_MARKUP_CHAR_CAP) return;
@@ -120,7 +120,7 @@ export function createJsxNodeCountTrigger(): HookRegistration {
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       const tc = ctx.currentToolCall;
       if (!tc || tc.name !== 'jsx') return;
-      const markup = tc.args?.markup;
+      const markup = tc.input?.markup;
       if (typeof markup !== 'string') return;
       const count = countJsxNodes(markup);
       if (count <= JSX_SUBTREE_NODE_CAP) return;
@@ -150,7 +150,7 @@ export function createEditUnknownIdTrigger(state: TurnState): HookRegistration {
       const tc = ctx.currentToolCall;
       if (!tc || tc.name !== 'edit') return;
 
-      const ids = extractEditTargetIds(tc.args);
+      const ids = extractEditTargetIds(tc.input);
       if (ids.length === 0) return;
 
       // Page root "/" is always known — exempt
@@ -185,7 +185,7 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
       // Only interested in successful jsx creation
       if (ctx.toolResult?.error) {
         // Still record so delete→failedJsx→jsx stays detectable later
-        state.recordCall(tc, extractJsxParentHint(tc.args));
+        state.recordCall(tc, extractJsxParentHint(tc.input));
         return;
       }
 
@@ -195,7 +195,7 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
 
       // The current jsx's parent hint: explicit parentId, or the created root ID
       const currentParentHint =
-        extractJsxParentHint(tc.args) ??
+        extractJsxParentHint(tc.input) ??
         (typeof ctx.toolResult?.data?.id === 'string' ? ctx.toolResult.data.id : undefined);
 
       // Look back at the last DELETE_REBUILD_WINDOW calls for a recent delete_node.
@@ -260,7 +260,7 @@ export function createKnownIdObserver(state: TurnState): HookRegistration {
 
       // Record delete_node into the recent-calls window (parentHint = deleted target)
       if (tc.name === 'delete_node') {
-        state.recordCall(tc, extractDeleteTargetId(tc.args));
+        state.recordCall(tc, extractDeleteTargetId(tc.input));
         return;
       }
 

@@ -78,12 +78,15 @@ function compressToolMessage(msg: LLMMessage): boolean {
     const name = block.name;
     const compactResponse = buildCompactResponse(name, resp);
 
+    const hasError = resp.error != null;
+
     // Mutate in place — replace the data object
     (msg.content as ContentBlock[])[i] = {
       type: 'tool_result',
       id: block.id,
       name: block.name,
       data: compactResponse,
+      isError: hasError || undefined,
       thoughtSignature: block.thoughtSignature,
     };
     didCompress = true;

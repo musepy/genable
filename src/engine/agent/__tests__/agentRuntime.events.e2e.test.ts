@@ -17,7 +17,7 @@ function createMockProvider(scriptedResponses: LLMResponse[]): LLMProvider {
       id: `mdl_${Math.random().toString(36).slice(2, 7)}`,
       role: 'model',
       content: response.toolCalls && response.toolCalls.length > 0
-        ? response.toolCalls.map(tc => ({ type: 'tool_call' as const, id: tc.id || '', name: tc.name, input: tc.args }))
+        ? response.toolCalls.map(tc => ({ type: 'tool_call' as const, id: tc.id || '', name: tc.name, input: tc.input }))
         : (response.text || ''),
     })),
     formatToolResults: vi.fn((results: LLMToolResult[]) => ({
@@ -36,7 +36,7 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     const provider = createMockProvider([
       {
         text: '',
-        toolCalls: [{ id: 't1', name: 'mock_tool', args: { query: 'hello' } }],
+        toolCalls: [{ type: 'tool_call', id: 't1', name: 'mock_tool', input: { query: 'hello' } }],
       },
       {
         text: 'Done',
@@ -71,11 +71,11 @@ describe('AgentRuntime Event E2E Scenarios', () => {
     const provider = createMockProvider([
       {
         text: '',
-        toolCalls: [{ id: 'f1', name: 'fail_tool', args: { nodeId: 'n1' } }],
+        toolCalls: [{ type: 'tool_call', id: 'f1', name: 'fail_tool', input: { nodeId: 'n1' } }],
       },
       {
         text: '',
-        toolCalls: [{ id: 'f2', name: 'fix_tool', args: { nodeId: 'n1' } }],
+        toolCalls: [{ type: 'tool_call', id: 'f2', name: 'fix_tool', input: { nodeId: 'n1' } }],
       },
       {
         text: 'Recovered',
@@ -114,8 +114,8 @@ describe('AgentRuntime Event E2E Scenarios', () => {
       {
         text: '',
         toolCalls: [
-          { id: 'c1', name: 'slow_tool', args: { action: 'run' } },
-          { id: 'c2', name: 'after_tool', args: { action: 'follow' } },
+          { type: 'tool_call', id: 'c1', name: 'slow_tool', input: { action: 'run' } },
+          { type: 'tool_call', id: 'c2', name: 'after_tool', input: { action: 'follow' } },
         ],
       },
     ]);

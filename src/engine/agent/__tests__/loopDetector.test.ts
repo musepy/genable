@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { LoopDetector, type LoopFingerprint } from '../loopDetector';
 import { buildLoopFingerprint } from '../loopFingerprint';
-import type { LLMToolCall } from '../../llm-client/providers/types';
+import type { ToolCallBlock } from '../../llm-client/providers/types';
 
-function tc(name: string, args: Record<string, unknown> = {}): LLMToolCall {
-  return { name, args };
+function tc(name: string, input: Record<string, unknown> = {}): ToolCallBlock {
+  return { type: 'tool_call', id: `tc_${Math.random().toString(36).slice(2, 6)}`, name, input };
 }
 
-function fp(calls: LLMToolCall[]): LoopFingerprint {
+function fp(calls: ToolCallBlock[]): LoopFingerprint {
   return buildLoopFingerprint(calls);
 }
 
@@ -74,7 +74,7 @@ describe('LoopDetector — monotone loop', () => {
 
   it('does not flag alternating patterns', () => {
     const detector = new LoopDetector();
-    const sequence: LLMToolCall[][] = [
+    const sequence: ToolCallBlock[][] = [
       [tc('inspect', { node: '1:1' })],
       [tc('edit', { node: '1:1', props: { w: 100 } })],
       [tc('inspect', { node: '1:2' })],

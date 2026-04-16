@@ -19,7 +19,7 @@ import {
   JSX_SUBTREE_NODE_CAP,
   CAP_REJECT_CODE,
 } from '../toolPlanTriggers';
-import { LLMToolCall } from '../../../llm-client/providers/types';
+import { ToolCallBlock } from '../../../llm-client/providers/types';
 
 // ── helpers ─────────────────────────────────────────────────────
 
@@ -38,8 +38,8 @@ function makeCtx(overrides: Partial<HookContext> = {}): HookContext {
   };
 }
 
-function call(name: string, args: any): LLMToolCall {
-  return { id: `${name}-${Math.random().toString(36).slice(2, 6)}`, name, args };
+function call(name: string, input: any): ToolCallBlock {
+  return { type: 'tool_call', id: `${name}-${Math.random().toString(36).slice(2, 6)}`, name, input };
 }
 
 /** Invoke a single hook directly (bypassing HookRunner/Registry). */
@@ -591,7 +591,7 @@ describe('turnState helpers', () => {
   it('recordCall trims window to 5', () => {
     const state = createTurnState();
     for (let i = 0; i < 7; i++) {
-      state.recordCall({ id: String(i), name: 'noop', args: {} });
+      state.recordCall({ type: 'tool_call', id: String(i), name: 'noop', input: {} });
     }
     expect(state.recentToolCalls.length).toBe(5);
     // Oldest kept should be seq=3 (we pushed 1..7, kept 3..7)
@@ -602,7 +602,7 @@ describe('turnState helpers', () => {
   it('reset clears all state', () => {
     const state = createTurnState();
     state.addKnownIds(['1:2', '1:3']);
-    state.recordCall({ id: 'x', name: 'delete_node', args: {} });
+    state.recordCall({ type: 'tool_call', id: 'x', name: 'delete_node', input: {} });
     expect(state.knownNodeIds.size).toBe(2);
     expect(state.recentToolCalls.length).toBe(1);
     state.reset();

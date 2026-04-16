@@ -222,15 +222,19 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     console.log(`[DevBridge] Run ended (${prev} → ${curr}), posting result for ${triggerId}`)
 
     try {
+      const historySnapshot = [...stateRef.current.history]
+      const runtimeEventsSnapshot = [...(stateRef.current.eventBufferRef.current ?? [])]
+      const modelNameSnapshot = stateRef.current.modelName
+
       // Extract final text from last model message
-      const lastModel = [...stateRef.current.history].reverse().find(m => m.role === 'model')
+      const lastModel = [...historySnapshot].reverse().find(m => m.role === 'model')
       const finalText = lastModel?.text || ''
 
       // Collect tool call details (including per-call results for debugging).
       // Cap rejects (code === 'CAP_REJECT') are runtime-synthesized retry
       // instructions, not genuine tool failures — excluded from `errors` and
       // surfaced separately as `capRejects` for accurate quality metrics.
-      const allToolCalls = stateRef.current.history.flatMap(m => m.toolCalls || [])
+      const allToolCalls = historySnapshot.flatMap(m => m.toolCalls || [])
       const isCapReject = (tc: typeof allToolCalls[number]) => tc.code === 'CAP_REJECT'
       const toolCallSummary = {
         total: allToolCalls.length,
@@ -253,24 +257,22 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
         }
       })
 
-      const logs = generateLogDigest(stateRef.current.history, { modelName: stateRef.current.modelName })
-      const rootNodeIds = extractRootNodeIds(stateRef.current.history)
+      const logs = generateLogDigest(historySnapshot, { modelName: modelNameSnapshot })
+      const rootNodeIds = extractRootNodeIds(historySnapshot)
+      const conversationHistory = historySnapshot.map(m => ({
+        role: m.role,
+        text: m.text,
+        toolCalls: m.toolCalls?.map(tc => ({
+          name: tc.name,
+          parameters: tc.parameters,
+          result: tc.result,
+          status: tc.status,
+          error: tc.error,
+        })),
+      }))
 
       // Request node tree + screenshots from main thread, then POST everything
       requestExport(rootNodeIds).then(({ nodeTree, screenshots }) => {
-        // Serialize full conversation history for debugging LLM decisions
-        const conversationHistory = stateRef.current.history.map(m => ({
-          role: m.role,
-          text: m.text,
-          toolCalls: m.toolCalls?.map(tc => ({
-            name: tc.name,
-            parameters: tc.parameters,
-            result: tc.result,
-            status: tc.status,
-            error: tc.error,
-          })),
-        }))
-
         let body: string
         try {
           body = JSON.stringify({
@@ -278,12 +280,12 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
             status: curr,
             finalText,
             durationMs,
-            modelName: stateRef.current.modelName,
+            modelName: modelNameSnapshot,
             rootNodeIds,
             toolCallSummary,
             toolCallDetails,
             conversationHistory,
-            runtimeEvents: stateRef.current.eventBufferRef.current,
+            runtimeEvents: runtimeEventsSnapshot,
             logs,
             nodeTree,
             screenshots,
@@ -296,7 +298,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
             status: curr,
             finalText,
             durationMs,
-            modelName: stateRef.current.modelName,
+            modelName: modelNameSnapshot,
             toolCallSummary,
             toolCallDetails,
             logs,

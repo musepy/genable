@@ -18,7 +18,6 @@ import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';
 import { handleDescribe } from './describeHandler';
 import { handleEdit } from './editHandler';
-import { handleMemoryCommand } from './memoryHandler';
 import { handleScanTokens } from './tokenScanner';
 // verb_noun tool adapters
 import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './searchAdapter';
@@ -26,7 +25,6 @@ import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAd
 import { handleListVariables, handleCreateVariable, handleBindVariable, handleSetVariableMode, handleAliasVariable } from './varAdapter';
 import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './compAdapter';
 import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from './setterAdapter';
-import { handleListMemories, handleSaveMemory, handleDeleteMemory } from './memoryAdapter';
 import { handleGetSelection } from './selectionAdapter';
 
 // ── Command handler type ──
@@ -67,10 +65,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   set_fill: handleSetFill,
   set_stroke: handleSetStroke,
   set_layout: handleSetLayout,
-  // Memory (persistent across sessions)
-  list_memories: handleListMemories,
-  save_memory: handleSaveMemory,
-  delete_memory: handleDeleteMemory,
   // Selection (opt-in, LLM calls when needed)
   get_selection: handleGetSelection,
   // knowledge is handled locally in sandbox — should not arrive at IPC
@@ -86,10 +80,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
 // ── Dispatch function ──
 
 export async function dispatchCommand(toolName: string, parameters: any): Promise<ToolResponse> {
-  // Virtual path interception: /.agent/memory/
-  const memoryResponse = await handleMemoryCommand(toolName, parameters);
-  if (memoryResponse) return memoryResponse;
-
   const handler = COMMAND_HANDLERS[toolName];
   if (!handler) {
     return {
@@ -107,5 +97,3 @@ export async function dispatchCommand(toolName: string, parameters: any): Promis
   return result;
 }
 
-// Re-export for direct use
-export { handleMemoryCommand } from './memoryHandler';

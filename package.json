@@ -17,7 +17,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sucrase": "^3.35.1",
-    "valibot": "^1.2.0",
+"valibot": "^1.2.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
@@ -44,6 +44,7 @@
     "watch": "node build.js --watch",
     "build:raw": "build-figma-plugin --typecheck --minify",
     "preview": "vite --config vite.preview.config.ts",
+    "audit:ui-runtime": "node scripts/generate-ui-runtime-audit.cjs",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "lint:style": "stylelint \"src/**/*.{css,scss,sass,less}\"",
     "test": "vitest run",

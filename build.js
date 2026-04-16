@@ -25,7 +25,9 @@ console.log(`   Mode: ${isWatch ? 'watch' : 'production'}`);
 console.log('');
 
 // Build command args
-const buildArgs = ['build-figma-plugin', '--typecheck'];
+const skipTypecheck = args.includes('--no-typecheck');
+const buildArgs = ['build-figma-plugin'];
+if (!skipTypecheck) buildArgs.push('--typecheck');
 if (!isWatch) buildArgs.push('--minify');
 if (isWatch) buildArgs.push('--watch');
 

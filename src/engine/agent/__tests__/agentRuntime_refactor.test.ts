@@ -89,11 +89,12 @@ describe('AgentRuntime Refactor Verification', () => {
     };
   });
 
-  it('should NOT retry transient errors above the provider layer (fail-fast)', async () => {
-    // The retryPolicy + retryWithBackoff layer was deleted in the fail-fast
-    // refactor. Only fetchWithRetry inside the provider retries 5xx, and that
-    // happens BEFORE the runtime sees anything. From the runtime's perspective,
-    // any provider error is final.
+  it('should NOT retry untyped errors (fail-fast on non-ProviderError)', async () => {
+    // The runtime uses a single withRetry layer in LLMGenerationCoordinator,
+    // but it only retries typed ProviderError subclasses whitelisted in
+    // isRetryable (TransportError, ConnectTimeoutError, 5xx/429, EmptyResponseError).
+    // A plain Error — even one whose message contains "503" — is treated as
+    // fatal, because untyped throws usually indicate bugs, not transient I/O.
     let callCount = 0;
     (mockProvider.generate as any).mockImplementation(() => {
       callCount++;

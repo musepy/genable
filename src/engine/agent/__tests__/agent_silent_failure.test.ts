@@ -1,17 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AgentRuntime } from '../agentRuntime';
 import { LLMProvider } from '../../llm-client/providers/types';
 import { EmptyResponseError } from '../../llm-client/providers/shared/providerErrors';
 
 /**
- * Fail-fast contract: a provider that throws EmptyResponseError surfaces
- * directly to the caller. The runtime no longer retries empty responses
- * (the old emptyResponseHook was deleted in the fail-fast refactor).
+ * Fail-fast contract: after withRetry exhausts its budget, an EmptyResponseError
+ * surfaces to the caller. EmptyResponseError is retryable (transient model
+ * hiccup) but bounded — exhausted retries must throw, not fabricate a success.
+ *
+ * Coordinator config: MAX_RETRIES = 3 → up to 4 provider calls total.
  */
 describe('Agent fail-fast on empty response', () => {
   let mockProvider: LLMProvider;
 
   beforeEach(() => {
+    // Use fake timers so the withRetry backoff (500ms → 1s → 2s) completes
+    // instantly in test; without this the test would wait ~3.5s real time.
+    vi.useFakeTimers();
     vi.clearAllMocks();
     mockProvider = {
       name: 'gemini',
@@ -40,7 +45,11 @@ describe('Agent fail-fast on empty response', () => {
     } as any;
   });
 
-  it('surfaces EmptyResponseError immediately, no retry', async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('retries EmptyResponseError up to MAX_RETRIES, then surfaces', async () => {
     // Real providers throw EmptyResponseError from finalize() — simulate that here.
     (mockProvider.generate as any).mockRejectedValue(
       new EmptyResponseError('gemini', 'Provider returned no text or tool calls'),
@@ -54,8 +63,13 @@ describe('Agent fail-fast on empty response', () => {
       ipcBridge: { callTool: vi.fn(), dispose: vi.fn() } as any,
     });
 
-    await expect(runtime.run('Hello')).rejects.toBeInstanceOf(EmptyResponseError);
-    // Single call, no retry layer above.
-    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
+    const runPromise = runtime.run('Hello');
+    // Attach rejection handler BEFORE advancing timers so the unhandled
+    // rejection warning from fake-timer drain is avoided.
+    const outcome = runPromise.catch(e => e);
+    await vi.runAllTimersAsync();
+    expect(await outcome).toBeInstanceOf(EmptyResponseError);
+    // withRetry budget: 1 initial + 3 retries = 4 calls.
+    expect(mockProvider.generate).toHaveBeenCalledTimes(4);
   });
 });

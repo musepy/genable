@@ -32,7 +32,8 @@ export abstract class ProviderError extends Error {
 
 // ---------------------------------------------------------------------------
 // Transport category — network / streaming layer
-// fetchWithRetry already exhausted its budget. We fail fast here.
+// Providers throw these raw; the shared withRetry layer decides if it is
+// worth another attempt. After exhaustion these surface to the user.
 // ---------------------------------------------------------------------------
 
 export class ConnectTimeoutError extends ProviderError {
@@ -57,7 +58,8 @@ export class TransportError extends ProviderError {
 
 // ---------------------------------------------------------------------------
 // API category — HTTP-level error from upstream
-// fetchWithRetry already retried 5xx. These are final.
+// Providers throw these raw; withRetry (isRetryable) decides 5xx/429 = retry,
+// 4xx = fail-fast. These surface to the user after retry exhaustion.
 // ---------------------------------------------------------------------------
 
 export class APIError extends ProviderError {

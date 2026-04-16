@@ -10,6 +10,7 @@ import { ToolDefinition } from './tools';
 import { ToolCallMode } from './agentLoopPolicy';
 import { ToolResultCleaner } from './context/toolResultCleaner';
 import { EmptyResponseError } from '../llm-client/providers/shared/providerErrors';
+import { withRetry } from '../llm-client/providers/shared/withRetry';
 
 
 
@@ -57,15 +58,16 @@ export interface LLMGenerationCoordinatorConfig {
 // ---------------------------------------------------------------------------
 
 export class LLMGenerationCoordinator {
-  private static readonly MAX_EMPTY_RETRIES = 2;
+  /** Retry budget for transient provider failures. Total attempts = 1 + this. */
+  private static readonly MAX_RETRIES = 3;
+  /** Base exponential-backoff delay (ms). 500 → 1000 → 2000 across retries. */
+  private static readonly RETRY_BASE_DELAY_MS = 500;
 
   private lastThinkingText = '';
   private lastNotificationTime = 0;
   private lastTextNotificationTime = 0;
   private pendingTextDelta = '';
   private previousMessageHashes: number[] = [];
-  /** Consecutive empty response count for retry logic. */
-  private emptyRetryCount = 0;
 
   constructor(
     private provider: LLMProvider,
@@ -81,7 +83,6 @@ export class LLMGenerationCoordinator {
     this.lastNotificationTime = 0;
     this.lastTextNotificationTime = 0;
     this.pendingTextDelta = '';
-    this.emptyRetryCount = 0;
     // NOTE: previousMessageHashes is intentionally NOT reset here.
     // Messages accumulate across runs (this.messages persists), so the
     // hash chain must also persist for accurate KV-cache diagnostics.
@@ -128,88 +129,107 @@ export class LLMGenerationCoordinator {
     });
 
     try {
-      // Single direct call. Provider layer (fetchWithRetry) is the ONLY retry
-      // layer in the system. Any error here is final → throw to AgentRuntime.
-      response = await this.provider.generate({
-        system: request.system,
-        messages: request.messages,
-        tools: request.tools,
-        toolConfig: request.toolConfig,
-        maxTokens: request.maxOutputTokens,
-        abortSignal: abortController.signal,
-        onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
-          this.config.notifyIterationStart?.();
-          // Stream text chunks to UI for progressive "grow" effect
-          if (chunk) {
-            const now = Date.now();
-            if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
-              // Flush any buffered text BEFORE the current chunk to preserve order
-              const text = this.pendingTextDelta + chunk;
-              this.pendingTextDelta = '';
-              this.config.emitRuntimeEvent({
-                type: 'text_delta',
-                phase: 'execution',
+      // All transient-failure retry lives in withRetry (exponential backoff,
+      // isRetryable decision). A non-retryable error (401, malformed tool
+      // call, etc.) surfaces immediately. Exhausted retries re-throw the
+      // last error — no silent success fabrication.
+      response = await withRetry(
+        async () => {
+          const res = await this.provider.generate({
+            system: request.system,
+            messages: request.messages,
+            tools: request.tools,
+            toolConfig: request.toolConfig,
+            maxTokens: request.maxOutputTokens,
+            abortSignal: abortController.signal,
+            onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
+              this.config.notifyIterationStart?.();
+              // Stream text chunks to UI for progressive "grow" effect
+              if (chunk) {
+                const now = Date.now();
+                if (now - this.lastTextNotificationTime >= this.config.throttleMs) {
+                  // Flush any buffered text BEFORE the current chunk to preserve order
+                  const text = this.pendingTextDelta + chunk;
+                  this.pendingTextDelta = '';
+                  this.config.emitRuntimeEvent({
+                    type: 'text_delta',
+                    phase: 'execution',
 
-                iteration: iteration + 1,
-                text,
-              });
-              this.lastTextNotificationTime = now;
-            } else {
-              this.pendingTextDelta += chunk;
-            }
+                    iteration: iteration + 1,
+                    text,
+                  });
+                  this.lastTextNotificationTime = now;
+                } else {
+                  this.pendingTextDelta += chunk;
+                }
+              }
+            } : undefined,
+            onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
+              if (thought && thought !== this.lastThinkingText) {
+                this.config.notifyIterationStart?.();
+                const now = Date.now();
+                if (now - this.lastNotificationTime >= this.config.throttleMs) {
+                  this.config.emitRuntimeEvent({
+                    type: 'status',
+                    phase: 'execution',
+
+                    iteration: iteration + 1,
+                    maxIterations,
+                    message: 'Working...',
+                  });
+                  this.config.emitRuntimeEvent({
+                    type: 'reasoning_delta',
+                    phase: 'execution',
+
+                    iteration: iteration + 1,
+                    text: thought,
+                  });
+                  this.lastNotificationTime = now;
+                }
+                this.lastThinkingText = thought;
+              }
+            } : undefined,
+            thinkingLevel: request.thinkingLevel,
+          });
+
+          // Provider returned undefined = contract violation. Normalize into
+          // EmptyResponseError so withRetry can treat it uniformly.
+          if (!res) {
+            throw new EmptyResponseError(this.provider.name, 'Provider returned undefined');
           }
-        } : undefined,
-        onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
-          if (thought && thought !== this.lastThinkingText) {
-            this.config.notifyIterationStart?.();
-            const now = Date.now();
-            if (now - this.lastNotificationTime >= this.config.throttleMs) {
-              this.config.emitRuntimeEvent({
-                type: 'status',
-                phase: 'execution',
 
-                iteration: iteration + 1,
-                maxIterations,
-                message: 'Working...',
-              });
-              this.config.emitRuntimeEvent({
-                type: 'reasoning_delta',
-                phase: 'execution',
-
-                iteration: iteration + 1,
-                text: thought,
-              });
-              this.lastNotificationTime = now;
-            }
-            this.lastThinkingText = thought;
+          // Empty response guard: model returned no text AND no tool calls.
+          // Raise EmptyResponseError so withRetry decides whether to retry.
+          // Mirrors provider.assertNonEmpty() — keeps the decision in ONE place.
+          const hasContent = (res.text && res.text.length > 0)
+            || (res.toolCalls && res.toolCalls.length > 0);
+          if (!hasContent) {
+            throw new EmptyResponseError(this.provider.name, 'Response has no text or tool calls');
           }
-        } : undefined,
-        thinkingLevel: request.thinkingLevel,
-      });
 
-      // Provider returned undefined = genuine bug. Provider returned empty content = model issue.
-      if (!response) {
-        throw new EmptyResponseError(this.provider.name, 'Provider returned undefined');
-      }
-
-      // Empty response guard: model returned no text AND no tool calls.
-      // Retry up to MAX_EMPTY_RETRIES before returning the empty response
-      // to the main loop (which will treat it as a turn end).
-      const hasContent = (response.text && response.text.length > 0)
-        || (response.toolCalls && response.toolCalls.length > 0);
-      if (!hasContent) {
-        this.emptyRetryCount++;
-        if (this.emptyRetryCount <= LLMGenerationCoordinator.MAX_EMPTY_RETRIES) {
-          console.warn(`[LLMCoordinator] Empty response from ${this.provider.name} (retry ${this.emptyRetryCount}/${LLMGenerationCoordinator.MAX_EMPTY_RETRIES})`);
-          // Recursive retry — same request, same abort controller
-          return this.generate(request, abortController);
-        }
-        console.warn(`[LLMCoordinator] Empty response persists after ${LLMGenerationCoordinator.MAX_EMPTY_RETRIES} retries — returning to main loop`);
-        // Reset for next iteration; let main loop handle the empty response as turn end
-        this.emptyRetryCount = 0;
-      } else {
-        this.emptyRetryCount = 0;
-      }
+          return res;
+        },
+        {
+          maxRetries: LLMGenerationCoordinator.MAX_RETRIES,
+          baseDelayMs: LLMGenerationCoordinator.RETRY_BASE_DELAY_MS,
+          abortSignal: abortController.signal,
+          providerName: this.provider.name,
+          onRetry: (_attempt, _err, _delayMs) => {
+            // Emit a failed llm_response per retry attempt for observability.
+            // The successful attempt (if any) will emit its own success event below.
+            this.config.emitRuntimeEvent({
+              type: 'llm_response',
+              llmCallId,
+              iteration: iteration + 1,
+              phase: 'execution',
+              durationMs: Date.now() - llmStartMs,
+              usage: undefined,
+              responseShape: { textLength: 0, thoughtsLength: 0, toolCallCount: 0, toolCallNames: [] },
+              success: false,
+            });
+          },
+        },
+      );
 
       // Flush any buffered text delta
       if (this.pendingTextDelta) {
@@ -264,20 +284,8 @@ export class LLMGenerationCoordinator {
         rawToolCallsForLoopDetection,
       };
     } catch (err) {
-      // EmptyResponseError from provider assertNonEmpty: retry here instead of crashing.
-      // Provider's assertNonEmpty throws when model returns no text AND no tool calls.
-      // We absorb this and retry — empty responses are transient model issues, not bugs.
-      if (err instanceof EmptyResponseError) {
-        this.emptyRetryCount++;
-        if (this.emptyRetryCount <= LLMGenerationCoordinator.MAX_EMPTY_RETRIES) {
-          console.warn(`[LLMCoordinator] ${err.message} (retry ${this.emptyRetryCount}/${LLMGenerationCoordinator.MAX_EMPTY_RETRIES})`);
-          return this.generate(request, abortController);
-        }
-        // Exhausted retries — emit failure and re-throw
-        this.emptyRetryCount = 0;
-      }
-
-      // Emit llm_response (failure) before re-throwing
+      // Any error reaching here is either non-retryable or retry-exhausted —
+      // withRetry handled the rest. Emit a final failure event and surface.
       this.config.emitRuntimeEvent({
         type: 'llm_response',
         llmCallId,

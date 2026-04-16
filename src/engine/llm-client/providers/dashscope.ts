@@ -43,10 +43,6 @@ export type FetchProxy = (
  * DashScope TTFB through Worker can be 10-30s+ due to cross-border latency
  * (Cloudflare edge → China datacenter) plus model reasoning time. */
 const CONNECT_TIMEOUT_MS = 90000;
-/** Max retries for transient 5xx errors (e.g. Cloudflare 520). */
-const MAX_RETRIES = 2;
-/** Base delay for exponential backoff (ms): 2s → 4s. */
-const RETRY_BASE_DELAY_MS = 2000;
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
@@ -193,61 +189,37 @@ export class DashScopeProvider implements LLMProvider {
   }
 
   /**
-   * Fetch with retry for transient 5xx errors (e.g. Cloudflare 520).
-   * Throws typed ProviderError on exhaustion. The runtime never retries
-   * above this layer — this is the only retry layer in the system.
+   * One-shot fetch against the streaming Worker endpoint.
+   * Translates transport/HTTP errors into typed ProviderError so the shared
+   * withRetry layer (in LLMGenerationCoordinator) decides retry — this
+   * provider no longer owns its own retry loop.
+   *
+   * CONNECT_TIMEOUT_MS is kept: it's the cross-border TTFB guard, not a
+   * retry policy. Without it, a stalled proxy connection would hang forever.
    */
-  private async fetchWithRetry(body: Record<string, any>, abortSignal?: AbortSignal): Promise<Response> {
-    let lastError: Error | undefined;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) {
-        const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-        console.warn(`[DashScope] Retry ${attempt}/${MAX_RETRIES} after ${delay}ms...`);
-        await new Promise(r => setTimeout(r, delay));
-        if (abortSignal?.aborted) throw new TransportError(this.name, 'Aborted during retry wait');
+  private async fetchStreaming(body: Record<string, any>, abortSignal?: AbortSignal): Promise<Response> {
+    let res: Response;
+    try {
+      res = await withConnectTimeout(
+        () => fetch(`${this.workerUrl}/api/dashscope/generate`, {
+          method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: abortSignal,
+        }),
+        CONNECT_TIMEOUT_MS,
+      );
+    } catch (e: any) {
+      if (e?.name === 'AbortError') throw new TransportError(this.name, 'Aborted', e);
+      if (typeof e?.message === 'string' && e.message.includes('Connection timed out')) {
+        throw new ConnectTimeoutError(this.name, CONNECT_TIMEOUT_MS);
       }
-
-      try {
-        const res = await withConnectTimeout(
-          () => fetch(`${this.workerUrl}/api/dashscope/generate`, {
-            method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: abortSignal,
-          }),
-          CONNECT_TIMEOUT_MS,
-        );
-
-        if (res.ok) return res;
-
-        const errText = await res.text();
-        // Only retry on 5xx (server/infra errors). 4xx = client error, don't retry.
-        if (res.status >= 500 && attempt < MAX_RETRIES) {
-          console.warn(`[DashScope] ${res.status} error, will retry: ${errText.slice(0, 200)}`);
-          lastError = new APIError(this.name, res.status, errText);
-          continue;
-        }
-        throw new APIError(this.name, res.status, errText);
-      } catch (e: any) {
-        if (e?.name === 'AbortError') throw new TransportError(this.name, 'Aborted', e);
-        // Connect timeout from withConnectTimeout
-        if (typeof e?.message === 'string' && e.message.includes('Connection timed out')) {
-          if (attempt < MAX_RETRIES) {
-            console.warn(`[DashScope] Connect timeout, will retry: ${e.message?.slice(0, 200)}`);
-            lastError = new ConnectTimeoutError(this.name, CONNECT_TIMEOUT_MS);
-            continue;
-          }
-          throw new ConnectTimeoutError(this.name, CONNECT_TIMEOUT_MS);
-        }
-        // Don't re-retry typed APIError 4xx
-        if (e instanceof APIError && e.statusCode < 500) throw e;
-        if (attempt < MAX_RETRIES) {
-          console.warn(`[DashScope] Fetch failed, will retry: ${e?.message?.slice(0, 200)}`);
-          lastError = e instanceof Error ? e : new TransportError(this.name, String(e));
-          continue;
-        }
-        if (e instanceof Error) throw new TransportError(this.name, e.message, e);
-        throw new TransportError(this.name, String(e));
-      }
+      if (e instanceof Error) throw new TransportError(this.name, e.message, e);
+      throw new TransportError(this.name, String(e));
     }
-    throw lastError ?? new TransportError(this.name, 'All retries exhausted');
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new APIError(this.name, res.status, errText);
+    }
+    return res;
   }
 
   private async generateStreaming(
@@ -256,7 +228,7 @@ export class DashScopeProvider implements LLMProvider {
     onThinking?: (thought: string) => void,
     abortSignal?: AbortSignal,
   ): Promise<LLMResponse> {
-    const res = await this.fetchWithRetry(body, abortSignal);
+    const res = await this.fetchStreaming(body, abortSignal);
 
     const reader = res.body!.getReader();
     const accumulator = new ResponseAccumulator();

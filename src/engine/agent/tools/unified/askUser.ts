@@ -18,7 +18,7 @@ export const askUserDefinition: ToolDefinition = {
 - You need a decision before proceeding (delete existing content? which section first?)
 
 Input: question string + 2-4 options with label and optional description.
-Returns: the user's selected option label.
+Returns: the user's selected option label, OR custom text if the user typed a free-form answer instead of picking an option.
 
 Do NOT use when the instruction is clear enough to proceed.`,
   parameters: {

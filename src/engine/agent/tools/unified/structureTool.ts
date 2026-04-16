@@ -6,11 +6,13 @@
  */
 
 import { ToolDefinition } from '../types';
+import { keepFields } from './keepFields';
 
 export const deleteNodeDefinition: ToolDefinition = {
   name: 'delete_node',
   executionStrategy: 'sequential',
   mutates: true,
+  presentForLLM: (data) => keepFields(data, ['deleted']),
   description: `Delete a node and its children.
 
 Examples:
@@ -31,6 +33,7 @@ export const moveNodeDefinition: ToolDefinition = {
   name: 'move_node',
   executionStrategy: 'sequential',
   mutates: true,
+  presentForLLM: (data) => keepFields(data, ['id', 'name']),
   description: `Relocate a node to a different parent or reorder within siblings. Use when: (a) changing child order within a container, (b) moving a subtree into a different parent without recreating it, (c) fixing a placement mistake after jsx. DO NOT delete+jsx to restructure — move_node preserves IDs, bound variables, and component instances.
 
 Examples:
@@ -65,6 +68,7 @@ export const cloneNodeDefinition: ToolDefinition = {
   name: 'clone_node',
   executionStrategy: 'sequential',
   mutates: true,
+  presentForLLM: (data) => keepFields(data, ['idMap']),
   description: `Deep-copy a node with optional property overrides.
 
 Examples:

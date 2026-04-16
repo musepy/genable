@@ -6,10 +6,12 @@
  */
 
 import { ToolDefinition } from '../types';
+import { keepFields } from './keepFields';
 
 export const findNodesDefinition: ToolDefinition = {
   name: 'find_nodes',
   executionStrategy: 'parallel',
+  presentForLLM: (data) => keepFields(data, ['results']),
   description: `Search nodes by name or type.
 
 Examples:
@@ -61,6 +63,7 @@ export const replacePropsDefinition: ToolDefinition = {
   name: 'replace_props',
   executionStrategy: 'sequential',
   mutates: true,
+  presentForLLM: (data) => keepFields(data, ['replaced', 'details']),
   description: `Batch search-and-replace property values in a subtree.
 
 Examples:

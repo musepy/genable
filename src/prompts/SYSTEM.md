@@ -61,7 +61,6 @@ Runtime enforces the rules below as machine-observable state changes. It may pre
 | Prompt contains mobile / iOS / Android | guideline:mobile pre-loaded | Reference touch targets, density |
 | Prompt contains login / signup / form / auth | guideline:form pre-loaded | Use the form pattern guidance |
 | Prompt contains a known product type (CRM, fitness, marketplace, etc.) | guideline:product-type-lookup pre-loaded | Match style + section pattern |
-| Single jsx markup > 1500 chars | Tool call rejected | Split: root frame first, then child jsx/edit calls |
 | Single jsx subtree > 60 nodes | Tool call rejected | Use subtask for independent regions |
 | edit targets a node ID not in this session's idMap | Tool call rejected | Call find_nodes or get_selection first |
 | Same inspect target twice | Auto-served from cache | Free re-inspect — use it |

@@ -2,15 +2,20 @@
  * @file toolPlanTriggers.ts
  * @description Hard caps on the agent's tool-plan — enforced at beforeToolExec / afterToolExec.
  *
- * Measured E2E data (6 recent qwen3.6-plus runs post-refactor):
+ * Historical measurement (6 qwen3.6-plus runs, pre-experiment):
  *  - 65% of jsx calls exceed 1500 chars (28 of 43)
  *  - 28% of jsx calls exceed 60 nodes (12 of 43)
  *  - P2-Fitness retried a 7K-char broken jsx 7 times before giving up
  *  - 9 delete→rebuild cycles across 6 runs (each wastes ~2-4K output tokens)
  *
- * Soft prompt rules demonstrably fail at this scale. The runtime enforces:
+ * Experiment (April 2026): jsx char cap relaxed from 1500 → 10000 to observe
+ * whether node-count cap (T5, 60 nodes) is a sufficient primary guardrail.
+ * The 10K char cap remains as a safety net for pathological markup (e.g. a
+ * 50K byte blob that would otherwise burn tokens before node-count rejects).
  *
- *  T4 — jsx markup > 1500 chars            → beforeToolExec, REJECT (skip) priority 10
+ * The runtime enforces:
+ *
+ *  T4 — jsx markup > 10000 chars           → beforeToolExec, REJECT (skip) priority 10
  *  T5 — jsx subtree > 60 nodes             → beforeToolExec, REJECT (skip) priority 11
  *  T6 — edit targets unknown node ID       → beforeToolExec, REJECT (skip) priority 12
  *  T_delete_rebuild — delete→jsx same parent within 3 steps → afterToolExec, hint  priority 50
@@ -28,7 +33,7 @@ import { TurnState, extractKnownIdsFromResult } from './turnState';
 // Thresholds
 // ---------------------------------------------------------------------------
 
-export const JSX_MARKUP_CHAR_CAP = 1500;
+export const JSX_MARKUP_CHAR_CAP = 10000;
 export const JSX_SUBTREE_NODE_CAP = 60;
 /** Look-back window for delete→rebuild heuristic (number of tool calls). */
 export const DELETE_REBUILD_WINDOW = 3;

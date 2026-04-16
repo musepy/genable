@@ -85,32 +85,33 @@ describe('T4: jsxMarkupSizeTrigger', () => {
   });
 
   it('allows markup at exactly the cap', async () => {
-    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP); // 1500
+    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP);
     const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
     const result = await invoke(trigger, ctx);
     expect(result).toBeUndefined();
   });
 
-  it('allows markup at 1499 chars', async () => {
-    const markup = 'a'.repeat(1499);
+  it('allows markup just under the cap', async () => {
+    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP - 1);
     const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
     const result = await invoke(trigger, ctx);
     expect(result).toBeUndefined();
   });
 
-  it('rejects markup at 1501 chars with correct reason', async () => {
-    const markup = 'a'.repeat(1501);
+  it('rejects markup just over the cap with correct reason', async () => {
+    const len = JSX_MARKUP_CHAR_CAP + 1;
+    const markup = 'a'.repeat(len);
     const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
     const result = await invoke(trigger, ctx);
     expect(result).toBeDefined();
     expect(result!.action).toBe('skip');
-    expect(result!.reason).toContain('1501 chars');
+    expect(result!.reason).toContain(`${len} chars`);
     expect(result!.reason).toContain(`max ${JSX_MARKUP_CHAR_CAP}`);
     expect(result!.reason).toContain('Split');
   });
 
   it('stamps code=CAP_REJECT so metrics can exclude the reject from errors', async () => {
-    const markup = 'a'.repeat(1501);
+    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP + 1);
     const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
     const result = await invoke(trigger, ctx);
     expect(result?.code).toBe(CAP_REJECT_CODE);

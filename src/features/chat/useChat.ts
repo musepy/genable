@@ -76,6 +76,7 @@ export function useChat({
 
   const activeOrchestratorRef = useRef<AgentOrchestrator | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
+  const activeMessageIdRef = useRef<string | null>(null)
   const eventBufferRef = useRef<AgentRuntimeEvent[]>([])
 
   // End session and dispose orchestrator
@@ -96,10 +97,37 @@ export function useChat({
     return -1
   }
 
+  const findLastModelIndex = (messages: ChatMessage[]) => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'model') return i
+    }
+    return -1
+  }
+
+  const findActiveModelIndex = (
+    messages: ChatMessage[],
+    options?: { allowFallbackToLastModel?: boolean },
+  ) => {
+    const activeMessageId = activeMessageIdRef.current
+    if (activeMessageId) {
+      const byId = messages.findIndex(msg => msg.role === 'model' && msg.id === activeMessageId)
+      if (byId !== -1) return byId
+    }
+
+    const streamingIdx = findLastStreamingIndex(messages)
+    if (streamingIdx !== -1) return streamingIdx
+
+    if (options?.allowFallbackToLastModel !== false) {
+      return findLastModelIndex(messages)
+    }
+
+    return -1
+  }
+
   const updateStreamingMessage = (updater: (msg: ChatMessage) => ChatMessage) => {
     setHistory(prev => {
       const next = [...prev]
-      const idx = findLastStreamingIndex(next)
+      const idx = findActiveModelIndex(next)
       if (idx === -1) return prev
       next[idx] = updater(next[idx])
       return next
@@ -246,6 +274,8 @@ export function useChat({
         setRuntimeState(isEmptyResponse ? 'empty_response' : 'idle')
         setRetryInfo(null)
         setLoadingStatus('')
+        setThinkingText('')
+        setPendingQuestion(null)
         updateStreamingMessage(msg => {
           const finalText = event.summary || msg.text || ''
           // Replace last text block with summary, or append one
@@ -272,13 +302,14 @@ export function useChat({
             endTime: Date.now(),
           }
         })
+        activeMessageIdRef.current = null
         break
       }
       case 'canceled': {
         setLoading(false)
         setRuntimeState('canceled')
-        setLoadingStatus('Canceled by user')
-        
+        setLoadingStatus('')
+        setThinkingText('')
         setPendingQuestion(null)
         updateStreamingMessage(msg => ({
           ...msg,
@@ -287,6 +318,7 @@ export function useChat({
           runState: 'canceled',
           endTime: Date.now(),
         }))
+        activeMessageIdRef.current = null
         break
       }
       case 'retry': {
@@ -302,6 +334,8 @@ export function useChat({
         setLoading(false)
         setRuntimeState('error')
         setRetryInfo(null)
+        setLoadingStatus('')
+        setThinkingText('')
         setError(event.message)
         setPendingQuestion(null)
         updateStreamingMessage(msg => ({
@@ -311,6 +345,7 @@ export function useChat({
           runError: event.message,
           endTime: Date.now(),
         }))
+        activeMessageIdRef.current = null
         break
       }
       case 'debrief': {
@@ -349,6 +384,8 @@ export function useChat({
     setThinkingText('')
     setPendingQuestion(null)
     activeRunIdRef.current = null
+    const modelMessageId = `m-${Date.now() + 1}`
+    activeMessageIdRef.current = modelMessageId
     eventBufferRef.current = []
 
     setHistory(prev => [
@@ -361,7 +398,7 @@ export function useChat({
         iterations: [],
         toolCalls: [],
         blocks: [],
-        id: `m-${Date.now() + 1}`,
+        id: modelMessageId,
         startTime: Date.now(),
         runState: 'running',
       },
@@ -426,8 +463,24 @@ export function useChat({
   }
 
   const stopGeneration = () => {
-    if (!loading) return
+    const hasVisibleRunningMessage = history.some(
+      msg => msg.role === 'model' && (msg.streaming || msg.runState === 'running'),
+    )
+    if (!loading && runtimeState !== 'running' && !hasVisibleRunningMessage) return
     activeOrchestratorRef.current?.cancel('Canceled by user')
+    setLoading(false)
+    setRuntimeState('canceled')
+    setLoadingStatus('')
+    setThinkingText('')
+    setPendingQuestion(null)
+    updateStreamingMessage(msg => ({
+      ...msg,
+      text: msg.text || 'Canceled by user',
+      streaming: false,
+      runState: 'canceled',
+      endTime: Date.now(),
+    }))
+    activeMessageIdRef.current = null
   }
 
   const continueGeneration = async () => {
@@ -466,7 +519,41 @@ export function useChat({
     setLoadingStatus('')
     setThinkingText('')
     setPendingQuestion(null)
+    activeRunIdRef.current = null
+    activeMessageIdRef.current = null
+    eventBufferRef.current = []
   }
+
+  useEffect(() => {
+    if (loading || runtimeState === 'running') return
+
+    setHistory(prev => {
+      const next = [...prev]
+      const idx = findActiveModelIndex(next, { allowFallbackToLastModel: true })
+      if (idx === -1) return prev
+
+      const current = next[idx]
+      if (current.role !== 'model') return prev
+      if (!current.streaming && current.runState && current.runState !== 'running') return prev
+
+      const inferredRunState: ChatMessage['runState'] =
+        runtimeState === 'canceled'
+          ? 'canceled'
+          : runtimeState === 'error'
+            ? 'error'
+            : runtimeState === 'empty_response'
+              ? 'empty_response'
+              : (current.text?.trim() ? 'completed' : 'empty_response')
+
+      next[idx] = {
+        ...current,
+        streaming: false,
+        runState: inferredRunState,
+        endTime: current.endTime ?? Date.now(),
+      }
+      return next
+    })
+  }, [loading, runtimeState])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !(window as any).__GENABLE_PREVIEW__) {

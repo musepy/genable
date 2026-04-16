@@ -551,7 +551,7 @@ export function ChatFeature(props: UseChatProps) {
       {(() => {
         const lastModel = [...history].reverse().find((m: any) => m.role === 'model');
         if (!lastModel) return null;
-        const state = loading ? runtimeState : lastModel.runState;
+        const state = runtimeState !== 'idle' ? runtimeState : lastModel.runState;
         if (!state) return null;
         return (
           <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.colors.alpha[2]}` }}>

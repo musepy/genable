@@ -23,7 +23,8 @@
       "name": "dev-bridge",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["tsx", "tools/dev-bridge/server.ts"],
-      "port": 3456
+      "port": 3456,
+      "autoPort": true
     }
   ]
 }

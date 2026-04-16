@@ -21,3 +21,15 @@ test_output.txt
 数据结构/产出日志.json
 .agent-runs/
 .gstack/
+.env.local
+.opencode/
+test-results/
+tools/ui-preview/
+tools/ui-baseline/
+tools/ui-catalog/
+tools/community-assets/
+tools/flicker-test.html
+tools/status-block-test.html
+tools/transition-*.html
+tools/transition-verify.html
+tools/index.html

@@ -12,6 +12,11 @@ export const jsxDefinition: ToolDefinition = {
   name: 'jsx',
   executionStrategy: 'sequential',
   mutates: true,
+  // createdIds is runtime-only (inspection tracker); LLM doesn't need 69 IDs.
+  presentForLLM: (data) => {
+    const { createdIds: _omit, ...rest } = data;
+    return rest;
+  },
   description: `Create design trees with nested JSX markup — nesting IS the hierarchy.
 // To build a full card, create the card frame FIRST with a single jsx call, then add children one subtree at a time via follow-up jsx or edit calls — never embed a whole card tree in one markup string.
 

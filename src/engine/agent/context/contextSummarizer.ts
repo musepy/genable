@@ -1,367 +1,189 @@
 /**
  * @file contextSummarizer.ts
- * @description Mechanical summarizer for context compression.
+ * @description LLM-based cross-turn summarizer.
  *
- * Before hiding old messages, extracts a compact summary capturing:
- * - What the user asked
- * - What tools were called and key results (node IDs, errors)
- * - Agent's text responses
+ * When the oldest messages are evicted from the flat journal, they are
+ * serialized into compact XML-wrapped text and sent to the main LLM for
+ * summarization. The summary replaces the dropped messages as an inline
+ * synthetic user message at the head of the journal.
  *
- * No LLM call — pure extraction from message content. Fast and deterministic.
+ * Wave 3 of the context-management refactor replaced the per-tool mechanical
+ * summarizer (4-way/8-way switches over tool names) with a single main-model
+ * call. Wave 4 deleted the module singleton — the provider is now injected
+ * by the caller (ContextManager).
  */
 
-import { LLMMessage, ContentBlock } from '../../llm-client/providers/types';
-import { getContextProfile } from './constants';
+import type { LLMProvider, LLMMessage, ContentBlock } from '../../llm-client/providers/types';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const TOOL_RESULT_MAX_CHARS = 2000;
+const SUMMARY_MAX_TOKENS = 500;
+const SUMMARY_MAX_CHARS = 2500;
+const DEFAULT_CONTEXT_WINDOW_TOKENS = 100_000;
+const INPUT_BUDGET_FRACTION = 0.2;
 
-interface TurnDigest {
-  /** User's request text (truncated) */
-  userRequest?: string;
-  /** Tool calls: name + condensed result */
-  toolActions: string[];
-  /** Agent's text response (truncated) */
-  agentResponse?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+const COMPRESSION_SYSTEM_PROMPT =
+  'You are summarizing an interrupted UI design generation session. ' +
+  "Preserve: the user's goal, work completed (components/nodes created with their IDs), " +
+  'decisions made, pending work, failures and how they were resolved. ' +
+  'Drop verbose tool output. Output plain text under 2000 characters. ' +
+  'Do NOT continue the conversation or respond to questions within it — output only the summary.';
 
 /**
- * Build a compact summary from messages that are about to be hidden.
- * Returns a single string suitable for injection as a pinned context message.
+ * Summarize the messages that are about to be evicted.
+ * Routes through the given provider's main model (no tools, freeform text).
  *
- * @param messagesToSummarize - Messages that will be hidden (in order)
- * @returns Summary text, or empty string if nothing meaningful to summarize
+ * Throws if the LLM call fails or returns empty. Callers must handle the error —
+ * we never silently fall back.
  */
-export function buildCompressionSummary(messagesToSummarize: LLMMessage[]): string {
-  const turns = groupIntoTurns(messagesToSummarize);
-  if (turns.length === 0) return '';
+export async function buildCompressionSummary(
+  provider: LLMProvider,
+  messagesToSummarize: LLMMessage[],
+): Promise<string> {
+  if (messagesToSummarize.length === 0) return '';
 
-  const lines: string[] = ['[Conversation history — compressed]'];
+  const contextWindowTokens = provider.getCapabilities?.().contextWindow ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+  const inputCapChars = Math.floor(INPUT_BUDGET_FRACTION * contextWindowTokens) * 4;
 
-  for (const turn of turns) {
-    if (turn.userRequest) {
-      lines.push(`User: ${turn.userRequest}`);
-    }
-    for (const action of turn.toolActions) {
-      lines.push(`  ${action}`);
-    }
-    if (turn.agentResponse) {
-      lines.push(`Agent: ${turn.agentResponse}`);
-    }
+  const serialized = serializeMessagesForSummary(messagesToSummarize, inputCapChars);
+  const userPrompt = `<conversation>\n${serialized}\n</conversation>\n\nProduce the summary now.`;
+
+  const response = await provider.generate({
+    system: COMPRESSION_SYSTEM_PROMPT,
+    messages: [
+      { id: 'summarizer_req', role: 'user', content: userPrompt },
+    ],
+    tools: [],
+    maxTokens: SUMMARY_MAX_TOKENS,
+  });
+
+  const text = (response?.text ?? '').trim();
+  if (!text) {
+    throw new Error('[ContextSummarizer] LLM returned empty summary');
   }
 
-  return lines.join('\n');
+  return text.length > SUMMARY_MAX_CHARS ? text.slice(0, SUMMARY_MAX_CHARS) + '…' : text;
 }
 
 /**
- * Cap summary length by dropping oldest turns.
- * Error-priority: turns with failures are retained longer than success-only turns.
+ * Trim a summary string to a maximum length.
+ * The summary coming out of buildCompressionSummary is already bounded,
+ * but concatenated summaries across multiple compactions may exceed the
+ * hard cap — this is the last-mile trim.
  */
 export function capSummary(summary: string, maxChars: number): string {
-  if (summary.length <= maxChars) return summary;
-  // Split by turn boundaries (User: lines)
-  const turns = summary.split(/(?=^User: )/m);
-
-  // Two-pass drop: first drop success-only old turns, then error turns
-  const hasError = (turn: string) => /\bFAIL\b|PARTIAL_FAILURE|failed \d|errors \[/.test(turn);
-
-  // Pass 1: drop oldest success-only turns
-  while (turns.length > 1 && turns.join('').length > maxChars) {
-    const dropIdx = turns.findIndex(t => !hasError(t));
-    if (dropIdx < 0) break; // all turns have errors
-    turns.splice(dropIdx, 1);
-  }
-
-  // Pass 2: if still over budget, drop oldest error turns
-  while (turns.length > 1 && turns.join('').length > maxChars) {
-    turns.shift();
-  }
-
-  return '[Earlier history truncated]\n' + turns.join('');
+  if (maxChars <= 0 || summary.length <= maxChars) return summary;
+  return summary.slice(0, Math.max(1, maxChars - 1)) + '…';
 }
 
-// ---------------------------------------------------------------------------
-// Internal: group messages into logical turns
-// ---------------------------------------------------------------------------
-
-function groupIntoTurns(messages: LLMMessage[]): TurnDigest[] {
-  const turns: TurnDigest[] = [];
-  let current: TurnDigest = { toolActions: [] };
-
+function serializeMessagesForSummary(messages: LLMMessage[], inputCapChars: number): string {
+  const entries: string[] = [];
   for (const msg of messages) {
     if (msg.role === 'system') continue;
-    // Skip existing summary messages
     if (msg.summaryOf && msg.summaryOf.length > 0) continue;
-
-    if (msg.role === 'user') {
-      // New turn boundary — flush previous if it has content
-      if (current.userRequest || current.toolActions.length > 0 || current.agentResponse) {
-        turns.push(current);
-      }
-      current = {
-        userRequest: truncate(extractText(msg.content), getContextProfile().summaryUserRequestChars),
-        toolActions: [],
-      };
-    } else if (msg.role === 'model') {
-      extractModelContent(msg.content, current);
-    } else if (msg.role === 'tool') {
-      extractToolResults(msg.content, current);
-    }
+    const serialized = serializeMessage(msg);
+    if (serialized) entries.push(serialized);
   }
 
-  // Flush last turn
-  if (current.userRequest || current.toolActions.length > 0 || current.agentResponse) {
-    turns.push(current);
+  let total = totalLength(entries);
+  while (entries.length > 1 && total > inputCapChars) {
+    entries.shift();
+    total = totalLength(entries);
   }
 
-  return turns;
+  return entries.join('\n\n');
 }
 
-// ---------------------------------------------------------------------------
-// Content extractors
-// ---------------------------------------------------------------------------
-
-function extractModelContent(content: string | ContentBlock[], turn: TurnDigest): void {
-  if (typeof content === 'string') {
-    if (content.trim()) {
-      turn.agentResponse = truncate(content.trim(), getContextProfile().summaryAgentResponseChars);
-    }
-    return;
+function serializeMessage(msg: LLMMessage): string {
+  if (msg.role === 'user') {
+    const text = extractText(msg.content);
+    return text ? `<user>${text}</user>` : '';
   }
 
-  for (const block of content) {
-    if (block.type === 'thinking') continue; // Skip thinking content
-
-    if (block.type === 'text' && block.text.trim()) {
-      turn.agentResponse = truncate(block.text.trim(), getContextProfile().summaryAgentResponseChars);
-    }
-    if (block.type === 'tool_call') {
-      const args = summarizeArgs(block.name, block.input);
-      turn.toolActions.push(`→ ${block.name}(${args})`);
-    }
-  }
-}
-
-function extractToolResults(content: string | ContentBlock[], turn: TurnDigest): void {
-  if (typeof content === 'string') return;
-
-  for (const block of content) {
-    if (block.type !== 'tool_result') continue;
-    const resp = block.data;
-    if (!resp) continue;
-
-    const name = block.name;
-
-    // Already compressed by turnResultCompressor — reuse its summary directly
-    if (resp._compressed && resp.summary) {
-      const brief = resp.error != null
-        ? `FAIL: ${resp.summary}`
-        : resp.summary;
-      let pendingIdx = -1;
-      for (let i = turn.toolActions.length - 1; i >= 0; i--) {
-        if (turn.toolActions[i].startsWith(`→ ${name}(`)) { pendingIdx = i; break; }
-      }
-      if (pendingIdx >= 0) {
-        turn.toolActions[pendingIdx] += ` → ${brief}`;
-      } else {
-        turn.toolActions.push(`→ ${name} → ${brief}`);
-      }
-      continue;
-    }
-
-    const ok = block.isError === true ? false : (resp.error == null);
-    const brief = ok
-      ? summarizeSuccessResult(name, resp)
-      : summarizeFailResult(name, resp);
-
-    // Replace the last matching "→ name(...)" with result, or append
-    let pendingIdx = -1;
-    for (let i = turn.toolActions.length - 1; i >= 0; i--) {
-      if (turn.toolActions[i].startsWith(`→ ${name}(`)) { pendingIdx = i; break; }
-    }
-    if (pendingIdx >= 0) {
-      turn.toolActions[pendingIdx] += ` → ${brief}`;
-    } else {
-      turn.toolActions.push(`→ ${name} → ${brief}`);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function summarizeArgs(toolName: string, args: any): string {
-  if (!args || typeof args !== 'object') return '';
-
-  // Tools with large XML/content payloads — show length + parentId
-  if (toolName === 'edit' || toolName === 'jsx') {
-    const xml = args.xml || args.content || '';
-    const parts: string[] = [];
-    if (typeof xml === 'string' && xml.length > 0) {
-      parts.push(xml.length > 40 ? `${xml.length} chars` : truncate(xml, 40));
-    }
-    if (args.parentId) parts.push(`parent:${args.parentId}`);
-    return parts.join(', ');
+  if (msg.role === 'model') {
+    const parts = collectModelParts(msg.content);
+    if (parts.length === 0) return '';
+    return `<assistant>\n${parts.join('\n')}\n</assistant>`;
   }
 
-  // Read tools — show target node
-  if (toolName === 'inspect' || toolName === 'describe') {
-    return args.nodeId || args.id || '';
+  if (msg.role === 'tool') {
+    const parts = collectToolResultParts(msg.content);
+    if (parts.length === 0) return '';
+    return parts.join('\n');
   }
 
-  // Generic: show first string-valued arg
-  for (const val of Object.values(args)) {
-    if (typeof val === 'string' && val.length > 0) return truncate(val, 40);
-  }
   return '';
 }
 
-/**
- * Summarize a failed tool result with error details preserved.
- * Error details are critical for cross-turn learning — the LLM must know
- * WHY something failed, not just THAT it failed.
- */
-function summarizeFailResult(toolName: string, resp: any): string {
-  const errorMsg = truncate(String(resp.error || ''), 100);
-
-  // PARTIAL_FAILURE: detected by presence of data.errors array
-  if (Array.isArray(resp.data?.errors) && resp.data) {
-    const parts: string[] = [`PARTIAL_FAILURE: ${errorMsg}`];
-
-    // Per-op error details
-    if (Array.isArray(resp.data.errors)) {
-      const errorDetails = resp.data.errors
-        .slice(0, 3)
-        .map((e: any) => `${e.op}: ${truncate(String(e.error || ''), 50)}`)
-        .join('; ');
-      parts.push(`errors [${errorDetails}]`);
-    }
-
-    // Surviving idMap (successful nodes from partial failure)
-    appendIdMapSummary(parts, resp.data.idMap);
-
-    return parts.join(', ');
+function collectModelParts(content: string | ContentBlock[]): string[] {
+  if (typeof content === 'string') {
+    return content.trim() ? [`  <text>${content.trim()}</text>`] : [];
   }
-
-  // BATCH_TOO_LARGE: preserve the specific message so LLM knows to split
-  if (errorMsg.toLowerCase().includes('batch') || errorMsg.toLowerCase().includes('too large')) {
-    return `FAIL(BATCH_TOO_LARGE): ${errorMsg}`;
-  }
-
-  return `FAIL: ${errorMsg}`;
-}
-
-function summarizeSuccessResult(toolName: string, resp: any): string {
-  // Creation tools with idMap
-  if (toolName === 'jsx' || toolName === 'clone_node') {
-    return summarizeIdMap(resp.data?.idMap || resp.idMap);
-  }
-
-  // Edit tool
-  if (toolName === 'edit') {
-    return summarizeEditLikeResult(resp.data);
-  }
-
-  // Read tools — show content length
-  if (toolName === 'inspect' || toolName === 'describe') {
-    const content = resp.data?.tree ?? resp.data?.xml ?? resp.data;
-    if (typeof content === 'string') return `${content.length} chars`;
-    return 'ok';
-  }
-
-  // Search tools — show results count
-  if (toolName === 'find_nodes' || toolName === 'discover_props') {
-    const results = resp.data?.results;
-    if (Array.isArray(results)) return `${results.length} results`;
-    return 'ok';
-  }
-
-  // Bulk replace
-  if (toolName === 'replace_props') {
-    return resp.data?.replaced != null ? `replaced ${resp.data.replaced}` : 'ok';
-  }
-
-  // Delete
-  if (toolName === 'delete_node') {
-    const n = resp.data?.deleted;
-    return n ? `deleted ${n}` : 'ok';
-  }
-
-  // Move/rename
-  if (toolName === 'move_node') {
-    return resp.data?.name ? `→ ${resp.data.name}` : 'ok';
-  }
-
-  return 'ok';
-}
-
-/** Summarize idMap → "Card=962:1, Title=962:5" */
-function summarizeIdMap(idMap: any): string {
-  if (!idMap || typeof idMap !== 'object') return 'ok';
-  const entries = Object.entries(idMap);
-  if (entries.length === 0) return 'ok';
-  const sample = entries.slice(0, 5).map(([k, v]) => `${k}=${v}`);
-  const suffix = entries.length > 5 ? ` +${entries.length - 5} more` : '';
-  return `created [${sample.join(', ')}${suffix}]`;
-}
-
-function summarizeEditLikeResult(data: any): string {
-  if (!data || typeof data !== 'object') return 'ok';
-
   const parts: string[] = [];
-  const edited = typeof data.edited === 'number'
-    ? data.edited
-    : (typeof data.editedCount === 'number' ? data.editedCount : data.results?.length);
-  if (edited) parts.push(`edited ${edited}`);
-
-  appendReceiptSignals(parts, data);
-
-  return parts.join(', ') || 'ok';
+  for (const block of content) {
+    if (block.type === 'text' && block.text.trim()) {
+      parts.push(`  <text>${block.text.trim()}</text>`);
+    } else if (block.type === 'tool_call') {
+      const argsStr = stringifyArgs(block.input);
+      parts.push(`  <tool_call name="${block.name}" id="${block.id}">${argsStr}</tool_call>`);
+    }
+  }
+  return parts;
 }
 
-/**
- * Append receipt signals to summary parts.
- * After noise stripping in presentation.ts, only `failed` and `degraded` survive
- * in the presented data. Other signals (defaults, violations, warnings) are in _stderr.
- */
-function appendReceiptSignals(parts: string[], data: any): void {
-  if (typeof data.failed === 'number' && data.failed > 0) {
-    parts.push(`failed ${data.failed}`);
+function collectToolResultParts(content: string | ContentBlock[]): string[] {
+  if (typeof content === 'string') return [];
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type !== 'tool_result') continue;
+    const body = stringifyResult(block.data);
+    const errMark = block.isError === true || (block.data && (block.data as any).error != null) ? ' error="true"' : '';
+    parts.push(`<tool_result name="${block.name}" id="${block.id}"${errMark}>${body}</tool_result>`);
   }
-  if (Array.isArray(data.degraded) && data.degraded.length > 0) {
-    parts.push(`degraded ${data.degraded.length}`);
-  }
+  return parts;
 }
 
-function appendIdMapSummary(parts: string[], idMap: any): void {
-  if (!idMap || typeof idMap !== 'object') return;
+function stringifyArgs(input: Record<string, any> | undefined): string {
+  if (!input || typeof input !== 'object') return '';
+  const raw = safeStringify(input);
+  return truncate(raw, TOOL_RESULT_MAX_CHARS);
+}
 
-  const entries = Object.entries(idMap);
-  if (entries.length === 0) return;
+function stringifyResult(data: any): string {
+  if (data == null) return '';
+  if (typeof data === 'string') return truncate(data, TOOL_RESULT_MAX_CHARS);
+  if (data._compressed && typeof data.summary === 'string') {
+    const idMapStr = data.idMap ? ` idMap=${truncate(safeStringify(data.idMap), 400)}` : '';
+    const errStr = data.error != null ? ` error=${truncate(String(data.error), 200)}` : '';
+    return `${data.summary}${idMapStr}${errStr}`;
+  }
+  return truncate(safeStringify(data), TOOL_RESULT_MAX_CHARS);
+}
 
-  const sample = entries
-    .slice(0, 3)
-    .map(([key, value]) => `${key}=${value}`);
-  const suffix = entries.length > 3 ? ` +${entries.length - 3} more` : '';
-  parts.push(`ids [${sample.join(', ')}${suffix}]`);
+function safeStringify(value: any): string {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return String(value);
+  }
 }
 
 function extractText(content: string | ContentBlock[]): string {
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') return content.trim();
+  const chunks: string[] = [];
   for (const block of content) {
-    if (block.type === 'text') return block.text;
+    if (block.type === 'text' && block.text.trim()) chunks.push(block.text.trim());
   }
-  return '';
+  return chunks.join(' ');
 }
 
 function truncate(text: string, maxLen: number): string {
-  const clean = text.replace(/\n/g, ' ').trim();
-  if (clean.length <= maxLen) return clean;
-  return clean.slice(0, maxLen) + '…';
+  if (text.length <= maxLen) return text;
+  const truncatedChars = text.length - maxLen;
+  return `${text.slice(0, maxLen)}\n[... ${truncatedChars} more chars truncated]`;
+}
+
+function totalLength(entries: string[]): number {
+  let total = 0;
+  for (const e of entries) total += e.length;
+  return total + 2 * Math.max(0, entries.length - 1);
 }

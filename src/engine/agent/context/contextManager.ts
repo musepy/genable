@@ -1,230 +1,152 @@
 /**
  * @file contextManager.ts
- * @description Manages the 4-layer context for the agent runtime.
+ * @description Flat message journal with inline summary.
  *
- * Extracted from AgentRuntime to separate context management from loop orchestration.
- * Layers:
- *   1. systemPrompt          — static, set once at construction
- *   2. summary               — compressed history (only populated when context is near-full)
- *   3. conversationHistory   — previous turns' FULL messages (kept as long as context allows)
- *   4. turnMessages          — current turn's messages, moved to history at turn end
+ * State (Pimono-style):
+ *   systemPrompt: string          — static, set once, never mutated
+ *   messages: LLMMessage[]        — flat journal; summary lives as the first
+ *                                   entry when compaction has run
  *
- * Lazy compression: full messages are preserved across turns. Only when the total
- * context approaches the model's context window are the oldest turns compressed
- * into the summary.
+ * Summary representation: a synthetic user message with `summaryOf` populated
+ * (markers already defined on LLMMessage). The summarizer skips it during
+ * serialization, and the provider bridge treats it as regular user text.
+ *
+ * Turn boundary is inferred, not tracked: walk back from the end of the
+ * journal to the last user message. Everything from that index onward is
+ * "the current turn"; everything before is history.
+ *
+ * Lazy compression: full messages are preserved across turns. Only when the
+ * total context approaches the budget does endTurn() evict the oldest
+ * pre-current-turn messages into the summary.
  */
 
-import { LLMMessage, ContentBlock } from '../../llm-client/providers/types';
+import { LLMMessage, ContentBlock, LLMProvider } from '../../llm-client/providers/types';
 import { buildCompressionSummary, capSummary } from './contextSummarizer';
 import { compressConsumedToolResults } from './turnResultCompressor';
 import { getContextProfile } from './constants';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import type {
+  ContextLayerBreakdown,
+  ContextLayerMessagePreview,
+} from '../../../shared/protocol/agentRuntimeEvents';
 
 export interface ContextManagerOptions {
   systemPrompt: string;
   contextBudgetChars: number;
+  provider: LLMProvider;
 }
 
-// ---------------------------------------------------------------------------
-// ContextManager
-// ---------------------------------------------------------------------------
+const SUMMARY_MARKER = '__context_summary__';
+
+function isSummaryMessage(msg: LLMMessage): boolean {
+  return Array.isArray(msg.summaryOf) && msg.summaryOf.includes(SUMMARY_MARKER);
+}
+
+function makeSummaryMessage(summary: string): LLMMessage {
+  return {
+    id: 'ctx_summary',
+    role: 'user',
+    content: `Previous conversation summary: ${summary}`,
+    summaryOf: [SUMMARY_MARKER],
+  };
+}
 
 export class ContextManager {
-  // ─── State ───
   private readonly systemPrompt: string;
-  private summary: string = '';
-  private conversationHistory: LLMMessage[] = [];
-  private turnMessages: LLMMessage[] = [];
   private readonly contextBudgetChars: number;
+  private readonly provider: LLMProvider;
+  private messages: LLMMessage[] = [];
   private lastPromptTokens: number = 0;
 
   constructor(opts: ContextManagerOptions) {
     this.systemPrompt = opts.systemPrompt;
     this.contextBudgetChars = opts.contextBudgetChars;
+    this.provider = opts.provider;
   }
 
   // ─── Public API ─────────────────────────────────────────────
 
   /**
-   * Assemble the prompt from 4-layer context.
-   * Returns system prompt (layers 1+2) separately from messages (layers 3+4),
-   * so providers can pass system via their native system parameter.
+   * Assemble the prompt sent to the LLM.
+   * Returns system prompt separately (providers pass it natively);
+   * `messages` is the flat journal with the summary (if any) at index 0.
    *
-   * Includes an intra-turn budget gate: if the current turn has grown beyond
-   * the context budget, older model+tool message pairs are compressed in-place
-   * before assembling. This prevents unbounded context growth within a single
-   * turn (e.g. 18 JSX iterations accumulating ~126K chars of functionCall args).
+   * Includes an intra-turn budget gate: if total context exceeds budget,
+   * older model+tool pairs within the current turn get their tool_call args
+   * compressed in place. Prevents unbounded growth within a single turn
+   * (e.g. 18 JSX iterations accumulating ~126K chars).
    */
   assemblePrompt(): { system: string; messages: LLMMessage[] } {
-    // ── Intra-turn budget gate ──
-    // Compress oldest consumed model+tool pairs when context exceeds budget.
-    // This is the "fail fast" defense — prevent sending over-budget prompts to the LLM.
     this.compressTurnIfOverBudget();
-
-    // Layers 1+2: system prompt + summary concatenated into a single string
-    const systemParts: string[] = [];
-    if (this.systemPrompt) systemParts.push(this.systemPrompt);
-    if (this.summary) systemParts.push(this.summary);
-    const system = systemParts.join('\n\n');
-
-    const messages: LLMMessage[] = [];
-
-    // Layer 3: uncompressed conversation history (previous turns, full detail)
-    messages.push(...this.conversationHistory);
-
-    // Layer 4: current turn messages
-    messages.push(...this.turnMessages);
-
-    return { system, messages };
+    return { system: this.systemPrompt, messages: this.messages.slice() };
   }
 
   /**
-   * End the current turn. Moves turnMessages to conversationHistory (preserving
-   * full detail), then lazily compresses only if approaching context budget.
-   *
-   * turnMessages are NOT cleared here — they stay available for getTurnMessages()
-   * (used by debrief). They're cleared at the start of the next startTurn().
+   * End-of-turn pipeline: compress consumed tool results, then lazily evict
+   * oldest pre-turn messages into the summary when over budget.
    */
-  endTurn(): void {
-    this.conversationHistory.push(...this.turnMessages);
-    this.compressIfNeeded();
+  async endTurn(): Promise<void> {
+    this.compressConsumedResults();
+    await this.compressIfNeeded();
   }
 
   /**
-   * Start a new turn. Clears turnMessages (already moved to conversationHistory
-   * by endTurn).
+   * Intra-turn compression of consumed tool results. Safe to call every
+   * iteration — mutates tool_result blocks in place, skipping the latest.
    */
-  startTurn(): void {
-    this.turnMessages = [];
+  compressConsumedResults(): number {
+    const turnStart = this.findCurrentTurnStart();
+    if (turnStart < 0) return 0;
+    const slice: LLMMessage[] = [];
+    for (let i = turnStart; i < this.messages.length; i++) slice.push(this.messages[i]);
+    return compressConsumedToolResults(slice);
   }
 
-  /** Whether this is the first turn (no previous conversation history). */
+  /** Whether no user turn has completed yet. */
   isFirstTurn(): boolean {
-    return this.conversationHistory.length === 0;
+    let userCount = 0;
+    for (const msg of this.messages) {
+      if (msg.role === 'user' && !isSummaryMessage(msg)) {
+        userCount++;
+        if (userCount > 1) return false;
+      }
+    }
+    return userCount <= 1;
   }
 
   // ─── Message operations ─────────────────────────────────────
 
-  pushToTurn(msg: LLMMessage): void {
-    this.turnMessages.push(msg);
-  }
-
-  unshiftToTurn(msg: LLMMessage): void {
-    this.turnMessages.unshift(msg);
+  addMessage(msg: LLMMessage): void {
+    this.messages.push(msg);
   }
 
   /**
-   * Returns the live turnMessages array reference.
-   * Hooks depend on this being a live reference — they push injectMessage directly.
+   * Insert a message just before the current turn's user message.
+   * Used for turn-local system notices (e.g. token scan) that must precede
+   * the user prompt in the LLM's view.
    */
-  getTurnMessages(): LLMMessage[] {
-    return this.turnMessages;
-  }
-
-  /** Read-only access to conversation history (for subtask etc.). */
-  getConversationHistory(): LLMMessage[] {
-    return this.conversationHistory;
-  }
-
-  // ─── Compression ────────────────────────────────────────────
-
-  /** Compress consumed tool results in current turn. Returns count of compressed results. */
-  compressConsumedResults(): number {
-    return compressConsumedToolResults(this.turnMessages);
+  insertBeforeCurrentTurn(msg: LLMMessage): void {
+    const turnStart = this.findCurrentTurnStart();
+    if (turnStart < 0) {
+      this.messages.unshift(msg);
+      return;
+    }
+    this.messages.splice(turnStart, 0, msg);
   }
 
   /**
-   * Intra-turn budget gate: compress oldest consumed model+tool message pairs
-   * when the total context exceeds the budget.
-   *
-   * Unlike compressConsumedResults (which only touches functionResponse),
-   * this also compresses model messages' functionCall args — the main source
-   * of unbounded growth (each JSX call is ~7K chars).
-   *
-   * Strategy: find consumed model+tool pairs (all except the latest pair)
-   * and replace functionCall args with a one-line summary.
+   * Live reference to the full journal.
+   * Hooks use this to inspect the in-flight state (read-only contract,
+   * but the array itself is live so appends here are visible).
    */
-  private compressTurnIfOverBudget(): void {
-    const totalChars = this.estimateContextChars();
-    if (totalChars <= this.contextBudgetChars) return;
-
-    // Find model message indices that have functionCall parts
-    const modelIndices: number[] = [];
-    for (let i = 0; i < this.turnMessages.length; i++) {
-      const msg = this.turnMessages[i];
-      if (msg.role === 'model' && this.hasFunctionCalls(msg)) {
-        modelIndices.push(i);
-      }
-    }
-
-    // Keep the latest model message uncompressed (LLM needs it for continuity)
-    if (modelIndices.length < 2) return;
-
-    let compressed = 0;
-    for (let k = 0; k < modelIndices.length - 1; k++) {
-      if (this.compressModelMessage(this.turnMessages[modelIndices[k]])) {
-        compressed++;
-      }
-    }
-
-    if (compressed > 0) {
-      const afterChars = this.estimateContextChars();
-      console.log(`[Context] Budget gate: compressed ${compressed} model msg(s) functionCall args: ${totalChars} → ${afterChars} chars (budget: ${this.contextBudgetChars})`);
-    }
+  getMessages(): LLMMessage[] {
+    return this.messages;
   }
 
-  /** Check if a message contains tool_call blocks. */
-  private hasFunctionCalls(msg: LLMMessage): boolean {
-    if (!Array.isArray(msg.content)) return false;
-    return (msg.content as ContentBlock[]).some(b => b.type === 'tool_call');
-  }
-
-  /**
-   * Compress tool_call inputs in a model message to a one-line summary.
-   * Preserves the tool name and call ID. Returns true if anything was compressed.
-   */
-  private compressModelMessage(msg: LLMMessage): boolean {
-    if (!Array.isArray(msg.content)) return false;
-    let didCompress = false;
-
-    for (let i = 0; i < (msg.content as ContentBlock[]).length; i++) {
-      const block = (msg.content as ContentBlock[])[i];
-      if (block.type !== 'tool_call') continue;
-      const input = block.input;
-      if (!input || (input as any)._compressed) continue;
-
-      // Build a one-line summary of input
-      const name = block.name || '?';
-      const inputStr = JSON.stringify(input);
-      const summary = inputStr.length > 200
-        ? `${name}: ${inputStr.length} chars (compressed)`
-        : undefined;
-
-      if (!summary) continue; // small input, not worth compressing
-
-      (msg.content as ContentBlock[])[i] = {
-        type: 'tool_call',
-        id: block.id,
-        name: block.name,
-        input: { _compressed: true, summary },
-        thoughtSignature: block.thoughtSignature,
-      };
-      didCompress = true;
-    }
-
-    // Also compress any text/thoughts in the model message (thinking tokens)
-    for (let i = 0; i < (msg.content as ContentBlock[]).length; i++) {
-      const block = (msg.content as ContentBlock[])[i];
-      if (block.type === 'text' && block.text.length > 500) {
-        (msg.content as ContentBlock[])[i] = { type: 'text', text: block.text.slice(0, 200) + '…(compressed)' };
-        didCompress = true;
-      }
-    }
-
-    return didCompress;
+  /** Messages belonging to the current turn (from last user message onward). */
+  getCurrentTurnMessages(): LLMMessage[] {
+    const turnStart = this.findCurrentTurnStart();
+    if (turnStart < 0) return [];
+    return this.messages.slice(turnStart);
   }
 
   // ─── Token tracking ─────────────────────────────────────────
@@ -243,23 +165,19 @@ export class ContextManager {
     return this.systemPrompt;
   }
 
-  /** Estimate total context size in chars (across all 4 layers). */
   estimateContextChars(): number {
-    let total = this.systemPrompt.length + this.summary.length;
-    for (const msg of this.conversationHistory) {
-      total += this.estimateMessageChars(msg);
-    }
-    for (const msg of this.turnMessages) {
-      total += this.estimateMessageChars(msg);
-    }
+    let total = this.systemPrompt.length;
+    for (const msg of this.messages) total += this.estimateMessageChars(msg);
     return total;
   }
 
-  /** Per-layer chars, message counts, and full content for diagnostics.
-   *  systemPrompt: only included when `includeStaticContent` is true (first call),
-   *  since it's the same across iterations. */
-  getLayerBreakdown(includeStaticContent = true) {
-    const serializeMsg = (msg: LLMMessage) => {
+  /**
+   * Per-layer chars, message counts, and full content for telemetry.
+   * The flat journal is split back into the legacy 4-layer shape so the
+   * dashboard's visualizer can render the same stacked bar.
+   */
+  getLayerBreakdown(includeStaticContent = true): ContextLayerBreakdown {
+    const serializeMsg = (msg: LLMMessage): ContextLayerMessagePreview => {
       const chars = this.estimateMessageChars(msg);
       let content: string;
       if (typeof msg.content === 'string') {
@@ -268,12 +186,8 @@ export class ContextManager {
         const parts: string[] = [];
         for (const p of msg.content as ContentBlock[]) {
           if (p.type === 'text') parts.push(p.text);
-          if (p.type === 'tool_call') {
-            parts.push(`[call] ${p.name}(${JSON.stringify(p.input)})`);
-          }
-          if (p.type === 'tool_result') {
-            parts.push(`[result] ${p.name}: ${JSON.stringify(p.data)}`);
-          }
+          if (p.type === 'tool_call') parts.push(`[call] ${p.name}(${JSON.stringify(p.input)})`);
+          if (p.type === 'tool_result') parts.push(`[result] ${p.name}: ${JSON.stringify(p.data)}`);
         }
         content = parts.join('\n');
       } else {
@@ -282,16 +196,18 @@ export class ContextManager {
       return { id: msg.id || '', role: msg.role, chars, preview: content };
     };
 
-    let historyChars = 0;
-    const historyMsgs = this.conversationHistory.map(m => {
-      historyChars += this.estimateMessageChars(m);
-      return serializeMsg(m);
-    });
-    let turnChars = 0;
-    const turnMsgs = this.turnMessages.map(m => {
-      turnChars += this.estimateMessageChars(m);
-      return serializeMsg(m);
-    });
+    const turnStart = this.findCurrentTurnStart();
+    const summaryMsg = this.messages[0] && isSummaryMessage(this.messages[0]) ? this.messages[0] : null;
+    const historyStart = summaryMsg ? 1 : 0;
+    const historyEnd = turnStart < 0 ? this.messages.length : turnStart;
+
+    const historyMessages = this.messages.slice(historyStart, historyEnd);
+    const turnMessages = turnStart < 0 ? [] : this.messages.slice(turnStart);
+
+    const sumChars = (msgs: LLMMessage[]) =>
+      msgs.reduce((acc, m) => acc + this.estimateMessageChars(m), 0);
+
+    const summaryChars = summaryMsg ? this.estimateMessageChars(summaryMsg) : 0;
 
     return {
       systemPrompt: {
@@ -303,72 +219,186 @@ export class ContextManager {
           : [],
       },
       summary: {
-        chars: this.summary.length,
-        msgs: this.summary ? 1 : 0,
-        messages: this.summary
-          ? [{ id: 'ctx_summary', role: 'system', chars: this.summary.length, preview: this.summary }]
-          : [],
+        chars: summaryChars,
+        msgs: summaryMsg ? 1 : 0,
+        messages: summaryMsg ? [serializeMsg(summaryMsg)] : [],
       },
-      conversationHistory: { chars: historyChars, msgs: this.conversationHistory.length, messages: historyMsgs },
-      turnMessages: { chars: turnChars, msgs: this.turnMessages.length, messages: turnMsgs },
+      conversationHistory: {
+        chars: sumChars(historyMessages),
+        msgs: historyMessages.length,
+        messages: historyMessages.map(serializeMsg),
+      },
+      turnMessages: {
+        chars: sumChars(turnMessages),
+        msgs: turnMessages.length,
+        messages: turnMessages.map(serializeMsg),
+      },
     };
   }
 
-  // ─── Private ────────────────────────────────────────────────
+  // ─── Turn boundary detection ────────────────────────────────
+
+  private findCurrentTurnStart(): number {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.role === 'user' && !isSummaryMessage(msg)) return i;
+    }
+    return -1;
+  }
+
+  // ─── Compression ────────────────────────────────────────────
 
   /**
-   * Compress oldest turns from conversationHistory into summary,
-   * but ONLY if total context exceeds the budget.
+   * Lazy eviction: while over budget, peel the oldest pre-current-turn
+   * messages, summarize them, and splice a single summary message at the
+   * head (merging with any existing summary).
    */
-  private compressIfNeeded(): void {
+  private async compressIfNeeded(): Promise<void> {
     const totalBefore = this.estimateContextChars();
     if (totalBefore <= this.contextBudgetChars) {
       console.log(`[Context] Lazy: ${totalBefore} chars, budget ${this.contextBudgetChars} — no compression needed`);
       return;
     }
 
-    console.log(`[Context] Lazy: ${totalBefore} chars exceeds budget ${this.contextBudgetChars} — compressing oldest turns`);
-    let compressed = 0;
+    console.log(`[Context] Lazy: ${totalBefore} chars exceeds budget ${this.contextBudgetChars} — compressing oldest messages`);
+    let compressions = 0;
 
-    while (this.estimateContextChars() > this.contextBudgetChars && this.conversationHistory.length > 0) {
-      const oldestTurn = this.extractOldestTurn();
-      if (oldestTurn.length === 0) break;
+    while (this.estimateContextChars() > this.contextBudgetChars) {
+      const evicted = this.extractOldestTurnMessages();
+      if (evicted.length === 0) break;
 
-      const turnSummary = buildCompressionSummary(oldestTurn);
+      const turnSummary = await buildCompressionSummary(this.provider, evicted);
       if (turnSummary) {
-        this.summary = this.summary
-          ? `${this.summary}\n${turnSummary}`
-          : turnSummary;
-        compressed++;
+        this.mergeIntoSummary(turnSummary);
+        compressions++;
       }
     }
 
-    // Cap summary if it grew too large
     const maxChars = getContextProfile().summaryMaxChars;
-    if (maxChars > 0 && this.summary.length > maxChars) {
-      this.summary = capSummary(this.summary, maxChars);
+    if (maxChars > 0) {
+      const summary = this.messages[0];
+      if (summary && isSummaryMessage(summary) && typeof summary.content === 'string') {
+        const prefix = 'Previous conversation summary: ';
+        const body = summary.content.startsWith(prefix) ? summary.content.slice(prefix.length) : summary.content;
+        if (body.length > maxChars) {
+          summary.content = prefix + capSummary(body, maxChars);
+        }
+      }
     }
 
     const totalAfter = this.estimateContextChars();
-    console.log(`[Context] Compressed ${compressed} turns: ${totalBefore} → ${totalAfter} chars (summary: ${this.summary.length} chars)`);
+    console.log(`[Context] Compressed ${compressions} turn(s): ${totalBefore} → ${totalAfter} chars`);
   }
 
   /**
-   * Extract the oldest logical turn from conversationHistory.
-   * A turn = a user message + all subsequent model/tool messages until the next user message.
+   * Splice a turn summary onto the head summary message. If none exists,
+   * create one. The summary message is never part of "the current turn" —
+   * it lives at index 0 (after any preceding one it's replacing).
    */
-  private extractOldestTurn(): LLMMessage[] {
-    if (this.conversationHistory.length === 0) return [];
+  private mergeIntoSummary(turnSummary: string): void {
+    const head = this.messages[0];
+    if (head && isSummaryMessage(head) && typeof head.content === 'string') {
+      head.content = `${head.content}\n${turnSummary}`;
+      return;
+    }
+    this.messages.unshift(makeSummaryMessage(turnSummary));
+  }
 
-    let endIdx = this.conversationHistory.length;
-    for (let i = 1; i < this.conversationHistory.length; i++) {
-      if (this.conversationHistory[i].role === 'user') {
+  /**
+   * Peel the oldest non-summary "turn" from the journal.
+   * A turn = a user message + all following model/tool messages up to (but
+   * excluding) the next user message, OR the tail if this is the only turn.
+   *
+   * Never evicts the current turn — that's the one the LLM is actively in.
+   */
+  private extractOldestTurnMessages(): LLMMessage[] {
+    const currentTurnStart = this.findCurrentTurnStart();
+    if (currentTurnStart < 0) return [];
+
+    const startIdx = this.messages[0] && isSummaryMessage(this.messages[0]) ? 1 : 0;
+    if (startIdx >= currentTurnStart) return [];
+
+    let endIdx = currentTurnStart;
+    for (let i = startIdx + 1; i < currentTurnStart; i++) {
+      if (this.messages[i].role === 'user' && !isSummaryMessage(this.messages[i])) {
         endIdx = i;
         break;
       }
     }
 
-    return this.conversationHistory.splice(0, endIdx);
+    return this.messages.splice(startIdx, endIdx - startIdx);
+  }
+
+  // ─── Intra-turn budget gate ─────────────────────────────────
+
+  private compressTurnIfOverBudget(): void {
+    const totalChars = this.estimateContextChars();
+    if (totalChars <= this.contextBudgetChars) return;
+
+    const turnStart = this.findCurrentTurnStart();
+    if (turnStart < 0) return;
+
+    const modelIndices: number[] = [];
+    for (let i = turnStart; i < this.messages.length; i++) {
+      const msg = this.messages[i];
+      if (msg.role === 'model' && this.hasFunctionCalls(msg)) modelIndices.push(i);
+    }
+
+    if (modelIndices.length < 2) return;
+
+    let compressed = 0;
+    for (let k = 0; k < modelIndices.length - 1; k++) {
+      if (this.compressModelMessage(this.messages[modelIndices[k]])) compressed++;
+    }
+
+    if (compressed > 0) {
+      const afterChars = this.estimateContextChars();
+      console.log(`[Context] Budget gate: compressed ${compressed} model msg(s) functionCall args: ${totalChars} → ${afterChars} chars (budget: ${this.contextBudgetChars})`);
+    }
+  }
+
+  private hasFunctionCalls(msg: LLMMessage): boolean {
+    if (!Array.isArray(msg.content)) return false;
+    return (msg.content as ContentBlock[]).some(b => b.type === 'tool_call');
+  }
+
+  private compressModelMessage(msg: LLMMessage): boolean {
+    if (!Array.isArray(msg.content)) return false;
+    let didCompress = false;
+
+    for (let i = 0; i < (msg.content as ContentBlock[]).length; i++) {
+      const block = (msg.content as ContentBlock[])[i];
+      if (block.type !== 'tool_call') continue;
+      const input = block.input;
+      if (!input || (input as any)._compressed) continue;
+
+      const name = block.name || '?';
+      const inputStr = JSON.stringify(input);
+      const summary = inputStr.length > 200
+        ? `${name}: ${inputStr.length} chars (compressed)`
+        : undefined;
+
+      if (!summary) continue;
+
+      (msg.content as ContentBlock[])[i] = {
+        type: 'tool_call',
+        id: block.id,
+        name: block.name,
+        input: { _compressed: true, summary },
+        thoughtSignature: block.thoughtSignature,
+      };
+      didCompress = true;
+    }
+
+    for (let i = 0; i < (msg.content as ContentBlock[]).length; i++) {
+      const block = (msg.content as ContentBlock[])[i];
+      if (block.type === 'text' && block.text.length > 500) {
+        (msg.content as ContentBlock[])[i] = { type: 'text', text: block.text.slice(0, 200) + '…(compressed)' };
+        didCompress = true;
+      }
+    }
+
+    return didCompress;
   }
 
   private estimateMessageChars(msg: LLMMessage): number {
@@ -379,11 +409,9 @@ export class ContextManager {
       if (block.type === 'text') {
         total += block.text.length;
       } else if (block.type === 'tool_call') {
-        total += (block.name?.length || 0)
-          + JSON.stringify(block.input || {}).length;
+        total += (block.name?.length || 0) + JSON.stringify(block.input || {}).length;
       } else if (block.type === 'tool_result') {
-        total += (block.name?.length || 0)
-          + JSON.stringify(block.data || {}).length;
+        total += (block.name?.length || 0) + JSON.stringify(block.data || {}).length;
       }
     }
     return total;

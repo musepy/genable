@@ -1,17 +1,12 @@
 /**
  * @file agentRuntime.ts
- * @description Autonomous agent runtime with layered context management.
+ * @description Autonomous agent runtime with a flat message journal.
  *
- * Context is structured in 4 layers, not a flat message array:
- *   1. systemPrompt          — static, set once at construction
- *   2. summary               — compressed history (only populated when context is near-full)
- *   3. conversationHistory   — previous turns' FULL messages (kept as long as context allows)
- *   4. turnMessages          — current turn's messages, moved to history at turn end
- *
- * Lazy compression: full messages are preserved across turns. Only when the total
- * context approaches the model's context window are the oldest turns compressed
- * into the summary. This matches how Claude Code works — use the context you have,
- * only compress when you must.
+ * Context is a flat array of LLMMessage entries plus a static system prompt.
+ * Summary (when compaction runs) lives as a synthetic user message at the head
+ * of the journal. Turn boundary is inferred by walking back to the last user
+ * message. Lazy compression: full messages are preserved until the budget is
+ * exceeded, then the oldest pre-current-turn messages are summarized.
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, ToolCallBlock } from '../llm-client/providers/types';
@@ -126,6 +121,7 @@ export class AgentRuntime {
     this.contextManager = new ContextManager({
       systemPrompt: options.systemPrompt || '',
       contextBudgetChars: Math.floor(contextWindowTokens * 0.7) * 4,
+      provider: options.provider,
     });
     // ToolResultCleaner uses command definitions (not the `run` wrapper)
     // so it can route to the correct cleaning strategy per command.
@@ -176,7 +172,7 @@ export class AgentRuntime {
             iteration: this.currentIteration,
             maxIterations: this.maxIterations,
             currentToolCall: tc,
-            messages: this.contextManager.getTurnMessages(),
+            messages: this.contextManager.getCurrentTurnMessages(),
             loopPolicy: this.loopPolicy,
             generateId: (prefix) => this.generateId(prefix),
           };
@@ -192,7 +188,7 @@ export class AgentRuntime {
             maxIterations: this.maxIterations,
             currentToolCall: tc,
             toolResult,
-            messages: this.contextManager.getTurnMessages(),
+            messages: this.contextManager.getCurrentTurnMessages(),
             loopPolicy: this.loopPolicy,
             generateId: (prefix) => this.generateId(prefix),
           };
@@ -467,11 +463,9 @@ export class AgentRuntime {
     this.canceled = false;
     this.cancelReason = 'Canceled by user';
 
-    // Clear previous turn's messages (already moved to conversationHistory by endTurn)
-    this.contextManager.startTurn();
-
-    // Add user message to current turn
-    this.contextManager.pushToTurn({
+    // Append user message — this starts the new turn (turn boundary is
+    // inferred by walking back to the last user message).
+    this.contextManager.addMessage({
       id: this.generateId('usr'),
       role: 'user',
       content: userPrompt,
@@ -507,7 +501,7 @@ export class AgentRuntime {
         if (scanResult && !scanResult.error && scanResult.data) {
           const { snapshot, summary, tokenCount } = scanResult.data;
           if (tokenCount > 0) {
-            this.contextManager.unshiftToTurn({
+            this.contextManager.insertBeforeCurrentTurn({
               id: this.generateId('tok'),
               role: 'user',
               content: `[System: Design tokens detected — ${summary}]`,
@@ -551,7 +545,7 @@ export class AgentRuntime {
       const beforeIterCtx: HookContext = {
         iteration,
         maxIterations: this.maxIterations,
-        messages: this.contextManager.getTurnMessages(),
+        messages: this.contextManager.getCurrentTurnMessages(),
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),
       };
@@ -669,7 +663,7 @@ export class AgentRuntime {
         maxIterations: this.maxIterations,
         responseText: response.text,
         toolCalls: rawCalls,
-        messages: this.contextManager.getTurnMessages(),
+        messages: this.contextManager.getCurrentTurnMessages(),
         loopPolicy: this.loopPolicy,
         generateId: (prefix) => this.generateId(prefix),
       };
@@ -694,7 +688,7 @@ export class AgentRuntime {
       // ──── ADD MODEL RESPONSE TO TURN ────
       const modelMessage = this.options.provider.formatResponse(response);
       modelMessage.id = this.generateId('mdl');
-      this.contextManager.pushToTurn(modelMessage);
+      this.contextManager.addMessage(modelMessage);
 
       // Token tracking: use API usage when available, fall back to chars/4 estimation.
       // Critical for providers like DashScope/Kimi K2.5 whose streaming doesn't return usage.
@@ -745,7 +739,7 @@ export class AgentRuntime {
         }
 
         // LLM context from PRESENTED results (separate concern)
-        this.contextManager.pushToTurn(dispatchResult.toolResultsMessage);
+        this.contextManager.addMessage(dispatchResult.toolResultsMessage);
 
         // Guardrails (consecutiveFailure, partialFailure, budget) are now
         // handled by builtin afterIteration hooks.
@@ -762,7 +756,7 @@ export class AgentRuntime {
         const afterIterCtx: HookContext = {
           iteration,
           maxIterations: this.maxIterations,
-          messages: this.contextManager.getTurnMessages(),
+          messages: this.contextManager.getCurrentTurnMessages(),
           loopPolicy: this.loopPolicy,
           generateId: (prefix) => this.generateId(prefix),
           iterationToolResults,
@@ -791,12 +785,12 @@ export class AgentRuntime {
           if (questionCount >= 2) {
             askUserNudged = true;
             console.log(`[AgentRuntime] Text-only response with ${questionCount} questions — nudging to use ask_user tool`);
-            this.contextManager.pushToTurn({
+            this.contextManager.addMessage({
               id: this.generateId('model'),
               role: 'model',
               content: response.text,
             });
-            this.contextManager.pushToTurn({
+            this.contextManager.addMessage({
               id: this.generateId('nudge'),
               role: 'user',
               content: 'Do not ask questions in plain text — the user cannot reply inline. Use the ask_user tool to present options. Pick the single most important question and call ask_user with 2-4 options.',
@@ -828,7 +822,7 @@ export class AgentRuntime {
           summary: response.text || '',
           ...(isEmptyResponse ? { emptyResponse: true } : {}),
         });
-        this.contextManager.endTurn();
+        await this.contextManager.endTurn();
         return response.text;
       }
     }
@@ -840,13 +834,13 @@ export class AgentRuntime {
       iteration,
       maxIterations: this.maxIterations,
     });
-    this.contextManager.endTurn();
+    await this.contextManager.endTurn();
     return `I've used all ${this.maxIterations} iterations. My progress is saved — say "continue" to pick up where I left off.`;
   }
 
   /** Returns current turn messages (for debrief/diagnostics). */
   public getMessages(): LLMMessage[] {
-    return this.contextManager.getTurnMessages();
+    return this.contextManager.getCurrentTurnMessages();
   }
 
   /** Structured node info created during the current turn. */

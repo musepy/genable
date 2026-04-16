@@ -4,9 +4,9 @@
  *
  * After the LLM has consumed a tool result and made its next decision,
  * the full result is redundant — the model's response already captures
- * the key interpretation. Replace verbose results with compact summaries
- * while preserving node IDs (needed for subsequent operations) and
- * error details (needed for cross-iteration learning).
+ * the key interpretation. Replace verbose results with compact stubs
+ * while preserving structural facts (node IDs, errors) that the model
+ * cannot re-derive on its own.
  *
  * Called at the start of each iteration, before assemblePrompt().
  * Only compresses tool results that the LLM has already seen (all except the latest).
@@ -33,7 +33,6 @@ import { LLMMessage, ContentBlock } from '../../llm-client/providers/types';
  * @returns Number of tool result messages compressed in this call.
  */
 export function compressConsumedToolResults(turnMessages: LLMMessage[]): number {
-  // Find all tool result message indices
   const toolMsgIndices: number[] = [];
   for (let i = 0; i < turnMessages.length; i++) {
     if (turnMessages[i].role === 'tool') {
@@ -41,11 +40,9 @@ export function compressConsumedToolResults(turnMessages: LLMMessage[]): number 
     }
   }
 
-  // Need at least 2 tool results — keep the latest uncompressed
   if (toolMsgIndices.length < 2) return 0;
 
   let compressed = 0;
-  // Compress all except the last tool result message
   for (let k = 0; k < toolMsgIndices.length - 1; k++) {
     if (compressToolMessage(turnMessages[toolMsgIndices[k]])) {
       compressed++;
@@ -58,10 +55,6 @@ export function compressConsumedToolResults(turnMessages: LLMMessage[]): number 
 // Internal: compress a single tool result message
 // ---------------------------------------------------------------------------
 
-/**
- * Replace verbose tool_result data with a compact summary.
- * Returns true if any block was actually compressed (false if all were already compressed).
- */
 function compressToolMessage(msg: LLMMessage): boolean {
   if (typeof msg.content === 'string') return false;
   if (!Array.isArray(msg.content)) return false;
@@ -75,12 +68,9 @@ function compressToolMessage(msg: LLMMessage): boolean {
     const resp = block.data;
     if (!resp || resp._compressed) continue;
 
-    const name = block.name;
-    const compactResponse = buildCompactResponse(name, resp);
-
+    const compactResponse = buildCompactResponse(block.name, resp);
     const hasError = resp.error != null;
 
-    // Mutate in place — replace the data object
     (msg.content as ContentBlock[])[i] = {
       type: 'tool_result',
       id: block.id,
@@ -96,126 +86,42 @@ function compressToolMessage(msg: LLMMessage): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Build compact response — preserves IDs and errors, drops verbose content
+// Build compact response — preserves IDs and errors, discards everything else
 // ---------------------------------------------------------------------------
 
 interface CompactResponse {
   _compressed: true;
-  summary: string;
+  stub?: string;
   idMap?: Record<string, string>;
   id?: string;
   name?: string;
-  children?: any[];
   error?: string;
+  errors?: unknown;
 }
 
 function buildCompactResponse(toolName: string, resp: any): CompactResponse {
-  const ok = !resp.error;
-  const summary = ok
-    ? summarizeSuccess(toolName, resp)
-    : summarizeFailure(toolName, resp);
+  const compact: CompactResponse = { _compressed: true };
 
-  const compact: CompactResponse = {
-    _compressed: true,
-    summary,
-  };
-
-  // Preserve idMap — LLM needs node IDs for subsequent operations
   if (resp.idMap && typeof resp.idMap === 'object' && Object.keys(resp.idMap).length > 0) {
     compact.idMap = resp.idMap;
   }
 
-  // Preserve node identity (jsx spreads {id, name, type, children} to top level)
   if (resp.id) {
     compact.id = resp.id;
     if (resp.name) compact.name = resp.name;
-    if (resp.children) compact.children = resp.children;
   }
 
-  // Preserve error — cross-iteration learning
-  if (!ok) {
-    compact.error = resp.error;
+  if (resp.error != null) {
+    compact.error = String(resp.error);
+    // Preserve per-op errors array for partial-failure diagnostics.
+    if (Array.isArray(resp.errors)) compact.errors = resp.errors;
+  }
+
+  // If no structural fact survives, leave an identifiable marker so logs
+  // remain greppable and the LLM sees a clear "this was pruned" signal.
+  if (compact.idMap === undefined && compact.id === undefined && compact.error === undefined) {
+    compact.stub = `[old tool result: ${toolName}]`;
   }
 
   return compact;
-}
-
-// ---------------------------------------------------------------------------
-// Summarizers — adapted from contextSummarizer patterns
-// ---------------------------------------------------------------------------
-
-function summarizeSuccess(toolName: string, resp: any): string {
-  // After presentForLLM flattening, data fields are at top level (resp.X, not resp.data.X)
-
-  // Creation — preserve idMap (LLM needs IDs for subsequent operations)
-  if (toolName === 'jsx') {
-    if (resp.id) {
-      const childCount = Array.isArray(resp.children) ? resp.children.length : 0;
-      return `created ${resp.created || '?'} nodes, root: ${resp.name || resp.type}#${resp.id} (${childCount} children)`;
-    }
-    return summarizeIdMap(resp.idMap) || 'created ok';
-  }
-
-  // Edit — show count + change summary
-  if (toolName === 'edit') {
-    const edited = resp.edited ?? resp.editedCount;
-    const changeSummary = resp.changeSummary;
-    if (changeSummary && typeof changeSummary === 'string') {
-      return `edited ${edited ?? '?'}: ${changeSummary.slice(0, 120)}`;
-    }
-    return edited ? `edited ${edited} nodes` : 'edited ok';
-  }
-
-  // Read tools — show content size
-  if (toolName === 'inspect' || toolName === 'describe') {
-    const content = resp.tree ?? resp.listing;
-    if (typeof content === 'string') return `${content.split('\n').length} lines`;
-    return 'ok';
-  }
-
-  // Search — show match count
-  if (toolName === 'find_nodes' || toolName === 'discover_props') {
-    if (Array.isArray(resp.results)) return `${resp.results.length} matches`;
-    return 'ok';
-  }
-  if (toolName === 'replace_props') {
-    return resp.replaced != null ? `replaced ${resp.replaced}` : 'ok';
-  }
-
-  // Structure
-  if (toolName === 'clone_node') {
-    return summarizeIdMap(resp.idMap) || 'cloned ok';
-  }
-  if (toolName === 'delete_node') {
-    return resp.deleted ? `deleted ${resp.deleted}` : 'ok';
-  }
-  if (toolName === 'move_node') {
-    return resp.name ? `moved → ${resp.name}` : 'ok';
-  }
-
-  // Generic fallback — most setter/variable/component tools return small results
-  return 'ok';
-}
-
-function summarizeIdMap(idMap: any): string {
-  if (!idMap || typeof idMap !== 'object') return '';
-  const entries = Object.entries(idMap);
-  if (entries.length === 0) return '';
-  const sample = entries.slice(0, 8).map(([k, v]) => `${k}=${v}`);
-  const suffix = entries.length > 8 ? ` +${entries.length - 8} more` : '';
-  return `created ${entries.length} nodes [${sample.join(', ')}${suffix}]`;
-}
-
-function summarizeFailure(_toolName: string, resp: any): string {
-  // After flattening, error is a string (not {code, message})
-  const errorMsg = String(resp.error || '');
-
-  // Detect partial failure (errors array present alongside error)
-  if (resp.errors && Array.isArray(resp.errors)) {
-    const errorCount = resp.errors.length;
-    const successCount = resp.idMap ? Object.keys(resp.idMap).length : 0;
-    return `PARTIAL: ${errorCount} failed, ${successCount} succeeded`;
-  }
-
-  return `FAIL: ${errorMsg.slice(0, 100)}`;
 }

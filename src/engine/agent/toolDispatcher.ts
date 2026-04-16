@@ -120,16 +120,16 @@ export class ToolDispatcher {
 
   // ─── Noop detection ───────────────────────────────────────
 
-  private static isNoopResult(toolName: string, result: any): boolean {
+  private static isNoopResult(result: any): boolean {
     if (!result || result.error != null) return false;
     const data = result.data;
     if (!data) return false;
 
-    if (toolName === 'edit' && data.edited === 0) return true;
-    if (toolName === 'jsx' && data.created === 0) return true;
-    if (data.moved === 0 || data.deleted === 0 || data.copied === 0) return true;
-
-    return false;
+    return data.created === 0
+        || data.edited === 0
+        || data.moved === 0
+        || data.deleted === 0
+        || data.copied === 0;
   }
 
   constructor(
@@ -268,7 +268,7 @@ export class ToolDispatcher {
       }
 
       // ── Noop detection ──
-      const isNoop = ToolDispatcher.isNoopResult(toolName, result);
+      const isNoop = ToolDispatcher.isNoopResult(result);
 
       // ── Track $LAST — extract last created/modified node ID ──
       this.extractLastNodeId(result);

@@ -1,450 +1,271 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { buildCompressionSummary, capSummary } from '../contextSummarizer';
-import type { LLMMessage } from '../../../llm-client/providers/types';
+import type {
+  LLMMessage,
+  LLMProvider,
+  LLMGenerateOptions,
+  LLMResponse,
+  LLMToolResult,
+} from '../../../llm-client/providers/types';
+import type { ToolDefinition } from '../../tools/types';
+
+// -----------------------------------------------------------------------------
+// Stubbed LLM provider — captures the last request so tests can assert on it
+// -----------------------------------------------------------------------------
+
+interface StubProviderOptions {
+  response?: LLMResponse;
+  contextWindow?: number;
+  throwOnGenerate?: Error;
+}
+
+function createStubProvider(opts: StubProviderOptions = {}): LLMProvider & { lastRequest?: LLMGenerateOptions } {
+  const provider: any = {
+    name: 'stub',
+    lastRequest: undefined,
+    getCapabilities() {
+      return {
+        supportsTextStreaming: false,
+        supportsReasoningStreaming: false,
+        contextWindow: opts.contextWindow ?? 200_000,
+      };
+    },
+    async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
+      provider.lastRequest = options;
+      if (opts.throwOnGenerate) throw opts.throwOnGenerate;
+      return opts.response ?? { text: 'stub summary' };
+    },
+    formatResponse(): LLMMessage {
+      return { id: 'x', role: 'model', content: '' };
+    },
+    formatToolResults(_results: LLMToolResult[]): LLMMessage {
+      return { id: 'x', role: 'tool', content: '' };
+    },
+    getToolSystemInstruction(_tools: ToolDefinition[]): string {
+      return '';
+    },
+  };
+  return provider;
+}
 
 describe('buildCompressionSummary', () => {
-  it('returns empty string for no messages', () => {
-    expect(buildCompressionSummary([])).toBe('');
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('summarizes a simple user → model turn', () => {
+  it('returns empty string for no messages (skips LLM call)', async () => {
+    const provider = createStubProvider();
+    const result = await buildCompressionSummary(provider, []);
+    expect(result).toBe('');
+    expect(provider.lastRequest).toBeUndefined();
+  });
+
+  it('routes through the provider with no tools and a bounded maxTokens', async () => {
+    const provider = createStubProvider({
+      response: { text: 'Summary: user wanted a login page. Created Card=1:1.' },
+    });
+
     const messages: LLMMessage[] = [
       { id: 'u1', role: 'user', content: 'Make a login page' },
-      { id: 'm1', role: 'model', content: 'I created a login page with email and password fields.' },
+      { id: 'm1', role: 'model', content: 'Done — created Card 1:1.' },
     ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('User: Make a login page');
-    expect(summary).toContain('Agent: I created a login page');
+
+    const summary = await buildCompressionSummary(provider, messages);
+
+    expect(summary).toContain('Summary');
+    expect(provider.lastRequest).toBeDefined();
+    expect(provider.lastRequest!.tools).toEqual([]);
+    expect(provider.lastRequest!.maxTokens).toBe(500);
+    expect(provider.lastRequest!.system).toMatch(/summariz/i);
   });
 
-  it('summarizes tool calls with function call parts', () => {
+  it('wraps messages in <conversation> XML tags', async () => {
+    const provider = createStubProvider({ response: { text: 'ok' } });
+
     const messages: LLMMessage[] = [
       { id: 'u1', role: 'user', content: 'Build a card' },
       {
         id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { xml: '<frame name="Card">...</frame>', parentId: '0:1' } },
+          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { xml: '<frame/>', parentId: '0:1' } },
         ],
       },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_1', name: 'jsx', data: { data: { idMap: { Card: '100:1', Title: '100:2' } } } },
-        ],
-      },
-      { id: 'm2', role: 'model', content: 'Card created successfully.' },
     ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('User: Build a card');
-    expect(summary).toContain('jsx(');
-    expect(summary).toContain('100:1');
-    expect(summary).toContain('100:2');
-    expect(summary).toContain('Agent: Card created');
+    await buildCompressionSummary(provider, messages);
+
+    const userMsg = provider.lastRequest!.messages[0];
+    const prompt = typeof userMsg.content === 'string'
+      ? userMsg.content
+      : userMsg.content.map(b => (b.type === 'text' ? b.text : '')).join('');
+    expect(prompt).toContain('<conversation>');
+    expect(prompt).toContain('</conversation>');
+    expect(prompt).toContain('<user>Build a card</user>');
+    expect(prompt).toContain('tool_call name="jsx"');
   });
 
-  it('summarizes tool errors', () => {
+  it('serializes tool results including _compressed pre-summaries', async () => {
+    const provider = createStubProvider({ response: { text: 'ok' } });
+
     const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Edit the button' },
+      { id: 'u1', role: 'user', content: 'Create dashboard' },
       {
         id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_2', name: 'edit', input: { xml: '<frame id="99:1" bg="#F00"/>' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_2', name: 'edit', data: { error: 'NODE_NOT_FOUND: 99:1' } },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('FAIL');
-    expect(summary).toContain('NODE_NOT_FOUND');
-  });
-
-  it('handles multiple turns', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Make a header' },
-      { id: 'm1', role: 'model', content: 'Header done.' },
-      { id: 'u2', role: 'user', content: 'Add a footer' },
-      { id: 'm2', role: 'model', content: 'Footer done.' },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('User: Make a header');
-    expect(summary).toContain('Agent: Header done.');
-    expect(summary).toContain('User: Add a footer');
-    expect(summary).toContain('Agent: Footer done.');
-  });
-
-  it('skips system messages and existing summaries', () => {
-    const messages: LLMMessage[] = [
-      { id: 's1', role: 'system', content: 'You are an agent' },
-      { id: 'sum1', role: 'user', content: '[old summary]', summaryOf: ['old1', 'old2'] },
-      { id: 'u1', role: 'user', content: 'Do something' },
-      { id: 'm1', role: 'model', content: 'Done.' },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).not.toContain('You are an agent');
-    expect(summary).not.toContain('[old summary]');
-    expect(summary).toContain('User: Do something');
-  });
-
-  it('truncates long user requests', () => {
-    const longText = 'A'.repeat(200);
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: longText },
-      { id: 'm1', role: 'model', content: 'OK' },
-    ];
-    const summary = buildCompressionSummary(messages);
-    // Should be truncated to ~120 chars + ellipsis
-    const userLine = summary.split('\n').find(l => l.startsWith('User:'))!;
-    expect(userLine.length).toBeLessThan(140);
-    expect(userLine).toContain('…');
-  });
-
-  it('skips thinking parts in model content', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Design a form' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'thinking', text: 'Let me think about the layout...' },
-          { type: 'text', text: 'Here is your form.' },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).not.toContain('Let me think');
-    expect(summary).toContain('Agent: Here is your form.');
-  });
-
-  it('preserves jsx creation details during compression', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Create a settings panel' },
-      {
-        id: 'm1',
-        role: 'model',
-        content: [
-          { type: 'tool_call', id: 'call_3', name: 'jsx', input: { parentId: '200:1', xml: '<frame name="Panel"/>' } },
-        ],
-      },
-      {
-        id: 't1',
-        role: 'tool',
-        content: [
-          {
-            type: 'tool_result', id: 'call_3', name: 'jsx',
-            data: {
-              data: {
-                idMap: {
-                  panel: '100:1',
-                  title: '100:2',
-                  subtitle: '100:3',
-                  toggle: '100:4',
-                },
-              },
-            },
-          },
-        ],
-      },
-    ];
-
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('jsx(');
-    expect(summary).toContain('parent:200:1');
-    expect(summary).toContain('panel=100:1');
-    expect(summary).toContain('title=100:2');
-  });
-
-  it('uses receipt.edited for edit summaries (lean format)', () => {
-    // After noise stripping, edit results only have: idMap, edited, failed, changeSummary
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Adjust the card spacing' },
-      {
-        id: 'm1',
-        role: 'model',
-        content: [
-          { type: 'tool_call', id: 'call_4', name: 'edit', input: { xml: '<frame id="1:1" gap="24"/>' } },
-        ],
-      },
-      {
-        id: 't1',
-        role: 'tool',
-        content: [
-          {
-            type: 'tool_result', id: 'call_4', name: 'edit',
-            data: {
-              data: {
-                edited: 3,
-              },
-            },
-          },
-        ],
-      },
-    ];
-
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('edited 3');
-  });
-
-  it('summarizes clone_node command with idMap', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Copy a card' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_5', name: 'clone_node', input: { id: '962:1' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_5', name: 'clone_node', data: { data: { idMap: { Card: '962:1', Title: '962:5' } } } },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('Card=962:1');
-    expect(summary).toContain('Title=962:5');
-  });
-
-  it('summarizes find_nodes command', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Find all buttons' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_6', name: 'find_nodes', input: { query: 'Button' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_6', name: 'find_nodes', data: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }, { id: '1:4' }, { id: '1:5' }] } } },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('5 results');
-  });
-
-  it('summarizes discover_props command', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Find button properties' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_7', name: 'discover_props', input: { query: 'Button' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_7', name: 'discover_props', data: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }] } } },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('3 results');
-  });
-
-  it('summarizes replace_props command', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Replace colors' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_8', name: 'replace_props', input: { property: 'fill', value: '#FF0000' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_8', name: 'replace_props', data: { data: { replaced: 5 } } },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('replaced 5');
-  });
-
-  it('summarizes delete_node command', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Delete nodes' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_9', name: 'delete_node', input: { id: '1:1' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_9', name: 'delete_node', data: { data: { deleted: 3 } } },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('deleted 3');
-  });
-
-  it('preserves PARTIAL_FAILURE error details in summary', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Create a settings panel' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_10', name: 'jsx', input: { xml: '<frame name="Panel">...</frame>' } },
+          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { parentId: '0:1' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
           {
-            type: 'tool_result', id: 'call_10', name: 'jsx',
-            data: {
-              error: '3 created, 2 failed',
-              data: {
-                created: 3,
-                failed: 2,
-                idMap: { panel: '100:1', title: '100:2' },
-                errors: [
-                  { op: 'buttons', error: 'Unknown property: cornerRadii (did you mean cornerRadius?)' },
-                  { op: 'footer', error: 'FONT_UNLOADED: Figma Sans not available' },
-                ],
-              },
-            },
-          },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    // Must contain PARTIAL_FAILURE status
-    expect(summary).toContain('PARTIAL_FAILURE');
-    // Must contain per-op error details (not just "failed 2")
-    expect(summary).toContain('buttons');
-    expect(summary).toContain('cornerRadii'); // the actual error property name
-    expect(summary).toContain('footer');
-    expect(summary).toContain('FONT_UNLOADED');
-    // Must still contain surviving idMap
-    expect(summary).toContain('panel=100:1');
-  });
-
-  it('preserves BATCH_TOO_LARGE error in summary', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Create everything' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_11', name: 'jsx', input: { xml: '<frame name="All">...</frame>' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          {
-            type: 'tool_result', id: 'call_11', name: 'jsx',
-            data: {
-              error: 'batch of 45 operations exceeds the hard limit of 30',
-            },
-          },
-        ],
-      },
-    ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('BATCH_TOO_LARGE');
-    expect(summary).toContain('45');
-  });
-
-  it('handles already-compressed tool results from turnResultCompressor', () => {
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Create a dashboard' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_12', name: 'jsx', input: { xml: '<frame name="Dashboard"/>' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          {
-            type: 'tool_result', id: 'call_12', name: 'jsx',
+            type: 'tool_result', id: 'call_1', name: 'jsx',
             data: {
               _compressed: true,
-              summary: 'created 5 nodes [Dashboard=100:1, Header=100:2, Sidebar=100:3, Main=100:4, Footer=100:5]',
-              idMap: { Dashboard: '100:1', Header: '100:2', Sidebar: '100:3', Main: '100:4', Footer: '100:5' },
+              summary: 'created 3 nodes',
+              idMap: { Dashboard: '1:1', Header: '1:2', Footer: '1:3' },
             },
           },
         ],
       },
-      { id: 'm2', role: 'model', content: 'Dashboard layout created.' },
     ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('created 5 nodes');
-    expect(summary).toContain('Dashboard=100:1');
-    expect(summary).toContain('Agent: Dashboard layout created.');
+    await buildCompressionSummary(provider, messages);
+
+    const userMsg = provider.lastRequest!.messages[0];
+    const prompt = typeof userMsg.content === 'string' ? userMsg.content : '';
+    expect(prompt).toContain('created 3 nodes');
+    expect(prompt).toContain('Dashboard');
+    expect(prompt).toContain('tool_result');
   });
 
-  it('handles compressed failed results from turnResultCompressor', () => {
+  it('marks error results with error="true"', async () => {
+    const provider = createStubProvider({ response: { text: 'ok' } });
+
     const messages: LLMMessage[] = [
       { id: 'u1', role: 'user', content: 'Edit the card' },
       {
         id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_13', name: 'edit', input: { xml: '<frame id="99:1"/>' } },
+          { type: 'tool_call', id: 'call_2', name: 'edit', input: { xml: '<frame/>' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          {
-            type: 'tool_result', id: 'call_13', name: 'edit',
-            data: {
-              _compressed: true,
-              summary: 'PARTIAL_FAILURE: 2 failed, 1 succeeded',
-              error: '2 ops failed',
-            },
-          },
+          { type: 'tool_result', id: 'call_2', name: 'edit', data: { error: 'NODE_NOT_FOUND' } },
         ],
       },
     ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('FAIL');
-    expect(summary).toContain('PARTIAL_FAILURE: 2 failed, 1 succeeded');
+    await buildCompressionSummary(provider, messages);
+
+    const userMsg = provider.lastRequest!.messages[0];
+    const prompt = typeof userMsg.content === 'string' ? userMsg.content : '';
+    expect(prompt).toContain('error="true"');
+    expect(prompt).toContain('NODE_NOT_FOUND');
   });
 
-  it('summarizes move_node command', () => {
+  it('throws when LLM returns empty text', async () => {
+    const provider = createStubProvider({ response: { text: '' } });
+
     const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Move the card' },
+      { id: 'u1', role: 'user', content: 'Hello' },
+    ];
+    await expect(buildCompressionSummary(provider, messages)).rejects.toThrow(/empty summary/);
+  });
+
+  it('propagates LLM errors (no silent fallback)', async () => {
+    const provider = createStubProvider({ throwOnGenerate: new Error('NETWORK_DOWN') });
+
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Hello' },
+    ];
+    await expect(buildCompressionSummary(provider, messages)).rejects.toThrow(/NETWORK_DOWN/);
+  });
+
+  it('respects the input budget — huge payloads get trimmed before the LLM call', async () => {
+    // contextWindow 10K tokens → 0.2 * 10_000 * 4 = 8000 chars input cap
+    const provider = createStubProvider({
+      contextWindow: 10_000,
+      response: { text: 'ok' },
+    });
+
+    const messages: LLMMessage[] = [];
+    // 20 user turns, each 2000 chars — 40K of content, well above 8K cap
+    for (let i = 0; i < 20; i++) {
+      messages.push({ id: `u${i}`, role: 'user', content: 'X'.repeat(2000) });
+    }
+    await buildCompressionSummary(provider, messages);
+
+    const userMsg = provider.lastRequest!.messages[0];
+    const prompt = typeof userMsg.content === 'string' ? userMsg.content : '';
+    // Should be capped well below the total 40K input
+    expect(prompt.length).toBeLessThan(15_000);
+  });
+
+  it('truncates individual tool results that exceed TOOL_RESULT_MAX_CHARS', async () => {
+    const provider = createStubProvider({ response: { text: 'ok' } });
+
+    const fatData = { xml: 'X'.repeat(10_000) };
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'Inspect' },
       {
         id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_14', name: 'move_node', input: { id: '1:1', parentId: '2:1' } },
+          { type: 'tool_call', id: 'call_1', name: 'inspect', input: { node: '1:1' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { type: 'tool_result', id: 'call_14', name: 'move_node', data: { data: { name: 'Card' } } },
+          { type: 'tool_result', id: 'call_1', name: 'inspect', data: fatData },
         ],
       },
     ];
-    const summary = buildCompressionSummary(messages);
-    expect(summary).toContain('→ Card');
+    await buildCompressionSummary(provider, messages);
+
+    const userMsg = provider.lastRequest!.messages[0];
+    const prompt = typeof userMsg.content === 'string' ? userMsg.content : '';
+    expect(prompt).toContain('truncated');
+    // Full 10K payload should not be present verbatim
+    expect(prompt).not.toContain('X'.repeat(10_000));
+  });
+
+  it('caps output when the LLM over-produces (safety rail)', async () => {
+    const huge = 'A'.repeat(5000);
+    const provider = createStubProvider({ response: { text: huge } });
+
+    const messages: LLMMessage[] = [
+      { id: 'u1', role: 'user', content: 'hi' },
+    ];
+    const summary = await buildCompressionSummary(provider, messages);
+    expect(summary.length).toBeLessThanOrEqual(2600);
+  });
+
+  it('skips system messages and prior summaries during serialization', async () => {
+    const provider = createStubProvider({ response: { text: 'ok' } });
+
+    const messages: LLMMessage[] = [
+      { id: 's1', role: 'system', content: 'SECRET SYSTEM PROMPT' },
+      { id: 'sum1', role: 'user', content: '[prior summary]', summaryOf: ['old1'] },
+      { id: 'u1', role: 'user', content: 'Keep this one' },
+    ];
+    await buildCompressionSummary(provider, messages);
+
+    const userMsg = provider.lastRequest!.messages[0];
+    const prompt = typeof userMsg.content === 'string' ? userMsg.content : '';
+    expect(prompt).not.toContain('SECRET SYSTEM PROMPT');
+    expect(prompt).not.toContain('[prior summary]');
+    expect(prompt).toContain('Keep this one');
   });
 });
 
 describe('capSummary', () => {
-  it('returns unchanged if under limit', () => {
-    const summary = 'User: Hello\nAgent: Hi';
-    expect(capSummary(summary, 100)).toBe(summary);
+  it('returns unchanged when under limit', () => {
+    const s = 'User: Hello\nAgent: Hi';
+    expect(capSummary(s, 100)).toBe(s);
   });
 
-  it('drops oldest turns when over limit', () => {
-    const summary = 'User: First request\n  → jsx → ok\nAgent: Done first\nUser: Second request\n  → find_nodes → ok\nAgent: Done second';
-    const capped = capSummary(summary, 60);
-    expect(capped).toContain('[Earlier history truncated]');
-    expect(capped).toContain('User: Second request');
-    expect(capped).not.toContain('User: First request');
+  it('truncates overflowing strings with ellipsis', () => {
+    const capped = capSummary('A'.repeat(500), 50);
+    expect(capped.length).toBe(50);
+    expect(capped.endsWith('…')).toBe(true);
   });
 
-  it('keeps last turn even if exceeds limit', () => {
-    const summary = 'User: A very long single turn that exceeds the limit by itself';
-    const capped = capSummary(summary, 10);
-    expect(capped).toContain('[Earlier history truncated]');
-    expect(capped).toContain('User: A very long');
-  });
-
-  it('drops success-only turns before error turns (error-priority)', () => {
-    const summary = [
-      'User: First (success)',
-      '  → jsx → created [a=1:1, b=1:2]',
-      'User: Second (failed)',
-      '  → jsx → PARTIAL_FAILURE: 3 created, 2 failed',
-      'User: Third (success)',
-      '  → jsx → created [c=2:1, d=2:2]',
-    ].join('\n');
-    // Set limit small enough that one turn must be dropped
-    const capped = capSummary(summary, summary.length - 20);
-    // Should drop a success turn, not the error turn
-    expect(capped).toContain('PARTIAL_FAILURE');
-    expect(capped).toContain('[Earlier history truncated]');
+  it('returns unchanged when maxChars <= 0 (opt-out)', () => {
+    const s = 'anything';
+    expect(capSummary(s, 0)).toBe(s);
+    expect(capSummary(s, -1)).toBe(s);
   });
 });

@@ -23,28 +23,13 @@ export class ToolResultCleaner {
    */
   public sanitizeToolCallsForHistory(toolCalls: ToolCallBlock[]): ToolCallBlock[] {
     return toolCalls.map(tc => {
-      // Strip XML from edit history — tool result already has success/idMap feedback.
-      if (tc.name === 'edit' && typeof tc.input?.xml === 'string' && tc.input.xml.length > 500) {
-        return {
-          ...tc,
-          input: {
-            ...(tc.input?.parentId && { parentId: tc.input.parentId }),
-          }
-        };
-      }
-
-      // Unwrap "run" tool — extract the actual command name from the CLI string
-      const commandName = tc.name === 'run' && typeof tc.input?.command === 'string'
-        ? tc.input.command.trim().split(/\s/)[0]
-        : tc.name;
-
-      const def = this.toolMap.get(commandName);
+      const def = this.toolMap.get(tc.name);
       if (!def) return tc;
       let sanitizedArgs = this.sanitizeArgsBySchema(tc.input, def.parameters as ToolParameter);
 
       const argsJson = JSON.stringify(sanitizedArgs);
       if (argsJson.length > CONTEXT_CONSTANTS.MAX_HISTORY_ARGS_CHARS) {
-        sanitizedArgs = this.truncateArgs(tc.name, sanitizedArgs, argsJson.length);
+        sanitizedArgs = this.truncateArgs(sanitizedArgs);
       }
 
       return { ...tc, input: sanitizedArgs };
@@ -101,7 +86,7 @@ export class ToolResultCleaner {
     }
   }
 
-  private truncateArgs(_toolName: string, sanitizedArgs: any, _originalLength: number): any {
+  private truncateArgs(sanitizedArgs: any): any {
     return {
       ...(sanitizedArgs.nodeId && { nodeId: sanitizedArgs.nodeId }),
       ...(sanitizedArgs.name && { name: sanitizedArgs.name }),

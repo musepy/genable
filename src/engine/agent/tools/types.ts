@@ -27,6 +27,13 @@ export interface ToolDefinition {
    * Used by noop detection to decide whether to check for no-change results.
    */
   mutates?: boolean;
+
+  /**
+   * Transform the raw `result.data` object into the LLM-visible shape.
+   * Called by the presentation pipe after flattening, before meta/stderr/guards.
+   * When absent, data passes through unchanged.
+   */
+  presentForLLM?: (data: any) => any;
 }
 
 export interface ToolParameter {

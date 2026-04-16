@@ -30,7 +30,7 @@ describe('compressConsumedToolResults', () => {
     const messages: LLMMessage[] = [
       userMsg('Create a card'),
       modelMsg(''),
-      toolMsg('tol_1', [{ name: 'jsx', response: { node: { id: '100:1', name: 'Card', type: 'frame' }, created: 1 } }]),
+      toolMsg('tol_1', [{ name: 'jsx', response: { id: '100:1', name: 'Card', type: 'frame', created: 1 } }]),
     ];
     const count = compressConsumedToolResults(messages);
     expect(count).toBe(0);
@@ -38,7 +38,7 @@ describe('compressConsumedToolResults', () => {
     expect(resp._compressed).toBeUndefined();
   });
 
-  it('compresses all tool results except the last one', () => {
+  it('compresses all tool results except the last one, preserving idMap', () => {
     const messages: LLMMessage[] = [
       userMsg('Design a page'),
       modelMsg(''),
@@ -50,18 +50,20 @@ describe('compressConsumedToolResults', () => {
     ];
 
     const count = compressConsumedToolResults(messages);
-    expect(count).toBe(2); // tol_1 and tol_2 compressed, tol_3 kept
+    expect(count).toBe(2);
 
-    // tol_1: compressed, idMap preserved
+    // tol_1: idMap survives (required for cross-iteration ID resolution)
     const resp1 = (messages[2].content as any)[0].data;
     expect(resp1._compressed).toBe(true);
-    expect(resp1.summary).toContain('created 2 nodes');
     expect(resp1.idMap).toEqual({ Card: '100:1', Title: '100:2' });
+    // verbose fields discarded
+    expect(resp1.created).toBeUndefined();
 
-    // tol_2: compressed
+    // tol_2: no idMap / id / error → stub marker
     const resp2 = (messages[4].content as any)[0].data;
     expect(resp2._compressed).toBe(true);
-    expect(resp2.summary).toBe('edited 2 nodes');
+    expect(resp2.stub).toBe('[old tool result: edit]');
+    expect(resp2.edited).toBeUndefined();
 
     // tol_3: NOT compressed (latest)
     const resp3 = (messages[6].content as any)[0].data;
@@ -78,18 +80,15 @@ describe('compressConsumedToolResults', () => {
       toolMsg('tol_2', [{ name: 'edit', response: { edited: 1 } }]),
     ];
 
-    // First call: compresses tol_1
     compressConsumedToolResults(messages);
     const resp1After = (messages[2].content as any)[0].data;
     expect(resp1After._compressed).toBe(true);
 
-    // Add a new tool result (simulating next iteration)
     messages.push(modelMsg(''));
     messages.push(toolMsg('tol_3', [{ name: 'inspect', response: { tree: 'x\ny' } }]));
 
-    // Second call: compresses tol_2, skips tol_1 (already compressed), keeps tol_3
     const count = compressConsumedToolResults(messages);
-    expect(count).toBe(1); // only tol_2 newly compressed
+    expect(count).toBe(1);
 
     const resp2After = (messages[4].content as any)[0].data;
     expect(resp2After._compressed).toBe(true);
@@ -102,7 +101,6 @@ describe('compressConsumedToolResults', () => {
       toolMsg('tol_1', [{
         name: 'jsx',
         response: {
-          // Flat format: error as string, data fields at top level
           error: '2 ops failed',
           idMap: { Card: '100:1' },
           errors: [{ op: 'create Title', error: 'invalid color' }],
@@ -118,7 +116,24 @@ describe('compressConsumedToolResults', () => {
     expect(resp1._compressed).toBe(true);
     expect(resp1.error).toBe('2 ops failed');
     expect(resp1.idMap).toEqual({ Card: '100:1' });
-    expect(resp1.summary).toContain('PARTIAL');
+    expect(resp1.errors).toEqual([{ op: 'create Title', error: 'invalid color' }]);
+  });
+
+  it('marks tool_result as isError when error is present', () => {
+    const messages: LLMMessage[] = [
+      userMsg('go'),
+      modelMsg(''),
+      toolMsg('tol_1', [{ name: 'edit', response: { error: 'NODE_NOT_FOUND: 99:1' } }]),
+      modelMsg(''),
+      toolMsg('tol_2', [{ name: 'inspect', response: { tree: 'x' } }]),
+    ];
+
+    compressConsumedToolResults(messages);
+
+    const block = (messages[2].content as any)[0];
+    expect(block.isError).toBe(true);
+    expect(block.data.error).toBe('NODE_NOT_FOUND: 99:1');
+    expect(block.data._compressed).toBe(true);
   });
 
   it('handles multi-part tool result messages', () => {
@@ -137,12 +152,12 @@ describe('compressConsumedToolResults', () => {
 
     const parts = (messages[2].content as any);
     expect(parts[0].data._compressed).toBe(true);
-    expect(parts[0].data.summary).toContain('created 1 nodes');
+    expect(parts[0].data.idMap).toEqual({ A: '1:1' });
     expect(parts[1].data._compressed).toBe(true);
-    expect(parts[1].data.summary).toBe('edited 3 nodes');
+    expect(parts[1].data.stub).toBe('[old tool result: edit]');
   });
 
-  it('summarizes inspect/tree results by line count', () => {
+  it('discards verbose tree content and adds stub when no id/idMap', () => {
     const treeContent = Array.from({ length: 50 }, (_, i) => `  Node_${i}`).join('\n');
     const messages: LLMMessage[] = [
       userMsg('go'),
@@ -156,11 +171,12 @@ describe('compressConsumedToolResults', () => {
 
     const resp = (messages[2].content as any)[0].data;
     expect(resp._compressed).toBe(true);
-    expect(resp.summary).toBe('50 lines of node data');
+    expect(resp.tree).toBeUndefined();
+    expect(resp.stub).toBe('[old tool result: inspect]');
     expect(resp.idMap).toBeUndefined();
   });
 
-  it('preserves jsx node identity in compressed results', () => {
+  it('preserves jsx node identity (id + name) in compressed results', () => {
     const messages: LLMMessage[] = [
       userMsg('go'),
       modelMsg(''),
@@ -175,7 +191,26 @@ describe('compressConsumedToolResults', () => {
     expect(resp._compressed).toBe(true);
     expect(resp.id).toBe('1:1');
     expect(resp.name).toBe('Card');
-    expect(resp.children).toEqual(['Title#1:2']);
-    expect(resp.summary).toContain('Card#1:1');
+    // Verbose children/created/type discarded
+    expect(resp.children).toBeUndefined();
+    expect(resp.created).toBeUndefined();
+    expect(resp.type).toBeUndefined();
+  });
+
+  it('survives empty idMap without preserving it', () => {
+    const messages: LLMMessage[] = [
+      userMsg('go'),
+      modelMsg(''),
+      toolMsg('tol_1', [{ name: 'jsx', response: { idMap: {}, created: 0 } }]),
+      modelMsg(''),
+      toolMsg('tol_2', [{ name: 'inspect', response: { tree: 'x' } }]),
+    ];
+
+    compressConsumedToolResults(messages);
+
+    const resp = (messages[2].content as any)[0].data;
+    expect(resp._compressed).toBe(true);
+    expect(resp.idMap).toBeUndefined();
+    expect(resp.stub).toBe('[old tool result: jsx]');
   });
 });

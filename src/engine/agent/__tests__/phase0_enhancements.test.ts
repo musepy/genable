@@ -229,11 +229,8 @@ describe('Noop detection', () => {
     );
 
     const logEvents = events.filter(e => e.type === 'tool_log');
-    // Note: isNoopResult checks toolName, not executor name.
-    // Since 'edit-noop' is not 'edit', it won't match the edit-specific check.
-    // But it will still check the generic checks (moved: 0, etc.)
-    // The actual noop detection uses the commandName from dispatch which is 'edit-noop'
-    expect(logEvents[0].logEntry.isNoop).toBe(false); // 'edit-noop' !== 'edit'
+    // isNoopResult is generic — any tool returning { edited: 0 } is a noop.
+    expect(logEvents[0].logEntry.isNoop).toBe(true);
   });
 
   it('should detect noop via generic checks (deleted: 0)', async () => {

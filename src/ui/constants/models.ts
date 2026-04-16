@@ -53,6 +53,7 @@ export const SUPPORTED_MODELS: Record<string, ModelConfig[]> = {
   ],
   dashscope: [
     // 千问
+    { name: 'qwen3.6-plus', displayName: 'Qwen 3.6 Plus', tier: 'balanced', isFree: false },
     { name: 'qwen3.5-plus', displayName: 'Qwen 3.5 Plus', tier: 'balanced', isFree: false },
     { name: 'qwen3-max-2026-01-23', displayName: 'Qwen 3 Max', tier: 'balanced', isFree: false },
     { name: 'qwen3-coder-next', displayName: 'Qwen 3 Coder Next', tier: 'fast', isFree: false },

@@ -128,8 +128,7 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<LLMModel[]>
 }
 
 /**
- * DashScope models — static list only (API endpoint has no CORS headers,
- * can't be called from plugin sandbox iframe)
+ * DashScope models — static list only (coding plan endpoint has no /models API)
  */
 export async function fetchDashScopeModels(_apiKey: string): Promise<LLMModel[]> {
   return [];

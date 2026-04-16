@@ -1,101 +1,103 @@
 /**
  * @file types.ts
- * @description Common interfaces for LLM Providers to support tool-use and model abstraction.
+ * @description Common interfaces for LLM Providers — tagged-union content blocks,
+ * provider-neutral message format, and shared adapters.
+ *
+ * ContentBlock replaces the old Gemini-style Part (optional fields).
+ * Every block has a `type` discriminator — access via `block.type === 'tool_call'`,
+ * not by checking which optional field exists.
  */
 
 import { ToolDefinition, ToolResponse } from '../../agent/tools/types';
 
+// ═══════════════════════════════════════════════════════════════
+// Content blocks (tagged union)
+// ═══════════════════════════════════════════════════════════════
+
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface ToolCallBlock {
+  type: 'tool_call';
+  id: string;
+  name: string;
+  input: Record<string, any>;
+  thoughtSignature?: string;
+}
+
+export interface ToolResultBlock {
+  type: 'tool_result';
+  id: string;
+  name: string;
+  data: any;
+  thoughtSignature?: string;
+}
+
+export interface ThinkingBlock {
+  type: 'thinking';
+  text: string;
+  signature?: string;
+}
+
+export interface ImageBlock {
+  type: 'image';
+  mimeType: string;
+  data: string;
+}
+
+export type ContentBlock = TextBlock | ToolCallBlock | ToolResultBlock | ThinkingBlock | ImageBlock;
+
+// ═══════════════════════════════════════════════════════════════
+// Messages
+// ═══════════════════════════════════════════════════════════════
+
 export type MessageRole = 'system' | 'user' | 'model' | 'tool';
 
-/**
- * Common message format for all LLM providers.
- * Providers are responsible for mapping these roles to their specific API formats.
- * - 'system': System instructions
- * - 'user': Human input
- * - 'model': Assistant/AI response (may include function calls)
- * - 'tool': Response from a tool/function execution
- */
 export interface LLMMessage {
-  id: string; // Unique identifier for tracking and reversibility
+  id: string;
   role: MessageRole;
-  content: string | Part[];
-  hidden?: boolean; // If true, this message is excluded from the current context sent to LLM
-  summaryOf?: string[]; // IDs of original messages that this message summarizes
-  pinned?: boolean; // If true, this message survives context compression (e.g., original user request)
-  synthetic?: boolean; // If true, this message was injected by the runtime (not from the user or LLM)
+  content: string | ContentBlock[];
+  hidden?: boolean;
+  summaryOf?: string[];
+  pinned?: boolean;
+  synthetic?: boolean;
 }
 
-export interface Part {
-  text?: string;
-  functionCall?: {
-    name: string;
-    args: any;
-    id?: string;
-  };
-  functionResponse?: {
-    name: string;
-    response: any;
-    id?: string;
-  };
-  /** Unique identifier for tool call, required for OpenAI-compatible APIs */
-  tool_call_id?: string;
-  /** Inline binary data (e.g. image) for multimodal messages */
-  inlineData?: {
-    mimeType: string;  // e.g. 'image/jpeg'
-    data: string;      // base64 encoded
-  };
-  /** Thought flag for Gemini 3 thinking process content */
-  thought?: boolean;
-  /** Thought signature for Gemini 3 function calling - must be returned in next turn */
-  thought_signature?: string;
-}
+// ═══════════════════════════════════════════════════════════════
+// Tool call / result (intermediate types for runtime dispatch)
+// ═══════════════════════════════════════════════════════════════
 
 export interface LLMToolCall {
   id?: string;
   name: string;
   args: any;
-  /** Internal metadata for specific providers (e.g. Gemini thought signatures) */
   metadata?: Record<string, any>;
-  /** Official snake_case field for Gemini 3 function calling */
-  /** Official snake_case field for Gemini 3 function calling */
   thought_signature?: string;
 }
 
 export interface LLMToolResult {
   name: string;
   response: any;
-  id?: string; // Original tool call ID
+  id?: string;
   thought_signature?: string;
-  /** Image attachment extracted from tool result, injected as inlineData part */
   imageAttachment?: {
     mimeType: string;
     data: string;
   };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// LLM Response
+// ═══════════════════════════════════════════════════════════════
+
 /**
- * Reason the LLM stopped generating.
- *
- * Strict union — only LLM API "real" finish reasons are allowed. Providers
- * MUST NOT fabricate values like 'timeout' to signal transport errors —
- * those are thrown as typed ProviderErrors from `providerErrors.ts`.
- *
- * - 'stop'           — model finished naturally
- * - 'length'         — model hit max_tokens (real LLM-level truncation)
- * - 'tool_calls'     — model emitted tool calls and stopped
- * - 'content_filter' — provider-side safety filter blocked output
+ * Strict union — only LLM API "real" finish reasons.
+ * Providers MUST NOT fabricate values like 'timeout'.
  */
 export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter';
 
-/**
- * Normalize a raw upstream finish_reason string to our strict FinishReason
- * union. Returns undefined for unknown/missing values (the runtime then
- * treats it as "natural stop").
- *
- * Maps legacy and provider-specific aliases:
- * - OpenAI legacy: 'function_call' → 'tool_calls'
- * - Anthropic:    'end_turn' → 'stop', 'max_tokens' → 'length', 'tool_use' → 'tool_calls'
- */
 export function normalizeFinishReason(raw: string | null | undefined): FinishReason | undefined {
   if (!raw) return undefined;
   switch (raw) {
@@ -123,13 +125,10 @@ export interface LLMResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
-    /** Tokens served from provider KV cache (if reported). */
     cachedTokens?: number;
   };
   thoughts?: string;
-  /** Full original parts from the provider to ensure exact history reconstruction */
-  fullParts?: Part[];
-  /** Why the model stopped. See FinishReason. */
+  fullBlocks?: ContentBlock[];
   finishReason?: FinishReason;
 }
 
@@ -138,40 +137,24 @@ export interface LLMGenerateOptions {
   tools?: ToolDefinition[];
   temperature?: number;
   maxTokens?: number;
-  models?: string[]; // Multiple models for fallback/routing (e.g. OpenRouter)
+  models?: string[];
   streaming?: boolean;
   onProgress?: (chunk: string) => void;
   onThinking?: (thought: string) => void;
-  /** Constrained response schema (optional) */
   responseSchema?: Record<string, any>;
-  /** Thinking level for models that support it */
   thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high';
-  /** Configuration for tool calling behavior (optional) */
   toolConfig?: LLMToolConfig;
-  /** AbortSignal for cancelling streaming requests */
   abortSignal?: AbortSignal;
 }
 
-/**
- * Common tool configuration behavior
- */
 export interface LLMToolConfig {
-  /** 
-   * 'AUTO': Model decides whether to call tools
-   * 'ANY': Model MUST call at least one tool ( Gemini 'ANY', OpenAI 'required' )
-   * 'NONE': Model must NOT call any tools
-   */
   mode?: 'AUTO' | 'ANY' | 'NONE';
-  /** Optional list of tool names that the model is allowed to call */
   allowedTools?: string[];
 }
 
 export interface LLMProviderCapabilities {
-  /** Provider can return incremental text chunks in a single generation turn. */
   supportsTextStreaming: boolean;
-  /** Provider can return incremental reasoning/thought chunks in a single generation turn. */
   supportsReasoningStreaming: boolean;
-  /** Model's context window size in tokens. Used for lazy compression decisions. */
   contextWindow: number;
 }
 
@@ -186,75 +169,60 @@ export interface LLMProvider {
   generate(options: LLMGenerateOptions): Promise<LLMResponse>;
   generateStream?(options: LLMGenerateOptions): AsyncIterable<LLMResponse>;
   getCapabilities?(): LLMProviderCapabilities;
-  
-  /**
-   * Format an LLM response into a message for history record.
-   * This allows providers to handle model-specific constraints (e.g. Gemini's tool call turns).
-   */
   formatResponse(response: LLMResponse): LLMMessage;
-
-  /**
-   * Format tool execution results into a message for history record.
-   * This allows providers to echo back signatures or metadata required by the specific model.
-   */
   formatToolResults(results: LLMToolResult[]): LLMMessage;
-
-  /**
-   * Get provider-specific system instructions for tool usage.
-   * This allows decoupling the prompt format from the content composer.
-   */
   getToolSystemInstruction(tools: ToolDefinition[]): string;
 }
 
-/**
- * Default implementation for formatResponse (standard model -> message mapping)
- */
+// ═══════════════════════════════════════════════════════════════
+// Default formatters (shared by providers that don't need custom logic)
+// ═══════════════════════════════════════════════════════════════
+
+function randomId(prefix: string): string {
+  return prefix + '_' + Math.random().toString(36).substring(7);
+}
+
 export function formatResponseDefault(response: LLMResponse): LLMMessage {
   if (response.toolCalls && response.toolCalls.length > 0) {
-    const content: Part[] = [];
-    if (response.text) content.push({ text: response.text });
-    
+    const content: ContentBlock[] = [];
+    if (response.text) content.push({ type: 'text', text: response.text });
+
     content.push(...response.toolCalls.map(tc => ({
-      functionCall: { name: tc.name, args: tc.args },
-      tool_call_id: tc.id,
-      thought_signature: tc.thought_signature
+      type: 'tool_call' as const,
+      id: tc.id || randomId('call'),
+      name: tc.name,
+      input: tc.args,
+      thoughtSignature: tc.thought_signature,
     })));
 
-    return {
-      id: 'gen_' + Math.random().toString(36).substring(7),
-      role: 'model',
-      content
-    };
+    return { id: randomId('gen'), role: 'model', content };
   }
-  return { 
-    id: 'gen_' + Math.random().toString(36).substring(7),
-    role: 'model', 
-    content: response.text || '' 
-  };
+  return { id: randomId('gen'), role: 'model', content: response.text || '' };
 }
 
-/**
- * Default implementation for formatToolResults (standard tool results -> message mapping)
- * NOTE: thought_signature is NOT included in functionResponse per Gemini API protocol.
- * thoughtSignature is only allowed in model turns (functionCall, thought, text parts).
- */
 export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
   return {
-    id: 'gen_' + Math.random().toString(36).substring(7),
+    id: randomId('gen'),
     role: 'tool',
     content: results.map(tr => ({
-      functionResponse: { name: tr.name, response: tr.response },
-      tool_call_id: tr.id,
-      // thought_signature intentionally omitted - not allowed in functionResponse
-    }))
+      type: 'tool_result' as const,
+      id: tr.id || '',
+      name: tr.name,
+      data: tr.response,
+    })),
   };
 }
 
-/**
- * Default implementation for getToolSystemInstruction.
- * Tool calling protocol is now part of CORE prompt (merged during prompt consolidation).
- * Returns empty — no separate tool instruction needed.
- */
 export function getToolSystemInstructionDefault(_tools: ToolDefinition[]): string {
   return '';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Type guards (for consumers that switch on block.type)
+// ═══════════════════════════════════════════════════════════════
+
+export function isTextBlock(b: ContentBlock): b is TextBlock { return b.type === 'text'; }
+export function isToolCallBlock(b: ContentBlock): b is ToolCallBlock { return b.type === 'tool_call'; }
+export function isToolResultBlock(b: ContentBlock): b is ToolResultBlock { return b.type === 'tool_result'; }
+export function isThinkingBlock(b: ContentBlock): b is ThinkingBlock { return b.type === 'thinking'; }
+export function isImageBlock(b: ContentBlock): b is ImageBlock { return b.type === 'image'; }

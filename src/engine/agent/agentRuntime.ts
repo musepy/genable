@@ -571,9 +571,10 @@ export class AgentRuntime {
           ? m.content.slice(0, 500)
           : Array.isArray(m.content)
             ? (m.content as any[]).map((p: any) => {
-                if (p.text) return `[text] ${p.text.slice(0, 200)}`;
-                if (p.functionCall) return `[call] ${p.functionCall.name}(${JSON.stringify(p.functionCall.args).slice(0, 200)})`;
-                if (p.functionResponse) return `[result] ${p.functionResponse.name}: ${JSON.stringify(p.functionResponse.response).slice(0, 200)}`;
+                if (p.type === 'text') return `[text] ${p.text.slice(0, 200)}`;
+                if (p.type === 'tool_call') return `[call] ${p.name}(${JSON.stringify(p.input).slice(0, 200)})`;
+                if (p.type === 'tool_result') return `[result] ${p.name}: ${JSON.stringify(p.data).slice(0, 200)}`;
+                if (p.type === 'thinking') return `[thinking] ${p.text.slice(0, 100)}`;
                 return '[other]';
               }).join('\n    ')
             : '(empty)';

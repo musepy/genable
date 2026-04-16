@@ -1,23 +1,23 @@
 /**
  * @file responseAccumulator.ts
  * @description Accumulates streaming LLM response chunks into a single LLMResponse.
- * Provider-agnostic — operates on the common LLMResponse/LLMToolCall/Part types.
+ * Provider-agnostic — operates on the common LLMResponse/LLMToolCall/ContentBlock types.
  */
 
-import { LLMResponse, LLMToolCall, Part, FinishReason } from '../types';
+import { LLMResponse, LLMToolCall, ContentBlock, FinishReason } from '../types';
 
 /**
- * Accumulates streaming response chunks (text, thoughts, tool calls, fullParts).
+ * Accumulates streaming response chunks (text, thoughts, tool calls, fullBlocks).
  *
  * Handles the case where thoughtSignature arrives in a different streaming
- * chunk than the functionCall it belongs to (common with Gemini 3).
+ * chunk than the tool_call it belongs to (common with Gemini 3).
  * Providers that don't use signatures get a simple passthrough.
  */
 export class ResponseAccumulator {
   private text: string = '';
   private thoughts: string = '';
   private toolCalls: LLMToolCall[] = [];
-  private fullParts: Part[] = [];
+  private fullBlocks: ContentBlock[] = [];
   private usage?: LLMResponse['usage'];
   private finishReason?: FinishReason;
 
@@ -25,43 +25,55 @@ export class ResponseAccumulator {
     if (chunk.text) this.text += chunk.text;
     if (chunk.thoughts) this.thoughts += chunk.thoughts;
     if (chunk.toolCalls && chunk.toolCalls.length > 0) this.toolCalls.push(...chunk.toolCalls);
-    if (chunk.fullParts && chunk.fullParts.length > 0) this.fullParts.push(...chunk.fullParts);
+    if (chunk.fullBlocks && chunk.fullBlocks.length > 0) this.fullBlocks.push(...chunk.fullBlocks);
     if (chunk.usage) this.usage = chunk.usage;
     if (chunk.finishReason) this.finishReason = chunk.finishReason;
   }
 
   finalize(): LLMResponse {
-    // Identify shared signature across accumulated parts (if any)
-    const sharedSignature = (this.fullParts as any[]).find((p: any) => p.thought_signature || p.thoughtSignature)?.thought_signature
-      || (this.fullParts as any[]).find((p: any) => p.thought_signature || p.thoughtSignature)?.thoughtSignature;
+    // Identify shared signature across accumulated blocks (if any)
+    const sharedSignature = this.fullBlocks.find((b) => {
+      if (b.type === 'tool_call' || b.type === 'tool_result') return !!b.thoughtSignature;
+      if (b.type === 'thinking') return !!b.signature;
+      return false;
+    });
+    const sharedSig = sharedSignature
+      ? (sharedSignature.type === 'thinking' ? sharedSignature.signature : (sharedSignature as any).thoughtSignature)
+      : undefined;
 
-    const finalFullParts: Part[] = [];
+    const finalBlocks: ContentBlock[] = [];
 
-    if (sharedSignature) {
+    if (sharedSig) {
       // Propagate signature to tool calls missing it
       for (const tc of this.toolCalls) {
         if (!tc.thought_signature) {
-          tc.thought_signature = sharedSignature;
+          tc.thought_signature = sharedSig;
           if (tc.metadata) {
-            tc.metadata.thought_signature = sharedSignature;
+            tc.metadata.thought_signature = sharedSig;
           } else {
-            tc.metadata = { thought_signature: sharedSignature };
+            tc.metadata = { thought_signature: sharedSig };
           }
         }
       }
 
-      // Propagate signature to parts, filter out standalone signature-only parts
-      for (const p of this.fullParts as any[]) {
-        if (p.text || p.thought || p.functionCall || p.functionResponse) {
-          const copy = { ...p };
-          if (!copy.thought_signature) copy.thought_signature = sharedSignature;
-          finalFullParts.push(copy);
+      // Propagate signature to blocks, filter out empty blocks
+      for (const b of this.fullBlocks) {
+        if (b.type === 'text' || b.type === 'thinking' || b.type === 'tool_call' || b.type === 'tool_result') {
+          if (b.type === 'tool_call' && !b.thoughtSignature) {
+            finalBlocks.push({ ...b, thoughtSignature: sharedSig });
+          } else if (b.type === 'tool_result' && !b.thoughtSignature) {
+            finalBlocks.push({ ...b, thoughtSignature: sharedSig });
+          } else if (b.type === 'thinking' && !b.signature) {
+            finalBlocks.push({ ...b, signature: sharedSig });
+          } else {
+            finalBlocks.push(b);
+          }
         }
       }
     } else {
-      for (const p of this.fullParts as any[]) {
-        if (p.text || p.thought || p.functionCall || p.functionResponse) {
-          finalFullParts.push(p);
+      for (const b of this.fullBlocks) {
+        if (b.type === 'text' || b.type === 'thinking' || b.type === 'tool_call' || b.type === 'tool_result') {
+          finalBlocks.push(b);
         }
       }
     }
@@ -70,7 +82,7 @@ export class ResponseAccumulator {
       text: this.text,
       thoughts: this.thoughts || undefined,
       toolCalls: this.toolCalls.length > 0 ? this.toolCalls : undefined,
-      fullParts: finalFullParts.length > 0 ? finalFullParts : undefined,
+      fullBlocks: finalBlocks.length > 0 ? finalBlocks : undefined,
       usage: this.usage,
       finishReason: this.finishReason,
     };

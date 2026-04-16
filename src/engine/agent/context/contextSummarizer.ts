@@ -10,7 +10,7 @@
  * No LLM call — pure extraction from message content. Fast and deterministic.
  */
 
-import { LLMMessage, Part } from '../../llm-client/providers/types';
+import { LLMMessage, ContentBlock } from '../../llm-client/providers/types';
 import { getContextProfile } from './constants';
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ function groupIntoTurns(messages: LLMMessage[]): TurnDigest[] {
 // Content extractors
 // ---------------------------------------------------------------------------
 
-function extractModelContent(content: string | Part[], turn: TurnDigest): void {
+function extractModelContent(content: string | ContentBlock[], turn: TurnDigest): void {
   if (typeof content === 'string') {
     if (content.trim()) {
       turn.agentResponse = truncate(content.trim(), getContextProfile().summaryAgentResponseChars);
@@ -134,28 +134,28 @@ function extractModelContent(content: string | Part[], turn: TurnDigest): void {
     return;
   }
 
-  for (const part of content) {
-    if (part.thought) continue; // Skip thinking content
+  for (const block of content) {
+    if (block.type === 'thinking') continue; // Skip thinking content
 
-    if (part.text && part.text.trim()) {
-      turn.agentResponse = truncate(part.text.trim(), getContextProfile().summaryAgentResponseChars);
+    if (block.type === 'text' && block.text.trim()) {
+      turn.agentResponse = truncate(block.text.trim(), getContextProfile().summaryAgentResponseChars);
     }
-    if (part.functionCall) {
-      const args = summarizeArgs(part.functionCall.name, part.functionCall.args);
-      turn.toolActions.push(`→ ${part.functionCall.name}(${args})`);
+    if (block.type === 'tool_call') {
+      const args = summarizeArgs(block.name, block.input);
+      turn.toolActions.push(`→ ${block.name}(${args})`);
     }
   }
 }
 
-function extractToolResults(content: string | Part[], turn: TurnDigest): void {
+function extractToolResults(content: string | ContentBlock[], turn: TurnDigest): void {
   if (typeof content === 'string') return;
 
-  for (const part of content) {
-    if (!part.functionResponse) continue;
-    const resp = part.functionResponse.response;
+  for (const block of content) {
+    if (block.type !== 'tool_result') continue;
+    const resp = block.data;
     if (!resp) continue;
 
-    const name = part.functionResponse.name;
+    const name = block.name;
 
     // Already compressed by turnResultCompressor — reuse its summary directly
     if (resp._compressed && resp.summary) {
@@ -352,10 +352,10 @@ function appendIdMapSummary(parts: string[], idMap: any): void {
   parts.push(`ids [${sample.join(', ')}${suffix}]`);
 }
 
-function extractText(content: string | Part[]): string {
+function extractText(content: string | ContentBlock[]): string {
   if (typeof content === 'string') return content;
-  for (const part of content) {
-    if (part.text && !part.thought) return part.text;
+  for (const block of content) {
+    if (block.type === 'text') return block.text;
   }
   return '';
 }

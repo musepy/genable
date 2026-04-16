@@ -14,7 +14,7 @@
  * into the summary.
  */
 
-import { LLMMessage, Part } from '../../llm-client/providers/types';
+import { LLMMessage, ContentBlock } from '../../llm-client/providers/types';
 import { buildCompressionSummary, capSummary } from './contextSummarizer';
 import { compressConsumedToolResults } from './turnResultCompressor';
 import { getContextProfile } from './constants';
@@ -179,50 +179,50 @@ export class ContextManager {
     }
   }
 
-  /** Check if a message contains functionCall parts. */
+  /** Check if a message contains tool_call blocks. */
   private hasFunctionCalls(msg: LLMMessage): boolean {
     if (!Array.isArray(msg.content)) return false;
-    return (msg.content as Part[]).some(p => !!p.functionCall);
+    return (msg.content as ContentBlock[]).some(b => b.type === 'tool_call');
   }
 
   /**
-   * Compress functionCall args in a model message to a one-line summary.
+   * Compress tool_call inputs in a model message to a one-line summary.
    * Preserves the tool name and call ID. Returns true if anything was compressed.
    */
   private compressModelMessage(msg: LLMMessage): boolean {
     if (!Array.isArray(msg.content)) return false;
     let didCompress = false;
 
-    for (let i = 0; i < (msg.content as Part[]).length; i++) {
-      const part = (msg.content as Part[])[i];
-      if (!part.functionCall) continue;
-      const args = part.functionCall.args;
-      if (!args || (args as any)._compressed) continue;
+    for (let i = 0; i < (msg.content as ContentBlock[]).length; i++) {
+      const block = (msg.content as ContentBlock[])[i];
+      if (block.type !== 'tool_call') continue;
+      const input = block.input;
+      if (!input || (input as any)._compressed) continue;
 
-      // Build a one-line summary of args
-      const name = part.functionCall.name || '?';
-      const argsStr = JSON.stringify(args);
-      const summary = argsStr.length > 200
-        ? `${name}: ${argsStr.length} chars (compressed)`
+      // Build a one-line summary of input
+      const name = block.name || '?';
+      const inputStr = JSON.stringify(input);
+      const summary = inputStr.length > 200
+        ? `${name}: ${inputStr.length} chars (compressed)`
         : undefined;
 
-      if (!summary) continue; // small args, not worth compressing
+      if (!summary) continue; // small input, not worth compressing
 
-      (msg.content as Part[])[i] = {
-        ...part,
-        functionCall: {
-          ...part.functionCall,
-          args: { _compressed: true, summary },
-        },
+      (msg.content as ContentBlock[])[i] = {
+        type: 'tool_call',
+        id: block.id,
+        name: block.name,
+        input: { _compressed: true, summary },
+        thoughtSignature: block.thoughtSignature,
       };
       didCompress = true;
     }
 
     // Also compress any text/thoughts in the model message (thinking tokens)
-    for (let i = 0; i < (msg.content as Part[]).length; i++) {
-      const part = (msg.content as Part[])[i];
-      if (part.text && part.text.length > 500) {
-        (msg.content as Part[])[i] = { ...part, text: part.text.slice(0, 200) + '…(compressed)' };
+    for (let i = 0; i < (msg.content as ContentBlock[]).length; i++) {
+      const block = (msg.content as ContentBlock[])[i];
+      if (block.type === 'text' && block.text.length > 500) {
+        (msg.content as ContentBlock[])[i] = { type: 'text', text: block.text.slice(0, 200) + '…(compressed)' };
         didCompress = true;
       }
     }
@@ -269,13 +269,13 @@ export class ContextManager {
         content = msg.content;
       } else if (Array.isArray(msg.content)) {
         const parts: string[] = [];
-        for (const p of msg.content as Part[]) {
-          if (p.text) parts.push(p.text);
-          if (p.functionCall) {
-            parts.push(`[call] ${p.functionCall.name}(${JSON.stringify(p.functionCall.args)})`);
+        for (const p of msg.content as ContentBlock[]) {
+          if (p.type === 'text') parts.push(p.text);
+          if (p.type === 'tool_call') {
+            parts.push(`[call] ${p.name}(${JSON.stringify(p.input)})`);
           }
-          if (p.functionResponse) {
-            parts.push(`[result] ${p.functionResponse.name}: ${JSON.stringify(p.functionResponse.response)}`);
+          if (p.type === 'tool_result') {
+            parts.push(`[result] ${p.name}: ${JSON.stringify(p.data)}`);
           }
         }
         content = parts.join('\n');
@@ -378,15 +378,15 @@ export class ContextManager {
     if (typeof msg.content === 'string') return msg.content.length;
     if (!Array.isArray(msg.content)) return 0;
     let total = 0;
-    for (const part of msg.content as Part[]) {
-      if (part.text) total += part.text.length;
-      if (part.functionCall) {
-        total += (part.functionCall.name?.length || 0)
-          + JSON.stringify(part.functionCall.args || {}).length;
-      }
-      if (part.functionResponse) {
-        total += (part.functionResponse.name?.length || 0)
-          + JSON.stringify(part.functionResponse.response || {}).length;
+    for (const block of msg.content as ContentBlock[]) {
+      if (block.type === 'text') {
+        total += block.text.length;
+      } else if (block.type === 'tool_call') {
+        total += (block.name?.length || 0)
+          + JSON.stringify(block.input || {}).length;
+      } else if (block.type === 'tool_result') {
+        total += (block.name?.length || 0)
+          + JSON.stringify(block.data || {}).length;
       }
     }
     return total;

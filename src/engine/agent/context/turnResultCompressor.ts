@@ -17,7 +17,7 @@
  *   Iteration 2: compress tool_0 (consumed), keep tool_1 (fresh) → LLM sees tool_1
  */
 
-import { LLMMessage, Part } from '../../llm-client/providers/types';
+import { LLMMessage, ContentBlock } from '../../llm-client/providers/types';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -59,8 +59,8 @@ export function compressConsumedToolResults(turnMessages: LLMMessage[]): number 
 // ---------------------------------------------------------------------------
 
 /**
- * Replace verbose functionResponse data with a compact summary.
- * Returns true if any part was actually compressed (false if all were already compressed).
+ * Replace verbose tool_result data with a compact summary.
+ * Returns true if any block was actually compressed (false if all were already compressed).
  */
 function compressToolMessage(msg: LLMMessage): boolean {
   if (typeof msg.content === 'string') return false;
@@ -69,22 +69,22 @@ function compressToolMessage(msg: LLMMessage): boolean {
   let didCompress = false;
 
   for (let i = 0; i < msg.content.length; i++) {
-    const part = msg.content[i];
-    if (!part.functionResponse) continue;
+    const block = (msg.content as ContentBlock[])[i];
+    if (block.type !== 'tool_result') continue;
 
-    const resp = part.functionResponse.response;
+    const resp = block.data;
     if (!resp || resp._compressed) continue;
 
-    const name = part.functionResponse.name;
+    const name = block.name;
     const compactResponse = buildCompactResponse(name, resp);
 
-    // Mutate in place — replace the response object
-    msg.content[i] = {
-      ...part,
-      functionResponse: {
-        ...part.functionResponse,
-        response: compactResponse,
-      },
+    // Mutate in place — replace the data object
+    (msg.content as ContentBlock[])[i] = {
+      type: 'tool_result',
+      id: block.id,
+      name: block.name,
+      data: compactResponse,
+      thoughtSignature: block.thoughtSignature,
     };
     didCompress = true;
   }

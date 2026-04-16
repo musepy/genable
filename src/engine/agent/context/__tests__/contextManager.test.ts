@@ -180,13 +180,13 @@ describe('ContextManager', () => {
       expect(chars).toBe('You are a design agent.'.length + 'Hello'.length);
     });
 
-    it('counts Part[] content correctly', () => {
+    it('counts ContentBlock[] content correctly', () => {
       cm.pushToTurn({
         id: 'test',
         role: 'model',
         content: [
-          { text: 'Some text' },
-          { functionCall: { name: 'jsx', args: { xml: '<frame/>' } } },
+          { type: 'text', text: 'Some text' },
+          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { xml: '<frame/>' } },
         ],
       });
       const chars = cm.estimateContextChars();

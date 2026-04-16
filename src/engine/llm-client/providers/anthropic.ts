@@ -9,7 +9,7 @@
 import {
   LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolResult,
   formatResponseDefault, formatToolResultsDefault, getToolSystemInstructionDefault,
-  Part, normalizeFinishReason,
+  ContentBlock, normalizeFinishReason,
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { ANTHROPIC_CONFIG } from '../config';
@@ -32,21 +32,21 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): { system?: string; mess
     if (m.role === 'system') {
       const text = typeof m.content === 'string'
         ? m.content
-        : (m.content as Part[]).filter(p => p.text).map(p => p.text).join('\n');
+        : (m.content as ContentBlock[]).filter(b => b.type === 'text').map(b => (b as { text: string }).text).join('\n');
       system = system ? `${system}\n\n${text}` : text;
       continue;
     }
 
     // Tool results → user message with tool_result content blocks
     if (m.role === 'tool' && Array.isArray(m.content)) {
-      for (const part of m.content) {
-        if (part.functionResponse) {
+      for (const block of m.content) {
+        if (block.type === 'tool_result') {
           mapped.push({
             role: 'user',
             content: [{
               type: 'tool_result',
-              tool_use_id: part.tool_call_id || 'unknown',
-              content: JSON.stringify(part.functionResponse.response),
+              tool_use_id: block.id || 'unknown',
+              content: JSON.stringify(block.data),
             }],
           });
         }
@@ -59,16 +59,16 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): { system?: string; mess
       const content: any[] = [];
 
       if (Array.isArray(m.content)) {
-        for (const part of m.content) {
-          if (part.text) {
-            content.push({ type: 'text', text: part.text });
+        for (const block of m.content) {
+          if (block.type === 'text') {
+            content.push({ type: 'text', text: block.text });
           }
-          if (part.functionCall) {
+          if (block.type === 'tool_call') {
             content.push({
               type: 'tool_use',
-              id: part.tool_call_id || 'toolu_' + Math.random().toString(36).substring(7),
-              name: part.functionCall.name,
-              input: part.functionCall.args,
+              id: block.id || 'toolu_' + Math.random().toString(36).substring(7),
+              name: block.name,
+              input: block.input,
             });
           }
         }
@@ -86,15 +86,15 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): { system?: string; mess
     if (m.role === 'user') {
       if (Array.isArray(m.content)) {
         const content: any[] = [];
-        for (const part of m.content) {
-          if (part.text) content.push({ type: 'text', text: part.text });
-          if (part.inlineData) {
+        for (const block of m.content) {
+          if (block.type === 'text') content.push({ type: 'text', text: block.text });
+          if (block.type === 'image') {
             content.push({
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: part.inlineData.mimeType,
-                data: part.inlineData.data,
+                media_type: block.mimeType,
+                data: block.data,
               },
             });
           }

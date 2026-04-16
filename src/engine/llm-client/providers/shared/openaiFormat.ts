@@ -6,7 +6,7 @@
  * Eliminates ~110 lines of duplicated mapMessages/mapToLLMResponse code per provider.
  */
 
-import type { LLMMessage, LLMToolCall, Part, FinishReason } from '../types';
+import type { LLMMessage, LLMToolCall, ContentBlock, FinishReason } from '../types';
 import { normalizeFinishReason } from '../types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -26,12 +26,12 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
 
     // Tool results → individual messages per OpenAI spec
     if (m.role === 'tool' && Array.isArray(m.content)) {
-      for (const part of m.content) {
-        if (part.functionResponse) {
+      for (const block of m.content) {
+        if (block.type === 'tool_result') {
           mapped.push({
             role: 'tool',
-            tool_call_id: part.tool_call_id || 'unknown',
-            content: JSON.stringify(part.functionResponse.response),
+            tool_call_id: block.id || 'unknown',
+            content: JSON.stringify(block.data),
           });
         }
       }
@@ -40,9 +40,9 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
 
     let content: any = m.content;
     if (Array.isArray(m.content)) {
-      content = m.content.map((p: Part) => {
-        if (p.text) return { type: 'text', text: p.text };
-        if (p.inlineData) return { type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } };
+      content = m.content.map((p: ContentBlock) => {
+        if (p.type === 'text') return { type: 'text', text: p.text };
+        if (p.type === 'image') return { type: 'image_url', image_url: { url: `data:${p.mimeType};base64,${p.data}` } };
         return null;
       }).filter(Boolean);
       if (content.length === 1 && content[0].type === 'text') content = content[0].text;
@@ -54,12 +54,15 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
     // Assistant tool calls
     if (m.role === 'model' && Array.isArray(m.content)) {
       const tcs = m.content
-        .filter((p: Part) => p.functionCall)
-        .map((p: Part) => ({
-          id: p.tool_call_id || 'call_' + Math.random().toString(36).substring(7),
-          type: 'function',
-          function: { name: p.functionCall!.name, arguments: JSON.stringify(p.functionCall!.args) },
-        }));
+        .filter((p: ContentBlock) => p.type === 'tool_call')
+        .map((p: ContentBlock) => {
+          const tc = p as import('../types').ToolCallBlock;
+          return {
+            id: tc.id || 'call_' + Math.random().toString(36).substring(7),
+            type: 'function',
+            function: { name: tc.name, arguments: JSON.stringify(tc.input) },
+          };
+        });
       if (tcs.length > 0) {
         msg.tool_calls = tcs;
         if (!msg.content) msg.content = null;

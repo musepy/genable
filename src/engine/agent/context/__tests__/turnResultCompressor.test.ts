@@ -2,14 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { compressConsumedToolResults } from '../turnResultCompressor';
 import { LLMMessage } from '../../../llm-client/providers/types';
 
-// Helper: create a tool result message with functionResponse parts
+// Helper: create a tool result message with ToolResultBlock parts
 // Response format matches presentForLLM output (flat, no success/data wrapper)
 function toolMsg(id: string, parts: Array<{ name: string; response: any }>): LLMMessage {
   return {
     id,
     role: 'tool',
-    content: parts.map(p => ({
-      functionResponse: { name: p.name, response: p.response },
+    content: parts.map((p, i) => ({
+      type: 'tool_result' as const,
+      id: `${id}_${i}`,
+      name: p.name,
+      data: p.response,
     })),
   };
 }
@@ -31,7 +34,7 @@ describe('compressConsumedToolResults', () => {
     ];
     const count = compressConsumedToolResults(messages);
     expect(count).toBe(0);
-    const resp = (messages[2].content as any)[0].functionResponse.response;
+    const resp = (messages[2].content as any)[0].data;
     expect(resp._compressed).toBeUndefined();
   });
 
@@ -50,18 +53,18 @@ describe('compressConsumedToolResults', () => {
     expect(count).toBe(2); // tol_1 and tol_2 compressed, tol_3 kept
 
     // tol_1: compressed, idMap preserved
-    const resp1 = (messages[2].content as any)[0].functionResponse.response;
+    const resp1 = (messages[2].content as any)[0].data;
     expect(resp1._compressed).toBe(true);
     expect(resp1.summary).toContain('created 2 nodes');
     expect(resp1.idMap).toEqual({ Card: '100:1', Title: '100:2' });
 
     // tol_2: compressed
-    const resp2 = (messages[4].content as any)[0].functionResponse.response;
+    const resp2 = (messages[4].content as any)[0].data;
     expect(resp2._compressed).toBe(true);
     expect(resp2.summary).toBe('edited 2 nodes');
 
     // tol_3: NOT compressed (latest)
-    const resp3 = (messages[6].content as any)[0].functionResponse.response;
+    const resp3 = (messages[6].content as any)[0].data;
     expect(resp3._compressed).toBeUndefined();
     expect(resp3.tree).toBe('line1\nline2\nline3');
   });
@@ -77,7 +80,7 @@ describe('compressConsumedToolResults', () => {
 
     // First call: compresses tol_1
     compressConsumedToolResults(messages);
-    const resp1After = (messages[2].content as any)[0].functionResponse.response;
+    const resp1After = (messages[2].content as any)[0].data;
     expect(resp1After._compressed).toBe(true);
 
     // Add a new tool result (simulating next iteration)
@@ -88,7 +91,7 @@ describe('compressConsumedToolResults', () => {
     const count = compressConsumedToolResults(messages);
     expect(count).toBe(1); // only tol_2 newly compressed
 
-    const resp2After = (messages[4].content as any)[0].functionResponse.response;
+    const resp2After = (messages[4].content as any)[0].data;
     expect(resp2After._compressed).toBe(true);
   });
 
@@ -111,7 +114,7 @@ describe('compressConsumedToolResults', () => {
 
     compressConsumedToolResults(messages);
 
-    const resp1 = (messages[2].content as any)[0].functionResponse.response;
+    const resp1 = (messages[2].content as any)[0].data;
     expect(resp1._compressed).toBe(true);
     expect(resp1.error).toBe('2 ops failed');
     expect(resp1.idMap).toEqual({ Card: '100:1' });
@@ -133,10 +136,10 @@ describe('compressConsumedToolResults', () => {
     compressConsumedToolResults(messages);
 
     const parts = (messages[2].content as any);
-    expect(parts[0].functionResponse.response._compressed).toBe(true);
-    expect(parts[0].functionResponse.response.summary).toContain('created 1 nodes');
-    expect(parts[1].functionResponse.response._compressed).toBe(true);
-    expect(parts[1].functionResponse.response.summary).toBe('edited 3 nodes');
+    expect(parts[0].data._compressed).toBe(true);
+    expect(parts[0].data.summary).toContain('created 1 nodes');
+    expect(parts[1].data._compressed).toBe(true);
+    expect(parts[1].data.summary).toBe('edited 3 nodes');
   });
 
   it('summarizes inspect/tree results by line count', () => {
@@ -151,7 +154,7 @@ describe('compressConsumedToolResults', () => {
 
     compressConsumedToolResults(messages);
 
-    const resp = (messages[2].content as any)[0].functionResponse.response;
+    const resp = (messages[2].content as any)[0].data;
     expect(resp._compressed).toBe(true);
     expect(resp.summary).toBe('50 lines of node data');
     expect(resp.idMap).toBeUndefined();
@@ -168,7 +171,7 @@ describe('compressConsumedToolResults', () => {
 
     compressConsumedToolResults(messages);
 
-    const resp = (messages[2].content as any)[0].functionResponse.response;
+    const resp = (messages[2].content as any)[0].data;
     expect(resp._compressed).toBe(true);
     expect(resp.id).toBe('1:1');
     expect(resp.name).toBe('Card');

@@ -76,15 +76,21 @@ describe('Atomic Tools Interactions', () => {
         formatResponse: vi.fn().mockImplementation(res => ({
           role: 'model',
           content: res.toolCalls?.length ? res.toolCalls.map((tc: any) => ({
-            functionCall: { name: tc.name, args: tc.args },
-            thought_signature: tc.thought_signature
+            type: 'tool_call',
+            id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
+            name: tc.name,
+            input: tc.args,
+            thoughtSignature: tc.thought_signature
           })) : res.text
         })),
         formatToolResults: vi.fn().mockImplementation(results => ({
           role: 'tool',
           content: results.map((tr: any) => ({
-            functionResponse: { name: tr.name, response: tr.response },
-            thought_signature: tr.thought_signature
+            type: 'tool_result',
+            id: tr.id || '',
+            name: tr.name,
+            data: tr.response,
+            thoughtSignature: tr.thought_signature
           }))
         })),
         getToolSystemInstruction: vi.fn().mockReturnValue('')
@@ -223,15 +229,21 @@ describe('Atomic Tools Interactions', () => {
         formatResponse: vi.fn().mockImplementation(res => ({
           role: 'model',
           content: res.toolCalls?.length ? res.toolCalls.map((tc: any) => ({
-            functionCall: { name: tc.name, args: tc.args },
-            thought_signature: tc.thought_signature
+            type: 'tool_call',
+            id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
+            name: tc.name,
+            input: tc.args,
+            thoughtSignature: tc.thought_signature
           })) : res.text
         })),
         formatToolResults: vi.fn().mockImplementation(results => ({
           role: 'tool',
           content: results.map((tr: any) => ({
-            functionResponse: { name: tr.name, response: tr.response },
-            thought_signature: tr.thought_signature
+            type: 'tool_result',
+            id: tr.id || '',
+            name: tr.name,
+            data: tr.response,
+            thoughtSignature: tr.thought_signature
           }))
         })),
         getToolSystemInstruction: vi.fn().mockReturnValue('')

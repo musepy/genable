@@ -26,7 +26,7 @@ describe('AgentRuntime Loop Detection', () => {
       generate: vi.fn(),
       formatToolResults: vi.fn().mockImplementation((results) => ({ role: 'tool', content: results })),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions'),
-      formatToolCalls: vi.fn().mockImplementation((calls) => ({ role: 'model', content: Array.isArray(calls) ? calls.map(c => ({ functionCall: c })) : [{ functionCall: calls }] })),
+      formatToolCalls: vi.fn().mockImplementation((calls) => ({ role: 'model', content: Array.isArray(calls) ? calls.map((c: any) => ({ type: 'tool_call', id: c.id || '', name: c.name, input: c.args })) : [{ type: 'tool_call', id: calls.id || '', name: calls.name, input: calls.args }] })),
       formatResponse: vi.fn().mockImplementation((res) => ({ role: 'model', content: res.text || '', toolCalls: res.toolCalls }))
     };
     

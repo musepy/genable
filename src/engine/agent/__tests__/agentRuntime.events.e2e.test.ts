@@ -17,13 +17,13 @@ function createMockProvider(scriptedResponses: LLMResponse[]): LLMProvider {
       id: `mdl_${Math.random().toString(36).slice(2, 7)}`,
       role: 'model',
       content: response.toolCalls && response.toolCalls.length > 0
-        ? response.toolCalls.map(tc => ({ functionCall: { id: tc.id, name: tc.name, args: tc.args } }))
+        ? response.toolCalls.map(tc => ({ type: 'tool_call' as const, id: tc.id || '', name: tc.name, input: tc.args }))
         : (response.text || ''),
     })),
     formatToolResults: vi.fn((results: LLMToolResult[]) => ({
       id: `tool_${Math.random().toString(36).slice(2, 7)}`,
       role: 'tool',
-      content: results.map(r => ({ functionResponse: { name: r.name, response: r.response } })),
+      content: results.map(r => ({ type: 'tool_result' as const, id: r.id || '', name: r.name, data: r.response })),
     })),
     getToolSystemInstruction: vi.fn(() => 'mock'),
   } as unknown as LLMProvider;

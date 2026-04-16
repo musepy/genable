@@ -4,7 +4,7 @@
  * Shared by GeminiProvider (SDK) and ProxyProvider (raw HTTP).
  */
 
-import { LLMResponse, LLMToolCall, LLMToolResult, Part, LLMMessage } from '../types';
+import { LLMResponse, LLMToolCall, LLMToolResult, ContentBlock, LLMMessage } from '../types';
 import { ToolDefinition } from '../../../agent/tools/types';
 import { isGemini3Model } from '../../modelFilter';
 import { GEMINI_CONFIG } from '../../config';
@@ -36,7 +36,7 @@ export function mapGeminiPartsToLLMResponse(
   let text = '';
   let thoughts = '';
   const toolCalls: LLMToolCall[] = [];
-  const fullParts: Part[] = [];
+  const fullBlocks: ContentBlock[] = [];
 
   const sigPart = parts.find((p: any) => p.thoughtSignature || p.thought_signature);
   const sharedSignature = sigPart?.thoughtSignature || sigPart?.thought_signature;
@@ -53,14 +53,14 @@ export function mapGeminiPartsToLLMResponse(
         thought_signature: sig,
       };
       toolCalls.push(tc);
-      fullParts.push({ ...part, functionCall: { ...part.functionCall, id: tc.id }, thought_signature: sig });
+      fullBlocks.push({ type: 'tool_call', id: tc.id!, name: part.functionCall.name, input: part.functionCall.args, thoughtSignature: sig });
     } else if (part.thought) {
       const thoughtText = typeof part.thought === 'string' ? part.thought : (part.text || '');
       if (thoughtText) thoughts += thoughtText;
-      fullParts.push({ ...part, thought_signature: sig } as any);
+      fullBlocks.push({ type: 'thinking', text: thoughtText, signature: sig });
     } else if (part.text) {
       text += part.text;
-      fullParts.push({ ...part, thought_signature: sig } as any);
+      fullBlocks.push({ type: 'text', text: part.text });
     }
   }
 
@@ -68,7 +68,7 @@ export function mapGeminiPartsToLLMResponse(
     text,
     thoughts: thoughts || undefined,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    fullParts: fullParts.length > 0 ? fullParts : undefined,
+    fullBlocks: fullBlocks.length > 0 ? fullBlocks : undefined,
     usage: usageMetadata ? {
       promptTokens: usageMetadata.promptTokenCount || 0,
       completionTokens: usageMetadata.candidatesTokenCount || 0,
@@ -83,18 +83,21 @@ export function mapLLMMessageToGeminiContent(msg: LLMMessage): any {
   const role = msg.role === 'model' ? 'model' : 'user';
   const parts = typeof msg.content === 'string'
     ? [{ text: msg.content }]
-    : (msg.content as any[]).map((p: any) => {
-      const rawSig = p.thought_signature || p.thoughtSignature;
-      const sig = rawSig ? ensureBase64(rawSig) : undefined;
-
-      if (p.thought) {
-        if (p.thought === true && p.text) return { text: p.text, thought: true, ...(sig && { thoughtSignature: sig }) };
-        return { thought: p.thought, ...(sig && { thoughtSignature: sig }) };
+    : (msg.content as ContentBlock[]).map((block) => {
+      if (block.type === 'thinking') {
+        const sig = block.signature ? ensureBase64(block.signature) : undefined;
+        return { text: block.text, thought: true, ...(sig && { thoughtSignature: sig }) };
       }
-      if (p.functionCall) return { functionCall: { name: p.functionCall.name, args: p.functionCall.args }, ...(sig && { thoughtSignature: sig }) };
-      if (p.functionResponse) return { functionResponse: { name: p.functionResponse.name, response: p.functionResponse.response }, ...(sig && { thoughtSignature: sig }) };
-      if (p.inlineData) return { inlineData: { mimeType: p.inlineData.mimeType, data: p.inlineData.data } };
-      if (p.text) return { text: p.text };
+      if (block.type === 'tool_call') {
+        const sig = block.thoughtSignature ? ensureBase64(block.thoughtSignature) : undefined;
+        return { functionCall: { name: block.name, args: block.input }, ...(sig && { thoughtSignature: sig }) };
+      }
+      if (block.type === 'tool_result') {
+        const sig = block.thoughtSignature ? ensureBase64(block.thoughtSignature) : undefined;
+        return { functionResponse: { name: block.name, response: block.data }, ...(sig && { thoughtSignature: sig }) };
+      }
+      if (block.type === 'image') return { inlineData: { mimeType: block.mimeType, data: block.data } };
+      if (block.type === 'text') return { text: block.text };
       return { text: '' };
     }).filter((p: any) => {
       if (p.text === '' && Object.keys(p).length === 1) return false;
@@ -109,27 +112,30 @@ export function mapLLMMessageToGeminiContent(msg: LLMMessage): any {
 // Shared by GeminiProvider and ProxyProvider.
 // ═══════════════════════════════════════════════════════════════
 
-/** Format a Gemini LLM response into a history message, preserving fullParts with thought metadata. */
+/** Format a Gemini LLM response into a history message, preserving fullBlocks with thought metadata. */
 export function formatResponseGemini(response: LLMResponse): LLMMessage {
   if (!response.toolCalls || response.toolCalls.length === 0) {
     return { id: randomId('mdl_'), role: 'model', content: response.text || '' };
   }
-  const content = (response.fullParts || []).filter((p: any) => {
-    return p.functionCall || p.thought || (p.text && p.text.trim() !== '');
+  const content = (response.fullBlocks || []).filter((b) => {
+    return b.type === 'tool_call' || b.type === 'thinking' || (b.type === 'text' && b.text.trim() !== '');
   });
   return { id: randomId('mdl_'), role: 'model', content };
 }
 
-/** Format tool results into a Gemini history message, preserving thought_signature and image attachments. */
+/** Format tool results into a Gemini history message, preserving thoughtSignature and image attachments. */
 export function formatToolResultsGemini(results: LLMToolResult[]): LLMMessage {
-  const content: Part[] = [];
+  const content: ContentBlock[] = [];
   for (const tr of results) {
     content.push({
-      functionResponse: { name: tr.name, response: tr.response },
-      thought_signature: tr.thought_signature,
-    } as any);
+      type: 'tool_result',
+      id: tr.id || '',
+      name: tr.name,
+      data: tr.response,
+      thoughtSignature: tr.thought_signature,
+    });
     if (tr.imageAttachment) {
-      content.push({ inlineData: { mimeType: tr.imageAttachment.mimeType, data: tr.imageAttachment.data } });
+      content.push({ type: 'image', mimeType: tr.imageAttachment.mimeType, data: tr.imageAttachment.data });
     }
   }
   return { id: randomId('tol_'), role: 'tool', content };

@@ -22,17 +22,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Build a card' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'jsx', args: { xml: '<frame name="Card">...</frame>', parentId: '0:1' } } },
+          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { xml: '<frame name="Card">...</frame>', parentId: '0:1' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          {
-            functionResponse: {
-              name: 'jsx',
-              response: { data: { idMap: { Card: '100:1', Title: '100:2' } } },
-            },
-          },
+          { type: 'tool_result', id: 'call_1', name: 'jsx', data: { data: { idMap: { Card: '100:1', Title: '100:2' } } } },
         ],
       },
       { id: 'm2', role: 'model', content: 'Card created successfully.' },
@@ -50,17 +45,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Edit the button' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'edit', args: { xml: '<frame id="99:1" bg="#F00"/>' } } },
+          { type: 'tool_call', id: 'call_2', name: 'edit', input: { xml: '<frame id="99:1" bg="#F00"/>' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          {
-            functionResponse: {
-              name: 'edit',
-              response: { error: 'NODE_NOT_FOUND: 99:1' },
-            },
-          },
+          { type: 'tool_result', id: 'call_2', name: 'edit', data: { error: 'NODE_NOT_FOUND: 99:1' } },
         ],
       },
     ];
@@ -114,8 +104,8 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Design a form' },
       {
         id: 'm1', role: 'model', content: [
-          { thought: true, text: 'Let me think about the layout...' },
-          { text: 'Here is your form.' },
+          { type: 'thinking', text: 'Let me think about the layout...' },
+          { type: 'text', text: 'Here is your form.' },
         ],
       },
     ];
@@ -131,7 +121,7 @@ describe('buildCompressionSummary', () => {
         id: 'm1',
         role: 'model',
         content: [
-          { functionCall: { name: 'jsx', args: { parentId: '200:1', xml: '<frame name="Panel"/>' } } },
+          { type: 'tool_call', id: 'call_3', name: 'jsx', input: { parentId: '200:1', xml: '<frame name="Panel"/>' } },
         ],
       },
       {
@@ -139,16 +129,14 @@ describe('buildCompressionSummary', () => {
         role: 'tool',
         content: [
           {
-            functionResponse: {
-              name: 'jsx',
-              response: {
-                data: {
-                  idMap: {
-                    panel: '100:1',
-                    title: '100:2',
-                    subtitle: '100:3',
-                    toggle: '100:4',
-                  },
+            type: 'tool_result', id: 'call_3', name: 'jsx',
+            data: {
+              data: {
+                idMap: {
+                  panel: '100:1',
+                  title: '100:2',
+                  subtitle: '100:3',
+                  toggle: '100:4',
                 },
               },
             },
@@ -172,7 +160,7 @@ describe('buildCompressionSummary', () => {
         id: 'm1',
         role: 'model',
         content: [
-          { functionCall: { name: 'edit', args: { xml: '<frame id="1:1" gap="24"/>' } } },
+          { type: 'tool_call', id: 'call_4', name: 'edit', input: { xml: '<frame id="1:1" gap="24"/>' } },
         ],
       },
       {
@@ -180,12 +168,10 @@ describe('buildCompressionSummary', () => {
         role: 'tool',
         content: [
           {
-            functionResponse: {
-              name: 'edit',
-              response: {
-                data: {
-                  edited: 3,
-                },
+            type: 'tool_result', id: 'call_4', name: 'edit',
+            data: {
+              data: {
+                edited: 3,
               },
             },
           },
@@ -202,12 +188,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Copy a card' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'clone_node', args: { id: '962:1' } } },
+          { type: 'tool_call', id: 'call_5', name: 'clone_node', input: { id: '962:1' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'clone_node', response: { data: { idMap: { Card: '962:1', Title: '962:5' } } } } },
+          { type: 'tool_result', id: 'call_5', name: 'clone_node', data: { data: { idMap: { Card: '962:1', Title: '962:5' } } } },
         ],
       },
     ];
@@ -221,12 +207,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Find all buttons' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'find_nodes', args: { query: 'Button' } } },
+          { type: 'tool_call', id: 'call_6', name: 'find_nodes', input: { query: 'Button' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'find_nodes', response: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }, { id: '1:4' }, { id: '1:5' }] } } } },
+          { type: 'tool_result', id: 'call_6', name: 'find_nodes', data: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }, { id: '1:4' }, { id: '1:5' }] } } },
         ],
       },
     ];
@@ -239,12 +225,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Find button properties' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'discover_props', args: { query: 'Button' } } },
+          { type: 'tool_call', id: 'call_7', name: 'discover_props', input: { query: 'Button' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'discover_props', response: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }] } } } },
+          { type: 'tool_result', id: 'call_7', name: 'discover_props', data: { data: { results: [{ id: '1:1' }, { id: '1:2' }, { id: '1:3' }] } } },
         ],
       },
     ];
@@ -257,12 +243,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Replace colors' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'replace_props', args: { property: 'fill', value: '#FF0000' } } },
+          { type: 'tool_call', id: 'call_8', name: 'replace_props', input: { property: 'fill', value: '#FF0000' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'replace_props', response: { data: { replaced: 5 } } } },
+          { type: 'tool_result', id: 'call_8', name: 'replace_props', data: { data: { replaced: 5 } } },
         ],
       },
     ];
@@ -275,12 +261,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Delete nodes' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'delete_node', args: { id: '1:1' } } },
+          { type: 'tool_call', id: 'call_9', name: 'delete_node', input: { id: '1:1' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'delete_node', response: { data: { deleted: 3 } } } },
+          { type: 'tool_result', id: 'call_9', name: 'delete_node', data: { data: { deleted: 3 } } },
         ],
       },
     ];
@@ -293,25 +279,23 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Create a settings panel' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'jsx', args: { xml: '<frame name="Panel">...</frame>' } } },
+          { type: 'tool_call', id: 'call_10', name: 'jsx', input: { xml: '<frame name="Panel">...</frame>' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
           {
-            functionResponse: {
-              name: 'jsx',
-              response: {
-                error: '3 created, 2 failed',
-                data: {
-                  created: 3,
-                  failed: 2,
-                  idMap: { panel: '100:1', title: '100:2' },
-                  errors: [
-                    { op: 'buttons', error: 'Unknown property: cornerRadii (did you mean cornerRadius?)' },
-                    { op: 'footer', error: 'FONT_UNLOADED: Figma Sans not available' },
-                  ],
-                },
+            type: 'tool_result', id: 'call_10', name: 'jsx',
+            data: {
+              error: '3 created, 2 failed',
+              data: {
+                created: 3,
+                failed: 2,
+                idMap: { panel: '100:1', title: '100:2' },
+                errors: [
+                  { op: 'buttons', error: 'Unknown property: cornerRadii (did you mean cornerRadius?)' },
+                  { op: 'footer', error: 'FONT_UNLOADED: Figma Sans not available' },
+                ],
               },
             },
           },
@@ -335,17 +319,15 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Create everything' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'jsx', args: { xml: '<frame name="All">...</frame>' } } },
+          { type: 'tool_call', id: 'call_11', name: 'jsx', input: { xml: '<frame name="All">...</frame>' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
           {
-            functionResponse: {
-              name: 'jsx',
-              response: {
-                error: 'batch of 45 operations exceeds the hard limit of 30',
-              },
+            type: 'tool_result', id: 'call_11', name: 'jsx',
+            data: {
+              error: 'batch of 45 operations exceeds the hard limit of 30',
             },
           },
         ],
@@ -361,19 +343,17 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Create a dashboard' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'jsx', args: { xml: '<frame name="Dashboard"/>' } } },
+          { type: 'tool_call', id: 'call_12', name: 'jsx', input: { xml: '<frame name="Dashboard"/>' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
           {
-            functionResponse: {
-              name: 'jsx',
-              response: {
-                _compressed: true,
-                summary: 'created 5 nodes [Dashboard=100:1, Header=100:2, Sidebar=100:3, Main=100:4, Footer=100:5]',
-                idMap: { Dashboard: '100:1', Header: '100:2', Sidebar: '100:3', Main: '100:4', Footer: '100:5' },
-              },
+            type: 'tool_result', id: 'call_12', name: 'jsx',
+            data: {
+              _compressed: true,
+              summary: 'created 5 nodes [Dashboard=100:1, Header=100:2, Sidebar=100:3, Main=100:4, Footer=100:5]',
+              idMap: { Dashboard: '100:1', Header: '100:2', Sidebar: '100:3', Main: '100:4', Footer: '100:5' },
             },
           },
         ],
@@ -391,19 +371,17 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Edit the card' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'edit', args: { xml: '<frame id="99:1"/>' } } },
+          { type: 'tool_call', id: 'call_13', name: 'edit', input: { xml: '<frame id="99:1"/>' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
           {
-            functionResponse: {
-              name: 'edit',
-              response: {
-                _compressed: true,
-                summary: 'PARTIAL_FAILURE: 2 failed, 1 succeeded',
-                error: '2 ops failed',
-              },
+            type: 'tool_result', id: 'call_13', name: 'edit',
+            data: {
+              _compressed: true,
+              summary: 'PARTIAL_FAILURE: 2 failed, 1 succeeded',
+              error: '2 ops failed',
             },
           },
         ],
@@ -419,12 +397,12 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Move the card' },
       {
         id: 'm1', role: 'model', content: [
-          { functionCall: { name: 'move_node', args: { id: '1:1', parentId: '2:1' } } },
+          { type: 'tool_call', id: 'call_14', name: 'move_node', input: { id: '1:1', parentId: '2:1' } },
         ],
       },
       {
         id: 't1', role: 'tool', content: [
-          { functionResponse: { name: 'move_node', response: { data: { name: 'Card' } } } },
+          { type: 'tool_result', id: 'call_14', name: 'move_node', data: { data: { name: 'Card' } } },
         ],
       },
     ];

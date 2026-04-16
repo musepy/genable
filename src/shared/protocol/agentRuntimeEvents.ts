@@ -9,7 +9,7 @@ export interface ContextLayerMessagePreview {
   id: string;
   role: string;
   chars: number;
-  /** First N chars of text content, or "[functionCall] name(...)" / "[functionResponse] name(...)" */
+  /** First N chars of text content, or "[tool_call] name(...)" / "[tool_result] name(...)" */
   preview: string;
 }
 

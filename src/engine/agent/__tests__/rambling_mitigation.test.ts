@@ -14,18 +14,24 @@ describe('AgentRuntime Rambling Mitigation', () => {
       formatResponse: vi.fn().mockImplementation((res: LLMResponse) => ({
         role: 'model',
         content: [
-            ...(res.text ? [{ text: res.text }] : []),
+            ...(res.text ? [{ type: 'text' as const, text: res.text }] : []),
             ...(res.toolCalls?.map((tc: any) => ({
-                functionCall: { name: tc.name, args: tc.args },
-                thought_signature: tc.thought_signature
+                type: 'tool_call' as const,
+                id: tc.id || 'call_' + Math.random().toString(36).slice(2, 7),
+                name: tc.name,
+                input: tc.args,
+                thoughtSignature: tc.thought_signature
             })) || [])
         ]
       })),
       formatToolResults: vi.fn().mockImplementation(results => ({
         role: 'tool',
         content: results.map((tr: any) => ({
-          functionResponse: { name: tr.name, response: tr.response },
-          thought_signature: tr.thought_signature
+          type: 'tool_result' as const,
+          id: tr.id || '',
+          name: tr.name,
+          data: tr.response,
+          thoughtSignature: tr.thought_signature
         }))
       })),
       getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions')

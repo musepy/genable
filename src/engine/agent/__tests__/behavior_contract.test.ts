@@ -26,8 +26,11 @@ describe('Agent Architecture Contract Tests', () => {
             formatToolResults: vi.fn().mockImplementation(results => ({
                 role: 'tool',
                 content: results.map((tr: any) => ({
-                    functionResponse: { name: tr.name, response: tr.response },
-                    thought_signature: tr.thought_signature
+                    type: 'tool_result',
+                    id: tr.id || '',
+                    name: tr.name,
+                    data: tr.response,
+                    thoughtSignature: tr.thought_signature
                 }))
             })),
             getToolSystemInstruction: vi.fn().mockReturnValue('Mock Tool Instructions'),

@@ -39,10 +39,20 @@ export function normalizeSizing(
     return { h: 'FIXED', v: 'FIXED' };
   }
 
-  // Rule 2: HUG requires layoutMode on node
+  // Rule 2: HUG requires layoutMode on node.
+  // After the DSL fail-fast cleanup (April 2026), the only surviving path to
+  // this branch is: LLM writes `sizingH: HUG` (or HUG-native) but forgets
+  // `layout`. Emit a diagnostic so telemetry can prove reachability — if no
+  // hits over time, this safety net can be deleted outright.
   if (!ctx.hasAutoLayout) {
-    if (h === 'HUG') h = 'FIXED';
-    if (v === 'HUG') v = 'FIXED';
+    if (h === 'HUG') {
+      console.warn('[LayoutValidator] HUG→FIXED: node has no layoutMode. Add `layout: "row|column|grid"` to use HUG sizing.');
+      h = 'FIXED';
+    }
+    if (v === 'HUG') {
+      console.warn('[LayoutValidator] HUG→FIXED: node has no layoutMode. Add `layout: "row|column|grid"` to use HUG sizing.');
+      v = 'FIXED';
+    }
   }
 
   // Rule 3: FILL requires layoutMode on parent.

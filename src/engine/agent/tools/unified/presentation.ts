@@ -5,21 +5,19 @@
  * Single function that transforms raw tool results into LLM-ready format.
  * Applied once, at the shell level, after command execution.
  *
- * Pipeline: result → flatten data → per-tool presentForLLM → meta → stderr → overflow/binary guards
+ * Pipeline:
+ *   1. Flatten `result.data` to top level (no envelope)
+ *   2. Apply per-tool `presentForLLM` override if defined
+ *   3. Apply overflow/binary guards to text fields
  *
- * Design principle: commands own their output format.
  * Per-tool filtering lives in each tool's definition (`presentForLLM` method).
- * This pipe only flattens the envelope, adds metadata, and guards against
- * LLM cognitive limits.
- * No exit codes — error presence/absence is the only signal.
+ * Error presence/absence is the only success signal — no exit codes.
  */
 
 import {
-  formatTiming,
-  extractStderr,
   truncateOverflow,
   guardBinary,
-} from './exitCode';
+} from './outputGuards';
 import { unifiedTools } from './index';
 
 const TOOL_BY_NAME = new Map(unifiedTools.map(t => [t.name, t]));
@@ -31,9 +29,7 @@ const TOOL_BY_NAME = new Map(unifiedTools.map(t => [t.name, t]));
  * Error: presence of `error` field = failure (replaces success boolean).
  * Matches Open-Pencil's response convention: data fields at top level, error as string.
  */
-export function presentForLLM(result: any, commandName: string, durationMs: number): any {
-  const stderr = extractStderr(result);
-
+export function presentForLLM(result: any, commandName: string): any {
   let cleaned: any = {};
   if (result?.data && typeof result.data === 'object') {
     cleaned = { ...transformData(result.data, commandName) };
@@ -44,10 +40,6 @@ export function presentForLLM(result: any, commandName: string, durationMs: numb
   if (result?.error != null) {
     cleaned.error = result.error;
   }
-
-  cleaned._meta = `[${formatTiming(durationMs)}]`;
-
-  if (stderr) cleaned._stderr = stderr;
 
   const TEXT_FIELDS = ['listing', 'tree'] as const;
   for (const field of TEXT_FIELDS) {

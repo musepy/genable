@@ -264,9 +264,8 @@ async function executeSingleMk(
       }
       const normalized = normalizeProps(rawProps, {}, () => {});
       normalizeSizingInProps(normalized, node as SceneNode, (node as SceneNode).parent as SceneNode | null, node.type === 'TEXT');
-      const result = await updateNode(node as SceneNode, normalized);
-      const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
-      return { data: { idMap: { [node.name]: node.id } }, _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined };
+      await updateNode(node as SceneNode, normalized);
+      return { data: { idMap: { [node.name]: node.id } } };
     }
     return { error: `Node ID "${nodeName}" not found. Use ls or grep to find the correct ID.` };
   }
@@ -282,9 +281,8 @@ async function executeSingleMk(
     }
     const normalized = normalizeProps(rawProps, {}, () => {});
     normalizeSizingInProps(normalized, existing.node, existing.node.parent as SceneNode | null, existing.node.type === 'TEXT');
-    const result = await updateNode(existing.node, normalized);
-    const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
-    return { data: { idMap: { [nodeName]: nodeId } }, _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined };
+    await updateNode(existing.node, normalized);
+    return { data: { idMap: { [nodeName]: nodeId } } };
   }
 
   // Node doesn't exist → create mode
@@ -333,10 +331,8 @@ async function executeSingleMk(
     if (n) tagAsAgentCreated(n);
   } catch { /* best-effort */ }
 
-  const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
   const response: ToolResponse = {
     data: { idMap: { [finalName]: result.nodeId } },
-    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
   };
   if (finalName !== nodeName) {
     response.data = { ...response.data, renamed: { [nodeName]: finalName } };
@@ -542,10 +538,8 @@ async function executeMkBatch(batchInput: string): Promise<ToolResponse> {
     return { error: warnings.join('; ') || 'No nodes created.' };
   }
 
-  const stderrLines = warnings.map(w => `[warn] ${w}`);
   return {
     data: { idMap, created: createdNodeIds.length },
-    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
   };
 }
 
@@ -585,17 +579,13 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
     if (globNodes.length === 0) {
       return { error: `No nodes matched pattern "${rmPath}". Use ls to check available children.` };
     }
-    const warnings: string[] = [];
     let deleted = 0;
     for (const n of globNodes) {
-      const result = deleteNode(n);
-      for (const w of result.warnings) warnings.push(w.message);
+      deleteNode(n);
       deleted++;
     }
-    const stderrLines = warnings.map(w => `[warn] ${w}`);
     return wrapRunStages('Rm', {
       data: { deleted },
-      _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
     }, _t0);
   }
 
@@ -609,12 +599,10 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
   const rmNodeId = rmResolved.node.id;
   const rmIsSessionNode = isSessionNode(rmNodeId) || rmResolved.node.getPluginData('_agent') === 'created';
 
-  const rmResult = deleteNode(rmResolved.node);
-  const stderrLines = rmResult.warnings.map(w => `[warn] ${w.message}`);
+  deleteNode(rmResolved.node);
 
   const response: ToolResponse = {
     data: { deleted: rmNodeName, id: rmNodeId },
-    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
   };
 
   if (!rmIsSessionNode) {
@@ -787,7 +775,6 @@ export async function handleCp(parameters: {
     if (n) tagAsAgentCreated(n);
   } catch { /* best-effort */ }
 
-  const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
   const cpResult: ToolResponse = {
     data: {
       idMap: { [cpCloneName]: result.nodeId },
@@ -795,7 +782,6 @@ export async function handleCp(parameters: {
       // Without this, subsequent edits on cloned children hit the "unknown" gate.
       createdIds: result.createdIds ?? [result.nodeId],
     },
-    _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
   };
   return wrapRunStages('Cp', cpResult, _t0);
 }

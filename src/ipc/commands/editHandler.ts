@@ -16,7 +16,6 @@ import { updateNode, normalizeSizingInProps } from '../../engine/actions/nodeFac
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { PipelineTracer } from './pipelineTracer';
-import { snapshotProps, verifyWrites, formatWriteWarnings } from './writeVerifier';
 
 interface EditEntry {
   node: string;
@@ -119,27 +118,24 @@ function resolveInstanceProps(
 function applyComponentProps(
   node: InstanceNode,
   componentProps: Record<string, string>,
-): string[] {
-  const warnings: string[] = [];
+): void {
   try {
     node.setProperties(componentProps);
-  } catch (e: any) {
-    warnings.push(`Failed to set component properties: ${e?.message ?? e}`);
+  } catch {
+    // non-fatal
   }
-  return warnings;
 }
 
 /** Apply an edit to a single resolved node. */
 async function applyEdit(
   node: SceneNode,
   props: Record<string, any>,
-): Promise<{ warnings: string[] }> {
+): Promise<void> {
   const { regularProps, componentProps } = resolveInstanceProps(node, props);
-  const allWarnings: string[] = [];
 
   // Apply component property overrides first (instance only)
   if (Object.keys(componentProps).length > 0) {
-    allWarnings.push(...applyComponentProps(node as InstanceNode, componentProps));
+    applyComponentProps(node as InstanceNode, componentProps);
   }
 
   // Apply regular Figma properties
@@ -147,14 +143,8 @@ async function applyEdit(
     const parentNode = node.parent as SceneNode | null;
     const isText = node.type === 'TEXT';
     normalizeSizingInProps(regularProps, node, parentNode, isText);
-    const snapBefore = snapshotProps(node, Object.keys(regularProps));
-    const result = await updateNode(node, regularProps);
-    allWarnings.push(...result.warnings.map(w => w.message || String(w)));
-    const failures = verifyWrites(node, regularProps, snapBefore);
-    allWarnings.push(...formatWriteWarnings(node, failures));
+    await updateNode(node, regularProps);
   }
-
-  return { warnings: allWarnings };
 }
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
@@ -170,7 +160,6 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
     const results: Array<{ nodeId: string; name: string; updated: boolean }> = [];
     const errors: string[] = [];
-    const allWarnings: string[] = [];
 
     for (const entry of entries) {
       const ref = entry.node;
@@ -188,8 +177,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       const merged = { ...(normalized || {}), ...componentPropsRaw };
       if (Object.keys(merged).length === 0) { errors.push(`No props or content for "${ref}"`); continue; }
 
-      const { warnings } = await applyEdit(resolved.node, merged);
-      allWarnings.push(...warnings);
+      await applyEdit(resolved.node, merged);
       const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
       const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
       results.push({ ...minJson, updated: true });
@@ -201,14 +189,8 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: errors.join('; ') };
     }
 
-    const stderrLines = [
-      ...errors.map(e => `[warn] ${e}`),
-      ...allWarnings.map(w => `[warn] ${w}`),
-    ];
-
     return {
       data: { updated: results.length, results },
-      _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
       _stages: tracer.collect(),
     };
   }
@@ -242,17 +224,13 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
   tracer.exit({ count: 1 });
 
-  const { warnings } = await applyEdit(resolved.node, merged);
-  const _stderr = warnings.length > 0
-    ? warnings.map(w => `[warn] ${w}`).join('\n')
-    : undefined;
+  await applyEdit(resolved.node, merged);
 
   const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
   const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
 
   return {
     data: { ...minJson, updated: true },
-    _stderr,
     _stages: tracer.collect(),
   };
 }

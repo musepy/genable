@@ -124,14 +124,6 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     // Post each newly completed tool call
     for (let i = lastCompletedCountRef.current; i < completed.length; i++) {
       const tc = completed[i]
-      const quality = (() => {
-        try {
-          const r = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result
-          const stderr = r?._stderr || ''
-          const line = stderr.split('\n').find((l: string) => l.includes('[quality]'))
-          return line?.trim() || null
-        } catch { return null }
-      })()
       fetchBridge(`/event/${triggerIdRef.current}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,7 +133,6 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           name: tc.name,
           status: tc.status,
           error: tc.error || null,
-          quality,
         }),
       }).catch(() => {})
     }

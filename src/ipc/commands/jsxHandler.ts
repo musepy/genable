@@ -127,10 +127,8 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   const _stages = tracer.collect();
 
   if (failed || rootResults.length === 0) {
-    const stderrLines = ctx.warnings.map(w => `[${w.code}] ${w.message}`);
     return {
       error: ctx.warnings[ctx.warnings.length - 1]?.message || 'Failed to create design tree.',
-      _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
       _stages,
     };
   }
@@ -163,12 +161,6 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     data.roots = roots;
   }
 
-  // Build stderr from warnings
-  let _stderr: string | undefined;
-  if (ctx.warnings.length > 0) {
-    _stderr = ctx.warnings.map(w => `[warn] ${w.message}`).join('\n');
-  }
-
   // Auto-pan viewport to newly created root node
   if (!resolvedParentId && rootResults.length > 0) {
     try {
@@ -180,5 +172,5 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   data.created = ctx.rollbackStack.length;
   data.createdIds = ctx.rollbackStack;
 
-  return { data, _stderr, _stages };
+  return { data, _stages };
 }

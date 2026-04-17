@@ -226,6 +226,7 @@ export class ToolDispatcher {
             name: toolName,
             id: tc.id,
             response: skipRaw,
+            isError: true,
             thought_signature: tc.thoughtSignature,
           });
           // Emit events so UI/dev-bridge update status (not stuck on "running")
@@ -318,13 +319,14 @@ export class ToolDispatcher {
         delete result.data.__image;
       }
 
-      // Presentation pipe — exit code, meta, stderr, guards
-      const presented = presentForLLM(result, toolName, durationMs);
+      // Presentation pipe — flatten data, per-tool override, overflow/binary guards
+      const presented = presentForLLM(result, toolName);
 
       toolResults.push({
         name: toolName,
         id: tc.id,
         response: presented,
+        isError: presented?.error != null ? true : undefined,
         thought_signature: tc.thoughtSignature,
         imageAttachment,
       });

@@ -60,8 +60,6 @@ export interface ToolParameter {
 export interface ToolResponse<T = any> {
   data?: T;
   error?: string;
-  /** Pre-built stderr from command source. presentForLLM passes it through. */
-  _stderr?: string;
   /** Pipeline stages for dashboard auto-visualization. Stripped by presentForLLM. */
   _stages?: Array<{ label: string; file: string; durationMs?: number; meta?: Record<string, unknown> }>;
 }

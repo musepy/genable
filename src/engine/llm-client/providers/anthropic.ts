@@ -50,6 +50,7 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): any[] {
               type: 'tool_result',
               tool_use_id: block.id || 'unknown',
               content: resultContent,
+              ...(block.isError === true && { is_error: true }),
             }],
           });
         }

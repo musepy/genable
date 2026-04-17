@@ -10,7 +10,7 @@ describe('presentForLLM — flat response format', () => {
         diagnostics: { elapsed: 42 },
       },
     };
-    const presented = presentForLLM(result, 'clone_node', 50);
+    const presented = presentForLLM(result, 'clone_node');
     // Data fields promoted to top level (clone_node keeps idMap)
     expect(presented.idMap).toEqual({ Card: '100:1', Title: '100:2' });
     // Noise stripped (count, diagnostics not in clone_node keep-list)
@@ -19,7 +19,6 @@ describe('presentForLLM — flat response format', () => {
     // No data wrapper
     expect(presented.data).toBeUndefined();
     expect(presented.success).toBeUndefined();
-    expect(presented._meta).toMatch(/\[\d+m?s?\]/);
   });
 
   it('flattens inspect result — pass through (no keep-list)', () => {
@@ -29,7 +28,7 @@ describe('presentForLLM — flat response format', () => {
         count: 3,
       },
     };
-    const presented = presentForLLM(result, 'inspect', 30);
+    const presented = presentForLLM(result, 'inspect');
     expect(presented.tree).toEqual({ id: '1:1', name: 'Card', type: 'frame', children: [] });
     expect(presented.count).toBe(3); // inspect passes through all fields
     expect(presented.data).toBeUndefined();
@@ -42,7 +41,7 @@ describe('presentForLLM — flat response format', () => {
         width: 300, height: 400,
       },
     };
-    const presented = presentForLLM(result, 'describe', 20);
+    const presented = presentForLLM(result, 'describe');
     expect(presented.type).toBe('frame');
     expect(presented.id).toBe('1:1');
     expect(presented.name).toBe('Card');
@@ -56,16 +55,16 @@ describe('presentForLLM — flat response format', () => {
         totalSearched: 100,
       },
     };
-    const presented = presentForLLM(result, 'find_nodes', 15);
+    const presented = presentForLLM(result, 'find_nodes');
     expect(presented.results).toHaveLength(2);
     expect(presented.totalSearched).toBeUndefined();
   });
 
-  it('no success field on success (_meta timing is sufficient)', () => {
+  it('no success field on success', () => {
     const result = {
       data: { idMap: { Card: '100:1' } },
     };
-    const presented = presentForLLM(result, 'jsx', 10);
+    const presented = presentForLLM(result, 'jsx');
     expect(presented.success).toBeUndefined();
   });
 
@@ -74,10 +73,9 @@ describe('presentForLLM — flat response format', () => {
       data: {},
       error: 'Failed to create',
     };
-    const presented = presentForLLM(result, 'jsx', 10);
+    const presented = presentForLLM(result, 'jsx');
     expect(presented.error).toBe('Failed to create');
     expect(presented.success).toBeUndefined();
-    expect(presented._meta).toMatch(/\[\d+m?s?\]/);
   });
 
   it('flattens chain sub-results too', () => {
@@ -95,7 +93,7 @@ describe('presentForLLM — flat response format', () => {
         ],
       },
     };
-    const presented = presentForLLM(result, 'js', 100);
+    const presented = presentForLLM(result, 'js');
     const chain = presented.chain;
     expect(chain).toHaveLength(2);
     // inspect sub-result: pass through (no keep-list)
@@ -120,7 +118,7 @@ describe('presentForLLM — flat response format', () => {
         ],
       },
     };
-    const presented = presentForLLM(result, 'js', 50);
+    const presented = presentForLLM(result, 'js');
     expect(presented.chain[0].error).toBe('Node not found');
     expect(presented.chain[0].success).toBeUndefined();
   });
@@ -129,7 +127,7 @@ describe('presentForLLM — flat response format', () => {
     const result = {
       data: { foo: 'bar', baz: 42 },
     };
-    const presented = presentForLLM(result, 'unknown_cmd', 10);
+    const presented = presentForLLM(result, 'unknown_cmd');
     expect(presented.foo).toBe('bar');
     expect(presented.baz).toBe(42);
   });
@@ -138,7 +136,7 @@ describe('presentForLLM — flat response format', () => {
     const result = {
       data: 'knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)',
     };
-    const presented = presentForLLM(result, 'knowledge', 5);
+    const presented = presentForLLM(result, 'knowledge');
     expect(presented.output).toBe('knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)');
   });
 
@@ -154,7 +152,7 @@ describe('presentForLLM — flat response format', () => {
         warningCount: 1,
       },
     };
-    const presented = presentForLLM(result, 'edit', 200);
+    const presented = presentForLLM(result, 'edit');
     // edit keeps: id, name, type, updated, results
     expect(presented.id).toBe('100:1');
     expect(presented.name).toBe('Card');
@@ -174,26 +172,10 @@ describe('presentForLLM — flat response format', () => {
       },
     };
     // edit has a keep-list: ['id', 'name', 'type', 'updated', 'results']
-    const presented = presentForLLM(result, 'edit', 10);
+    const presented = presentForLLM(result, 'edit');
     // Empty object and empty array stripped even if in keep-list
     expect(presented.idMap).toBeUndefined();
     expect(presented.results).toBeUndefined();
-  });
-
-  it('preserves stderr extraction before stripping', () => {
-    const result = {
-      data: {
-        idMap: { Card: '100:1' },
-        warnings: [{ message: 'font fallback' }],
-        violations: [{ message: 'sizing reverted' }],
-      },
-    };
-    // clone_node has a keep-list: ['idMap'] — warnings/violations stripped from output
-    const presented = presentForLLM(result, 'clone_node', 50);
-    expect(presented._stderr).toContain('font fallback');
-    expect(presented._stderr).toContain('sizing reverted');
-    expect(presented.warnings).toBeUndefined();
-    expect(presented.violations).toBeUndefined();
   });
 
   it('jsx result: node fields spread to top level', () => {
@@ -203,7 +185,7 @@ describe('presentForLLM — flat response format', () => {
         created: 5,
       },
     };
-    const presented = presentForLLM(result, 'jsx', 2000);
+    const presented = presentForLLM(result, 'jsx');
     expect(presented.id).toBe('1:1');
     expect(presented.name).toBe('Card');
     expect(presented.children).toEqual(['Title#1:2']);

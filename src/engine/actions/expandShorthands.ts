@@ -59,9 +59,10 @@ function mapGridAlign(v: string): string {
 }
 
 function resolveLayoutMode(all: Record<string, any>): string | undefined {
-  if (typeof all.layoutMode === 'string') return all.layoutMode;
+  // Single entry point: `layout` shorthand only. Narrow vocabulary,
+  // unknown values rejected by the `layout` expander (not here).
   if (typeof all.layout === 'string') {
-    return LAYOUT_MAP[norm(all.layout)] ?? all.layout.toUpperCase();
+    return LAYOUT_MAP[norm(all.layout)];
   }
   return undefined;
 }
@@ -86,9 +87,19 @@ const EFFECT_KEYS = new Set(['shadow', 'blur', 'bgblur']);
 const EXPANDERS: Record<string, Expander> = {
 
   // ── Layout ─────────────────────────────────────────────────────────────
-  layout: (v) => ({
-    layoutMode: LAYOUT_MAP[norm(String(v))] ?? String(v).toUpperCase(),
-  }),
+  // Narrow vocabulary + fail-fast: unknown values throw so the LLM sees
+  // the error next iteration and self-corrects. Do NOT add fuzzy matching
+  // or tolerant fallbacks — keeping vocabulary tight is the whole point.
+  layout: (v) => {
+    const key = norm(String(v));
+    const mapped = LAYOUT_MAP[key];
+    if (!mapped) {
+      throw new Error(
+        `unknown layout "${v}"; valid: row|column|horizontal|vertical|grid|none`,
+      );
+    }
+    return { layoutMode: mapped };
+  },
 
   pattern: (v, all) => {
     const pat = PATTERNS[String(v).toLowerCase()];

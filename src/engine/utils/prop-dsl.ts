@@ -35,7 +35,7 @@ export const TAG_TO_TYPE: Record<string, string> = {
 
 const STRING_VALUE_PROPS = new Set([
   'fontWeight', 'fontFamily', 'name', 'characters',
-  'layout', 'layoutMode', 'justifyContent', 'alignItems', 'background',
+  'layout', 'justifyContent', 'alignItems', 'background',
   'primaryAxisAlignItems', 'counterAxisAlignItems', 'textAlignHorizontal',
   'layoutPositioning', 'strokeAlign', 'iconName', 'layoutSizingHorizontal',
   'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',

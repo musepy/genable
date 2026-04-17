@@ -32,7 +32,8 @@ import { PipelineTracer } from './pipelineTracer';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
-  const { markup, parentId } = parameters;
+  const { markup, parentId, parent } = parameters;
+  const resolvedParentId = parentId || parent;  // accept both names
 
   if (!markup || typeof markup !== 'string') {
     return {
@@ -71,8 +72,8 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
   // Step 3: Resolve parent node
   let parentNode: SceneNode | null = null;
-  if (parentId) {
-    parentNode = await figma.getNodeByIdAsync(parentId) as SceneNode | null;
+  if (resolvedParentId) {
+    parentNode = await figma.getNodeByIdAsync(resolvedParentId) as SceneNode | null;
   }
 
   // Step 4: Walk tree — create Figma nodes
@@ -169,7 +170,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   }
 
   // Auto-pan viewport to newly created root node
-  if (!parentId && rootResults.length > 0) {
+  if (!resolvedParentId && rootResults.length > 0) {
     try {
       const newRootNode = await figma.getNodeByIdAsync(rootResults[0].nodeId);
       if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);

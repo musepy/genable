@@ -130,6 +130,11 @@ async function main() {
         const body = await readBody(req);
         const params = body ? JSON.parse(body) : {};
 
+        // Pit-of-success: screenshot=true implies mode:detail (screenshot only works in detail mode)
+        if (toolName === 'inspect' && params.screenshot && !params.mode) {
+          params.mode = 'detail';
+        }
+
         // Route to specific file or any available
         const response = fileKey
           ? await relay.callToolForFile(fileKey, toolName, params)
@@ -138,7 +143,13 @@ async function main() {
         if (response.error) {
           jsonResponse(res, 422, { error: response.error });
         } else {
-          jsonResponse(res, 200, { ok: true, data: response.data ?? response });
+          const data = response.data ?? response;
+          // Normalize __image → screenshot for cleaner API surface
+          if (data?.__image) {
+            data.screenshot = data.__image;
+            delete data.__image;
+          }
+          jsonResponse(res, 200, { ok: true, data });
         }
       } catch (err: any) {
         const isTimeout = err.message?.includes('timed out');

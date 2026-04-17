@@ -218,20 +218,25 @@ export const handleJs = traced('handleJs()', 'jsHandler.ts', async function hand
 
   try {
     // Figma sandbox blocks eval(). Use FunctionConstructor() instead.
-    const hasReturn = /\breturn\b/.test(code);
-    const hasArrow = /=>/.test(code);
+    // Pit-of-success: auto-replace sync Figma APIs with async equivalents
+    // (sync versions throw "Cannot call with documentAccess: dynamic-page")
+    const asyncCode = code
+      .replace(/\bfigma\.getNodeById\b(?!Async)/g, 'await figma.getNodeByIdAsync')
+      .replace(/\bfigma\.getStyleById\b(?!Async)/g, 'await figma.getStyleByIdAsync');
+    const hasReturn = /\breturn\b/.test(asyncCode);
+    const hasArrow = /=>/.test(asyncCode);
 
     let result: unknown;
     if (hasReturn || hasArrow) {
-      const body = hasReturn ? code : `return ${code}`;
+      const body = hasReturn ? asyncCode : `return ${asyncCode}`;
       const fn = FunctionConstructor('figma', `return (async function() { ${body} })()`);
       result = await fn(figma);
     } else {
       try {
-        const fn = FunctionConstructor('figma', `return (async function() { return (${code}); })()`);
+        const fn = FunctionConstructor('figma', `return (async function() { return (${asyncCode}); })()`);
         result = await fn(figma);
       } catch {
-        const fn = FunctionConstructor('figma', `return (async function() { ${code} })()`);
+        const fn = FunctionConstructor('figma', `return (async function() { ${asyncCode} })()`);
         result = await fn(figma);
       }
     }

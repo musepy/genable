@@ -120,6 +120,26 @@ function buildDetailResult(
   });
   const detail = JsonNodeSerializer.serialize(serialized, { maxDepth: depth });
 
+  // Attach geometry properties the serializer skips (complex objects / computed role)
+  if (node.type === 'ELLIPSE') {
+    const arc = (node as EllipseNode).arcData;
+    const fullCircle = arc.startingAngle === 0 && Math.abs(arc.endingAngle - Math.PI * 2) < 0.01 && arc.innerRadius === 0;
+    if (!fullCircle) detail.arcData = arc;
+  }
+  if (node.type === 'STAR') {
+    detail.pointCount = (node as StarNode).pointCount;
+    detail.innerRadius = (node as StarNode).innerRadius;
+  }
+  if (node.type === 'POLYGON') {
+    detail.pointCount = (node as PolygonNode).pointCount;
+  }
+  if ('vectorPaths' in node) {
+    const vp = (node as VectorNode).vectorPaths;
+    if (vp?.length > 0) {
+      detail.vectorPaths = vp.map((p: any) => ({ windingRule: p.windingRule, data: p.data }));
+    }
+  }
+
   return { data: detail };
 }
 

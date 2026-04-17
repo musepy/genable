@@ -32,6 +32,8 @@ import type { StyledRange } from '../text/richTextParser';
 export interface NodeResult {
   nodeId: string;
   warnings: Warning[];
+  /** All created node IDs (root + descendants). Populated by cloneNode. */
+  createdIds?: string[];
 }
 
 export interface PropResult {
@@ -289,7 +291,7 @@ export async function createText(
 }
 
 /**
- * Create a shape node (RECTANGLE, ELLIPSE, LINE, VECTOR), apply props.
+ * Create a shape node (RECTANGLE, ELLIPSE, LINE, VECTOR, STAR, POLYGON), apply props.
  */
 export async function createShape(
   shapeType: string,
@@ -299,6 +301,8 @@ export async function createShape(
   let shape: SceneNode;
   if (shapeType === 'ELLIPSE') shape = figma.createEllipse();
   else if (shapeType === 'LINE') shape = figma.createLine();
+  else if (shapeType === 'STAR') shape = figma.createStar();
+  else if (shapeType === 'POLYGON') shape = figma.createPolygon();
   else if (shapeType === 'VECTOR') shape = figma.createVector();
   else shape = figma.createRectangle();
 
@@ -625,7 +629,15 @@ export async function cloneNode(
     componentNameRegistry.set(toCamelCase(cloned.name), cloned.id);
   }
 
-  return { nodeId: cloned.id, warnings };
+  // Collect all descendant IDs so the caller can register them for subsequent edits.
+  const createdIds: string[] = [cloned.id];
+  if ('findAll' in cloned) {
+    for (const desc of (cloned as FrameNode).findAll(() => true)) {
+      createdIds.push(desc.id);
+    }
+  }
+
+  return { nodeId: cloned.id, warnings, createdIds };
 }
 
 /**

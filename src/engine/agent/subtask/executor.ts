@@ -75,11 +75,16 @@ export async function executeSubtask(
   try {
     const summary = await childRuntime.run(prompt);
     const createdNodes = childRuntime.getTurnCreatedNodes();
+    const createdIds = childRuntime.getTurnCreatedIds();
     const stats = childRuntime.getRunStats();
     return {
       data: {
         // Structured — parent can reference nodes directly
         createdNodes,
+        // Flat id list (roots + descendants) — parent's collectCreatedNodes reads
+        // this to seed the inspection tracker, so mutations on subtask-created
+        // descendants don't hit spurious gate rejections.
+        createdIds,
         // Natural language summary — for LLM context
         summary,
         stats,

@@ -1,13 +1,19 @@
 /**
  * @file inspectGateHook.ts
- * @description Mechanical gate: mutation tools require prior inspect on target node.
+ * @description Reality-check gate: rejects mutations on unknown (hallucinated) node IDs.
  *
  * Two hooks cooperate:
- *   - beforeToolExec (priority 15): rejects mutations on uninspected nodes
+ *   - beforeToolExec (priority 15): rejects mutations on nodes never seen this turn
  *   - afterToolExec  (priority 20): consumes inspection (dirty flag) after successful mutation
  *
- * Inspired by Claude Code's "Read before Edit" tool contract.
- * jsx is exempt — it creates nodes, doesn't target existing ones.
+ * Gate logic: if the target ID has not appeared in any inspect/describe/jsx
+ * result (not in tracker), reject — this is the main protection against
+ * the LLM hallucinating node IDs. No property-vs-structural distinction:
+ * Figma has no dirty-read hazards, so "must re-read before edit" created
+ * more round-trip cost than safety value.
+ *
+ * Creation tools (jsx, create_instance, create_component, create_variable)
+ * are exempt — they produce new nodes.
  */
 
 import { HookRegistration, HookContext, HookResult } from './hookTypes';
@@ -15,7 +21,7 @@ import { InspectionTracker } from './inspectionTracker';
 import { ToolDefinition } from '../tools/types';
 
 /** Tools that create rather than target existing nodes — exempt from gate. */
-const CREATION_TOOLS = new Set(['jsx']);
+const CREATION_TOOLS = new Set(['jsx', 'create_instance', 'create_component', 'create_variable']);
 
 /** Tools with batch node arrays: args.nodes[].node */
 const BATCH_TOOLS = new Set(['edit', 'set_text']);
@@ -32,6 +38,11 @@ function extractTargetNodeIds(toolName: string, args: any): string[] {
     return args.nodes
       .map((entry: any) => entry?.node)
       .filter((id: any): id is string => typeof id === 'string');
+  }
+
+  // combine_components takes nodes[] as an array of IDs
+  if (toolName === 'combine_components' && Array.isArray(args.nodes)) {
+    return args.nodes.filter((id: any): id is string => typeof id === 'string');
   }
 
   // Single mode: edit({node: "1:2", ...}) or set_fill({node: "1:2", ...})
@@ -69,16 +80,18 @@ export function createInspectGateHook(
       const nodeIds = extractTargetNodeIds(tc.name, tc.input);
       if (nodeIds.length === 0) return;
 
-      const uninspected = nodeIds.filter(id => !tracker.isInspected(id));
-      if (uninspected.length === 0) return;
+      const unknownIds = nodeIds.filter(id => !tracker.isInspected(id));
+      if (unknownIds.length === 0) return;
 
-      const hint = uninspected.length === 1
-        ? `inspect({node: "${uninspected[0]}"})`
-        : uninspected.map(id => `inspect({node: "${id}"})`).join(', ');
+      const hint = unknownIds.length === 1
+        ? `inspect({node: "${unknownIds[0]}"})`
+        : unknownIds.map(id => `inspect({node: "${id}"})`).join(', ');
 
       return {
         action: 'skip',
-        reason: `Node ${uninspected.join(', ')} not inspected. Call ${hint} first to confirm current state before modifying.`,
+        reason:
+          `Node ${unknownIds.join(', ')} unknown — it hasn't appeared in any inspect/describe/jsx result this turn. ` +
+          `Inspect it or create it before modifying. Call ${hint}.`,
       };
     },
   };

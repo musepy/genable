@@ -134,7 +134,7 @@ function processEntry(entry: string, result: Record<string, any>): void {
   result[key] = coerceValue(key, val);
 }
 
-const SHAPE_TYPES = new Set(['RECTANGLE', 'ELLIPSE', 'LINE', 'VECTOR']);
+const SHAPE_TYPES = new Set(['RECTANGLE', 'ELLIPSE', 'LINE', 'VECTOR', 'STAR', 'POLYGON']);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Direct node creation — replaces buildCreateIR + executeIR
@@ -789,7 +789,12 @@ export async function handleCp(parameters: {
 
   const stderrLines = result.warnings.map(w => `[warn] ${w.message}`);
   const cpResult: ToolResponse = {
-    data: { idMap: { [cpCloneName]: result.nodeId } },
+    data: {
+      idMap: { [cpCloneName]: result.nodeId },
+      // Expose all descendant IDs so the inspection tracker registers them.
+      // Without this, subsequent edits on cloned children hit the "unknown" gate.
+      createdIds: result.createdIds ?? [result.nodeId],
+    },
     _stderr: stderrLines.length > 0 ? stderrLines.join('\n') : undefined,
   };
   return wrapRunStages('Cp', cpResult, _t0);

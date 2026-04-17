@@ -20,8 +20,21 @@ const mockToolDefs: ToolDefinition[] = [
   { name: 'edit', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
   { name: 'set_fill', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
   { name: 'set_text', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'set_stroke', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'set_layout', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'replace_props', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'add_component_prop', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'bind_variable', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'alias_variable', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'set_variable_mode', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'combine_components', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
   { name: 'delete_node', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'move_node', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'clone_node', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
   { name: 'jsx', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'create_instance', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'create_component', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
+  { name: 'create_variable', mutates: true, executionStrategy: 'sequential', description: '', parameters: { type: 'object', properties: {} } },
   { name: 'inspect', executionStrategy: 'parallel', description: '', parameters: { type: 'object', properties: {} } },
   { name: 'describe', executionStrategy: 'parallel', description: '', parameters: { type: 'object', properties: {} } },
 ];
@@ -78,6 +91,12 @@ describe('InspectionTracker', () => {
   it('consumeInspection on unknown node is a no-op', () => {
     expect(() => tracker.consumeInspection('999:999')).not.toThrow();
   });
+
+  it('markInspected is idempotent', () => {
+    tracker.markInspected('1:2');
+    tracker.markInspected('1:2');
+    expect(tracker.isInspected('1:2')).toBe(true);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -101,20 +120,69 @@ describe('InspectGateHook', () => {
         currentToolCall: { type: 'tool_call', id: 'tc_1', name: toolName, input },
       }));
 
-    it('skips mutation on uninspected node', async () => {
+    // ── Unknown ID (hallucinated) ──
+
+    it('rejects set_fill on unknown ID with hallucination message', async () => {
       const result = await runGate('set_fill', { node: '1:2', fill: '#000' });
       expect(result?.action).toBe('skip');
       expect(result?.reason).toContain('1:2');
+      expect(result?.reason).toContain('unknown');
       expect(result?.reason).toContain('inspect');
     });
 
-    it('allows mutation on inspected node', async () => {
+    it('rejects delete_node on unknown ID', async () => {
+      const result = await runGate('delete_node', { node: '99:99' });
+      expect(result?.action).toBe('skip');
+      expect(result?.reason).toContain('99:99');
+    });
+
+    it('rejects edit on unknown ID', async () => {
+      const result = await runGate('edit', { node: '99:99', props: { w: 100 } });
+      expect(result?.action).toBe('skip');
+      expect(result?.reason).toContain('99:99');
+    });
+
+    // ── Known ID ──
+
+    it('allows delete_node on known id', async () => {
+      tracker.markInspected('1:2');
+      const result = await runGate('delete_node', { node: '1:2' });
+      expect(result).toBeUndefined();
+    });
+
+    it('allows move_node on known id', async () => {
+      tracker.markInspected('1:2');
+      const result = await runGate('move_node', { node: '1:2', dest: '/' });
+      expect(result).toBeUndefined();
+    });
+
+    it('allows clone_node on known id', async () => {
+      tracker.markInspected('1:2');
+      const result = await runGate('clone_node', { node: '1:2' });
+      expect(result).toBeUndefined();
+    });
+
+    it('allows edit on known id', async () => {
+      tracker.markInspected('1:2');
+      const result = await runGate('edit', { node: '1:2', props: { w: 200 } });
+      expect(result).toBeUndefined();
+    });
+
+    it('allows set_fill on known id', async () => {
       tracker.markInspected('1:2');
       const result = await runGate('set_fill', { node: '1:2', fill: '#000' });
       expect(result).toBeUndefined();
     });
 
-    it('allows non-mutation tools (inspect, describe)', async () => {
+    it('allows set_text on known id', async () => {
+      tracker.markInspected('1:2');
+      const result = await runGate('set_text', { node: '1:2', text: 'Hello' });
+      expect(result).toBeUndefined();
+    });
+
+    // ── Non-mutation + creation tools ──
+
+    it('allows non-mutation tools (inspect, describe) without gating', async () => {
       const result = await runGate('inspect', { node: '1:2' });
       expect(result).toBeUndefined();
     });
@@ -124,14 +192,26 @@ describe('InspectGateHook', () => {
       expect(result).toBeUndefined();
     });
 
-    it('allows mutation on "/" (always exempt)', async () => {
+    it('exempts create_instance (creation tool)', async () => {
+      const result = await runGate('create_instance', { component: '1:1' });
+      expect(result).toBeUndefined();
+    });
+
+    it('exempts create_component (creation tool)', async () => {
+      const result = await runGate('create_component', { nodes: ['1:2'] });
+      expect(result).toBeUndefined();
+    });
+
+    it('allows mutation on "/" (always known)', async () => {
       const result = await runGate('delete_node', { node: '/' });
       expect(result).toBeUndefined();
     });
 
-    it('blocks batch edit if ANY node uninspected', async () => {
+    // ── Batch handling ──
+
+    it('blocks batch edit if ANY node is unknown', async () => {
       tracker.markInspected('1:1');
-      // 1:2 not inspected
+      // 1:2 not marked → unknown
       const result = await runGate('edit', {
         nodes: [{ node: '1:1', props: {} }, { node: '1:2', props: {} }],
       });
@@ -140,7 +220,7 @@ describe('InspectGateHook', () => {
       expect(result?.reason).not.toContain('1:1');
     });
 
-    it('allows batch edit when all nodes inspected', async () => {
+    it('allows batch edit when all nodes are known', async () => {
       tracker.markInspected('1:1');
       tracker.markInspected('1:2');
       const result = await runGate('edit', {
@@ -149,7 +229,7 @@ describe('InspectGateHook', () => {
       expect(result).toBeUndefined();
     });
 
-    it('handles batch set_text', async () => {
+    it('handles batch set_text with unknown node', async () => {
       const result = await runGate('set_text', {
         nodes: [{ node: '5:6', text: 'Hello' }],
       });
@@ -159,6 +239,25 @@ describe('InspectGateHook', () => {
     it('handles missing input gracefully', async () => {
       const result = await runGate('edit', undefined);
       expect(result).toBeUndefined(); // no node IDs → nothing to gate
+    });
+
+    it('combine_components gates all IDs in nodes[] array', async () => {
+      tracker.markInspected('1:1');
+      const result = await runGate('combine_components', { nodes: ['1:1', '1:2'] });
+      expect(result?.action).toBe('skip');
+      expect(result?.reason).toContain('1:2');
+    });
+
+    // ── jsx createdIds → all become known ──
+
+    it('jsx created nodes are born known — can be edited immediately', async () => {
+      // Simulate what collectCreatedNodes does in agentRuntime
+      tracker.markInspected('10:1');
+      tracker.markInspected('10:2');
+      tracker.markInspected('10:3');
+
+      const result = await runGate('edit', { node: '10:2', props: { w: 100 } });
+      expect(result).toBeUndefined();
     });
   });
 
@@ -171,9 +270,13 @@ describe('InspectGateHook', () => {
 
     it('consumes inspection after successful mutation', async () => {
       tracker.markInspected('1:2');
-      expect(tracker.isInspected('1:2')).toBe(true);
-
       await runDirty('set_fill', { node: '1:2' }, { data: { id: '1:2' } });
+      expect(tracker.isInspected('1:2')).toBe(false);
+    });
+
+    it('consumes inspection after successful structural mutation', async () => {
+      tracker.markInspected('1:2');
+      await runDirty('delete_node', { node: '1:2' }, { data: { deleted: true } });
       expect(tracker.isInspected('1:2')).toBe(false);
     });
 
@@ -212,14 +315,71 @@ describe('InspectStubHook', () => {
       toolResult,
     }));
 
-  it('passes through first inspect result and marks inspected', async () => {
-    const result = await runStub('inspect', { node: '1:2' }, { data: { tree: [{ name: 'Card' }] } });
+  it('passes through first inspect result and marks root as known', async () => {
+    const result = await runStub('inspect', { node: '1:2' }, { data: { id: '1:2', name: 'Card', type: 'frame' } });
     expect(result).toBeUndefined(); // pass through
     expect(tracker.isInspected('1:2')).toBe(true);
   });
 
+  it('marks direct children as known after inspect with tree', async () => {
+    const toolResult = {
+      data: {
+        id: '1:2',
+        name: 'Card',
+        type: 'frame',
+        children: [
+          { id: '1:3', name: 'Header', type: 'frame' },
+          { id: '1:4', name: 'Body', type: 'text' },
+        ],
+      },
+    };
+    await runStub('inspect', { node: '1:2' }, toolResult);
+    expect(tracker.isInspected('1:2')).toBe(true);
+    expect(tracker.isInspected('1:3')).toBe(true);
+    expect(tracker.isInspected('1:4')).toBe(true);
+  });
+
+  it('marks nested grandchildren as known recursively', async () => {
+    const toolResult = {
+      data: {
+        id: '1:2',
+        name: 'Card',
+        type: 'frame',
+        children: [
+          {
+            id: '1:3',
+            name: 'Header',
+            type: 'frame',
+            children: [
+              { id: '1:5', name: 'Title', type: 'text' },
+            ],
+          },
+        ],
+      },
+    };
+    await runStub('inspect', { node: '1:2' }, toolResult);
+    expect(tracker.isInspected('1:5')).toBe(true);
+  });
+
+  it('marks page root children as known when inspecting "/"', async () => {
+    const toolResult = {
+      data: {
+        page: 'Page 1',
+        count: 2,
+        children: [
+          { id: '2:1', name: 'Login', type: 'frame' },
+          { id: '2:2', name: 'Dashboard', type: 'frame' },
+        ],
+      },
+    };
+    await runStub('inspect', { node: '/' }, toolResult);
+    expect(tracker.isInspected('/')).toBe(true);
+    expect(tracker.isInspected('2:1')).toBe(true);
+    expect(tracker.isInspected('2:2')).toBe(true);
+  });
+
   it('replaces identical second inspect with stub', async () => {
-    const toolResult = { data: { tree: [{ name: 'Card' }] } };
+    const toolResult = { data: { id: '1:2', name: 'Card', type: 'frame' } };
     await runStub('inspect', { node: '1:2' }, toolResult);
 
     const result = await runStub('inspect', { node: '1:2' }, toolResult);
@@ -229,13 +389,13 @@ describe('InspectStubHook', () => {
   });
 
   it('passes through changed inspect result', async () => {
-    await runStub('inspect', { node: '1:2' }, { data: { tree: [{ name: 'Card' }] } });
+    await runStub('inspect', { node: '1:2' }, { data: { id: '1:2', name: 'Card' } });
 
-    const result = await runStub('inspect', { node: '1:2' }, { data: { tree: [{ name: 'Card', bg: '#FFF' }] } });
+    const result = await runStub('inspect', { node: '1:2' }, { data: { id: '1:2', name: 'Card', opacity: 0.5 } });
     expect(result).toBeUndefined(); // different data → pass through
   });
 
-  it('does not stub error results', async () => {
+  it('does not stub error results and does not mark inspected on error', async () => {
     const result = await runStub('inspect', { node: '1:2' }, { error: 'Node not found' });
     expect(result).toBeUndefined();
     expect(tracker.isInspected('1:2')).toBe(false); // error → not marked
@@ -254,7 +414,7 @@ describe('InspectStubHook', () => {
   });
 
   it('reset clears the cache', async () => {
-    const toolResult = { data: { tree: [{ name: 'Card' }] } };
+    const toolResult = { data: { id: '1:2', name: 'Card' } };
     await runStub('inspect', { node: '1:2' }, toolResult);
 
     stub.reset();

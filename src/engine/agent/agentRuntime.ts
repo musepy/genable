@@ -102,6 +102,7 @@ export class AgentRuntime {
   private pendingQuestion: { resolve: (answer: string) => void } | null = null;
   private chatPanelId: string | null = null;
   private turnCreatedNodes: Array<{ id: string; name?: string; type?: string }> = [];
+  private turnCreatedIds: string[] = [];
   private inspectionTracker: InspectionTracker | null = null;
   private designRootId: string | null = null;  // persists across turns for edit-turn links
   private runStats = {
@@ -431,22 +432,38 @@ export class AgentRuntime {
     const data = rawResult?.data;
     if (!data || rawResult?.error) return;
 
-    // jsx tool: { data: { id: "1:2", name: "Card", type: "frame", createdIds: ["1:2","1:3",...] } }
+    // jsx tool shape: { data: { id, name, type, createdIds: [root + descendants] } }
     if (data.id && typeof data.id === 'string') {
       this.turnCreatedNodes.push({
         id: data.id,
         name: data.name,
         type: data.type,
       });
-      // jsx-created nodes are born clean — no inspect needed before first mutation
-      // Mark ALL created nodes (root + all descendants), not just root
-      if (Array.isArray(data.createdIds)) {
-        for (const id of data.createdIds) {
+    }
+
+    // subtask tool shape: { data: { createdNodes: [{id, name, type}], createdIds: [...], summary } }
+    // Propagate child's root nodes so parent's designRootId / link-text work.
+    if (Array.isArray(data.createdNodes)) {
+      for (const node of data.createdNodes) {
+        if (node?.id && typeof node.id === 'string') {
+          this.turnCreatedNodes.push({ id: node.id, name: node.name, type: node.type });
+        }
+      }
+    }
+
+    // Mark every created node as known (born clean from parent's view).
+    // For subtask, child runtime already processed descendants internally — parent
+    // trusts the returned createdIds in lieu of re-inspecting.
+    if (Array.isArray(data.createdIds)) {
+      for (const id of data.createdIds) {
+        if (typeof id === 'string') {
+          this.turnCreatedIds.push(id);
           this.inspectionTracker?.markInspected(id);
         }
-      } else {
-        this.inspectionTracker?.markInspected(data.id);
       }
+    } else if (data.id && typeof data.id === 'string') {
+      this.turnCreatedIds.push(data.id);
+      this.inspectionTracker?.markInspected(data.id);
     }
   }
 
@@ -515,6 +532,7 @@ export class AgentRuntime {
 
     // ── Render user message in chat panel ──
     this.turnCreatedNodes = [];
+    this.turnCreatedIds = [];
     try {
       await Promise.race([
         this.renderUserMessage(userPrompt, 0),
@@ -848,9 +866,14 @@ export class AgentRuntime {
     return [...this.turnCreatedNodes];
   }
 
-  /** Backward compat: flat ID list. */
+  /** Backward compat: flat ID list (roots only). */
   public getTurnCreatedNodeIds(): string[] {
     return this.turnCreatedNodes.map(n => n.id);
+  }
+
+  /** All IDs created during current turn (roots + descendants). Used to propagate subtask state. */
+  public getTurnCreatedIds(): string[] {
+    return [...this.turnCreatedIds];
   }
 
   public getRunStats() {

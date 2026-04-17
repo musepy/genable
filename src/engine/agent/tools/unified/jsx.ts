@@ -21,7 +21,7 @@ export const jsxDefinition: ToolDefinition = {
 // To build a full card, create the card frame FIRST with a single jsx call, then add children one subtree at a time via follow-up jsx or edit calls — never embed a whole card tree in one markup string.
 
 Examples:
-  jsx({markup: "<frame name='Card' layout='col' padding={16} fill='#FFFFFF' w='fill' />"})
+  jsx({markup: "<frame name='Card' layout='column' padding={16} fill='#FFFFFF' w='fill' />"})
   jsx({markup: "<frame name='Row' layout='row' gap={8} padding={12} w='fill'><icon name='Settings' size={20} /><text name='Label' w='fill'>Account</text><icon name='Chevron' size={16} /></frame>"})
 
 Elements: frame, text, rect, ellipse, line, icon, image, instance, component, group, section, vector

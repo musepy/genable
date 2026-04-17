@@ -299,7 +299,10 @@ const EXPANDERS: Record<string, Expander> = {
   // ── Layout details ─────────────────────────────────────────────────────
   smooth: (v) => ({ cornerSmoothing: Number(v) }),
   blend: (v) => ({ blendMode: v }),
-  borderRadius: (v) => ({ cornerRadius: v }),
+  // CSS alias for `radius` — delegate so `'full'`, `[tl,tr,bl,br]`, number,
+  // and `$varRef` all behave consistently. Previously a bare passthrough,
+  // which let strings like `'12px'` reach Figma raw and throw.
+  borderRadius: (v, all) => EXPANDERS.radius(v, all),
 
   overflow: (v) => {
     const s = String(v).toLowerCase();

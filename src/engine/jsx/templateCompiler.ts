@@ -503,6 +503,12 @@ const LAYOUT_KEYWORD_TO_MODE: Record<string, string> = {
  * Inject layout defaults: frames with layout default to hug sizing.
  * GRID containers can't HUG while any track is FLEX (the default), so
  * grid containers default to a fixed size instead of HUG.
+ *
+ * Runs BEFORE expandShorthands, so `props.layout` is still a raw DSL
+ * string (e.g. 'row'/'grid'). Invalid layout values fail-fast in the
+ * expander downstream — no tolerant toUpperCase() fallback needed here;
+ * if the key is missing from LAYOUT_KEYWORD_TO_MODE, the defaults
+ * simply don't run (the expander will throw next).
  */
 function applyLayoutDefaults(
   nodeType: string,
@@ -518,7 +524,7 @@ function applyLayoutDefaults(
   const layoutMode: string | undefined =
     props.layoutMode ??
     (typeof props.layout === 'string'
-      ? LAYOUT_KEYWORD_TO_MODE[props.layout.toLowerCase().replace(/[-_]/g, '')] ?? props.layout.toUpperCase()
+      ? LAYOUT_KEYWORD_TO_MODE[props.layout.toLowerCase().replace(/[-_]/g, '')]
       : undefined);
   const isGrid = layoutMode === 'GRID';
   const defaultH: string | number = isGrid ? 400 : 'hug';

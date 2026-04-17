@@ -1227,7 +1227,7 @@ export const PROPERTY_META: Record<string, PropMeta> = {
   opacity: { type: 'scalar', defaultValue: 1, min: 0, max: 1 },
 
   // Layout
-  layoutMode: { type: 'enum', enumMap: { VERTICAL: 'VERTICAL', HORIZONTAL: 'HORIZONTAL', NONE: 'NONE' }, defaultValue: 'NONE' },
+  layoutMode: { type: 'enum', enumMap: { VERTICAL: 'VERTICAL', HORIZONTAL: 'HORIZONTAL', GRID: 'GRID', NONE: 'NONE' }, defaultValue: 'NONE' },
   layoutSizingHorizontal: {
     type: 'enum', enumMap: { FIXED: 'FIXED', FILL: 'FILL', HUG: 'HUG', AUTO: 'HUG', STRETCH: 'FILL' },
     defaultValue: 'FIXED',

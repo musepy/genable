@@ -484,7 +484,12 @@ async function handleRecordingsList(res: ServerResponse) {
       try {
         await stat(join(dirPath, 'runtime-events.json'));
         hasEvents = true;
-      } catch { /* no events file */ }
+      } catch {
+        try {
+          await stat(join(dirPath, 'events.jsonl'));
+          hasEvents = true;
+        } catch { /* no events file */ }
+      }
 
       recordings.push({ id: entry, mtime: s.mtimeMs, hasEvents });
     }
@@ -503,8 +508,22 @@ async function handleRecordingMeta(id: string, res: ServerResponse) {
 
   // Try meta.json first (full payload)
   try {
-    const meta = await readFile(join(dir, 'meta.json'), 'utf-8');
-    json(res, 200, { ...JSON.parse(meta), id });
+    const meta = JSON.parse(await readFile(join(dir, 'meta.json'), 'utf-8'));
+    // Patch toolCallSummary from events.jsonl when meta has stale counts (e.g. timeout)
+    if (meta.toolCallSummary?.total === 0) {
+      try {
+        const lines = (await readFile(join(dir, 'events.jsonl'), 'utf-8')).trim().split('\n').filter(Boolean);
+        const toolEvents = lines.map(l => JSON.parse(l)).filter((e: any) => e.type === 'tool');
+        if (toolEvents.length > 0) {
+          meta.toolCallSummary = {
+            total: toolEvents.length,
+            errors: toolEvents.filter((e: any) => e.status === 'error').length,
+            capRejects: meta.toolCallSummary.capRejects || 0,
+          };
+        }
+      } catch { /* no events.jsonl */ }
+    }
+    json(res, 200, { ...meta, id });
     return;
   } catch { /* no meta.json — assemble from parts */ }
 
@@ -536,14 +555,47 @@ async function handleRecordingMeta(id: string, res: ServerResponse) {
 }
 
 async function handleRecordingEvents(id: string, res: ServerResponse) {
-  const eventsPath = join(RESULT_DIR, id, 'runtime-events.json');
+  // Prefer full runtime-events.json; fall back to events.jsonl (tool-only log)
+  const runtimePath = join(RESULT_DIR, id, 'runtime-events.json');
   try {
-    const data = await readFile(eventsPath, 'utf-8');
+    const data = await readFile(runtimePath, 'utf-8');
     cors(res);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(data);
+    return;
+  } catch { /* try fallback */ }
+
+  const jsonlPath = join(RESULT_DIR, id, 'events.jsonl');
+  try {
+    const raw = await readFile(jsonlPath, 'utf-8');
+    // Convert JSONL tool events → dashboard-compatible format
+    const events: any[] = [];
+    for (const line of raw.trim().split('\n')) {
+      if (!line) continue;
+      const entry = JSON.parse(line);
+      if (entry.type !== 'tool') continue;
+      const syntheticId = `evt-${entry.index}`;
+      events.push({
+        type: 'tool_call',
+        iteration: entry.index,
+        timestamp: entry.timestamp,
+        toolCall: { id: syntheticId, name: entry.name },
+      });
+      events.push({
+        type: 'tool_result',
+        iteration: entry.index,
+        timestamp: entry.timestamp,
+        toolResult: {
+          id: syntheticId,
+          name: entry.name,
+          status: entry.status,
+          error: entry.error || undefined,
+        },
+      });
+    }
+    json(res, 200, events);
   } catch {
-    json(res, 404, { error: `No runtime-events.json for recording "${id}"` });
+    json(res, 404, { error: `No events for recording "${id}"` });
   }
 }
 

@@ -27,6 +27,13 @@ const CREATION_TOOLS = new Set(['jsx', 'create_instance', 'create_component', 'c
 const BATCH_TOOLS = new Set(['edit', 'set_text']);
 
 /**
+ * Tools that invalidate the target ID (remove the node from the scene graph).
+ * Only these should consume the tracker entry — property edits, moves, and
+ * clones leave the target's ID intact, so the tracker should retain it.
+ */
+const INVALIDATING_TOOLS = new Set(['delete_node']);
+
+/**
  * Extract target node IDs from a tool call's arguments.
  * Returns empty array for creation tools or tools without node targeting.
  */
@@ -96,14 +103,16 @@ export function createInspectGateHook(
     },
   };
 
-  // ── afterToolExec: dirty flag ──
+  // ── afterToolExec: invalidate tracker entries for removed nodes ──
+  // Only delete_node invalidates IDs. Property edits, moves, and clones
+  // leave the target ID intact, so the tracker should retain those entries.
   const dirtyHook: HookRegistration = {
     id: 'builtin:inspectGate:dirty',
     event: 'afterToolExec',
     priority: 20,
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       const tc = ctx.currentToolCall;
-      if (!tc || !mutationTools.has(tc.name)) return;
+      if (!tc || !INVALIDATING_TOOLS.has(tc.name)) return;
 
       // Only consume on success (no error in result)
       if (ctx.toolResult?.error) return;

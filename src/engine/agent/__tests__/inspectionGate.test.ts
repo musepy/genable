@@ -261,28 +261,60 @@ describe('InspectGateHook', () => {
     });
   });
 
-  describe('afterToolExec dirty flag', () => {
+  describe('afterToolExec invalidation (delete-only)', () => {
     const runDirty = (toolName: string, input: any, toolResult: any) =>
       findHook('builtin:inspectGate:dirty').fn(makeCtx({
         currentToolCall: { type: 'tool_call', id: 'tc_1', name: toolName, input },
         toolResult,
       }));
 
-    it('consumes inspection after successful mutation', async () => {
-      tracker.markInspected('1:2');
-      await runDirty('set_fill', { node: '1:2' }, { data: { id: '1:2' } });
-      expect(tracker.isInspected('1:2')).toBe(false);
-    });
-
-    it('consumes inspection after successful structural mutation', async () => {
+    it('consumes inspection after successful delete_node', async () => {
       tracker.markInspected('1:2');
       await runDirty('delete_node', { node: '1:2' }, { data: { deleted: true } });
       expect(tracker.isInspected('1:2')).toBe(false);
     });
 
-    it('preserves inspection on mutation error', async () => {
+    it('does NOT consume after successful edit (ID still valid)', async () => {
       tracker.markInspected('1:2');
-      await runDirty('set_fill', { node: '1:2' }, { error: 'Node not found' });
+      await runDirty('edit', { node: '1:2', props: { w: 200 } }, { data: { id: '1:2' } });
+      expect(tracker.isInspected('1:2')).toBe(true);
+    });
+
+    it('does NOT consume after successful set_fill', async () => {
+      tracker.markInspected('1:2');
+      await runDirty('set_fill', { node: '1:2', fill: '#000' }, { data: { id: '1:2' } });
+      expect(tracker.isInspected('1:2')).toBe(true);
+    });
+
+    it('does NOT consume after successful set_text', async () => {
+      tracker.markInspected('1:2');
+      await runDirty('set_text', { node: '1:2', text: 'Hello' }, { data: { id: '1:2' } });
+      expect(tracker.isInspected('1:2')).toBe(true);
+    });
+
+    it('does NOT consume after successful move_node', async () => {
+      tracker.markInspected('1:2');
+      await runDirty('move_node', { node: '1:2', dest: '/' }, { data: { id: '1:2' } });
+      expect(tracker.isInspected('1:2')).toBe(true);
+    });
+
+    it('does NOT consume after successful clone_node (source ID unchanged)', async () => {
+      tracker.markInspected('1:2');
+      await runDirty('clone_node', { node: '1:2' }, { data: { idMap: {} } });
+      expect(tracker.isInspected('1:2')).toBe(true);
+    });
+
+    it('does NOT consume batch edit targets', async () => {
+      tracker.markInspected('1:1');
+      tracker.markInspected('1:2');
+      await runDirty('edit', { nodes: [{ node: '1:1' }, { node: '1:2' }] }, { data: {} });
+      expect(tracker.isInspected('1:1')).toBe(true);
+      expect(tracker.isInspected('1:2')).toBe(true);
+    });
+
+    it('preserves inspection on delete error', async () => {
+      tracker.markInspected('1:2');
+      await runDirty('delete_node', { node: '1:2' }, { error: 'Node not found' });
       expect(tracker.isInspected('1:2')).toBe(true);
     });
 

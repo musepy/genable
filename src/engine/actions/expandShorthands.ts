@@ -50,12 +50,32 @@ const isVarRef = (v: any): v is string => typeof v === 'string' && v.startsWith(
 
 const norm = (s: string) => s.toLowerCase().replace(/[-_]/g, '');
 
+// Fail-fast on unknown align values: white-list check + throw. Mirrors the
+// layout fail-fast (commit 58656a4) — keeps LLM vocabulary tight, surfaces
+// typos (`centre`, `middle`) as ToolResponse.error so the next iteration
+// self-corrects. Do NOT add fuzzy matching or tolerant fallbacks.
+//
+// `space-around`/`space-evenly`/`around`/`evenly` approximate to SPACE_BETWEEN
+// because Figma has no SPACE_AROUND — this is preserved as a deliberate
+// best-effort mapping (not a silent drop; still in ALIGN_MAP above).
 function mapAlign(v: string): string {
-  return ALIGN_MAP[norm(v)] ?? v.toUpperCase();
+  const mapped = ALIGN_MAP[norm(String(v))];
+  if (!mapped) {
+    throw new Error(
+      `unknown align "${v}"; valid: center|start|end|space-between|baseline`,
+    );
+  }
+  return mapped;
 }
 
 function mapGridAlign(v: string): string {
-  return GRID_ALIGN_MAP[norm(String(v))] ?? String(v).toUpperCase();
+  const mapped = GRID_ALIGN_MAP[norm(String(v))];
+  if (!mapped) {
+    throw new Error(
+      `unknown align "${v}"; valid: start|end|center|min|max|auto`,
+    );
+  }
+  return mapped;
 }
 
 function resolveLayoutMode(all: Record<string, any>): string | undefined {

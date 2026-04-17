@@ -22,7 +22,7 @@ export const jsxDefinition: ToolDefinition = {
 
 Examples:
   jsx({markup: "<frame name='Card' layout='column' padding={16} fill='#FFFFFF' w='fill' />"})
-  jsx({markup: "<frame name='Row' layout='row' gap={8} padding={12} w='fill'><icon name='Settings' size={20} /><text name='Label' w='fill'>Account</text><icon name='Chevron' size={16} /></frame>"})
+  jsx({markup: "<frame name='Row' layout='row' gap={8} padding={12} w='fill'><icon name='lucide:settings' size={20} /><text name='Label' w='fill'>Account</text><icon name='lucide:chevron-right' size={16} /></frame>"})
 
 Elements: frame, text, rect, ellipse, line, icon, image, instance, component, group, section, vector
 Attributes: same shorthands (w, h, bg, layout, gap, p, corner, fill, size, weight, stroke, shadow)

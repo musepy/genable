@@ -37,15 +37,15 @@ const STRING_VALUE_PROPS = new Set([
   'fontWeight', 'fontFamily', 'name', 'characters',
   'layout', 'justifyContent', 'alignItems', 'background',
   'primaryAxisAlignItems', 'counterAxisAlignItems', 'textAlignHorizontal',
-  'layoutPositioning', 'strokeAlign', 'iconName', 'layoutSizingHorizontal',
-  'layoutSizingVertical', 'textAlignVertical', 'textAutoResize',
+  'layoutPositioning', 'strokeAlign', 'iconName',
+  'textAlignVertical', 'textAutoResize',
   'layoutWrap', 'component', 'constraints',
   'strokeJoin', 'strokeCap', 'blendMode', 'dashPattern',
   'textDecoration', 'textTruncation', 'fontStyle', 'scaleMode',
   // Abbreviations that must stay as strings
   'weight', 'font', 'alignMain', 'alignCross', 'justify', 'textAlign',
   'positioning', 'strokeA', 'strokeJ', 'strokeC', 'dash',
-  'sizingH', 'sizingV', 'blend', 'wrap', 'pin', 'overflow',
+  'blend', 'wrap', 'pin', 'overflow',
   'decoration', 'whiteSpace', 'italic', 'fit', 'outline',
 ]);
 

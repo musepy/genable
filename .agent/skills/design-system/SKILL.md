@@ -161,8 +161,8 @@ After binding STRING variables for multi-language support, **test all mode combi
 3. Cross with Light/Dark theme
 
 **Rules for overflow-safe text:**
-- Paragraph text: `layoutSizingHorizontal: "FILL"` + `textAutoResize: "HEIGHT"` (fills parent width, wraps as needed)
-- Inline text (buttons, badges): `layoutSizingHorizontal: "HUG"` (auto-width, parent must accommodate)
+- Paragraph text: `w='fill'` + `textAutoResize: "HEIGHT"` (fills parent width, wraps as needed)
+- Inline text (buttons, badges): `w='hug'` (auto-width, parent must accommodate)
 - Numbers/metrics: keep format consistent across languages (use "10M+" not "1000万+")
 - Avatar initials: single letter in ALL languages
 - Never use FIXED width on text that changes with language

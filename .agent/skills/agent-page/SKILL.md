@@ -42,11 +42,13 @@ if (!existing) {
 }
 ```
 
-```
-mk /Dashboard/ frame layout:row gap:80 p:40 sizingH:hug sizingV:hug
-mk /Dashboard/Palette/ frame layout:column gap:24 sizingH:hug sizingV:hug
-mk /Dashboard/Palette/Colors/ frame layout:column gap:2 p:16 corner:8 bg:$Colors/Gray/2 sizingH:hug sizingV:hug
-mk /Dashboard/Guide/ frame layout:column gap:0 w:640 corner:12 sizingV:hug overflow:hidden
+```jsx
+<frame name="Dashboard" layout="row" gap={80} p={40} w="hug" h="hug">
+  <frame name="Palette" layout="column" gap={24} w="hug" h="hug">
+    <frame name="Colors" layout="column" gap={2} p={16} corner={8} bg="$Colors/Gray/2" w="hug" h="hug" />
+  </frame>
+  <frame name="Guide" layout="column" gap={0} w={640} corner={12} h="hug" overflow="hidden" />
+</frame>
 ```
 
 This creates a two-column auto-layout:

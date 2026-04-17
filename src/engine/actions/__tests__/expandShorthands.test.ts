@@ -154,19 +154,6 @@ describe('expandShorthands', () => {
     });
   });
 
-  describe('sizing', () => {
-    it('"fill" → both axes', () => {
-      const result = expandShorthands({ sizing: 'fill' });
-      expect(result.layoutSizingHorizontal).toBe('FILL');
-      expect(result.layoutSizingVertical).toBe('FILL');
-    });
-    it('["fill", "hug"] → individual', () => {
-      const result = expandShorthands({ sizing: ['fill', 'hug'] });
-      expect(result.layoutSizingHorizontal).toBe('FILL');
-      expect(result.layoutSizingVertical).toBe('HUG');
-    });
-  });
-
   // ── Paint ──────────────────────────────────────────────────────────────
 
   describe('fill', () => {

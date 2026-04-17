@@ -524,18 +524,10 @@ function applyLayoutDefaults(
   const defaultH: string | number = isGrid ? 400 : 'hug';
   const defaultV: string | number = isGrid ? 300 : 'hug';
 
-  if (
-    props.h === undefined && props.height === undefined &&
-    props.sizingV === undefined &&
-    props.layoutSizingVertical === undefined
-  ) {
+  if (props.h === undefined && props.height === undefined) {
     props.h = defaultV;
   }
-  if (
-    props.w === undefined && props.width === undefined &&
-    props.sizingH === undefined &&
-    props.layoutSizingHorizontal === undefined
-  ) {
+  if (props.w === undefined && props.width === undefined) {
     props.w = defaultH;
   }
 }

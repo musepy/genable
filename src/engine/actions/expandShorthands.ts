@@ -129,11 +129,11 @@ const EXPANDERS: Record<string, Expander> = {
     if ('fill' in all || 'fills' in all || 'background' in all || 'bg' in all) {
       delete result.fills;
     }
-    // Don't override explicit sizing — HUG defaults should yield to explicit w/h/sizing
-    if ('w' in all || 'width' in all || 'sizingH' in all || 'sizing' in all) {
+    // Don't override explicit sizing — HUG defaults should yield to explicit w/h
+    if ('w' in all || 'width' in all) {
       delete result.layoutSizingHorizontal;
     }
-    if ('h' in all || 'height' in all || 'sizingV' in all || 'sizing' in all) {
+    if ('h' in all || 'height' in all) {
       delete result.layoutSizingVertical;
     }
     return result;
@@ -207,7 +207,12 @@ const EXPANDERS: Record<string, Expander> = {
   alignY: (v) => ({ gridChildVerticalAlign: mapGridAlign(String(v)) }),
 
   // ── Sizing ─────────────────────────────────────────────────────────────
+  // Fail-fast on unknown sizing strings: only number | 'fill' | 'hug' | '100%'
+  // pass. Mirrors layout/align fail-fast — typos like `w='filll'` surface as
+  // ToolResponse.error for LLM self-correction. Non-string numeric JSX values
+  // pass through unchanged (e.g. `w={240}`).
   width: (v) => {
+    if (typeof v === 'number') return { width: v };
     if (typeof v === 'string') {
       const w = v.toLowerCase().trim();
       if (w === 'fill' || w === '100%') return { layoutSizingHorizontal: 'FILL' };
@@ -215,11 +220,15 @@ const EXPANDERS: Record<string, Expander> = {
       // Strip CSS units: "200px" → 200
       const parsed = parseFloat(w);
       if (!isNaN(parsed)) return { width: parsed };
+      throw new Error(
+        `unknown sizing value "${v}"; valid: number|fill|hug|100%`,
+      );
     }
     return { width: v };
   },
 
   height: (v) => {
+    if (typeof v === 'number') return { height: v };
     if (typeof v === 'string') {
       const h = v.toLowerCase().trim();
       if (h === 'fill' || h === '100%') return { layoutSizingVertical: 'FILL' };
@@ -227,19 +236,11 @@ const EXPANDERS: Record<string, Expander> = {
       // Strip CSS units: "100px" → 100
       const parsed = parseFloat(h);
       if (!isNaN(parsed)) return { height: parsed };
+      throw new Error(
+        `unknown sizing value "${v}"; valid: number|fill|hug|100%`,
+      );
     }
     return { height: v };
-  },
-
-  sizing: (v) => {
-    if (typeof v === 'string') {
-      const s = v.toUpperCase();
-      return { layoutSizingHorizontal: s, layoutSizingVertical: s };
-    }
-    if (Array.isArray(v) && v.length === 2) {
-      return { layoutSizingHorizontal: String(v[0]).toUpperCase(), layoutSizingVertical: String(v[1]).toUpperCase() };
-    }
-    return {};
   },
 
   // ── Paint ──────────────────────────────────────────────────────────────
@@ -370,8 +371,6 @@ const EXPANDERS: Record<string, Expander> = {
   strokeR: (v) => ({ strokeRightWeight: Number(v) }),
   strokeB: (v) => ({ strokeBottomWeight: Number(v) }),
   strokeL: (v) => ({ strokeLeftWeight: Number(v) }),
-  sizingH: (v) => ({ layoutSizingHorizontal: String(v).toUpperCase() }),
-  sizingV: (v) => ({ layoutSizingVertical: String(v).toUpperCase() }),
   strokesInLayout: (v) => ({ strokesIncludedInLayout: v === true || String(v).toLowerCase() === 'true' }),
   reverseZ: (v) => ({ itemReverseZIndex: v === true || String(v).toLowerCase() === 'true' }),
   lockRatio: (v) => ({ constrainProportions: v === true || String(v).toLowerCase() === 'true' }),

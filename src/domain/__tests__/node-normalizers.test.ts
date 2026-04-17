@@ -23,10 +23,13 @@ describe('normalizeProps', () => {
   });
 
   it('drops unknown enum values and warns', () => {
+    // Raw Figma-native enum prop (no expander gate upstream) — PROPERTY_META
+    // is the last-line filter. Shorthand expanders (layout/align/sizing) now
+    // fail-fast in the expander itself, so this path only exercises the
+    // remaining raw-enum surface.
     const warnings: string[] = [];
-    const result = normalizeProps({ alignItems: 'stretch' }, {}, msg => warnings.push(msg));
-    expect(result).not.toHaveProperty('alignItems');
-    expect(result).not.toHaveProperty('counterAxisAlignItems');
+    const result = normalizeProps({ strokeAlign: 'stretch' }, {}, msg => warnings.push(msg));
+    expect(result).not.toHaveProperty('strokeAlign');
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('not a valid Figma value');
   });

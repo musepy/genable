@@ -152,12 +152,6 @@ describe('shorthand pipeline (coerceValue → expandShorthands)', () => {
       expect(r.layoutSizingVertical).toBe('HUG');
       expect(r.height).toBeUndefined();
     });
-
-    it('sizingH:FILL / sizingV:HUG', () => {
-      const r = pipeline({ sizingH: 'FILL', sizingV: 'HUG' });
-      expect(r.layoutSizingHorizontal).toBe('FILL');
-      expect(r.layoutSizingVertical).toBe('HUG');
-    });
   });
 
   // ── Paint ──────────────────────────────────────────────────────────────

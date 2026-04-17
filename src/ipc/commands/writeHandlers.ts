@@ -87,8 +87,8 @@ function applyLayoutDefaults(type: string | undefined, rawProps: Record<string, 
   if (effectiveType !== 'frame' && effectiveType !== 'section' && effectiveType !== 'component') return;
   const hasLayout = rawProps.layout !== undefined || rawProps.layoutMode !== undefined;
   if (!hasLayout) return;
-  if (rawProps.h === undefined && rawProps.height === undefined && rawProps.sizingV === undefined) rawProps.h = 'hug';
-  if (rawProps.w === undefined && rawProps.width === undefined && rawProps.sizingH === undefined) rawProps.w = 'hug';
+  if (rawProps.h === undefined && rawProps.height === undefined) rawProps.h = 'hug';
+  if (rawProps.w === undefined && rawProps.width === undefined) rawProps.w = 'hug';
 }
 
 /** Parse a raw props string like "{bg:#FFF, w:200}" into typed props. */

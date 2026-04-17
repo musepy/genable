@@ -1,7 +1,7 @@
 ---
 name: tool-change-checklist
-description: Checklist for adding, modifying, or removing LLM-facing tools — ensures all coupled files are updated together
-trigger: (新增工具|改工具|删工具|add tool|remove tool|rename tool|tool api|工具改动|tool change|tool refactor)
+description: Checklist for changing LLM-facing tools or tightening DSL whitelists — ensures coupled files and examples stay consistent with the spec
+trigger: (新增工具|改工具|删工具|add tool|remove tool|rename tool|tool api|工具改动|tool change|tool refactor|fail-fast|DSL 白名单|DSL 收敛|whitelist|narrow vocabulary|收窄值域)
 ---
 
 # Tool Change Checklist
@@ -85,6 +85,37 @@ if (this.pendingX) { this.pendingX.resolve(defaultVal); this.pendingX = null; }
 
 ### Nudge mechanism (when LLM ignores the tool)
 If the LLM responds with plain text instead of calling the interactive tool, inject a synthetic user message telling it to use the tool. Track `nudged` flag to fire only once per run. Located in agentRuntime.ts text-only response handling section.
+
+## DSL Whitelist / Value Constraint Changes
+
+Tightening the DSL (adding fail-fast, narrowing accepted values, removing entry points) is a **coupled change**: the whitelist in code must stay consistent with every LLM-facing example.
+
+**Principle**: examples are LLM factual teaching material. An example that violates the new whitelist creates a self-defeating loop — LLM copies the illegal value → fail-fast rejects → wastes one iteration on self-correction.
+
+### Audit locations (after any whitelist tightening)
+
+| Where | Path |
+|---|---|
+| Tool descriptions | `src/engine/agent/tools/unified/*.ts` |
+| System prompt | `src/prompts/SYSTEM.md` + referenced `help/*.md` |
+| Skills | `.agent/skills/*/SKILL.md` (skip `_archive/`) |
+| Knowledge | `docs/knowledge/**/*.md` |
+| Generated | `src/generated/knowledge-content.json` + `skills-registry.json` (regenerate) |
+
+### Grep template
+
+Replace `<key>` with the DSL property name and `<illegal-value>` with the rejected token:
+
+```bash
+grep -rn "<key>=['\"]<illegal-value>['\"]\|<key>:\s*['\"]<illegal-value>['\"]" \
+  src/engine/agent/tools/ src/prompts/ .agent/skills/*/SKILL.md docs/knowledge/
+```
+
+Run this at the same time as the code change — do **not** split into a follow-up commit. The whitelist and examples land together or the commit is incomplete.
+
+### Precedent
+
+Commit `58656a4` introduced layout fail-fast rejecting `'col'`. Tool description at `jsx.ts:24` still had `layout='col'` in an example. E2E telemetry caught LLM parroting the example → fail-fast retry loop. Fixed in `30d5c33` — 1 line, but the pattern is the lesson: **tighten whitelist + audit examples** is one atomic change, not two.
 
 ## Common Mistakes (from real incidents)
 

@@ -22,6 +22,7 @@ export class OpenRouterProvider implements LLMProvider {
     return {
       supportsTextStreaming: false,
       supportsReasoningStreaming: false,
+      supportsVision: true,
       contextWindow: 1_000_000,
     };
   }

@@ -322,7 +322,9 @@ export class AgentOrchestrator {
         };
       }
       // workerUrl enables streaming (SSE via /api/dashscope/generate); fetchProxy is sync fallback
-      provider = new DashScopeProvider(apiKey, modelName, fetchProxy, workerUrl);
+      // Vision capability varies by model — VL models and kimi-k2.5 support images
+      const supportsVision = /vl|kimi/i.test(modelName);
+      provider = new DashScopeProvider(apiKey, modelName, fetchProxy, workerUrl, { supportsVision });
       emit('SEND_LOG', { message: `Using DashScope: ${modelName}`, type: 'ai' });
     } else if (providerName === 'claude') {
       // Auto-detect: sk-ant- prefix = native Anthropic, otherwise DashScope-compatible

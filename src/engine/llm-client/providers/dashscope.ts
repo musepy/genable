@@ -50,16 +50,20 @@ function randomId(prefix: string): string {
 
 export class DashScopeProvider implements LLMProvider {
   public readonly name = 'dashscope';
+  private readonly _supportsVision: boolean;
 
   constructor(
     private readonly apiKey: string,
     private readonly modelName: string = DASHSCOPE_CONFIG.DEFAULT_MODEL,
     private readonly fetchProxy?: FetchProxy,
     private readonly workerUrl?: string,
-  ) {}
+    options?: { supportsVision?: boolean },
+  ) {
+    this._supportsVision = options?.supportsVision ?? false;
+  }
 
   getCapabilities(): LLMProviderCapabilities {
-    return { supportsTextStreaming: true, supportsReasoningStreaming: false, contextWindow: 1_000_000 };
+    return { supportsTextStreaming: true, supportsReasoningStreaming: false, supportsVision: this._supportsVision, contextWindow: 1_000_000 };
   }
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
@@ -81,6 +85,10 @@ export class DashScopeProvider implements LLMProvider {
   }
 
   formatToolResults(results: LLMToolResult[]): LLMMessage {
+    if (!this._supportsVision) {
+      // Strip image attachments for non-vision models
+      return formatToolResultsDefault(results.map(r => ({ ...r, imageAttachment: undefined })));
+    }
     return formatToolResultsDefault(results);
   }
 

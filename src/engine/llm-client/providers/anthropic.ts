@@ -28,15 +28,28 @@ function mapMessagesToAnthropic(messages: LLMMessage[]): any[] {
 
   for (const m of messages) {
     // Tool results → user message with tool_result content blocks
+    // Image blocks immediately following a tool_result are attached as multimodal content
     if (m.role === 'tool' && Array.isArray(m.content)) {
-      for (const block of m.content) {
+      const blocks = m.content;
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
         if (block.type === 'tool_result') {
+          const resultContent: any[] = [{ type: 'text', text: JSON.stringify(block.data) }];
+          // Collect trailing image blocks (screenshot from inspect tool)
+          while (i + 1 < blocks.length && blocks[i + 1].type === 'image') {
+            i++;
+            const img = blocks[i] as import('./types').ImageBlock;
+            resultContent.push({
+              type: 'image',
+              source: { type: 'base64', media_type: img.mimeType, data: img.data },
+            });
+          }
           mapped.push({
             role: 'user',
             content: [{
               type: 'tool_result',
               tool_use_id: block.id || 'unknown',
-              content: JSON.stringify(block.data),
+              content: resultContent,
             }],
           });
         }
@@ -170,6 +183,7 @@ export class AnthropicProvider implements LLMProvider {
     return {
       supportsTextStreaming: false,
       supportsReasoningStreaming: false,
+      supportsVision: true,
       contextWindow: 200_000,
     };
   }

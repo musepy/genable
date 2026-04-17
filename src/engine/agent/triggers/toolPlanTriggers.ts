@@ -34,7 +34,7 @@ import { TurnState, extractKnownIdsFromResult } from './turnState';
 // ---------------------------------------------------------------------------
 
 export const JSX_MARKUP_CHAR_CAP = 10000;
-export const JSX_SUBTREE_NODE_CAP = 60;
+export const JSX_SUBTREE_NODE_CAP = Infinity;
 /** Look-back window for delete→rebuild heuristic (number of tool calls). */
 export const DELETE_REBUILD_WINDOW = 3;
 /**

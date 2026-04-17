@@ -25,7 +25,9 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
     if (role === 'model') role = 'assistant';
 
     // Tool results → individual messages per OpenAI spec
+    // Images collected and emitted as a trailing user message (tool messages are string-only)
     if (m.role === 'tool' && Array.isArray(m.content)) {
+      const pendingImages: { mimeType: string; data: string }[] = [];
       for (const block of m.content) {
         if (block.type === 'tool_result') {
           mapped.push({
@@ -33,7 +35,18 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
             tool_call_id: block.id || 'unknown',
             content: JSON.stringify(block.data),
           });
+        } else if (block.type === 'image') {
+          pendingImages.push({ mimeType: block.mimeType, data: block.data });
         }
+      }
+      if (pendingImages.length > 0) {
+        mapped.push({
+          role: 'user',
+          content: pendingImages.map(img => ({
+            type: 'image_url',
+            image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+          })),
+        });
       }
       continue;
     }

@@ -54,7 +54,7 @@ export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   promptPolicy: {
     useSkillSystem: true,
   },
-  maxIterations: 40,
+  maxIterations: 80,
 };
 
 /**

@@ -38,7 +38,7 @@ export class GeminiProvider implements LLMProvider {
   }
 
   getCapabilities() {
-    return { supportsTextStreaming: true, supportsReasoningStreaming: true, contextWindow: 1_000_000 };
+    return { supportsTextStreaming: true, supportsReasoningStreaming: true, supportsVision: true, contextWindow: 1_000_000 };
   }
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {

@@ -145,12 +145,14 @@ export interface LLMToolConfig {
 export interface LLMProviderCapabilities {
   supportsTextStreaming: boolean;
   supportsReasoningStreaming: boolean;
+  supportsVision: boolean;
   contextWindow: number;
 }
 
 export const DEFAULT_PROVIDER_CAPABILITIES: LLMProviderCapabilities = {
   supportsTextStreaming: false,
   supportsReasoningStreaming: false,
+  supportsVision: false,
   contextWindow: 1_000_000,
 };
 
@@ -183,17 +185,20 @@ export function formatResponseDefault(response: LLMResponse): LLMMessage {
 }
 
 export function formatToolResultsDefault(results: LLMToolResult[]): LLMMessage {
-  return {
-    id: randomId('gen'),
-    role: 'tool',
-    content: results.map(tr => ({
+  const content: ContentBlock[] = [];
+  for (const tr of results) {
+    content.push({
       type: 'tool_result' as const,
       id: tr.id || '',
       name: tr.name,
       data: tr.response,
       isError: tr.isError,
-    })),
-  };
+    });
+    if (tr.imageAttachment) {
+      content.push({ type: 'image', mimeType: tr.imageAttachment.mimeType, data: tr.imageAttachment.data });
+    }
+  }
+  return { id: randomId('gen'), role: 'tool', content };
 }
 
 export function getToolSystemInstructionDefault(_tools: ToolDefinition[]): string {

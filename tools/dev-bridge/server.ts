@@ -18,7 +18,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { mkdir, readFile, writeFile, rm, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile, rm, readdir, stat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -91,6 +91,10 @@ function notifyAnswerWaiters(triggerId: string, answer: string) {
   }
 }
 
+// --- active trigger tracking (disconnect detection) ---
+
+let activeTrigger: { id: string; claimedAt: number } | null = null;
+
 // --- long-poll waiters ---
 
 const resultWaiters = new Map<string, Array<(data: any) => void>>();
@@ -136,7 +140,59 @@ async function cleanupOldResults() {
 
 // --- routes ---
 
+async function handlePluginDisconnect(triggerId: string, claimedAt: number) {
+  console.log(`[disconnect] plugin reloaded during ${triggerId}, saving partial result`);
+
+  const partialDir = join(RESULT_DIR, triggerId);
+  await mkdir(partialDir, { recursive: true });
+
+  // Read accumulated events from disk
+  let events: any[] = [];
+  try {
+    const lines = (await readFile(join(partialDir, 'events.jsonl'), 'utf-8')).trim();
+    if (lines) events = lines.split('\n').map(l => JSON.parse(l));
+  } catch { /* no events */ }
+
+  const toolEvents = events.filter(e => e.type === 'tool');
+  const partialMeta = {
+    triggerId,
+    status: 'interrupted',
+    reason: 'plugin_reloaded',
+    durationMs: Date.now() - claimedAt,
+    toolCallSummary: {
+      total: toolEvents.length,
+      errors: toolEvents.filter((e: any) => e.status === 'error').length,
+      partial: true,
+    },
+    toolCallDetails: toolEvents,
+  };
+
+  await writeFile(join(partialDir, 'meta.json'), JSON.stringify(partialMeta, null, 2));
+
+  // Notify SSE clients
+  sendSSE(triggerId, 'disconnected', { triggerId, reason: 'plugin_reloaded', toolEvents: toolEvents.length });
+  const clients = streamClients.get(triggerId);
+  if (clients) {
+    for (const c of clients) try { c.end(); } catch {}
+    streamClients.delete(triggerId);
+  }
+}
+
 async function handleTriggerGet(waitSec: number, res: ServerResponse) {
+  // Disconnect detection: plugin is polling while a trigger should be executing
+  if (activeTrigger) {
+    const { id, claimedAt } = activeTrigger;
+    activeTrigger = null;
+    // Check if result was already posted (race with normal completion)
+    try {
+      await stat(join(RESULT_DIR, id, 'meta.json'));
+      // Result exists — normal completion, not a disconnect
+    } catch {
+      // No result — plugin reloaded mid-run
+      await handlePluginDisconnect(id, claimedAt);
+    }
+  }
+
   // Try immediate read first
   try {
     const data = await readFile(TRIGGER_FILE, 'utf-8');
@@ -207,6 +263,15 @@ async function handleTriggerPost(req: IncomingMessage, res: ServerResponse) {
 }
 
 async function handleTriggerDelete(res: ServerResponse) {
+  // Read trigger ID before deleting so we can track it as active
+  try {
+    const data = await readFile(TRIGGER_FILE, 'utf-8');
+    const trigger = JSON.parse(data);
+    if (trigger.id) {
+      activeTrigger = { id: trigger.id, claimedAt: Date.now() };
+    }
+  } catch { /* already gone or unreadable */ }
+
   try {
     await rm(TRIGGER_FILE);
   } catch {
@@ -218,6 +283,9 @@ async function handleTriggerDelete(res: ServerResponse) {
 async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
   const body = await readBody(req);
   const payload = JSON.parse(body.toString('utf-8'));
+
+  // Clear active trigger — run completed normally
+  activeTrigger = null;
 
   const rawId = payload.triggerId || `result-${Date.now()}`;
   const id = rawId.replace(/[^a-zA-Z0-9_\-]/g, '_'); // sanitize: alphanumeric, dash, underscore only
@@ -522,6 +590,10 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const event = JSON.parse(body.toString('utf-8'));
       sendSSE(id, event.type || 'tool', event);
+      // Persist to disk so partial runs survive plugin reloads
+      const eventDir = join(RESULT_DIR, id);
+      await mkdir(eventDir, { recursive: true });
+      await appendFile(join(eventDir, 'events.jsonl'), JSON.stringify({ ...event, timestamp: Date.now() }) + '\n');
       json(res, 200, { ok: true });
     } else if (path.startsWith('/stream/') && method === 'GET') {
       // SSE stream for a trigger — client subscribes to live events

@@ -1,13 +1,14 @@
 /**
  * @file emptyArgsGuard.ts
- * @description Guards against LLM returning tool calls with empty/null arguments.
+ * @description Guards against LLM returning tool calls with malformed arguments
+ * (null, non-object, empty string). Empty object `{}` is VALID — some tools
+ * (e.g. list_variables, get_selection) accept zero-arg invocation; blocking
+ * those would break legitimate queries.
  *
  * Two hooks cooperate:
- *  - afterLLMResponse: counts iterations with empty-args calls, aborts after threshold,
- *    injects a self-correct hint message.
- *  - beforeToolExec: skips individual tool calls that have empty args.
- *
- * Replaces the inline emptyArgs guard from agentRuntime.ts.
+ *  - afterLLMResponse: counts iterations with malformed-args calls, aborts
+ *    after threshold, injects a self-correct hint message.
+ *  - beforeToolExec: skips individual tool calls that have malformed args.
  */
 
 import { HookRegistration, HookContext, HookResult } from './hookTypes';
@@ -18,12 +19,12 @@ interface EmptyArgsState {
   emptyArgsCount: number;
 }
 
+/**
+ * Detects malformed tool args. Empty object `{}` is NOT malformed — it is a
+ * valid zero-arg call for tools whose schema has no required parameters.
+ */
 function isEmptyArgs(args: any): boolean {
-  return (
-    args == null
-    || (typeof args === 'object' && Object.keys(args).length === 0)
-    || args === ''
-  );
+  return args == null || typeof args !== 'object' || Array.isArray(args);
 }
 
 function createEmptyArgsCounterHook(state: EmptyArgsState): HookRegistration {
@@ -51,12 +52,12 @@ function createEmptyArgsCounterHook(state: EmptyArgsState): HookRegistration {
       }
 
       console.warn(
-        `[Hook:emptyArgs] ${emptyArgsCalls.length} tool call(s) with empty args: ${names} (${state.emptyArgsCount}/${MAX_EMPTY_ARGS_ITERATIONS})`
+        `[Hook:emptyArgs] ${emptyArgsCalls.length} tool call(s) with malformed args: ${names} (${state.emptyArgsCount}/${MAX_EMPTY_ARGS_ITERATIONS})`
       );
 
       return {
         action: 'continue',
-        injectMessage: `Your tool call to ${names} had empty arguments and was not executed. Please provide the required parameters (e.g. xml for create/edit) and try again.`,
+        injectMessage: `Your tool call to ${names} had malformed arguments (null or non-object) and was not executed. Check the tool schema and provide a valid JSON object — use {} for zero-arg tools, or fill in the required parameters for others.`,
       };
     },
   };
@@ -72,7 +73,7 @@ function createEmptyArgsSkipHook(): HookRegistration {
       if (isEmptyArgs(ctx.currentToolCall.input)) {
         return {
           action: 'skip',
-          reason: `Tool call "${ctx.currentToolCall.name}" has empty arguments.`,
+          reason: `Tool call "${ctx.currentToolCall.name}" has malformed arguments (null or non-object).`,
         };
       }
     },

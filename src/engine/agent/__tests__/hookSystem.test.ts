@@ -379,15 +379,27 @@ describe('emptyArgsGuard', () => {
     }
   });
 
-  it('should skip individual empty-args tool calls in beforeToolExec', async () => {
+  it('should skip tool calls with null args in beforeToolExec', async () => {
     const guard = createEmptyArgsGuard();
     const registry = new HookRegistry();
     registry.registerAll(guard.hooks);
     const runner = new HookRunner(registry);
 
-    const ctx = makeCtx({ currentToolCall: { type: 'tool_call', id: '1', name: 'run', input: {} } });
+    const ctx = makeCtx({ currentToolCall: { type: 'tool_call', id: '1', name: 'run', input: null as any } });
     const result = await runner.run('beforeToolExec', ctx);
     expect(result.action).toBe('skip');
+  });
+
+  it('should allow empty object {} as valid zero-arg call', async () => {
+    const guard = createEmptyArgsGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    // e.g. list_variables() compiles to input: {} — valid per its schema
+    const ctx = makeCtx({ currentToolCall: { type: 'tool_call', id: '1', name: 'list_variables', input: {} } });
+    const result = await runner.run('beforeToolExec', ctx);
+    expect(result.action).toBe('continue');
   });
 });
 

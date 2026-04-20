@@ -12,7 +12,7 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
 import { normalizeProps } from '../../domain/node-normalizers';
 import { coerceValue } from '../../engine/utils/prop-dsl';
-import { updateNode, normalizeSizingInProps } from '../../engine/actions/nodeFactory';
+import { updateNode, normalizeSizingInProps, type NodeResult } from '../../engine/actions/nodeFactory';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { PipelineTracer } from './pipelineTracer';
@@ -126,11 +126,11 @@ function applyComponentProps(
   }
 }
 
-/** Apply an edit to a single resolved node. */
+/** Apply an edit to a single resolved node. Returns true if any property actually changed. */
 async function applyEdit(
   node: SceneNode,
   props: Record<string, any>,
-): Promise<void> {
+): Promise<boolean> {
   const { regularProps, componentProps } = resolveInstanceProps(node, props);
 
   // Apply component property overrides first (instance only)
@@ -143,8 +143,12 @@ async function applyEdit(
     const parentNode = node.parent as SceneNode | null;
     const isText = node.type === 'TEXT';
     normalizeSizingInProps(regularProps, node, parentNode, isText);
-    await updateNode(node, regularProps);
+    const result: NodeResult = await updateNode(node, regularProps);
+    const anyChanged = result.diffs?.some(d => d.changed) ?? true;
+    return anyChanged || Object.keys(componentProps).length > 0;
   }
+
+  return Object.keys(componentProps).length > 0;
 }
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
@@ -177,10 +181,10 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       const merged = { ...(normalized || {}), ...componentPropsRaw };
       if (Object.keys(merged).length === 0) { errors.push(`No props or content for "${ref}"`); continue; }
 
-      await applyEdit(resolved.node, merged);
+      const changed = await applyEdit(resolved.node, merged);
       const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
       const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
-      results.push({ ...minJson, updated: true });
+      results.push({ ...minJson, updated: changed });
     }
 
     tracer.exit({ count: results.length });
@@ -224,13 +228,13 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
   tracer.exit({ count: 1 });
 
-  await applyEdit(resolved.node, merged);
+  const changed = await applyEdit(resolved.node, merged);
 
   const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
   const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
 
   return {
-    data: { ...minJson, updated: true },
+    data: { ...minJson, updated: changed },
     _stages: tracer.collect(),
   };
 }

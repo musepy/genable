@@ -34,6 +34,8 @@ export interface NodeResult {
   warnings: Warning[];
   /** All created node IDs (root + descendants). Populated by cloneNode. */
   createdIds?: string[];
+  /** Per-property change diffs. Populated by updateNode. */
+  diffs?: PropResult['diffs'];
 }
 
 export interface PropResult {
@@ -680,10 +682,10 @@ export async function updateNode(
     workingProps = rest;
   }
 
-  const { warnings } = node.type === 'TEXT'
+  const { warnings, diffs } = node.type === 'TEXT'
     ? await applyTextProps(node as TextNode, stripDenied(workingProps))
     : await applyProps(node, stripDenied(workingProps));
-  return { nodeId: node.id, warnings: [...preWarnings, ...warnings] };
+  return { nodeId: node.id, warnings: [...preWarnings, ...warnings], diffs };
 }
 
 /**

@@ -17,8 +17,7 @@ export const jsxDefinition: ToolDefinition = {
     const { createdIds: _omit, ...rest } = data;
     return rest;
   },
-  description: `Create design trees with nested JSX markup — nesting IS the hierarchy.
-// To build a full card, create the card frame FIRST with a single jsx call, then add children one subtree at a time via follow-up jsx or edit calls — never embed a whole card tree in one markup string.
+  description: `Create design trees with nested JSX markup — nesting IS the hierarchy. One jsx call creates one complete subtree atomically; don't split a single logical unit across multiple calls, and don't re-add children already included in the markup.
 
 Examples:
   jsx({markup: "<frame name='Card' layout='column' padding={16} fill='#FFFFFF' w='fill' />"})
@@ -32,6 +31,8 @@ Self-closing: <line w="fill" stroke="#E5E7EB"/> (divider — use line not rect f
 Arc/Ring: <ellipse w={120} h={120} arc="0 270" fill="#4F46E5"/> (degrees; arc="start end innerRadius?" — innerRadius 0-1 for donut/ring)
 Grid: <frame layout="grid" cols={3} rows={2} gap={16} w={720} h={400}>...children fill cells in insertion order...</frame> (always set w AND h explicitly — grid rows divide height equally)
 
+Swap/fix an existing subtree: jsx({replaceId: "<id>", markup: "<frame>...</frame>"}) — new root replaces the node at the same parent and position; old node is deleted atomically. Use this instead of delete_node + jsx for updates. Markup must have exactly one root element. Cannot be combined with parentId.
+
 Use jsx for tree creation. Use edit for property updates on existing nodes.`,
   parameters: {
     type: 'object',
@@ -42,7 +43,15 @@ Use jsx for tree creation. Use edit for property updates on existing nodes.`,
       },
       parentId: {
         type: 'string',
-        description: 'Parent node ID (optional)',
+        description: 'Parent node ID to append into (optional). Mutually exclusive with replaceId.',
+      },
+      replaceId: {
+        type: 'string',
+        description: 'Replace this existing node in-place (keeps parent + sibling index). Old node is deleted on success. Markup must be single-root. Mutually exclusive with parentId.',
+      },
+      insertIndex: {
+        type: 'number',
+        description: 'Position among parent siblings (0 = first). Omit to append at end. Ignored when replaceId is set (inherits old node index).',
       },
     },
     required: ['markup'],

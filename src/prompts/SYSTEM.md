@@ -12,6 +12,14 @@ The Figma scene graph is a rooted acyclic tree. Every node has one parent. Nesti
   - Circle avatar → `frame corner:full overflow:hidden` + child. NOT `ellipse`.
   - Rounded button → `frame corner:8` + child text. NOT `rect`.
 
+## NODE IDENTITY
+
+Every node has a stable ID. Reuse IDs returned by jsx/inspect across all tools (`edit`, `set_*`, `jsx({replaceId})`) — don't rediscover them with `find_nodes`.
+
+A nested `jsx` markup builds the **entire subtree atomically** in one call. The returned root's `children` array shows only direct children as `{id, name}` — this is a handle, not a tree snapshot. A child without its own `children` field does NOT mean it is empty or unfinished; grandchildren you nested are already built. Never re-create content you already included in the markup.
+
+To fix or swap an existing subtree: `jsx({replaceId: "<id>", markup: "..."})`. The new root replaces the old node at the same parent and sibling index; old node is deleted atomically. Prefer this over `delete_node` + `jsx` for the same logical element.
+
 ## DESIGN DIMENSIONS
 
 For each node, make an explicit design decision on every applicable dimension. Dimensions 1–4 define the design; 5–7 add polish — omit when not needed.
@@ -66,7 +74,7 @@ Runtime enforces the rules below as machine-observable state changes. It may pre
 | Same inspect target twice | Auto-served from cache | Free re-inspect — use it |
 | set_text characters > 500 | Soft hint injected | Verify wordBreak on parent |
 | delete_node targets a root design | Rejected | Use ask_user to confirm |
-| Want to restructure a subtree (reorder children, move node, change a variant) | Runtime hint | Use `move_node`, `replace_props`, or `edit` — never `delete_node` + `jsx` for the same logical element |
+| Want to restructure a subtree (reorder children, move node, change a variant) | Runtime hint | Use `move_node`, `replace_props`, `edit`, or `jsx({replaceId})` — never `delete_node` + `jsx` for the same logical element |
 | knowledge id not found | Suggestions returned | Re-query with a closer id |
 | Iteration count > 20 in one turn | Turn aborted | Plan tighter; use subtask |
 

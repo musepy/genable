@@ -6,7 +6,7 @@
 import { LLMProvider, LLMGenerateOptions, LLMResponse, LLMMessage, LLMToolResult, formatResponseDefault, formatToolResultsDefault, getToolSystemInstructionDefault } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { OPENROUTER_CONFIG } from '../config';
-import { resolveMaxOutput } from '../modelCaps';
+import { resolveOpenRouterMax } from './openrouterModels';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
 import {
   APIError,
@@ -40,7 +40,7 @@ export class OpenRouterProvider implements LLMProvider {
     const body: any = {
       messages: openAIMessages,
       temperature: temperature ?? 0.7,
-      max_tokens: resolveMaxOutput(this.modelName, maxTokens),
+      max_tokens: await resolveOpenRouterMax(this.modelName, maxTokens),
     };
 
     // OpenRouter supports 'models' array for fallback or 'model' string

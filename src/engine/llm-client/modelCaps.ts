@@ -35,10 +35,10 @@ export const MODEL_MAX_OUTPUT: Record<string, number> = {
   'MiniMax-M2.5': 32_768,              // 400 error: "Range of max_tokens should be [1, 32768]"
   'glm-4.7': 131_072,                  // DashScope accepts any; Z.AI native docs: 128K out
 
-  // ── OpenRouter (routes to underlying model; cap depends on route) ───
-  // These are floor values — OpenRouter passes through so the underlying model's
-  // cap applies. Set conservatively. Update per-route if users report truncation.
-  'anthropic/claude-3.5-sonnet': 8_192,
+  // NOTE: OpenRouter is intentionally absent. Its 300+ routes can't be
+  // statically registered — OpenRouterProvider uses the public `/api/v1/models`
+  // endpoint (via openrouterModels.ts) to resolve `max_completion_tokens`
+  // per model at runtime.
 };
 
 /**

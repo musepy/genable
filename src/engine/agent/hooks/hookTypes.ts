@@ -24,13 +24,19 @@ import { AgentLoopPolicy } from '../agentLoopPolicy';
  *   beforeToolExec   → before a single tool executes (via dispatcher callback)
  *   afterToolExec    → after a single tool executes (via dispatcher callback)
  *   afterIteration   → after all tool results committed to history
+ *   beforeTurnEnd    → after a 0-tool-call response, before turn actually ends.
+ *                      Hooks may inject a user message + action:'continue' to keep
+ *                      the while-loop running for another iteration. This is where
+ *                      we enforce rules that a prompt alone cannot guarantee
+ *                      (announce-intent without tool call, truncation, etc.).
  */
 export type HookEvent =
   | 'beforeIteration'
   | 'afterLLMResponse'
   | 'beforeToolExec'
   | 'afterToolExec'
-  | 'afterIteration';
+  | 'afterIteration'
+  | 'beforeTurnEnd';
 
 // ---------------------------------------------------------------------------
 // Hook action & result

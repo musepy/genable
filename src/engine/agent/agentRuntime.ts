@@ -818,6 +818,34 @@ export class AgentRuntime {
           }
         }
 
+        // ──── HOOK: beforeTurnEnd ────
+        // Last harness-level checkpoint before closing the turn. Stop hooks may
+        // veto the end (announce-intent without tool call, provider-side
+        // truncation, etc.) and inject a corrective user message. Prompt rules
+        // alone can't guarantee these — the while-loop condition does.
+        // Model message was already added at line 707-709 (formatResponse +
+        // addMessage), so any hook injection will land correctly after it.
+        const stopCtx: HookContext = {
+          iteration,
+          maxIterations: this.maxIterations,
+          messages: this.contextManager.getCurrentTurnMessages(),
+          loopPolicy: this.loopPolicy,
+          generateId: (prefix) => this.generateId(prefix),
+          responseText: response.text,
+          finishReason: response.finishReason,
+        };
+        const messagesBeforeStop = this.contextManager.getCurrentTurnMessages().length;
+        const stopResult = await this.hookRunner.run('beforeTurnEnd', stopCtx);
+        const injectedCount = this.contextManager.getCurrentTurnMessages().length - messagesBeforeStop;
+        if (stopResult.action === 'abort') {
+          throw new Error(stopResult.reason || 'Aborted by beforeTurnEnd hook');
+        }
+        if (injectedCount > 0) {
+          // A stop hook injected a corrective message — continue the while loop.
+          iteration++;
+          continue;
+        }
+
         // Auto-bubble: render agent's reply in chat panel BEFORE turn_end
         // (so dev bridge nodeTree snapshot captures it)
         if (response.text) {

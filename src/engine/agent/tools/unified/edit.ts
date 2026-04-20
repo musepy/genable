@@ -34,7 +34,21 @@ For instances, use component property DISPLAY NAMES (e.g. "Label") — edit reso
     type: 'object',
     properties: {
       node: { type: 'string', description: 'Node ID (e.g. "1:2") from jsx/inspect results' },
-      nodes: { type: 'array', description: 'Batch: array of {node, props?, content?} objects', items: { type: 'object', description: '{node, props?, content?}' } },
+      nodes: {
+        type: 'array',
+        maxItems: 8,
+        description: 'Batch: array of {node, props?, content?} objects. Cap 8 per call — larger batches risk the LLM response being truncated by the output-token limit, producing malformed props.',
+        items: {
+          type: 'object',
+          description: '{node, props?, content?} — at least one of props or content is required',
+          properties: {
+            node: { type: 'string', description: 'Node ID to update' },
+            props: { type: 'object', description: 'Properties to update (object, not a stringified JSON)' },
+            content: { type: 'string', description: 'New text content (for text nodes / overrides)' },
+          },
+          required: ['node'],
+        },
+      },
       props: { type: 'object', description: 'Properties to update (single mode)' },
       content: { type: 'string', description: 'New text content (single mode)' },
     },

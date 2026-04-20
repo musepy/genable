@@ -237,6 +237,8 @@ export interface AgentRuntimeLLMResponseEvent extends AgentRuntimeBaseEvent {
     toolCallNames: string[];
   };
   success: boolean;
+  /** Present on failed responses — surfaces the provider error detail for diagnostics. */
+  errorMessage?: string;
 }
 
 export type AgentRuntimeEvent =

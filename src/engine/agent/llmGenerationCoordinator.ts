@@ -286,6 +286,7 @@ export class LLMGenerationCoordinator {
     } catch (err) {
       // Any error reaching here is either non-retryable or retry-exhausted —
       // withRetry handled the rest. Emit a final failure event and surface.
+      const errorMessage = err instanceof Error ? err.message : String(err);
       this.config.emitRuntimeEvent({
         type: 'llm_response',
         llmCallId,
@@ -296,6 +297,7 @@ export class LLMGenerationCoordinator {
         usage: undefined,
         responseShape: { textLength: 0, thoughtsLength: 0, toolCallCount: 0, toolCallNames: [] },
         success: false,
+        errorMessage,
       });
       throw err;
     }

@@ -28,7 +28,6 @@ import { createStepWarningHook } from './stepWarningHook';
 import { createInspectionTracker, InspectionTracker } from './inspectionTracker';
 import { createInspectGateHook } from './inspectGateHook';
 import { createInspectStubHook } from './inspectStubHook';
-import { createAnnounceIntentLint } from './announceIntentLint';
 import { createTruncationRecovery } from './truncationRecovery';
 import { createTruncationPlaceholderGuard } from './truncationPlaceholderGuard';
 import { unifiedTools } from '../tools/unified';
@@ -111,7 +110,6 @@ export function createBuiltinHooksWithState(): {
   const inspectStub = createInspectStubHook(tracker);
   const turnState = createTurnState();
   const toolPlanTriggers = createToolPlanTriggers(turnState);
-  const announceIntentLint = createAnnounceIntentLint();
   const truncationRecovery = createTruncationRecovery();
   const truncationPlaceholderGuard = createTruncationPlaceholderGuard();
 
@@ -125,7 +123,6 @@ export function createBuiltinHooksWithState(): {
     ...inspectGate.hooks,
     ...inspectStub.hooks,
     ...toolPlanTriggers.hooks,
-    ...announceIntentLint.hooks,
     ...truncationRecovery.hooks,
     ...truncationPlaceholderGuard.hooks,
   ];
@@ -144,7 +141,6 @@ export function createBuiltinHooksWithState(): {
       inspectStub.reset();
       tracker.reset();
       turnState.reset();
-      announceIntentLint.reset();
       truncationRecovery.reset();
       truncationPlaceholderGuard.reset();
     },

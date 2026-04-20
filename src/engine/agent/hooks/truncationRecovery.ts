@@ -31,7 +31,7 @@ export function createTruncationRecovery(): {
   const hook: HookRegistration = {
     id: 'builtin:truncationRecovery',
     event: 'beforeTurnEnd',
-    priority: 30, // run before announceIntentLint so we handle this root cause first
+    priority: 30,
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       if (ctx.finishReason !== 'length') return;
 

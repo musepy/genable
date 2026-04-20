@@ -307,8 +307,9 @@ describe('createBuiltinHooksWithState', () => {
     // + consecutiveFailure(1) + partialFailure(1) + budget(1) + stepWarning(1)
     // + inspectGate(2: gate + dirty) + inspectStub(1)
     // + toolPlanTriggers(5: jsxMarkupSize, jsxNodeCount, editUnknownId, knownIdObserver, deleteRebuild)
-    // = 15
-    expect(hooks).toHaveLength(15);
+    // + truncationRecovery(1) + truncationPlaceholderGuard(1)
+    // = 17
+    expect(hooks).toHaveLength(17);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();
@@ -423,7 +424,7 @@ describe('consecutiveFailureGuard', () => {
     const ctx3 = makeCtx({ iterationToolResults: failResults });
     const result = await runner.run('afterIteration', ctx3);
     expect(result.action).toBe('continue');
-    const injected = ctx3.messages.find(m => m.content?.toString().includes('consecutive iterations have ALL failed'));
+    const injected = ctx3.messages.find(m => m.content?.toString().includes('consecutive iterations have all failed'));
     expect(injected).toBeTruthy();
   });
 

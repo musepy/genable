@@ -13,7 +13,7 @@ export const editDefinition: ToolDefinition = {
   name: 'edit',
   executionStrategy: 'sequential',
   mutates: true,
-  presentForLLM: (data) => keepFields(data, ['id', 'name', 'type', 'updated', 'results']),
+  presentForLLM: (data) => keepFields(data, ['id', 'name', 'type', 'updated', 'results', 'errors', 'partial']),
   description: `Batch update properties on multiple nodes.
 
 For single-property changes, prefer focused setters:

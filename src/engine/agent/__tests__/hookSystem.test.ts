@@ -7,6 +7,7 @@ import { createEmptyArgsGuard } from '../hooks/emptyArgsGuard';
 import { createConsecutiveFailureGuard } from '../hooks/consecutiveFailureGuard';
 import { createPartialFailureGuard } from '../hooks/partialFailureGuard';
 import { createBudgetGuard } from '../hooks/budgetGuard';
+import { createTruncationPlaceholderGuard, __test__ as truncPlaceholderTest } from '../hooks/truncationPlaceholderGuard';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -511,5 +512,85 @@ describe('budgetGuard', () => {
     const result = await runner.run('afterIteration', ctx);
     expect(result.action).toBe('continue');
     expect(ctx.messages).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// truncationPlaceholderGuard
+// ═══════════════════════════════════════════════════════════════
+
+describe('truncationPlaceholderGuard', () => {
+  describe('findPlaceholder detector', () => {
+    const { findPlaceholder } = truncPlaceholderTest;
+
+    it('detects {…} at a nested object field (Kimi props-compression case)', () => {
+      const input = {
+        edits: [
+          { id: '1:2', props: { fill: '#fff' } },
+          { id: '1:3', props: '{…}' },
+          { id: '1:4', props: '{…}' },
+        ],
+      };
+      const found = findPlaceholder(input);
+      expect(found).toEqual({ path: 'edits[1].props', value: '{…}' });
+    });
+
+    it('detects {...} with ASCII dots', () => {
+      expect(findPlaceholder({ x: '{...}' })?.value).toBe('{...}');
+    });
+
+    it('detects [...] and [...] in array-expected fields', () => {
+      expect(findPlaceholder({ children: '[...]' })?.value).toBe('[...]');
+      expect(findPlaceholder({ children: '[…]' })?.value).toBe('[…]');
+    });
+
+    it('trims whitespace before matching', () => {
+      expect(findPlaceholder({ x: '  {…}  ' })?.value).toBe('{…}');
+    });
+
+    it('does NOT match bare ellipsis or three dots (ambiguous with real UI text)', () => {
+      expect(findPlaceholder({ label: 'Loading...' })).toBeNull();
+      expect(findPlaceholder({ label: '...' })).toBeNull();
+      expect(findPlaceholder({ label: '…' })).toBeNull();
+    });
+
+    it('returns null for a fully legitimate input', () => {
+      expect(findPlaceholder({ id: '1:2', props: { fill: '#fff', w: 120 } })).toBeNull();
+    });
+  });
+
+  it('skips a tool call whose args contain {…}', async () => {
+    const guard = createTruncationPlaceholderGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const ctx = makeCtx({
+      currentToolCall: {
+        type: 'tool_call', id: '1', name: 'edit',
+        input: { edits: [{ id: '1:2', props: '{…}' }] },
+      },
+    });
+    const result = await runner.run('beforeToolExec', ctx);
+    expect(result.action).toBe('skip');
+    expect(result.code).toBe('TRUNCATION_PLACEHOLDER');
+    expect(result.reason).toMatch(/truncation placeholder/);
+    expect(result.reason).toMatch(/edits\[0\]\.props/);
+  });
+
+  it('lets through a clean tool call', async () => {
+    const guard = createTruncationPlaceholderGuard();
+    const registry = new HookRegistry();
+    registry.registerAll(guard.hooks);
+    const runner = new HookRunner(registry);
+
+    const ctx = makeCtx({
+      currentToolCall: {
+        type: 'tool_call', id: '1', name: 'edit',
+        input: { edits: [{ id: '1:2', props: { fill: '#fff' } }] },
+      },
+    });
+    const result = await runner.run('beforeToolExec', ctx);
+    expect(result.action).toBe('continue');
   });
 });

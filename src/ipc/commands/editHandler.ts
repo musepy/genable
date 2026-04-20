@@ -144,7 +144,11 @@ async function applyEdit(
     const isText = node.type === 'TEXT';
     normalizeSizingInProps(regularProps, node, parentNode, isText);
     const result: NodeResult = await updateNode(node, regularProps);
-    const anyChanged = result.diffs?.some(d => d.changed) ?? true;
+    // Fail-safe default: if diffs is missing, assume NOT changed. A missing diff
+    // array means we have no evidence of a real write; an optimistic `?? true`
+    // would mask silent writes (e.g. a truncated `props: "{…}"` string that
+    // gets filtered to zero applied properties).
+    const anyChanged = result.diffs?.some(d => d.changed) ?? false;
     return anyChanged || Object.keys(componentProps).length > 0;
   }
 
@@ -193,8 +197,18 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: errors.join('; ') };
     }
 
+    // Partial-failure propagation: when SOME entries applied but others failed
+    // (e.g. "No props or content" on a truncated {…} placeholder that slipped
+    // past the hook guard), surface the per-entry errors alongside the results
+    // so the LLM sees which entries failed and can retry only those. Dropping
+    // `errors[]` here was the "silent partial success" bug — the LLM would see
+    // `updated: 3` and believe all 17 entries succeeded.
     return {
-      data: { updated: results.length, results },
+      data: {
+        updated: results.length,
+        results,
+        ...(errors.length > 0 ? { errors, partial: true } : {}),
+      },
       _stages: tracer.collect(),
     };
   }

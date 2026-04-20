@@ -23,6 +23,7 @@ import {
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { DASHSCOPE_CONFIG } from '../config';
+import { resolveMaxOutput } from '../modelCaps';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
@@ -125,7 +126,7 @@ export class DashScopeProvider implements LLMProvider {
       model: this.modelName,
       messages: openAIMessages,
       temperature: temperature ?? defaultTemp,
-      ...(maxTokens && { max_tokens: maxTokens }),
+      max_tokens: resolveMaxOutput(this.modelName, maxTokens),
     };
 
     if (tools && tools.length > 0) {

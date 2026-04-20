@@ -13,6 +13,7 @@ import {
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { ANTHROPIC_CONFIG } from '../config';
+import { resolveMaxOutput } from '../modelCaps';
 import {
   APIError,
   TransportError,
@@ -196,7 +197,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const body: any = {
       model: this.modelName,
-      max_tokens: maxTokens || 8192,
+      max_tokens: resolveMaxOutput(this.modelName, maxTokens),
       messages: anthropicMessages,
     };
 

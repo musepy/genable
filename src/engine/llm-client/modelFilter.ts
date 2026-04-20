@@ -144,8 +144,8 @@ export async function fetchClaudeModels(apiKey: string): Promise<LLMModel[]> {
   if (isNative) {
     return [
       { name: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
-      { name: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet' },
-      { name: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku' },
+      // claude-3-5-sonnet-20241022 retired 2025-10-28; API rejects requests
+      // claude-3-5-haiku-20241022  retired 2026-02-19; API rejects requests
     ];
   }
   // DashScope Anthropic-compatible models

@@ -42,8 +42,7 @@ export const SUPPORTED_MODELS: Record<string, ModelConfig[]> = {
     { name: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', tier: 'fast', isFree: true },
     { name: MODEL_FAMILIES.GEMINI_2_5_FLASH, displayName: 'Gemini 2.5 Flash', tier: 'fast', isFree: true },
     { name: MODEL_FAMILIES.GEMINI_2_5_PRO, displayName: 'Gemini 2.5 Pro', tier: 'balanced', isFree: false },
-    { name: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash', tier: 'fast', isFree: true },
-    { name: 'gemini-1.5-pro', displayName: 'Gemini 1.5 Pro', tier: 'balanced', isFree: false },
+    // gemini-1.5-pro and gemini-1.5-flash retired 2025-09-24; API rejects requests
   ],
   openrouter: [
     { name: MODEL_FAMILIES.CLAUDE_3_5_SONNET, displayName: MODEL_DISPLAY_LABELS[MODEL_FAMILIES.CLAUDE_3_5_SONNET], tier: 'balanced', isFree: false },

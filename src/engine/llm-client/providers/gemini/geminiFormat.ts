@@ -7,7 +7,7 @@
 import { LLMResponse, ToolCallBlock, LLMToolResult, ContentBlock, LLMMessage } from '../types';
 import { ToolDefinition } from '../../../agent/tools/types';
 import { isGemini3Model } from '../../modelFilter';
-import { GEMINI_CONFIG } from '../../config';
+import { resolveMaxOutput } from '../../modelCaps';
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
@@ -156,7 +156,7 @@ export function buildGeminiGenerationConfig(opts: {
 
   const config: Record<string, any> = {
     temperature: temperature ?? 0.4,
-    maxOutputTokens: maxTokens || GEMINI_CONFIG.MAX_OUTPUT_TOKENS,
+    maxOutputTokens: resolveMaxOutput(modelName, maxTokens),
   };
 
   if (thinkingLevel) {

@@ -81,11 +81,11 @@ export class ContextManager {
   }
 
   /**
-   * End-of-turn pipeline: compress consumed tool results, then lazily evict
-   * oldest pre-turn messages into the summary when over budget.
+   * End-of-turn pipeline: lazily evict oldest pre-turn messages into the
+   * summary when over budget. Intra-turn compression is disabled to preserve
+   * KV-cache hits and full tool-result context.
    */
   async endTurn(): Promise<void> {
-    this.compressConsumedResults();
     await this.compressIfNeeded();
   }
 

@@ -549,15 +549,9 @@ export class AgentRuntime {
       this.throwIfCanceled(iteration + 1);
       this.currentIteration = iteration;
 
-      // ──── INTRA-TURN COMPRESSION ────
-      // After the LLM has consumed a tool result, compress it to a compact summary.
-      // Preserves node IDs and error details; drops verbose content.
-      if (iteration > 0) {
-        const compressed = this.contextManager.compressConsumedResults();
-        if (compressed > 0) {
-          console.log(`[Context] Compressed ${compressed} consumed tool result(s) in current turn`);
-        }
-      }
+      // ──── INTRA-TURN COMPRESSION (DISABLED) ────
+      // Disabled to preserve KV-cache hits and full tool-result context.
+      // Cross-turn summarization still runs at endTurn() → compressIfNeeded().
 
       // ──── HOOK: beforeIteration ────
       const beforeIterCtx: HookContext = {

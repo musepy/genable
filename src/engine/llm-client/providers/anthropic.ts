@@ -13,12 +13,31 @@ import {
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { ANTHROPIC_CONFIG } from '../config';
-import { resolveMaxOutput } from '../modelCaps';
 import {
   APIError,
   TransportError,
   EmptyResponseError,
 } from './shared/providerErrors';
+
+/**
+ * Per-model max_output_tokens for Anthropic Claude (from platform.claude.com/docs).
+ * Anthropic hard-rejects over-limit requests, so unknown models must throw to
+ * force intentional registration.
+ */
+const ANTHROPIC_MAX_OUTPUT: Record<string, number> = {
+  'claude-sonnet-4-20250514': 64_000, // deprecated 2026-04-14, retires 2026-06-15
+};
+
+function resolveAnthropicMaxOutput(modelName: string, requested?: number): number {
+  const cap = ANTHROPIC_MAX_OUTPUT[modelName];
+  if (cap == null) {
+    throw new Error(
+      `Unknown Anthropic model "${modelName}": no max_output_tokens registered. ` +
+      `Add to ANTHROPIC_MAX_OUTPUT in anthropic.ts with a value from platform.claude.com/docs.`
+    );
+  }
+  return requested != null ? Math.min(requested, cap) : cap;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Wire format: LLMMessage[] → Anthropic Messages API
@@ -197,7 +216,7 @@ export class AnthropicProvider implements LLMProvider {
 
     const body: any = {
       model: this.modelName,
-      max_tokens: resolveMaxOutput(this.modelName, maxTokens),
+      max_tokens: resolveAnthropicMaxOutput(this.modelName, maxTokens),
       messages: anthropicMessages,
     };
 

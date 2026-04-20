@@ -23,7 +23,6 @@ import {
 } from './types';
 import { ToolDefinition } from '../../agent/tools/types';
 import { DASHSCOPE_CONFIG } from '../config';
-import { resolveMaxOutput } from '../modelCaps';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
@@ -44,6 +43,39 @@ export type FetchProxy = (
  * DashScope TTFB through Worker can be 10-30s+ due to cross-border latency
  * (Cloudflare edge → China datacenter) plus model reasoning time. */
 const CONNECT_TIMEOUT_MS = 90000;
+
+/**
+ * Per-model max_output_tokens for DashScope. Documented values from
+ * help.aliyun.com/zh/model-studio/models; others empirically probed via
+ * tools/probe-max-tokens.ts (DashScope returns 400 with the exact cap in
+ * the error message, e.g. "Range of max_tokens should be [1, 98304]").
+ * Unknown models must throw — DashScope hard-rejects over-limit requests.
+ */
+const DASHSCOPE_MAX_OUTPUT: Record<string, number> = {
+  // ── documented ───────────────────────────────────────────────
+  'qwen3.6-plus': 65_536,
+  'qwen3.5-plus': 65_536,
+  'qwen3-max-2026-01-23': 32_768,
+  'qwen3-coder-plus': 65_536,
+  'glm-5': 65_536,                // docs show max 131_072; 65_536 is the default
+  // ── empirically probed 2026-04-20 ────────────────────────────
+  'kimi-k2.5': 98_304,
+  'qwen3-coder-next': 65_536,
+  'MiniMax-M2.5': 32_768,
+  'glm-4.7': 131_072,             // DashScope accepts any; Z.AI native docs: 128K out
+};
+
+function resolveDashScopeMaxOutput(modelName: string, requested?: number): number {
+  const cap = DASHSCOPE_MAX_OUTPUT[modelName];
+  if (cap == null) {
+    throw new Error(
+      `Unknown DashScope model "${modelName}": no max_output_tokens registered. ` +
+      `Add to DASHSCOPE_MAX_OUTPUT in dashscope.ts with a documented value or ` +
+      `one probed via tools/probe-max-tokens.ts.`
+    );
+  }
+  return requested != null ? Math.min(requested, cap) : cap;
+}
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
@@ -126,7 +158,7 @@ export class DashScopeProvider implements LLMProvider {
       model: this.modelName,
       messages: openAIMessages,
       temperature: temperature ?? defaultTemp,
-      max_tokens: resolveMaxOutput(this.modelName, maxTokens),
+      max_tokens: resolveDashScopeMaxOutput(this.modelName, maxTokens),
     };
 
     if (tools && tools.length > 0) {
@@ -170,7 +202,8 @@ export class DashScopeProvider implements LLMProvider {
       if (!result.ok) {
         throw new APIError(this.name, result.status, result.body);
       }
-      return this.assertNonEmpty(this.mapToLLMResponse(JSON.parse(result.body)));
+      const mapped = this.mapToLLMResponse(JSON.parse(result.body));
+      return this.assertNonEmpty(mapped, mapped._discardedToolCalls ?? []);
     }
 
     // Direct fetch fallback (works in environments without CORS restrictions)
@@ -184,15 +217,19 @@ export class DashScopeProvider implements LLMProvider {
       const errText = await res.text();
       throw new APIError(this.name, res.status, errText);
     }
-    return this.assertNonEmpty(this.mapToLLMResponse(await res.json()));
+    const mapped = this.mapToLLMResponse(await res.json());
+    return this.assertNonEmpty(mapped, mapped._discardedToolCalls ?? []);
   }
 
   /** Final empty-response gate. Throws EmptyResponseError if nothing usable. */
-  private assertNonEmpty(response: LLMResponse): LLMResponse {
+  private assertNonEmpty(response: LLMResponse, discardedToolCallNames: string[] = []): LLMResponse {
     const hasText = !!response.text && response.text.length > 0;
     const hasToolCalls = !!response.toolCalls && response.toolCalls.length > 0;
     if (!hasText && !hasToolCalls) {
-      throw new EmptyResponseError(this.name);
+      const detail = discardedToolCallNames.length > 0
+        ? `Empty after discarding ${discardedToolCallNames.length} empty-args tool call(s): ${discardedToolCallNames.join(', ')}`
+        : 'Provider returned no text, thoughts, or tool calls';
+      throw new EmptyResponseError(this.name, detail);
     }
     return response;
   }
@@ -267,22 +304,23 @@ export class DashScopeProvider implements LLMProvider {
       finalResponse.toolCalls = toolCalls.length > 0 ? toolCalls : undefined;
     }
 
-    // Guard: Kimi K2.5 known issue — finish_reason=tool_calls but args empty/null.
-    // Discard broken tool calls at source so they never reach the agent loop.
+    // Guard: Kimi K2.5 known issue — finish_reason=tool_calls but args=null.
+    // Only filter null/non-object args (the Kimi bug). Empty object `{}` is a
+    // valid zero-arg call for tools like list_variables and must pass through.
+    const streamingDiscarded: string[] = [];
     if (finalResponse.toolCalls) {
       finalResponse.toolCalls = finalResponse.toolCalls.filter(tc => {
-        const hasInput = tc.input != null
-          && typeof tc.input === 'object'
-          && Object.keys(tc.input).length > 0;
+        const hasInput = tc.input != null && typeof tc.input === 'object';
         if (!hasInput) {
-          console.warn(`[DashScope] Discarding empty tool call: ${tc.name} (known Kimi K2.5 issue)`);
+          console.warn(`[DashScope] Discarding null-args tool call: ${tc.name}`);
+          streamingDiscarded.push(tc.name);
         }
         return hasInput;
       });
       if (finalResponse.toolCalls.length === 0) finalResponse.toolCalls = undefined;
     }
 
-    return this.assertNonEmpty(finalResponse);
+    return this.assertNonEmpty(finalResponse, streamingDiscarded);
   }
 
   /** Converts raw SSE byte stream to parsed JSON objects */
@@ -306,19 +344,25 @@ export class DashScopeProvider implements LLMProvider {
 
   // ── Response Mapping (OpenAI chat/completions format — non-streaming) ────────
 
-  private mapToLLMResponse(data: any): LLMResponse {
-    const response = mapOpenAIToLLMResponse(data);
+  private mapToLLMResponse(data: any): LLMResponse & { _discardedToolCalls?: string[] } {
+    const response = mapOpenAIToLLMResponse(data) as LLMResponse & { _discardedToolCalls?: string[] };
 
-    // Guard: discard tool calls with empty input (Kimi K2.5 known issue)
+    // Guard: Kimi K2.5 known issue — args=null. Empty object `{}` is valid
+    // zero-arg (e.g. list_variables()) and must pass through.
+    const discarded: string[] = [];
     if (response.toolCalls) {
       response.toolCalls = response.toolCalls.filter(tc => {
-        const hasInput = tc.input != null && typeof tc.input === 'object' && Object.keys(tc.input).length > 0;
-        if (!hasInput) console.warn(`[DashScope] Discarding empty tool call: ${tc.name}`);
+        const hasInput = tc.input != null && typeof tc.input === 'object';
+        if (!hasInput) {
+          console.warn(`[DashScope] Discarding null-args tool call: ${tc.name}`);
+          discarded.push(tc.name);
+        }
         return hasInput;
       });
       if (response.toolCalls.length === 0) response.toolCalls = undefined;
     }
 
+    if (discarded.length > 0) response._discardedToolCalls = discarded;
     return response;
   }
 

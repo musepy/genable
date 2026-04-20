@@ -7,7 +7,28 @@
 import { LLMResponse, ToolCallBlock, LLMToolResult, ContentBlock, LLMMessage } from '../types';
 import { ToolDefinition } from '../../../agent/tools/types';
 import { isGemini3Model } from '../../modelFilter';
-import { resolveMaxOutput } from '../../modelCaps';
+
+/**
+ * Per-model max_output_tokens for Gemini, from ai.google.dev / Vertex docs.
+ * Unknown model → throw (forces intentional registration when adding SKUs).
+ */
+const GEMINI_MAX_OUTPUT: Record<string, number> = {
+  'gemini-3-flash-preview': 65_536,
+  'gemini-2.5-pro': 65_535,
+  'gemini-2.5-flash': 65_535,
+  'gemini-2.0-flash': 8_192, // deprecated 2026-06-01
+};
+
+function resolveGeminiMaxOutput(modelName: string, requested?: number): number {
+  const cap = GEMINI_MAX_OUTPUT[modelName];
+  if (cap == null) {
+    throw new Error(
+      `Unknown Gemini model "${modelName}": no max_output_tokens registered. ` +
+      `Add to GEMINI_MAX_OUTPUT in geminiFormat.ts with a value from ai.google.dev/gemini-api/docs/models.`
+    );
+  }
+  return requested != null ? Math.min(requested, cap) : cap;
+}
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
@@ -156,7 +177,7 @@ export function buildGeminiGenerationConfig(opts: {
 
   const config: Record<string, any> = {
     temperature: temperature ?? 0.4,
-    maxOutputTokens: resolveMaxOutput(modelName, maxTokens),
+    maxOutputTokens: resolveGeminiMaxOutput(modelName, maxTokens),
   };
 
   if (thinkingLevel) {

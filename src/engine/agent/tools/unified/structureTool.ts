@@ -34,7 +34,7 @@ export const moveNodeDefinition: ToolDefinition = {
   executionStrategy: 'sequential',
   mutates: true,
   presentForLLM: (data) => keepFields(data, ['id', 'name']),
-  description: `Relocate a node to a different parent or reorder within siblings. Use when: (a) changing child order within a container, (b) moving a subtree into a different parent without recreating it, (c) fixing a placement mistake after jsx. DO NOT delete+jsx to restructure — move_node preserves IDs, bound variables, and component instances.
+  description: `Relocate a node without recreating it. Preserves IDs, bound variables, and component instances across the move, so callers tracking the node by ID never need to re-discover it. Use for: (a) changing child order within a container, (b) moving a subtree into a different parent, (c) fixing a placement mistake after jsx.
 
 Examples:
   move_node({node: "1:3", name: "NewTitle"})

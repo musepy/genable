@@ -8,7 +8,7 @@ tags: [intent, create, edit, selection, turn-start]
 
 ## INTENT DETECTION
 
-Determine intent BEFORE acting. Do NOT assume edit intent from canvas state.
+Intent comes from the user's words, not the canvas. Existing content is context (style to match, structure to avoid duplicating) — its presence alone isn't a signal to edit. Decide create vs. edit before the first tool call.
 
 **Create fresh** (default) — user describes a new design:
 - "Design a login page", "Build a dashboard", "Create a pricing card"

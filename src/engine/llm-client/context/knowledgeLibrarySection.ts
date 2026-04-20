@@ -58,7 +58,7 @@ function renderLibrarySection(): string {
   lines.push('## KNOWLEDGE LIBRARY');
   lines.push('');
   lines.push(
-    'You have access to a curated knowledge library. The full menu is listed below. When an entry matches your task, load it BEFORE proceeding — this is a BLOCKING REQUIREMENT. Use the exact id (e.g. knowledge("style:neon-cyber")). For fresh designs, load at least one style entry before creating nodes.',
+    'You have access to a curated knowledge library. The full menu is listed below. When an entry matches your task, load it with `knowledge("<id>")` before acting — the entry carries the detail the menu line only hints at, and the static prompt stays lean by holding the detail there instead of here. For fresh designs, load at least one style entry before creating nodes so visual decisions have a source of truth.',
   );
   lines.push('');
 

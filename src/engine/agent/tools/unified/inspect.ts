@@ -30,7 +30,7 @@ Examples:
     type: 'object',
     properties: {
       node: { type: 'string', description: '"/" for page root, or node ID (e.g. "100:5").' },
-      mode: { type: 'string', description: '"tree" (default) or "detail"' },
+      mode: { type: 'string', enum: ['tree', 'detail'], description: 'tree = structure skeleton (default); detail = full properties' },
       depth: { type: 'number', description: 'Max depth (default: 5, max: 10)' },
       screenshot: { type: 'boolean', description: 'Capture screenshot (detail mode only)' },
     },

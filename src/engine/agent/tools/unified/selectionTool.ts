@@ -14,11 +14,11 @@ export const getSelectionDefinition: ToolDefinition = {
   description: `Get the user's currently selected nodes in Figma.
 
 Returns node names, types, and IDs of selected elements.
-Call this ONLY when the user's intent involves modifying existing elements:
+Call this when the user's intent involves modifying existing elements:
 - "change this button", "update the card", "fix the spacing"
 - References to "this", "the selected", "it"
 
-Do NOT call for new design requests like "design a login page" — just create fresh.
+Skip for fresh design requests ("design a login page", "create a dashboard") — a new canvas has no selection to read, so the call returns nothing and burns an iteration.
 
 Examples:
   get_selection()`,

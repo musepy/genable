@@ -42,9 +42,9 @@ export function createConsecutiveFailureGuard(): {
         return {
           action: 'continue',
           injectMessage:
-            `⚠ ${state.consecutiveFailIterations} consecutive iterations have ALL failed. Your current approach is not working. `
-            + `STOP and change strategy: use context/outline to re-examine the canvas state, `
-            + `verify node IDs exist, or explain the blocker to the user.`,
+            `⚠ ${state.consecutiveFailIterations} consecutive iterations have all failed — the current approach is hitting a wall. `
+            + `Before the next tool call: re-read canvas state with inspect({node:"/"}) or get_selection, confirm the node IDs you're targeting still exist, `
+            + `or surface the blocker to the user in text so they can redirect.`,
         };
       }
     },

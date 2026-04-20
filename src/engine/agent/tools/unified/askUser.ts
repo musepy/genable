@@ -20,7 +20,7 @@ export const askUserDefinition: ToolDefinition = {
 Input: question string + 2-4 options with label and optional description.
 Returns: the user's selected option label, OR custom text if the user typed a free-form answer instead of picking an option.
 
-Do NOT use when the instruction is clear enough to proceed.`,
+Skip when the instruction is already actionable — asking adds a turn and costs momentum without reducing ambiguity.`,
   parameters: {
     type: 'object',
     properties: {

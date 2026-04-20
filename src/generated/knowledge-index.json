@@ -137,28 +137,14 @@
   {
     "id": "help:component-workflow",
     "name": "Component Workflow",
-    "description": "Use when building reusable components and instances — covers the components-first ordering, ID tracking, and override mechanism.",
+    "description": "Use when creating reusable components, converting frames to components, assembling designs with instances, or adding component properties (TEXT/BOOLEAN/INSTANCE_SWAP).",
     "category": "help",
     "tags": [
       "component",
       "instance",
       "create_component",
+      "add_component_prop",
       "override",
-      "component-prop",
-      "workflow"
-    ]
-  },
-  {
-    "id": "help:componentization",
-    "name": "Componentization Workflow",
-    "description": "Use when creating reusable components, converting frames to components, or assembling designs with component instances and component properties (TEXT/BOOLEAN).",
-    "category": "help",
-    "tags": [
-      "component",
-      "instance",
-      "componentize",
-      "reusable",
-      "component-prop",
       "workflow"
     ]
   },
@@ -303,16 +289,15 @@
   },
   {
     "id": "help:sandbox-sop",
-    "name": "Sandbox Rules and Component SOPs",
-    "description": "Use when using the js tool, converting frames to components/instances, hitting Blocked/parenting-cycle errors, or planning multi-step component-to-instance replacement workflows.",
+    "name": "Sandbox Rules (js tool)",
+    "description": "Use when using the js tool for custom reads, traversals, or API patterns not covered by dedicated tools — covers blocked patterns, the async API rule, and iteration budgeting.",
     "category": "help",
     "tags": [
       "js",
       "sandbox",
-      "component",
-      "instance",
-      "sop",
-      "workflow"
+      "figma-api",
+      "async",
+      "budget"
     ]
   },
   {

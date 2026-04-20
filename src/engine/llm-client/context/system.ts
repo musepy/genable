@@ -71,10 +71,10 @@ Delegate directly — each subtask creates at canvas root:
 - **STYLE**: design constraints (font, colors, spacing, sizing)
 - **CONTEXT**: relationship to siblings ("this is section 2 of 4, after the header")
 
-### Do NOT use subtask for
-- Simple operations (1-2 tool calls) — just do them inline
-- Dependent sequential work where step 2 needs step 1's output
-- Assembling pieces that subtasks created — move_node or inspect yourself`
+### When to stay inline (no subtask)
+- Simple operations (1–2 tool calls) finish faster as direct calls than the subtask spin-up cost
+- Dependent sequential work where step 2 needs step 1's output — one agent keeps the mapping in a single idMap
+- Assembling pieces that subtasks already created — move_node or inspect from here; spawning another subtask to stitch would re-fetch context it already has`
     );
 
     // 6. Tool definitions

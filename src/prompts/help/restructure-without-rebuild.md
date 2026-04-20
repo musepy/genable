@@ -20,7 +20,7 @@ A Button instance should be primary, not secondary? `replace_props({node, props:
 Wrong color, wrong spacing, wrong label? `edit({updates: [{node, fill: '#0ea5e9', padding: 16}]})`. Batch-edit one or multiple nodes in a single call.
 
 ## 4. Genuinely structural (need to add/remove siblings, split a container) — justified delete
-If the logical intent is "this whole region should be a different layout," then `delete_node` followed by one new `jsx` on the same parent is justified. Budget: at most one delete+jsx cycle per logical element per turn. More than that is thrashing.
+When the logical intent is "this whole region should be a different layout," `delete_node` followed by one new `jsx` on the same parent earns its cost. Budget one delete+jsx cycle per logical element per turn — beyond that, consecutive rebuilds indicate the diagnosis is still incomplete.
 
-## Anti-pattern
-`delete_node(X)` followed by `jsx` rebuilding something near-identical to X = stop. Call `inspect` on the original to understand what's actually wrong, then pick alternative 1/2/3.
+## Diagnose before rebuilding
+When `delete_node(X)` followed by `jsx` would rebuild something near-identical to X, the fix probably lives in options 1–3 above. `inspect` the original first: the property or child you want to change is usually still there, and one of `move_node`, `replace_props`, or `edit` will reach it without losing the subtree's IDs and bound variables.

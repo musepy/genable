@@ -12,9 +12,7 @@ export const jsToolDefinition: ToolDefinition = {
   name: 'js',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Execute JavaScript in the Figma plugin runtime — full figma.* API access.
-
-Use as escape hatch for operations not covered by other tools. NOT for setting fills, text, layout, or stroke — use the dedicated setters (set_fill, set_text, set_layout, set_stroke) instead.
+  description: `Execute JavaScript in the Figma plugin runtime — full figma.* API access. Escape hatch for reads and API patterns the dedicated tools don't cover. For visual properties — fills, text, layout, stroke — the dedicated setters (set_fill, set_text, set_layout, set_stroke) run the same idMap + validation pipeline the rest of the agent relies on; prefer them so changes stay traceable.
 
 Examples:
   js({code: "figma.currentPage.children.length"})

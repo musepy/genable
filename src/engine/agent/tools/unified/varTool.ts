@@ -10,17 +10,41 @@ import { ToolDefinition } from '../types';
 export const listVariablesDefinition: ToolDefinition = {
   name: 'list_variables',
   executionStrategy: 'parallel',
-  description: `List variable collections and variables.
+  description: `List variable collections and variables, including per-mode values.
+
+Returns structured data with every variable's value in every mode of its collection —
+enough to render a full variable table without further calls.
+
+Shape:
+  {
+    listing: "<human-readable summary>",
+    count: <total variable count>,
+    collections: [
+      {
+        id, name,
+        modes: [{id, name}, ...],
+        variables: [
+          {
+            id, name, type,            // type: COLOR | FLOAT | BOOLEAN | STRING
+            valuesByMode: {
+              "<modeName>": {value: "#FFFFFF"}          // literal (COLOR as #hex, FLOAT as number, etc.)
+              "<modeName>": {alias: "colors/gray-900", aliasId: "..."}  // alias to another variable
+            }
+          }, ...
+        ]
+      }, ...
+    ]
+  }
 
 Examples:
-  list_variables()
-  list_variables({collection: "Theme"})`,
+  list_variables()                        // all collections, all variables, all modes
+  list_variables({collection: "Theme"})   // filter by collection name (substring match)`,
   parameters: {
     type: 'object',
     properties: {
       collection: {
         type: 'string',
-        description: 'Filter by collection name',
+        description: 'Filter by collection name (substring, case-insensitive)',
       },
     },
   },

@@ -38,10 +38,11 @@ export async function handleVarLs(params: any): Promise<ToolResponse> {
   const allVariables = await figma.variables.getLocalVariablesAsync();
 
   if (collections.length === 0) {
-    return { data: { listing: '(no variable collections)', count: 0 } };
+    return { data: { listing: '(no variable collections)', count: 0, collections: [] } };
   }
 
   const lines: string[] = [];
+  const structured: StructuredCollection[] = [];
   let totalVars = 0;
 
   for (const coll of collections) {
@@ -52,13 +53,18 @@ export async function handleVarLs(params: any): Promise<ToolResponse> {
     lines.push(`📁 ${coll.name}  (${collVars.length} vars, modes: ${modeNames})`);
     totalVars += collVars.length;
 
+    // Always build structured entry — per-mode values for every variable.
+    structured.push(buildStructuredCollection(coll, collVars, allVariables));
+
     if (!filterCollection && !verbose) {
-      // No collection specified → summary only (collection names + counts)
+      // No collection specified → text summary only (collection names + counts).
+      // Structured array still carries full data above.
       continue;
     }
 
     if (!verbose && collVars.length > 30) {
-      // Collection specified but too many vars → grouped summary
+      // Collection specified but too many vars → grouped text summary.
+      // Structured array still carries full per-variable data.
       const groups = new Map<string, { count: number; types: Set<string>; examples: string[] }>();
       for (const v of collVars) {
         // Group by all segments except the last (e.g. "Colors/Gray/1" → "Colors/Gray")
@@ -82,7 +88,7 @@ export async function handleVarLs(params: any): Promise<ToolResponse> {
       continue;
     }
 
-    // Verbose mode or small collection → full listing
+    // Verbose mode or small collection → full text listing.
     for (const v of collVars) {
       const values: string[] = [];
       for (const mode of coll.modes) {
@@ -107,9 +113,95 @@ export async function handleVarLs(params: any): Promise<ToolResponse> {
     data: {
       listing: lines.join('\n'),
       count: totalVars,
-      collections: collections.length,
+      collections: structured,
     },
   };
+}
+
+// ── Structured output types ──
+
+interface StructuredMode {
+  id: string;
+  name: string;
+}
+
+interface StructuredLiteralValue {
+  value: string | number | boolean;
+}
+
+interface StructuredAliasValue {
+  alias: string;
+  aliasId: string;
+}
+
+type StructuredVarValue = StructuredLiteralValue | StructuredAliasValue;
+
+interface StructuredVariable {
+  id: string;
+  name: string;
+  type: VariableResolvedDataType;
+  /** Keyed by mode name — LLM-friendly (not mode ID). */
+  valuesByMode: Record<string, StructuredVarValue>;
+}
+
+interface StructuredCollection {
+  id: string;
+  name: string;
+  modes: StructuredMode[];
+  variables: StructuredVariable[];
+}
+
+function buildStructuredCollection(
+  coll: VariableCollection,
+  collVars: Variable[],
+  allVariables: Variable[],
+): StructuredCollection {
+  return {
+    id: coll.id,
+    name: coll.name,
+    modes: coll.modes.map(m => ({ id: m.modeId, name: m.name })),
+    variables: collVars.map(v => ({
+      id: v.id,
+      name: v.name,
+      type: v.resolvedType,
+      valuesByMode: buildValuesByMode(v, coll, allVariables),
+    })),
+  };
+}
+
+function buildValuesByMode(
+  v: Variable,
+  coll: VariableCollection,
+  allVariables: Variable[],
+): Record<string, StructuredVarValue> {
+  const out: Record<string, StructuredVarValue> = {};
+  for (const mode of coll.modes) {
+    const raw = v.valuesByMode[mode.modeId];
+    out[mode.name] = toStructuredValue(raw, v.resolvedType, allVariables);
+  }
+  return out;
+}
+
+function toStructuredValue(
+  raw: unknown,
+  type: VariableResolvedDataType,
+  allVariables: Variable[],
+): StructuredVarValue {
+  // Alias — reference to another variable.
+  if (raw && typeof raw === 'object' && (raw as any).type === 'VARIABLE_ALIAS') {
+    const aliasId = (raw as any).id as string;
+    const target = allVariables.find(x => x.id === aliasId);
+    return { alias: target ? target.name : aliasId, aliasId };
+  }
+
+  if (type === 'COLOR') {
+    const rgba = raw as { r: number; g: number; b: number; a?: number } | undefined;
+    return { value: rgba && typeof rgba.r === 'number' ? rgbaToHex(rgba) : '#???' };
+  }
+  if (type === 'FLOAT') return { value: typeof raw === 'number' ? raw : Number(raw) };
+  if (type === 'BOOLEAN') return { value: Boolean(raw) };
+  // STRING
+  return { value: raw == null ? '' : String(raw) };
 }
 
 // ── var mk (create variable or set value) ──

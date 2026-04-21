@@ -70,10 +70,10 @@ function extractEditTargetIds(args: any): string[] {
   return ids;
 }
 
-/** Extract the "parent" a jsx call will plant its subtree under. Explicit parentId wins. */
+/** Extract the "parent" a jsx call will plant its subtree under. Explicit parent wins. */
 function extractJsxParentHint(args: any): string | undefined {
   if (!args) return undefined;
-  if (typeof args.parentId === 'string' && args.parentId.length > 0) return args.parentId;
+  if (typeof args.parent === 'string' && args.parent.length > 0) return args.parent;
   return undefined;
 }
 
@@ -105,9 +105,10 @@ export function createJsxMarkupSizeTrigger(): HookRegistration {
         code: CAP_REJECT_CODE,
         reason:
           `jsx markup is ${len} chars (max ${JSX_MARKUP_CHAR_CAP}). ` +
-          `Split into steps: first create the root frame with ONE jsx call, ` +
-          `then add child subtrees one-at-a-time via follow-up jsx or edit calls. ` +
-          `Never embed a whole card tree in one markup.`,
+          `Split across calls: (1) first jsx creates the root frame — save the returned id; ` +
+          `(2) each follow-up jsx MUST pass parent: "<that id>" (or a descendant id) to nest directly, ` +
+          `plus index when sibling order matters. ` +
+          `Do NOT recreate pieces at page root and move_node them later — that duplicates work and wastes tokens.`,
       };
     },
   };
@@ -198,7 +199,7 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
       const createdIds = extractKnownIdsFromResult('jsx', ctx.toolResult);
       state.addKnownIds(createdIds);
 
-      // The current jsx's parent hint: explicit parentId, or the created root ID
+      // The current jsx's parent hint: explicit parent, or the created root ID
       const currentParentHint =
         extractJsxParentHint(tc.input) ??
         (typeof ctx.toolResult?.data?.id === 'string' ? ctx.toolResult.data.id : undefined);
@@ -212,7 +213,7 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
       if (recentDelete) {
         const deletedId = recentDelete.parentHint; // we recorded target in parentHint
         // Parent-sharing approximation:
-        //  a) explicit: current jsx's parentId === deleted node's ID (nesting into ex-parent)
+        //  a) explicit: current jsx's parent === deleted node's ID (nesting into ex-parent)
         //  b) prefix: deleted ID shares file prefix with new root ID (same file → likely same vicinity)
         //  c) fallback: any delete→jsx within window is suspicious enough to warrant the hint
         if (deletedId && currentParentHint && deletedId === currentParentHint) {

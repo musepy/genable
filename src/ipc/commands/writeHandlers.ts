@@ -618,7 +618,7 @@ export async function handleRm(parameters: any): Promise<ToolResponse> {
 
 export async function handleMv(parameters: any): Promise<ToolResponse> {
   const _t0 = Date.now();
-  const { sourcePath: mvSourcePath, destPath: mvDestPath, at: mvAtIndex } = parameters;
+  const { sourcePath: mvSourcePath, destPath: mvDestPath, at: mvAtIndex, newName: mvExplicitName } = parameters;
 
   if (!mvSourcePath) {
     return { error: 'mv requires a source path. Usage: mv /OldName /NewName' };
@@ -661,6 +661,10 @@ export async function handleMv(parameters: any): Promise<ToolResponse> {
     } else {
       return { error: `"${mvParentPath}" is not a container. Cannot move node there.` };
     }
+  }
+
+  if (typeof mvExplicitName === 'string' && mvExplicitName.length > 0) {
+    mvNewName = mvExplicitName;
   }
 
   const mvRenamed = mvOldName !== mvNewName;

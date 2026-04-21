@@ -86,7 +86,7 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Build a card' },
       {
         id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { xml: '<frame/>', parentId: '0:1' } },
+          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { xml: '<frame/>', parent: '0:1' } },
         ],
       },
     ];
@@ -109,7 +109,7 @@ describe('buildCompressionSummary', () => {
       { id: 'u1', role: 'user', content: 'Create dashboard' },
       {
         id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { parentId: '0:1' } },
+          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { parent: '0:1' } },
         ],
       },
       {

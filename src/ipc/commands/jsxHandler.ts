@@ -32,12 +32,11 @@ import { PipelineTracer } from './pipelineTracer';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function handleJsx(parameters: any): Promise<ToolResponse> {
-  const { markup, parentId, parent, replaceId, insertIndex } = parameters;
-  const resolvedParentId = parentId || parent;  // accept both names
+  const { markup, parent, replaceId, insertIndex } = parameters;
 
-  // Param validation: replaceId is mutually exclusive with parentId
-  if (replaceId && resolvedParentId) {
-    return { error: 'jsx: replaceId and parentId are mutually exclusive — replaceId already determines the parent.' };
+  // Param validation: replaceId is mutually exclusive with parent
+  if (replaceId && parent) {
+    return { error: 'jsx: replaceId and parent are mutually exclusive — replaceId already determines the parent.' };
   }
 
   if (!markup || typeof markup !== 'string') {
@@ -86,8 +85,8 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   // Step 3: Resolve target parent + final index
   // Three modes:
   //   - replaceId: inherit oldNode's parent + index, delete oldNode on success
-  //   - parentId + insertIndex: append then move to index
-  //   - parentId only: append (current behavior)
+  //   - parent + insertIndex: append then move to index
+  //   - parent only: append (current behavior)
   let parentNode: SceneNode | null = null;
   let oldNode: SceneNode | null = null;
   let targetIndex: number | undefined;
@@ -103,8 +102,8 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     }
     parentNode = oldParent as SceneNode;
     targetIndex = oldParent.children.indexOf(oldNode as SceneNode);
-  } else if (resolvedParentId) {
-    parentNode = await figma.getNodeByIdAsync(resolvedParentId) as SceneNode | null;
+  } else if (parent) {
+    parentNode = await figma.getNodeByIdAsync(parent) as SceneNode | null;
     if (typeof insertIndex === 'number' && Number.isFinite(insertIndex)) {
       targetIndex = Math.max(0, Math.floor(insertIndex));
     }
@@ -221,7 +220,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   }
 
   // Auto-pan viewport to newly created root node
-  if (!resolvedParentId && rootResults.length > 0) {
+  if (!parent && rootResults.length > 0) {
     try {
       const newRootNode = await figma.getNodeByIdAsync(rootResults[0].nodeId);
       if (newRootNode) figma.viewport.scrollAndZoomIntoView([newRootNode as SceneNode]);

@@ -152,7 +152,7 @@ describe('InspectGateHook', () => {
 
     it('allows move_node on known id', async () => {
       tracker.markInspected('1:2');
-      const result = await runGate('move_node', { node: '1:2', dest: '/' });
+      const result = await runGate('move_node', { node: '1:2', parent: '/' });
       expect(result).toBeUndefined();
     });
 
@@ -294,7 +294,7 @@ describe('InspectGateHook', () => {
 
     it('does NOT consume after successful move_node', async () => {
       tracker.markInspected('1:2');
-      await runDirty('move_node', { node: '1:2', dest: '/' }, { data: { id: '1:2' } });
+      await runDirty('move_node', { node: '1:2', parent: '/' }, { data: { id: '1:2' } });
       expect(tracker.isInspected('1:2')).toBe(true);
     });
 

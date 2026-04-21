@@ -37,9 +37,9 @@ export const moveNodeDefinition: ToolDefinition = {
   description: `Relocate a node without recreating it. Preserves IDs, bound variables, and component instances across the move, so callers tracking the node by ID never need to re-discover it. Use for: (a) changing child order within a container, (b) moving a subtree into a different parent, (c) fixing a placement mistake after jsx.
 
 Examples:
-  move_node({node: "1:3", name: "NewTitle"})
-  move_node({node: "1:3", dest: "1:4"})
-  move_node({node: "1:5", index: 0})`,
+  move_node({node: "1:3", name: "NewTitle"})         — rename in place
+  move_node({node: "1:3", parent: "1:4"})            — move into parent 1:4
+  move_node({node: "1:5", index: 0})                 — reorder within current parent`,
   parameters: {
     type: 'object',
     properties: {
@@ -47,9 +47,9 @@ Examples:
         type: 'string',
         description: 'Node ID (e.g. "1:3") to move/rename',
       },
-      dest: {
+      parent: {
         type: 'string',
-        description: 'Destination parent node ID',
+        description: 'Target parent node ID — the frame/container the node should live inside after the call',
       },
       name: {
         type: 'string',
@@ -72,11 +72,11 @@ export const cloneNodeDefinition: ToolDefinition = {
   description: `Deep-copy a node with optional property overrides.
 
 Examples:
-  clone_node({node: "1:2"})                              — clone to page root, same name
-  clone_node({node: "1:2", dest: "/"})                   — clone to page root explicitly
-  clone_node({node: "1:2", dest: "/", name: "Hero Copy"})— clone to root with custom name
-  clone_node({node: "1:2", dest: "1:4"})                 — clone into parent node 1:4
-  clone_node({node: "1:2", dest: "1:4", overrides: {"bg": "#D9D9D9"}})`,
+  clone_node({node: "1:2"})                                 — clone to page root, same name
+  clone_node({node: "1:2", parent: "/"})                    — clone to page root explicitly
+  clone_node({node: "1:2", parent: "/", name: "Hero Copy"}) — clone to root with custom name
+  clone_node({node: "1:2", parent: "1:4"})                  — clone into parent node 1:4
+  clone_node({node: "1:2", parent: "1:4", overrides: {"bg": "#D9D9D9"}})`,
   parameters: {
     type: 'object',
     properties: {
@@ -84,9 +84,9 @@ Examples:
         type: 'string',
         description: 'Source node ID (e.g. "1:2")',
       },
-      dest: {
+      parent: {
         type: 'string',
-        description: 'Destination parent node ID or "/" for page root. Defaults to page root.',
+        description: 'Target parent node ID the clone should live inside, or "/" for page root. Defaults to page root.',
       },
       name: {
         type: 'string',

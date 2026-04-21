@@ -383,7 +383,7 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
     const jsxResult = await invoke(
       trigger,
       makeCtx({
-        currentToolCall: call('jsx', { markup: '<frame/>', parentId: '1:100' }),
+        currentToolCall: call('jsx', { markup: '<frame/>', parent: '1:100' }),
         toolResult: { data: { id: '2:200', createdIds: ['2:200'] } },
       }),
     );
@@ -395,7 +395,7 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
     expect(jsxResult!.injectMessage).toContain('replace_props');
   });
 
-  it('injects hint on delete → jsx (no explicit parentId, same file prefix)', async () => {
+  it('injects hint on delete → jsx (no explicit parent, same file prefix)', async () => {
     const state = createTurnState();
     const observer = createKnownIdObserver(state);
     const trigger = createDeleteRebuildTrigger(state);
@@ -408,7 +408,7 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
       }),
     );
 
-    // jsx with no parentId; root created ID 42:200 → shares "42:" prefix
+    // jsx with no parent; root created ID 42:200 → shares "42:" prefix
     const result = await invoke(
       trigger,
       makeCtx({
@@ -491,7 +491,7 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
     const r1 = await invoke(
       trigger,
       makeCtx({
-        currentToolCall: call('jsx', { markup: '<frame/>', parentId: '1:100' }),
+        currentToolCall: call('jsx', { markup: '<frame/>', parent: '1:100' }),
         toolResult: { data: { id: '1:200', createdIds: ['1:200'] } },
       }),
     );
@@ -517,9 +517,9 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
   // Sequence observed in dogfood batch 2026-04-15:
   //   iter 8:  delete_node({node: "1581:6759"})
   //   iter 9:  delete_node({node: "1581:6760"})
-  //   iter 10: jsx({parentId: "1581:6758", ...}) → creates root "1581:6764"
+  //   iter 10: jsx({parent: "1581:6758", ...}) → creates root "1581:6764"
   //
-  // Neither deleted id matches the jsx's parentId exactly, but all three
+  // Neither deleted id matches the jsx's parent exactly, but all three
   // share the "1581:" file prefix. The prefix-fallback branch of the hook
   // MUST fire under this shape — this is the dominant real-world pattern.
   it('replays real P3 batch: two deletes then jsx with prefix-match parent', async () => {
@@ -547,7 +547,7 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
       makeCtx({
         currentToolCall: call('jsx', {
           markup: '<frame/>',
-          parentId: '1581:6758',
+          parent: '1581:6758',
         }),
         toolResult: {
           data: { id: '1581:6764', createdIds: ['1581:6764', '1581:6765'] },

@@ -100,7 +100,7 @@ Total: ~6–10 calls depending on prop count.
 
 To turn a frame already nested inside a component into a reusable instance (e.g., icon frames inside a Login Form), lift the frame out before converting it:
 
-1. `clone_node({node: "<icon-frame-id>", dest: "/<Icon Name>"})` → places clone at page level
+1. `clone_node({node: "<icon-frame-id>", parent: "/", name: "<Icon Name>"})` → places clone at page level
 2. `create_component({node: "<clone-id>"})` → returns new component id
 3. `create_instance({node: "<new-component-id>", parent: "<icon-parent-id>"})` → places instance inside the parent component
 4. `delete_node({node: "<original-icon-frame-id>"})` → remove the frame it replaces

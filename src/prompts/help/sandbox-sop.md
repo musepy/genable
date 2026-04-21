@@ -14,7 +14,7 @@ The `js` tool runs code inside the Figma plugin main thread. Dedicated tools exi
 |---|---|---|
 | `.remove()` | Structural mutations flow through `delete_node` so IDs/bindings stay tracked | `delete_node({node: "1:2"})` |
 | `.removeChild()` | Same as above | `delete_node` |
-| `.insertChild()` | `move_node` preserves layout order and parent relationship atomically | `move_node({node, dest, index})` |
+| `.insertChild()` | `move_node` preserves layout order and parent relationship atomically | `move_node({node, parent, index})` |
 | `figma.root` / `figma.currentPage.children` | Document-wide traversal bypasses the idMap — results can reference nodes outside this session | `find_nodes({query})` or `inspect({node: "/"})` |
 | `eval`, `Function()`, `import()` | Sandbox escape | – |
 

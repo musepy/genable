@@ -76,16 +76,16 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     tool: 'move_node',
     mode: 'EXECUTION',
     required: [{ name: 'node', trim: true, check: 'required' }],
-    repairHint: 'provide "node" ref + "dest", "name", or "index"',
+    repairHint: 'provide "node" ref + "parent", "name", or "index"',
   },
   {
     tool: 'clone_node',
     mode: 'EXECUTION',
     required: [
       { name: 'node', trim: true, check: 'required' },
-      { name: 'dest', trim: true, check: 'required' },
+      { name: 'parent', trim: true, check: 'required' },
     ],
-    repairHint: 'provide "node" ref and "dest" path',
+    repairHint: 'provide "node" ref and "parent" path',
   },
   // Knowledge
   {

@@ -11,7 +11,7 @@ const parameterExtractors: Record<string, (params: any) => string> = {
   jsx: (params) => {
     const parts: string[] = [];
     if (typeof params.jsx === 'string') parts.push(`jsx: ${params.jsx.length} chars`);
-    if (params.parentId) parts.push(`parentId: ${params.parentId}`);
+    if (params.parent) parts.push(`parent: ${params.parent}`);
     return parts.join(', ') || 'empty';
   },
   edit: (params) => {

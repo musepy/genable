@@ -19,7 +19,7 @@ export interface RecentToolCall {
   name: string;
   /** Args passed to the tool. */
   args: any;
-  /** For delete_node: target node ID. For jsx: parentId (if explicit). Otherwise undefined. */
+  /** For delete_node: target node ID. For jsx: parent (if explicit). Otherwise undefined. */
   parentHint?: string;
   /** Monotonic sequence number — useful for "within last N steps" windowing. */
   seq: number;

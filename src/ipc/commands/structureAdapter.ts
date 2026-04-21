@@ -12,17 +12,31 @@ export async function handleDeleteNode(params: any): Promise<ToolResponse> {
 }
 
 export async function handleMoveNode(params: any): Promise<ToolResponse> {
-  let destPath = params.dest;
-  if (!destPath && params.name) {
-    destPath = params.name;
+  const hasParent = typeof params.parent === 'string' && params.parent.length > 0;
+  const hasName = typeof params.name === 'string' && params.name.length > 0;
+  const hasIndex = params.index != null;
+
+  if (!hasParent && !hasName && !hasIndex) {
+    return { error: 'move_node requires "parent", "name", or "index".' };
   }
-  if (!destPath && params.index == null) {
-    return { error: 'move_node requires "dest", "name", or "index".' };
+
+  let destPath: string;
+  if (hasParent) {
+    destPath = params.parent;
+  } else {
+    const sourceResolved = await resolvePathToNode(params.node);
+    if (!sourceResolved.ok) return sourceResolved.response;
+    if (sourceResolved.isPage) return { error: 'Cannot move page root.' };
+    const parentId = sourceResolved.node.parent?.id;
+    if (!parentId) return { error: 'Source node has no parent; provide "parent".' };
+    destPath = parentId;
   }
+
   return handleMv({
     sourcePath: params.node,
-    destPath: destPath || params.node,
+    destPath,
     at: params.index,
+    newName: hasName ? params.name : undefined,
   });
 }
 
@@ -44,14 +58,14 @@ export async function handleCloneNode(params: any): Promise<ToolResponse> {
 
   const cloneName = params.name || sourceResolved.node.name;
 
-  // Resolve parent (dest)
+  // Resolve target parent
   let parentId: string | undefined;
-  const dest: string = params.dest ?? '/';
-  if (dest && dest !== '/' && dest !== '') {
-    const destResolved = await resolvePathToNode(dest);
-    if (!destResolved.ok) return destResolved.response;
-    if (!destResolved.isPage) parentId = destResolved.node.id;
-    // else: dest resolved to page root → parentId remains undefined
+  const parentPath: string = params.parent ?? '/';
+  if (parentPath && parentPath !== '/' && parentPath !== '') {
+    const parentResolved = await resolvePathToNode(parentPath);
+    if (!parentResolved.ok) return parentResolved.response;
+    if (!parentResolved.isPage) parentId = parentResolved.node.id;
+    // else: resolved to page root → parentId remains undefined
   }
   // parentId undefined = page root
 

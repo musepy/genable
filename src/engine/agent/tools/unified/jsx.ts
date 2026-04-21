@@ -39,13 +39,13 @@ Swap an existing subtree: jsx({replaceId: "<id>", markup: "..."}) replaces the o
         type: 'string',
         description: 'JSX-like nested markup string',
       },
-      parentId: {
+      parent: {
         type: 'string',
-        description: 'Parent node ID to append into (optional). Mutually exclusive with replaceId.',
+        description: 'Target parent node ID — the frame/container the new subtree will live inside',
       },
       replaceId: {
         type: 'string',
-        description: 'Replace this existing node in-place (keeps parent + sibling index). Old node is deleted on success. Markup must be single-root. Mutually exclusive with parentId.',
+        description: 'Replace this existing node in-place (keeps parent + sibling index). Old node is deleted on success. Markup must be single-root. Mutually exclusive with parent.',
       },
       insertIndex: {
         type: 'number',

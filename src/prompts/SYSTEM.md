@@ -11,8 +11,8 @@ The Figma scene graph is a rooted acyclic tree. Every node has one parent. Nesti
 - **FRAME** = container (children, layout, padding, gap).
 - **TEXT, RECTANGLE, ELLIPSE, LINE, ICON** = leaf nodes (no children, no layout).
 - **Default to FRAME** for ALL UI components — buttons, badges, chips, avatars, cards, inputs, icon containers. Use `rect`/`ellipse`/`line` ONLY for pure decoration with no children. Use `line` (not `rect`) for dividers.
-  - Circle avatar → `frame corner:full overflow:hidden` + child. NOT `ellipse`.
-  - Rounded button → `frame corner:8` + child text. NOT `rect`.
+  - Circle avatar → `frame rounded:full overflow:hidden` + child. NOT `ellipse`.
+  - Rounded button → `frame rounded:8` + child text. NOT `rect`.
 
 ## NODE IDENTITY
 
@@ -29,11 +29,11 @@ For each node, make an explicit design decision on every applicable dimension. D
 ### Frame — 7 dimensions
 | # | Dimension | Think about... | Props |
 |---|---|---|---|
-| 1 | **LAYOUT** | How are children arranged? | `layout`, `align`, `justifyContent`, `wrap` |
+| 1 | **LAYOUT** | How are children arranged? | `layout` (`'row'`/`'column'`/`'grid'`), `justify` (main axis: `'start'`/`'center'`/`'end'`/`'between'`), `items` (cross axis: `'start'`/`'center'`/`'end'`), `wrap` |
 | 2 | **SIZING** | How does this frame size itself? | `w`/`h` (px, `'fill'`, `'hug'`), `minW`, `maxW` |
 | 3 | **SPACING** | Internal padding + child gaps | `p` (padding), `gap` (between children) |
 | 4 | **SURFACE** | Background appearance | `bg` (`'transparent'` for wrappers, colors for surfaces) |
-| 5 | **SHAPE** | Edge treatment | `corner` (0=sharp, 8/12/16=rounded, `'full'`=pill/circle) |
+| 5 | **SHAPE** | Edge treatment | `rounded` (0=sharp, 8/12/16=rounded, `'full'`=pill/circle) |
 | 6 | **BORDER** | Visible edges | `stroke:'1 #E5E7EB'` |
 | 7 | **DEPTH** | Elevation | `shadow:'0,4,16,0,#0000001A'` |
 
@@ -54,7 +54,7 @@ For each node, make an explicit design decision on every applicable dimension. D
 
 Figma does not behave like a browser. Known mental-model gaps:
 
-1. **space-between needs a fill child**: If ALL children are hug/fixed, space-between has no visible effect. At least one child must be `w="fill"` (or `h="fill"` vertically) to push siblings apart.
+1. **`justify:"between"` needs a fill child**: If ALL children are hug/fixed, `justify:"between"` has no visible effect. At least one child must be `w="fill"` (or `h="fill"` vertically) to push siblings apart. (Values: `'start'`/`'center'`/`'end'`/`'between'` — no CSS `'space-between'` prefix.)
 2. **Fixed-width children don't shrink**: Auto-layout does not shrink fixed-width children — they overflow and get clipped. Sibling cards in a row MUST use `w="fill"`.
 3. **No color/style inheritance**: Each text node sets its own `fill`. There is no CSS `color` cascade.
 4. **Icons and avatars are never empty frames**: An empty `<frame w={20} h={20}/>` is invisible. Use `icon` type or a colored circle with initials.

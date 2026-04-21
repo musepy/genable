@@ -36,15 +36,15 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
 ```xml
 <frame name='Dashboard' layout='row' w='1440' h='900' bg='#F8FAFC'>
   <frame name='Sidebar' layout='column' w='240' height='fill' bg='#0F172A' p='16'>
-    <frame name='Logo Area' layout='row' gap='8' alignItems='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Logo Area' layout='row' gap='8' items='center' width='fill' height='hug' bg='transparent'>
       <icon name='Logo Icon' icon='lucide:layout-dashboard' size='24' fill='#FFFFFF'/>
       <text name='App Name' size='18' weight='Bold' fill='#FFFFFF'>AppName</text>
     </frame>
     <frame name='Nav Section' layout='column' gap='4' width='fill' height='fill' bg='transparent' p='0 0 16 0'>
       {/* Nav items go here */}
     </frame>
-    <frame name='User Section' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='transparent' p='12 0 0 0'>
-      <frame name='Avatar' w='32' h='32' corner='16' bg='#334155'/>
+    <frame name='User Section' layout='row' gap='12' items='center' width='fill' height='hug' bg='transparent' p='12 0 0 0'>
+      <frame name='Avatar' w='32' h='32' rounded='16' bg='#334155'/>
       <text name='User Name' size='14' fill='#CBD5E1'>John Doe</text>
     </frame>
   </frame>
@@ -59,11 +59,11 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
 ### Sidebar Nav Item (active & inactive)
 
 ```xml
-<frame name='Nav Item Active' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='#1E293B' p='10 12' corner='8'>
+<frame name='Nav Item Active' layout='row' gap='12' items='center' width='fill' height='hug' bg='#1E293B' p='10 12' rounded='8'>
   <icon name='Icon' icon='lucide:home' size='20' fill='#3B82F6'/>
   <text name='Label' size='14' weight='Medium' fill='#F1F5F9'>Dashboard</text>
 </frame>
-<frame name='Nav Item' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='transparent' p='10 12' corner='8'>
+<frame name='Nav Item' layout='row' gap='12' items='center' width='fill' height='hug' bg='transparent' p='10 12' rounded='8'>
   <icon name='Icon' icon='lucide:users' size='20' fill='#94A3B8'/>
   <text name='Label' size='14' fill='#94A3B8'>Users</text>
 </frame>
@@ -72,13 +72,13 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
 ### Metric Card (KPI)
 
 ```xml
-<frame name='Metric Card' layout='column' gap='8' p='20' w='fill' height='hug' bg='#FFFFFF' corner='12' shadow='0,1,3,0,#0000001A'>
-  <frame name='Header' layout='row' justifyContent='space-between' alignItems='center' width='fill' height='hug' bg='transparent'>
+<frame name='Metric Card' layout='column' gap='8' p='20' w='fill' height='hug' bg='#FFFFFF' rounded='12' shadow='0,1,3,0,#0000001A'>
+  <frame name='Header' layout='row' justify='between' items='center' width='fill' height='hug' bg='transparent'>
     <text name='Label' size='14' fill='#64748B'>Total Revenue</text>
     <icon name='Icon' icon='lucide:dollar-sign' size='20' fill='#3B82F6'/>
   </frame>
   <text name='Value' size='28' weight='Bold' fill='#0F172A'>$48,250</text>
-  <frame name='Change' layout='row' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Change' layout='row' gap='4' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Arrow' icon='lucide:trending-up' size='16' fill='#10B981'/>
     <text name='Percent' size='14' weight='Medium' fill='#10B981'>+12.5%</text>
     <text name='Period' size='14' fill='#94A3B8'>vs last month</text>
@@ -97,7 +97,7 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
 ### Data Table
 
 ```xml
-<frame name='Table Container' layout='column' width='fill' height='hug' bg='#FFFFFF' corner='12' shadow='0,1,3,0,#0000001A'>
+<frame name='Table Container' layout='column' width='fill' height='hug' bg='#FFFFFF' rounded='12' shadow='0,1,3,0,#0000001A'>
   <frame name='Table Header Row' layout='row' gap='0' width='fill' height='hug' bg='#F8FAFC' p='12 16'>
     <text name='Col 1' size='12' weight='Medium' fill='#64748B' w='200'>Name</text>
     <text name='Col 2' size='12' weight='Medium' fill='#64748B' w='fill'>Status</text>
@@ -105,7 +105,7 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
   </frame>
   <frame name='Row 1' layout='row' gap='0' width='fill' height='hug' bg='transparent' p='12 16' stroke='#F1F5F9' strokeW='1'>
     <text name='Cell 1' size='14' fill='#1E293B' w='200'>Acme Corp</text>
-    <frame name='Badge' layout='row' p='2 8' width='hug' height='hug' bg='#DCFCE7' corner='12'>
+    <frame name='Badge' layout='row' p='2 8' width='hug' height='hug' bg='#DCFCE7' rounded='12'>
       <text name='Status' size='12' weight='Medium' fill='#16A34A'>Active</text>
     </frame>
     <text name='Cell 3' size='14' weight='Medium' fill='#1E293B' w='120'>$1,250</text>
@@ -116,14 +116,14 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
 ### Chart Container
 
 ```xml
-<frame name='Chart Card' layout='column' gap='16' p='20' width='fill' height='hug' bg='#FFFFFF' corner='12' shadow='0,1,3,0,#0000001A'>
-  <frame name='Chart Header' layout='row' justifyContent='space-between' alignItems='center' width='fill' height='hug' bg='transparent'>
+<frame name='Chart Card' layout='column' gap='16' p='20' width='fill' height='hug' bg='#FFFFFF' rounded='12' shadow='0,1,3,0,#0000001A'>
+  <frame name='Chart Header' layout='row' justify='between' items='center' width='fill' height='hug' bg='transparent'>
     <text name='Title' size='16' weight='Bold' fill='#0F172A'>Revenue Overview</text>
-    <frame name='Period Selector' layout='row' gap='0' width='hug' height='hug' bg='#F1F5F9' corner='6'>
-      <frame name='Option Active' layout='row' p='6 12' width='hug' height='hug' bg='#FFFFFF' corner='6' shadow='0,1,2,0,#0000000D'>
+    <frame name='Period Selector' layout='row' gap='0' width='hug' height='hug' bg='#F1F5F9' rounded='6'>
+      <frame name='Option Active' layout='row' p='6 12' width='hug' height='hug' bg='#FFFFFF' rounded='6' shadow='0,1,2,0,#0000000D'>
         <text name='Label' size='12' weight='Medium' fill='#0F172A'>Week</text>
       </frame>
-      <frame name='Option' layout='row' p='6 12' width='hug' height='hug' bg='transparent' corner='6'>
+      <frame name='Option' layout='row' p='6 12' width='hug' height='hug' bg='transparent' rounded='6'>
         <text name='Label' size='12' fill='#64748B'>Month</text>
       </frame>
     </frame>

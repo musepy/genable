@@ -3,6 +3,7 @@
 > Source: `packages/core/src/tools/` @ [open-pencil/open-pencil](https://github.com/open-pencil/open-pencil)
 > Date: 2026-03-30
 > Parent: [OpenPencil 工具架构总览](openpencil-tool-architecture.md)
+> Follow-up (2026-04-21): [DSL 词汇迁移计划](vocabulary-migration-plan.md) — 基于最新 open-pencil v0.11 仓库对照，修正"我们在 Figma API CamelCase 象限"的误判，给出 Wave 1 / Wave 2 迁移清单
 
 ---
 

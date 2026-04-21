@@ -157,6 +157,9 @@ const EXPANDERS: Record<string, Expander> = {
   justifyContent: (v) => ({ primaryAxisAlignItems: mapAlign(String(v)) }),
   justify: (v) => ({ primaryAxisAlignItems: mapAlign(String(v)) }),
   alignItems: (v) => ({ counterAxisAlignItems: mapAlign(String(v)) }),
+  // `items` — Tailwind-style cross-axis alignment (preferred canonical name).
+  // Aliases: alignItems (CSS), alignCross (legacy read-side), align (two-axis shortcut).
+  items: (v) => ({ counterAxisAlignItems: mapAlign(String(v)) }),
 
   // ── Spacing ────────────────────────────────────────────────────────────
   padding: (v) => {
@@ -295,6 +298,9 @@ const EXPANDERS: Record<string, Expander> = {
   },
 
   corner: (v) => EXPANDERS.radius(v, {}),
+  // `rounded` — Tailwind-style corner alias (preferred canonical name).
+  // Same behavior as `radius`/`corner`: number | 'full' | [tl,tr,bl,br] | $varRef.
+  rounded: (v, all) => EXPANDERS.radius(v, all),
 
   // ── Layout details ─────────────────────────────────────────────────────
   smooth: (v) => ({ cornerSmoothing: Number(v) }),

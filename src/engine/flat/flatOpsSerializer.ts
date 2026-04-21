@@ -42,16 +42,18 @@ const INSPECT_PROPS = new Set([
   'constraints',
 ]);
 
-/** Abbreviations aligned with flatOpsParser's ABBREV_EXPANSION (inverse). */
+/** Abbreviations aligned with flatOpsParser's ABBREV_EXPANSION (inverse).
+ *  Read-side canonical names must match write-side (expandShorthands.ts)
+ *  so LLM doesn't have to translate between `inspect` output and `jsx` input. */
 const ATTR_ABBREV: Record<string, string> = {
   layoutMode: 'layout',
   width: 'w',
   height: 'h',
   layoutSizingHorizontal: 'sizingH',
   layoutSizingVertical: 'sizingV',
-  primaryAxisAlignItems: 'alignMain',
-  counterAxisAlignItems: 'alignCross',
-  cornerRadius: 'corner',
+  primaryAxisAlignItems: 'justify',      // was 'alignMain' — matches write-side `justify`
+  counterAxisAlignItems: 'items',         // was 'alignCross' — matches write-side `items`
+  cornerRadius: 'rounded',                // was 'corner' — matches write-side `rounded`
   strokeWeight: 'strokeW',
   paddingTop: 'pt',
   paddingRight: 'pr',
@@ -100,11 +102,12 @@ const TAG_MAP: Record<string, string> = {
   ICON: 'icon',
 };
 
-/** Figma-native enum → CSS-friendly (same vocab the LLM writes). */
+/** Figma-native enum → DSL-friendly (matches write-side ALIGN_MAP).
+ *  Strip CSS prefixes: `flex-start` → `start`, `space-between` → `between`. */
 const FIGMA_TO_CSS: Record<string, Record<string, string>> = {
   layoutMode:            { VERTICAL: 'column', HORIZONTAL: 'row' },
-  primaryAxisAlignItems: { MIN: 'flex-start', CENTER: 'center', MAX: 'flex-end', SPACE_BETWEEN: 'space-between' },
-  counterAxisAlignItems: { MIN: 'flex-start', CENTER: 'center', MAX: 'flex-end', BASELINE: 'baseline' },
+  primaryAxisAlignItems: { MIN: 'start', CENTER: 'center', MAX: 'end', SPACE_BETWEEN: 'between' },
+  counterAxisAlignItems: { MIN: 'start', CENTER: 'center', MAX: 'end', BASELINE: 'baseline' },
   layoutSizingHorizontal: { FILL: 'fill', HUG: 'hug' },
   layoutSizingVertical:   { FILL: 'fill', HUG: 'hug' },
   textAlignHorizontal:    { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'justified' },

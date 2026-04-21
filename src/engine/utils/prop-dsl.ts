@@ -43,7 +43,7 @@ const STRING_VALUE_PROPS = new Set([
   'strokeJoin', 'strokeCap', 'blendMode', 'dashPattern',
   'textDecoration', 'textTruncation', 'fontStyle', 'scaleMode',
   // Abbreviations that must stay as strings
-  'weight', 'font', 'alignMain', 'alignCross', 'justify', 'textAlign',
+  'weight', 'font', 'alignMain', 'alignCross', 'justify', 'items', 'textAlign',
   'positioning', 'strokeA', 'strokeJ', 'strokeC', 'dash',
   'blend', 'wrap', 'pin', 'overflow',
   'decoration', 'whiteSpace', 'italic', 'fit', 'outline',
@@ -61,7 +61,7 @@ const NUMERIC_PROPS = new Set([
   'cornerSmoothing',
   'rotation', 'maxLines', 'fontSlant',
   // Abbreviations that are numeric
-  'gap', 'crossGap', 'size', 'corner', 'smooth', 'strokeW',
+  'gap', 'crossGap', 'size', 'corner', 'rounded', 'smooth', 'strokeW',
   'pt', 'pr', 'pb', 'pl',
   'strokeT', 'strokeR', 'strokeB', 'strokeL',
   'minW', 'maxW', 'minH', 'maxH',

@@ -33,13 +33,13 @@ tags: [card, grid, layout, product, gallery, pricing, responsive]
 
 ```xml
 <frame name='Card Grid' layout='row' gap='24' wrap='wrap' width='fill' height='hug' bg='transparent'>
-  <frame name='Card 1' layout='column' gap='0' w='360' height='hug' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' overflow='hidden'>
+  <frame name='Card 1' layout='column' gap='0' w='360' height='hug' bg='#FFFFFF' rounded='12' shadow='0,2,8,0,#0000001A' overflow='hidden'>
     <frame name='Image' w='fill' h='200' bg='#E5E7EB'/>
     <frame name='Content' layout='column' gap='12' p='20' width='fill' height='hug' bg='transparent'>
       <text name='Title' size='18' weight='Bold' fill='#111827' width='fill'>Card Title</text>
       <text name='Description' size='14' fill='#6B7280' lineHeight='160%' width='fill'>Description text goes here with enough detail.</text>
     </frame>
-    <frame name='Footer' layout='row' justifyContent='space-between' alignItems='center' p='16 20' width='fill' height='hug' bg='transparent' stroke='#F3F4F6' strokeW='1'>
+    <frame name='Footer' layout='row' justify='between' items='center' p='16 20' width='fill' height='hug' bg='transparent' stroke='#F3F4F6' strokeW='1'>
       <text name='Meta' size='12' fill='#9CA3AF'>Jan 15, 2026</text>
       <text name='Action' size='14' weight='Medium' fill='#4F46E5'>Read more</text>
     </frame>
@@ -53,7 +53,7 @@ tags: [card, grid, layout, product, gallery, pricing, responsive]
 ### Basic Content Card
 
 ```xml
-<frame name='Card' layout='column' gap='16' p='24' w='360' height='hug' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A'>
+<frame name='Card' layout='column' gap='16' p='24' w='360' height='hug' bg='#FFFFFF' rounded='12' shadow='0,2,8,0,#0000001A'>
   <text name='Title' size='18' weight='Bold' fill='#111827' width='fill'>Card Title</text>
   <text name='Description' size='14' fill='#6B7280' lineHeight='160%' width='fill'>A brief description that provides context about this card's content.</text>
   <frame name='Action' layout='row' width='hug' height='hug' bg='transparent'>
@@ -65,11 +65,11 @@ tags: [card, grid, layout, product, gallery, pricing, responsive]
 ### Image Card (top image)
 
 ```xml
-<frame name='Image Card' layout='column' gap='0' w='360' height='hug' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' overflow='hidden'>
+<frame name='Image Card' layout='column' gap='0' w='360' height='hug' bg='#FFFFFF' rounded='12' shadow='0,2,8,0,#0000001A' overflow='hidden'>
   <frame name='Image' width='fill' h='200' bg='#E5E7EB'/>
   <frame name='Content' layout='column' gap='12' p='20' width='fill' height='hug' bg='transparent'>
     <frame name='Tags' layout='row' gap='8' width='fill' height='hug' bg='transparent'>
-      <frame name='Tag' layout='row' p='4 10' width='hug' height='hug' bg='#EEF2FF' corner='12'>
+      <frame name='Tag' layout='row' p='4 10' width='hug' height='hug' bg='#EEF2FF' rounded='12'>
         <text name='Label' size='12' weight='Medium' fill='#4F46E5'>Design</text>
       </frame>
     </frame>
@@ -82,16 +82,16 @@ tags: [card, grid, layout, product, gallery, pricing, responsive]
 ### Product Card
 
 ```xml
-<frame name='Product Card' layout='column' gap='0' w='280' height='hug' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A' overflow='hidden'>
+<frame name='Product Card' layout='column' gap='0' w='280' height='hug' bg='#FFFFFF' rounded='12' shadow='0,2,8,0,#0000001A' overflow='hidden'>
   <frame name='Image' width='fill' h='280' bg='#F9FAFB'/>
   <frame name='Content' layout='column' gap='8' p='16' width='fill' height='hug' bg='transparent'>
     <text name='Category' size='12' weight='Medium' fill='#6B7280'>Electronics</text>
     <text name='Name' size='16' weight='Bold' fill='#111827' width='fill'>Product Name</text>
-    <frame name='Price Row' layout='row' gap='8' alignItems='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Price Row' layout='row' gap='8' items='center' width='fill' height='hug' bg='transparent'>
       <text name='Price' size='18' weight='Bold' fill='#111827'>$49.99</text>
       <text name='Original' size='14' fill='#9CA3AF' textDecoration='strikethrough'>$79.99</text>
     </frame>
-    <frame name='Rating' layout='row' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+    <frame name='Rating' layout='row' gap='4' items='center' width='hug' height='hug' bg='transparent'>
       <icon name='Star' icon='lucide:star' size='14' fill='#F59E0B'/>
       <text name='Score' size='12' fill='#6B7280'>4.8 (124 reviews)</text>
     </frame>
@@ -102,28 +102,28 @@ tags: [card, grid, layout, product, gallery, pricing, responsive]
 ### Pricing Card (highlighted)
 
 ```xml
-<frame name='Pricing Card' layout='column' gap='24' p='32' w='340' height='hug' bg='#FFFFFF' corner='16' stroke='#4F46E5' strokeW='2' shadow='0,4,24,0,#4F46E51A'>
+<frame name='Pricing Card' layout='column' gap='24' p='32' w='340' height='hug' bg='#FFFFFF' rounded='16' stroke='#4F46E5' strokeW='2' shadow='0,4,24,0,#4F46E51A'>
   <frame name='Header' layout='column' gap='8' width='fill' height='hug' bg='transparent'>
-    <frame name='Badge' layout='row' p='4 12' width='hug' height='hug' bg='#EEF2FF' corner='12'>
+    <frame name='Badge' layout='row' p='4 12' width='hug' height='hug' bg='#EEF2FF' rounded='12'>
       <text name='Popular' size='12' weight='Bold' fill='#4F46E5'>Most Popular</text>
     </frame>
     <text name='Plan' size='20' weight='Bold' fill='#111827'>Pro</text>
-    <frame name='Price' layout='row' gap='4' alignItems='baseline' width='hug' height='hug' bg='transparent'>
+    <frame name='Price' layout='row' gap='4' items='baseline' width='hug' height='hug' bg='transparent'>
       <text name='Amount' size='36' weight='Bold' fill='#111827'>$29</text>
       <text name='Period' size='14' fill='#6B7280'>/month</text>
     </frame>
   </frame>
   <frame name='Features' layout='column' gap='12' width='fill' height='hug' bg='transparent'>
-    <frame name='Feature 1' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Feature 1' layout='row' gap='12' items='center' width='fill' height='hug' bg='transparent'>
       <icon name='Check' icon='lucide:check' size='16' fill='#10B981'/>
       <text name='Label' size='14' fill='#374151'>Unlimited projects</text>
     </frame>
-    <frame name='Feature 2' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Feature 2' layout='row' gap='12' items='center' width='fill' height='hug' bg='transparent'>
       <icon name='Check' icon='lucide:check' size='16' fill='#10B981'/>
       <text name='Label' size='14' fill='#374151'>Priority support</text>
     </frame>
   </frame>
-  <frame name='CTA' layout='row' justifyContent='center' alignItems='center' p='12' width='fill' h='44' bg='#4F46E5' corner='8'>
+  <frame name='CTA' layout='row' justify='center' items='center' p='12' width='fill' h='44' bg='#4F46E5' rounded='8'>
     <text name='Label' size='16' weight='Bold' fill='#FFFFFF'>Get Started</text>
   </frame>
 </frame>
@@ -132,9 +132,9 @@ tags: [card, grid, layout, product, gallery, pricing, responsive]
 ### Team Member Card
 
 ```xml
-<frame name='Team Card' layout='column' gap='16' alignItems='center' p='24' w='280' height='hug' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A'>
-  <frame name='Avatar' w='80' h='80' corner='40' bg='#E5E7EB'/>
-  <frame name='Info' layout='column' gap='4' alignItems='center' width='fill' height='hug' bg='transparent'>
+<frame name='Team Card' layout='column' gap='16' items='center' p='24' w='280' height='hug' bg='#FFFFFF' rounded='12' shadow='0,2,8,0,#0000001A'>
+  <frame name='Avatar' w='80' h='80' rounded='40' bg='#E5E7EB'/>
+  <frame name='Info' layout='column' gap='4' items='center' width='fill' height='hug' bg='transparent'>
     <text name='Name' size='16' weight='Bold' fill='#111827' textAlign='center'>Jane Smith</text>
     <text name='Role' size='14' fill='#6B7280' textAlign='center'>Lead Designer</text>
   </frame>

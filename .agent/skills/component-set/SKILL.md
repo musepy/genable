@@ -28,7 +28,7 @@ Find **identical style groups** to minimize clone overrides:
 ```
 jsx({markup: `
 <component name="Variant=Primary, State=Default, Size=Medium"
-  layout="row" gap={8} corner={8} w="hug" h="hug"
+  layout="row" gap={8} rounded={8} w="hug" h="hug"
   align="center" p={12} bg="#2C2C2C" stroke="#2C2C2C">
   <text name="Label" size={16} weight="Medium" fill="#F5F5F5">Button</text>
 </component>

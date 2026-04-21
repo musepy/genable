@@ -22,14 +22,16 @@ const MAX_DEPTH = 4;
 const MAX_CHILDREN = 15;
 const MIXED = 'mixed';
 
-/** Middle name mapping: Figma canonical → LLM-friendly middle name. */
+/** Middle name mapping: Figma canonical → LLM-friendly middle name.
+ *  Vocabulary mirrors the WRITE-side canonical names from expandShorthands.ts
+ *  (`justify`/`items`/`rounded`) so LLM reads and writes the same words. */
 const MIDDLE_NAMES: Record<string, string> = {
   layoutMode: 'layout',
   layoutSizingHorizontal: 'sizingH',
   layoutSizingVertical: 'sizingV',
-  primaryAxisAlignItems: 'alignMain',
-  counterAxisAlignItems: 'alignCross',
-  cornerRadius: 'radius',
+  primaryAxisAlignItems: 'justify',     // was 'alignMain' — matches write-side `justify`
+  counterAxisAlignItems: 'items',        // was 'alignCross' — matches write-side `items`
+  cornerRadius: 'rounded',               // was 'radius' — matches write-side `rounded`
   itemSpacing: 'gap',
   counterAxisSpacing: 'crossGap',
   characters: 'content',
@@ -43,11 +45,12 @@ const MIDDLE_NAMES: Record<string, string> = {
   constraints: 'pin',
 };
 
-/** Figma enum → CSS-friendly value. */
+/** Figma enum → LLM-friendly value. Vocabulary matches write-side ALIGN_MAP keys
+ *  (`start`/`center`/`end`/`between`), not CSS `flex-start`/`space-between`. */
 const ENUM_TO_CSS: Record<string, Record<string, string>> = {
   layoutMode:              { VERTICAL: 'column', HORIZONTAL: 'row' },
-  primaryAxisAlignItems:   { MIN: 'flex-start', CENTER: 'center', MAX: 'flex-end', SPACE_BETWEEN: 'space-between' },
-  counterAxisAlignItems:   { MIN: 'flex-start', CENTER: 'center', MAX: 'flex-end', BASELINE: 'baseline' },
+  primaryAxisAlignItems:   { MIN: 'start', CENTER: 'center', MAX: 'end', SPACE_BETWEEN: 'between' },
+  counterAxisAlignItems:   { MIN: 'start', CENTER: 'center', MAX: 'end', BASELINE: 'baseline' },
   layoutSizingHorizontal:  { FILL: 'fill', HUG: 'hug' },
   layoutSizingVertical:    { FILL: 'fill', HUG: 'hug' },
   textAlignHorizontal:     { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'justified' },

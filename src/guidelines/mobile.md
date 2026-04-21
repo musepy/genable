@@ -39,15 +39,15 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 
 ```xml
 <frame name='Mobile Screen' layout='column' w='390' h='844' bg='#FFFFFF'>
-  <frame name='Status Bar' layout='row' justifyContent='space-between' alignItems='center' p='0 24' width='fill' h='44' bg='transparent'>
+  <frame name='Status Bar' layout='row' justify='between' items='center' p='0 24' width='fill' h='44' bg='transparent'>
     <text name='Time' size='14' weight='Medium' fill='#000000'>9:41</text>
-    <frame name='Icons' layout='row' gap='6' alignItems='center' width='hug' height='hug' bg='transparent'>
+    <frame name='Icons' layout='row' gap='6' items='center' width='hug' height='hug' bg='transparent'>
       <icon name='Signal' icon='lucide:signal' size='14' fill='#000000'/>
       <icon name='Wifi' icon='lucide:wifi' size='14' fill='#000000'/>
       <icon name='Battery' icon='lucide:battery-full' size='14' fill='#000000'/>
     </frame>
   </frame>
-  <frame name='Nav Bar' layout='row' justifyContent='space-between' alignItems='center' p='8 16' width='fill' h='44' bg='transparent'>
+  <frame name='Nav Bar' layout='row' justify='between' items='center' p='8 16' width='fill' h='44' bg='transparent'>
     <icon name='Back' icon='lucide:chevron-left' size='24' fill='#000000'/>
     <text name='Title' size='17' weight='Bold' fill='#000000'>Page Title</text>
     <icon name='More' icon='lucide:more-horizontal' size='24' fill='#000000'/>
@@ -55,7 +55,7 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
   <frame name='Content' layout='column' gap='16' p='16' width='fill' height='fill' bg='transparent'>
     {/* Screen content goes here */}
   </frame>
-  <frame name='Bottom Nav' layout='row' justifyContent='space-around' alignItems='center' p='8 0 34 0' width='fill' h='83' bg='#FFFFFF' shadow='0,-1,0,0,#0000001A'>
+  <frame name='Bottom Nav' layout='row' justify='around' items='center' p='8 0 34 0' width='fill' h='83' bg='#FFFFFF' shadow='0,-1,0,0,#0000001A'>
     {/* Tab items */}
   </frame>
 </frame>
@@ -66,8 +66,8 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 ### Mobile Navigation Bar (iOS style)
 
 ```xml
-<frame name='Nav Bar' layout='row' justifyContent='space-between' alignItems='center' p='8 16' width='fill' h='44' bg='transparent'>
-  <frame name='Left' layout='row' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+<frame name='Nav Bar' layout='row' justify='between' items='center' p='8 16' width='fill' h='44' bg='transparent'>
+  <frame name='Left' layout='row' gap='4' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Back' icon='lucide:chevron-left' size='24' fill='#007AFF'/>
     <text name='Back Label' size='17' fill='#007AFF'>Back</text>
   </frame>
@@ -81,20 +81,20 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 ### Bottom Tab Bar
 
 ```xml
-<frame name='Bottom Nav' layout='row' justifyContent='space-around' alignItems='center' p='8 0 34 0' width='fill' h='83' bg='#FFFFFF' shadow='0,-1,0,0,#0000001A'>
-  <frame name='Tab Active' layout='column' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+<frame name='Bottom Nav' layout='row' justify='around' items='center' p='8 0 34 0' width='fill' h='83' bg='#FFFFFF' shadow='0,-1,0,0,#0000001A'>
+  <frame name='Tab Active' layout='column' gap='4' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Icon' icon='lucide:home' size='24' fill='#007AFF'/>
     <text name='Label' size='10' weight='Medium' fill='#007AFF'>Home</text>
   </frame>
-  <frame name='Tab' layout='column' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Tab' layout='column' gap='4' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Icon' icon='lucide:search' size='24' fill='#8E8E93'/>
     <text name='Label' size='10' fill='#8E8E93'>Search</text>
   </frame>
-  <frame name='Tab' layout='column' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Tab' layout='column' gap='4' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Icon' icon='lucide:heart' size='24' fill='#8E8E93'/>
     <text name='Label' size='10' fill='#8E8E93'>Favorites</text>
   </frame>
-  <frame name='Tab' layout='column' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Tab' layout='column' gap='4' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Icon' icon='lucide:user' size='24' fill='#8E8E93'/>
     <text name='Label' size='10' fill='#8E8E93'>Profile</text>
   </frame>
@@ -105,26 +105,26 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 
 ```xml
 <frame name='List' layout='column' gap='0' width='fill' height='hug' bg='#FFFFFF'>
-  <frame name='List Item' layout='row' gap='12' alignItems='center' p='12 16' width='fill' height='hug' bg='transparent'>
-    <frame name='Icon Wrapper' layout='row' justifyContent='center' alignItems='center' w='36' h='36' bg='#007AFF' corner='8'>
+  <frame name='List Item' layout='row' gap='12' items='center' p='12 16' width='fill' height='hug' bg='transparent'>
+    <frame name='Icon Wrapper' layout='row' justify='center' items='center' w='36' h='36' bg='#007AFF' rounded='8'>
       <icon name='Icon' icon='lucide:wifi' size='20' fill='#FFFFFF'/>
     </frame>
-    <frame name='Content' layout='row' justifyContent='space-between' alignItems='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Content' layout='row' justify='between' items='center' width='fill' height='hug' bg='transparent'>
       <text name='Label' size='17' fill='#000000'>Wi-Fi</text>
-      <frame name='Right' layout='row' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+      <frame name='Right' layout='row' gap='4' items='center' width='hug' height='hug' bg='transparent'>
         <text name='Value' size='17' fill='#8E8E93'>Home Network</text>
         <icon name='Chevron' icon='lucide:chevron-right' size='16' fill='#C7C7CC'/>
       </frame>
     </frame>
   </frame>
   <line name='Separator' w='fill' stroke='#E5E5EA'/>
-  <frame name='List Item 2' layout='row' gap='12' alignItems='center' p='12 16' width='fill' height='hug' bg='transparent'>
-    <frame name='Icon Wrapper' layout='row' justifyContent='center' alignItems='center' w='36' h='36' bg='#34C759' corner='8'>
+  <frame name='List Item 2' layout='row' gap='12' items='center' p='12 16' width='fill' height='hug' bg='transparent'>
+    <frame name='Icon Wrapper' layout='row' justify='center' items='center' w='36' h='36' bg='#34C759' rounded='8'>
       <icon name='Icon' icon='lucide:bluetooth' size='20' fill='#FFFFFF'/>
     </frame>
-    <frame name='Content' layout='row' justifyContent='space-between' alignItems='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Content' layout='row' justify='between' items='center' width='fill' height='hug' bg='transparent'>
       <text name='Label' size='17' fill='#000000'>Bluetooth</text>
-      <frame name='Right' layout='row' gap='4' alignItems='center' width='hug' height='hug' bg='transparent'>
+      <frame name='Right' layout='row' gap='4' items='center' width='hug' height='hug' bg='transparent'>
         <text name='Value' size='17' fill='#8E8E93'>On</text>
         <icon name='Chevron' icon='lucide:chevron-right' size='16' fill='#C7C7CC'/>
       </frame>
@@ -138,7 +138,7 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 ```xml
 <frame name='Section' layout='column' gap='0' width='fill' height='hug' bg='transparent'>
   <text name='Section Header' size='13' fill='#6D6D72' p='16 16 8 16'>GENERAL</text>
-  <frame name='Group' layout='column' gap='0' width='fill' height='hug' bg='#FFFFFF' corner='10' p='0 16'>
+  <frame name='Group' layout='column' gap='0' width='fill' height='hug' bg='#FFFFFF' rounded='10' p='0 16'>
     {/* List items here, separated by 1px rects */}
   </frame>
 </frame>
@@ -147,9 +147,9 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 ### Mobile Card
 
 ```xml
-<frame name='Card' layout='column' gap='12' p='16' width='fill' height='hug' bg='#FFFFFF' corner='12' shadow='0,2,8,0,#0000001A'>
-  <frame name='Header' layout='row' gap='12' alignItems='center' width='fill' height='hug' bg='transparent'>
-    <frame name='Avatar' w='40' h='40' corner='20' bg='#E5E7EB'/>
+<frame name='Card' layout='column' gap='12' p='16' width='fill' height='hug' bg='#FFFFFF' rounded='12' shadow='0,2,8,0,#0000001A'>
+  <frame name='Header' layout='row' gap='12' items='center' width='fill' height='hug' bg='transparent'>
+    <frame name='Avatar' w='40' h='40' rounded='20' bg='#E5E7EB'/>
     <frame name='Info' layout='column' gap='2' width='fill' height='hug' bg='transparent'>
       <text name='Name' size='15' weight='Medium' fill='#000000'>Jane Smith</text>
       <text name='Time' size='13' fill='#8E8E93'>2 hours ago</text>
@@ -162,7 +162,7 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 ### Floating Action Button
 
 ```xml
-<frame name='FAB' layout='row' justifyContent='center' alignItems='center' w='56' h='56' bg='#007AFF' corner='28' shadow='0,4,12,0,#0000003D'>
+<frame name='FAB' layout='row' justify='center' items='center' w='56' h='56' bg='#007AFF' rounded='28' shadow='0,4,12,0,#0000003D'>
   <icon name='Plus' icon='lucide:plus' size='24' fill='#FFFFFF'/>
 </frame>
 ```
@@ -179,7 +179,7 @@ tags: [mobile, ios, android, app, touch, viewport, phone]
 | Content padding | `16` px horizontal |
 | Content gap | `16` px |
 | List item padding | `12 16` px |
-| List icon wrapper | `36` x `36` px, `corner='8'` |
+| List icon wrapper | `36` x `36` px, `rounded='8'` |
 | Touch target minimum | `44` x `44` px |
 | Tab bar icon size | `24` px |
 | Tab bar label size | `10` px |

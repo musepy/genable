@@ -42,9 +42,9 @@ if (!existing) {
 ```jsx
 <frame name="Dashboard" layout="row" gap={80} p={40} w="hug" h="hug">
   <frame name="Palette" layout="column" gap={24} w="hug" h="hug">
-    <frame name="Colors" layout="column" gap={2} p={16} corner={8} bg="$Colors/Gray/2" w="hug" h="hug" />
+    <frame name="Colors" layout="column" gap={2} p={16} rounded={8} bg="$Colors/Gray/2" w="hug" h="hug" />
   </frame>
-  <frame name="Guide" layout="column" gap={0} w={640} corner={12} h="hug" overflow="hidden" />
+  <frame name="Guide" layout="column" gap={0} w={640} rounded={12} h="hug" overflow="hidden" />
 </frame>
 ```
 

@@ -72,6 +72,30 @@ describe('expandShorthands', () => {
     });
   });
 
+  describe('justify / items (canonical Tailwind-style names)', () => {
+    it('justify: "between" → SPACE_BETWEEN (no CSS prefix)', () => {
+      expect(expandShorthands({ justify: 'between' }))
+        .toMatchObject({ primaryAxisAlignItems: 'SPACE_BETWEEN' });
+    });
+    it('justify: "start" → MIN', () => {
+      expect(expandShorthands({ justify: 'start' }))
+        .toMatchObject({ primaryAxisAlignItems: 'MIN' });
+    });
+    it('items: "center" → counterAxisAlignItems CENTER', () => {
+      expect(expandShorthands({ items: 'center' }))
+        .toMatchObject({ counterAxisAlignItems: 'CENTER' });
+    });
+    it('items: "start" → MIN', () => {
+      expect(expandShorthands({ items: 'start' }))
+        .toMatchObject({ counterAxisAlignItems: 'MIN' });
+    });
+    it('items is equivalent to alignItems (aliases converge)', () => {
+      const viaItems = expandShorthands({ items: 'center' });
+      const viaAlignItems = expandShorthands({ alignItems: 'center' });
+      expect(viaItems).toEqual(viaAlignItems);
+    });
+  });
+
   // ── Spacing ────────────────────────────────────────────────────────────
 
   describe('padding', () => {
@@ -254,6 +278,22 @@ describe('expandShorthands', () => {
     });
     it('corner:full also works', () => {
       expect(expandShorthands({ corner: 'full' })).toMatchObject({ cornerRadius: 9999 });
+    });
+    it('rounded is alias for radius (Tailwind-style canonical name)', () => {
+      expect(expandShorthands({ rounded: 8 })).toMatchObject({ cornerRadius: 8 });
+    });
+    it('rounded:"full" → 9999', () => {
+      expect(expandShorthands({ rounded: 'full' })).toMatchObject({ cornerRadius: 9999 });
+    });
+    it('rounded: [tl, tr, bl, br] → individual corners', () => {
+      const result = expandShorthands({ rounded: [12, 12, 0, 0] });
+      expect(result.topLeftRadius).toBe(12);
+      expect(result.topRightRadius).toBe(12);
+      expect(result.bottomLeftRadius).toBe(0);
+      expect(result.bottomRightRadius).toBe(0);
+    });
+    it('rounded and radius converge to same result', () => {
+      expect(expandShorthands({ rounded: 12 })).toEqual(expandShorthands({ radius: 12 }));
     });
   });
 

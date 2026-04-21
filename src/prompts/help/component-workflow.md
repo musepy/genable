@@ -18,12 +18,12 @@ Atomic components are built at canvas top level first; pages assemble them via `
 jsx({markup: `
 <component name="Text Input" w={356} layout="column" gap={8}>
   <text name="Label" size={14} weight="Medium">Label</text>
-  <frame name="Input Box" w="fill" h={44} corner={8} stroke="#D1D5DB" layout="row" align="center" p={{left:16, right:16}}>
+  <frame name="Input Box" w="fill" h={44} rounded={8} stroke="#D1D5DB" layout="row" align="center" p={{left:16, right:16}}>
     <text name="Placeholder" size={14} fill="#9CA3AF">Placeholder</text>
   </frame>
 </component>
 
-<component name="Button" w={356} h={48} corner={8} bg="#4F46E5" layout="row" justify="center" align="center">
+<component name="Button" w={356} h={48} rounded={8} bg="#4F46E5" layout="row" justify="center" align="center">
   <text name="Label" size={16} weight="SemiBold" fill="#FFFFFF">Button</text>
 </component>
 `})
@@ -46,7 +46,7 @@ add_component_prop({node: compId, name: "Show Icon",   type: "BOOLEAN", default:
 
 ```jsx
 jsx({markup: `
-<frame name="Login Form" w={420} layout="column" gap={24} p={32} bg="#FFFFFF" corner={16}>
+<frame name="Login Form" w={420} layout="column" gap={24} p={32} bg="#FFFFFF" rounded={16}>
   <frame name="Header" w="fill" layout="column" gap={8}>
     <text size={28} weight="Bold">Sign In</text>
   </frame>

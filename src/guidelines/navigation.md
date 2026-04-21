@@ -52,20 +52,20 @@ tags: [navigation, navbar, sidebar, tabs, breadcrumb, wayfinding, menu]
 ### Top Navbar (light)
 
 ```xml
-<frame name='Navbar' layout='row' justifyContent='space-between' alignItems='center' p='12 24' width='fill' h='64' bg='#FFFFFF' shadow='0,1,3,0,#0000000D'>
-  <frame name='Left' layout='row' gap='8' alignItems='center' width='hug' height='hug' bg='transparent'>
+<frame name='Navbar' layout='row' justify='between' items='center' p='12 24' width='fill' h='64' bg='#FFFFFF' shadow='0,1,3,0,#0000000D'>
+  <frame name='Left' layout='row' gap='8' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Logo' icon='lucide:hexagon' size='28' fill='#4F46E5'/>
     <text name='Brand' size='18' weight='Bold' fill='#111827'>AppName</text>
   </frame>
-  <frame name='Center' layout='row' gap='32' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Center' layout='row' gap='32' items='center' width='hug' height='hug' bg='transparent'>
     <text name='Link Active' size='14' weight='Medium' fill='#111827'>Dashboard</text>
     <text name='Link' size='14' fill='#6B7280'>Projects</text>
     <text name='Link' size='14' fill='#6B7280'>Team</text>
     <text name='Link' size='14' fill='#6B7280'>Settings</text>
   </frame>
-  <frame name='Right' layout='row' gap='16' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Right' layout='row' gap='16' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Bell' icon='lucide:bell' size='20' fill='#6B7280'/>
-    <frame name='Avatar' w='32' h='32' corner='16' bg='#E5E7EB'/>
+    <frame name='Avatar' w='32' h='32' rounded='16' bg='#E5E7EB'/>
   </frame>
 </frame>
 ```
@@ -73,19 +73,19 @@ tags: [navigation, navbar, sidebar, tabs, breadcrumb, wayfinding, menu]
 ### Top Navbar (dark)
 
 ```xml
-<frame name='Navbar Dark' layout='row' justifyContent='space-between' alignItems='center' p='12 24' width='fill' h='64' bg='#111827'>
-  <frame name='Left' layout='row' gap='8' alignItems='center' width='hug' height='hug' bg='transparent'>
+<frame name='Navbar Dark' layout='row' justify='between' items='center' p='12 24' width='fill' h='64' bg='#111827'>
+  <frame name='Left' layout='row' gap='8' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Logo' icon='lucide:hexagon' size='28' fill='#60A5FA'/>
     <text name='Brand' size='18' weight='Bold' fill='#FFFFFF'>AppName</text>
   </frame>
-  <frame name='Center' layout='row' gap='32' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Center' layout='row' gap='32' items='center' width='hug' height='hug' bg='transparent'>
     <text name='Link Active' size='14' weight='Medium' fill='#FFFFFF'>Dashboard</text>
     <text name='Link' size='14' fill='#9CA3AF'>Projects</text>
     <text name='Link' size='14' fill='#9CA3AF'>Team</text>
   </frame>
-  <frame name='Right' layout='row' gap='16' alignItems='center' width='hug' height='hug' bg='transparent'>
+  <frame name='Right' layout='row' gap='16' items='center' width='hug' height='hug' bg='transparent'>
     <icon name='Bell' icon='lucide:bell' size='20' fill='#9CA3AF'/>
-    <frame name='Avatar' w='32' h='32' corner='16' bg='#374151'/>
+    <frame name='Avatar' w='32' h='32' rounded='16' bg='#374151'/>
   </frame>
 </frame>
 ```
@@ -94,29 +94,29 @@ tags: [navigation, navbar, sidebar, tabs, breadcrumb, wayfinding, menu]
 
 ```xml
 <frame name='Sidebar' layout='column' w='240' height='fill' bg='#0F172A' p='16'>
-  <frame name='Logo' layout='row' gap='8' alignItems='center' width='fill' height='hug' bg='transparent' p='0 0 16 0'>
+  <frame name='Logo' layout='row' gap='8' items='center' width='fill' height='hug' bg='transparent' p='0 0 16 0'>
     <icon name='Logo' icon='lucide:layout-dashboard' size='24' fill='#FFFFFF'/>
     <text name='Brand' size='18' weight='Bold' fill='#FFFFFF'>Admin</text>
   </frame>
   <line name='Divider' w='fill' stroke='#1E293B'/>
   <frame name='Nav Group' layout='column' gap='4' width='fill' height='hug' bg='transparent' p='16 0'>
     <text name='Group Label' size='12' weight='Medium' fill='#64748B' p='0 12 8 12'>MAIN</text>
-    <frame name='Nav Active' layout='row' gap='12' alignItems='center' p='10 12' width='fill' height='hug' bg='#1E293B' corner='8'>
+    <frame name='Nav Active' layout='row' gap='12' items='center' p='10 12' width='fill' height='hug' bg='#1E293B' rounded='8'>
       <icon name='Icon' icon='lucide:home' size='20' fill='#3B82F6'/>
       <text name='Label' size='14' weight='Medium' fill='#F1F5F9'>Dashboard</text>
     </frame>
-    <frame name='Nav Item' layout='row' gap='12' alignItems='center' p='10 12' width='fill' height='hug' bg='transparent' corner='8'>
+    <frame name='Nav Item' layout='row' gap='12' items='center' p='10 12' width='fill' height='hug' bg='transparent' rounded='8'>
       <icon name='Icon' icon='lucide:bar-chart-2' size='20' fill='#94A3B8'/>
       <text name='Label' size='14' fill='#94A3B8'>Analytics</text>
     </frame>
-    <frame name='Nav Item' layout='row' gap='12' alignItems='center' p='10 12' width='fill' height='hug' bg='transparent' corner='8'>
+    <frame name='Nav Item' layout='row' gap='12' items='center' p='10 12' width='fill' height='hug' bg='transparent' rounded='8'>
       <icon name='Icon' icon='lucide:users' size='20' fill='#94A3B8'/>
       <text name='Label' size='14' fill='#94A3B8'>Users</text>
     </frame>
   </frame>
   <frame name='Spacer' width='fill' height='fill' bg='transparent'/>
-  <frame name='User' layout='row' gap='12' alignItems='center' p='12' width='fill' height='hug' bg='#1E293B' corner='8'>
-    <frame name='Avatar' w='32' h='32' corner='16' bg='#334155'/>
+  <frame name='User' layout='row' gap='12' items='center' p='12' width='fill' height='hug' bg='#1E293B' rounded='8'>
+    <frame name='Avatar' w='32' h='32' rounded='16' bg='#334155'/>
     <frame name='Info' layout='column' gap='2' width='fill' height='hug' bg='transparent'>
       <text name='Name' size='14' weight='Medium' fill='#F1F5F9'>John Doe</text>
       <text name='Email' size='12' fill='#64748B'>john@company.com</text>
@@ -129,14 +129,14 @@ tags: [navigation, navbar, sidebar, tabs, breadcrumb, wayfinding, menu]
 
 ```xml
 <frame name='Tab Bar' layout='row' gap='0' width='fill' height='hug' bg='#FFFFFF' stroke='#E5E7EB' strokeW='1'>
-  <frame name='Tab Active' layout='column' alignItems='center' p='12 20' width='hug' height='hug' bg='transparent'>
+  <frame name='Tab Active' layout='column' items='center' p='12 20' width='hug' height='hug' bg='transparent'>
     <text name='Label' size='14' weight='Medium' fill='#4F46E5'>Overview</text>
     <rect name='Indicator' width='fill' h='2' bg='#4F46E5'/>
   </frame>
-  <frame name='Tab' layout='column' alignItems='center' p='12 20' width='hug' height='hug' bg='transparent'>
+  <frame name='Tab' layout='column' items='center' p='12 20' width='hug' height='hug' bg='transparent'>
     <text name='Label' size='14' fill='#6B7280'>Analytics</text>
   </frame>
-  <frame name='Tab' layout='column' alignItems='center' p='12 20' width='hug' height='hug' bg='transparent'>
+  <frame name='Tab' layout='column' items='center' p='12 20' width='hug' height='hug' bg='transparent'>
     <text name='Label' size='14' fill='#6B7280'>Settings</text>
   </frame>
 </frame>
@@ -145,7 +145,7 @@ tags: [navigation, navbar, sidebar, tabs, breadcrumb, wayfinding, menu]
 ### Breadcrumbs
 
 ```xml
-<frame name='Breadcrumbs' layout='row' gap='8' alignItems='center' width='fill' height='hug' bg='transparent'>
+<frame name='Breadcrumbs' layout='row' gap='8' items='center' width='fill' height='hug' bg='transparent'>
   <text name='Home' size='14' fill='#6B7280'>Home</text>
   <icon name='Sep' icon='lucide:chevron-right' size='14' fill='#D1D5DB'/>
   <text name='Parent' size='14' fill='#6B7280'>Projects</text>

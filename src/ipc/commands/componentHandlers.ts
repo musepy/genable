@@ -1,12 +1,11 @@
 /**
- * @file compHandlers.ts
+ * @file componentHandlers.ts
  * @description IPC handlers for component/variant management commands.
  * Runs on main thread with full figma component API access.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
-import { traced } from './pipelineTracer';
 
 // ── Helpers ──
 
@@ -16,29 +15,12 @@ function displayName(internalKey: string): string {
   return idx >= 0 ? internalKey.slice(0, idx) : internalKey;
 }
 
-// ── Main dispatcher ──
-
-export const handleComp = traced('handleComp()', 'compHandlers.ts', async function handleComp(parameters: any): Promise<ToolResponse> {
-  const sub = parameters.subcommand;
-  switch (sub) {
-    case 'create': return handleCompCreate(parameters);
-    case 'combine': return handleCompCombine(parameters);
-    case 'prop': return handleCompProp(parameters);
-    case 'ls': return handleCompLs(parameters);
-    case 'instance': return handleCompInstance(parameters);
-    default:
-      return {
-        error: `Unknown comp subcommand "${sub}". Use: create, combine, prop, ls, instance`,
-      };
-  }
-});
-
-// ── comp create — convert frame to component ──
+// ── create_component — convert frame to component ──
 
 export async function handleCompCreate(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   if (!paths || paths.length === 0) {
-    return { error: 'Usage: comp create <path>' };
+    return { error: 'create_component requires "node" (frame/group ID).' };
   }
 
   const resolved = await resolvePathToNode(paths[0]);
@@ -113,14 +95,14 @@ export async function handleCompCreate(params: any): Promise<ToolResponse> {
   };
 }
 
-// ── comp combine — combine as variant set ──
+// ── combine_components — combine as variant set ──
 
 export async function handleCompCombine(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   const setName = params.name as string | undefined;
 
   if (!paths || paths.length < 2) {
-    return { error: 'Usage: comp combine <path1> <path2> ... [--name Name]. Requires at least 2 components.' };
+    return { error: 'combine_components requires "nodes" (array of at least 2 component IDs); optional "name".' };
   }
 
   // Resolve all paths to component nodes
@@ -133,7 +115,7 @@ export async function handleCompCombine(params: any): Promise<ToolResponse> {
     }
     const node = resolved.node;
     if (node.type !== 'COMPONENT') {
-      return { error: `"${node.name}" is a ${node.type}, not a COMPONENT. Use "comp create" first to convert frames.` };
+      return { error: `"${node.name}" is a ${node.type}, not a COMPONENT. Use "create_component" first to convert frames.` };
     }
     components.push(node as ComponentNode);
   }
@@ -244,7 +226,7 @@ async function resolveBindTarget(
   return null;
 }
 
-// ── comp prop — add component property ──
+// ── add_component_prop — add component property ──
 
 export async function handleCompProp(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
@@ -254,7 +236,7 @@ export async function handleCompProp(params: any): Promise<ToolResponse> {
   const bindTarget = params.bindTarget as string | undefined;
 
   if (!paths || paths.length === 0 || !propName || !propType) {
-    return { error: 'Usage: add_component_prop({node, name, type, default?, bind?})' };
+    return { error: 'add_component_prop requires "node", "name", and "type"; optional "default", "bind".' };
   }
 
   const validTypes = ['TEXT', 'BOOLEAN', 'INSTANCE_SWAP'];
@@ -345,12 +327,12 @@ export async function handleCompProp(params: any): Promise<ToolResponse> {
   }
 }
 
-// ── comp ls — list component properties ──
+// ── list_component_props — list component properties ──
 
 export async function handleCompLs(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   if (!paths || paths.length === 0) {
-    return { error: 'Usage: comp ls <path>' };
+    return { error: 'list_component_props requires "node" (component/instance ID).' };
   }
 
   const resolved = await resolvePathToNode(paths[0]);
@@ -421,14 +403,14 @@ export async function handleCompLs(params: any): Promise<ToolResponse> {
   return { data: { listing: lines.join('\n') } };
 }
 
-// ── comp instance — create instance ──
+// ── create_instance — create instance ──
 
 export async function handleCompInstance(params: any): Promise<ToolResponse> {
   const paths = params.paths as string[];
   const parentPath = params.parent as string | undefined;
 
   if (!paths || paths.length === 0) {
-    return { error: 'Usage: comp instance <component-path> [--parent <dest-path>]' };
+    return { error: 'create_instance requires "node" (component ID); optional "parent".' };
   }
 
   const resolved = await resolvePathToNode(paths[0]);

@@ -23,7 +23,7 @@ import { handleScanTokens } from './tokenScanner';
 import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './searchAdapter';
 import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAdapter';
 import { handleListVariables, handleCreateVariable, handleBindVariable, handleSetVariableMode, handleAliasVariable } from './varAdapter';
-import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './compAdapter';
+import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './componentAdapter';
 import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from './setterAdapter';
 import { handleGetSelection } from './selectionAdapter';
 

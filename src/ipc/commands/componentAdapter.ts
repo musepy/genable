@@ -1,10 +1,10 @@
 /**
- * @file compAdapter.ts
- * @description Adapters for component tools — maps structured params to compHandlers.
+ * @file componentAdapter.ts
+ * @description Adapters for component tools — maps structured params to componentHandlers.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { handleCompCreate, handleCompCombine, handleCompProp, handleCompLs, handleCompInstance } from './compHandlers';
+import { handleCompCreate, handleCompCombine, handleCompProp, handleCompLs, handleCompInstance } from './componentHandlers';
 
 export async function handleCreateComponent(params: any): Promise<ToolResponse> {
   return handleCompCreate({ paths: [params.node] });

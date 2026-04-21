@@ -82,7 +82,6 @@ if (isWatch) {
     // UI capture disabled (test worktree)
 
     console.log(`🔨 Generating Agent Registries...`);
-    execSync(`node scripts/generate-skills-registry.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-knowledge-index.js`, { stdio: 'inherit' });
     execSync(`node scripts/generate-prompt-catalog.js`, { stdio: 'inherit' });
 

@@ -32,7 +32,9 @@ const availableSkills: SkillSummary[] = (knowledgeIndex as Array<{
 }>)
   .filter(entry => entry.category === 'skill')
   .map(entry => ({
-    id: entry.id,
+    // knowledge-index normalizes skill ids to `skill:<id>`. The UI attaches
+    // `@<skillId>` to the prompt, so strip the prefix to match the prior UX.
+    id: entry.id.startsWith('skill:') ? entry.id.slice('skill:'.length) : entry.id,
     name: entry.name,
     description: entry.description,
   }))

@@ -66,6 +66,40 @@ function serializeValue(value: unknown, depth = 0): unknown {
 }
 
 /**
+ * Sync Figma APIs that we silently rewrite to their async equivalents.
+ *
+ * With manifest `documentAccess: "dynamic-page"`, these sync forms throw
+ * at runtime ("Cannot call ... Use ...Async instead."). Only top-level
+ * `figma.*` calls where `await asyncVer()` is a drop-in semantic equivalent
+ * belong here — NOT node methods like `.findAll` / `.findOne`, whose results
+ * are commonly chained (`nodes.forEach`) and would break if silently awaited.
+ */
+const SYNC_API_REWRITES: Array<{ from: RegExp; to: string }> = [
+  { from: /\bfigma\.getNodeById\b(?!Async)/g,                         to: 'await figma.getNodeByIdAsync' },
+  { from: /\bfigma\.getStyleById\b(?!Async)/g,                        to: 'await figma.getStyleByIdAsync' },
+  { from: /\bfigma\.getLocalPaintStyles\b(?!Async)/g,                 to: 'await figma.getLocalPaintStylesAsync' },
+  { from: /\bfigma\.getLocalTextStyles\b(?!Async)/g,                  to: 'await figma.getLocalTextStylesAsync' },
+  { from: /\bfigma\.getLocalEffectStyles\b(?!Async)/g,                to: 'await figma.getLocalEffectStylesAsync' },
+  { from: /\bfigma\.getLocalGridStyles\b(?!Async)/g,                  to: 'await figma.getLocalGridStylesAsync' },
+  { from: /\bfigma\.variables\.getLocalVariableCollections\b(?!Async)/g, to: 'await figma.variables.getLocalVariableCollectionsAsync' },
+  { from: /\bfigma\.variables\.getLocalVariables\b(?!Async)/g,        to: 'await figma.variables.getLocalVariablesAsync' },
+  { from: /\bfigma\.variables\.getVariableById\b(?!Async)/g,          to: 'await figma.variables.getVariableByIdAsync' },
+];
+
+/**
+ * Sync node methods that we CANNOT silently rewrite (the result is often
+ * chained synchronously). Instead, early-reject with an actionable hint so
+ * the LLM can rewrite its own code.
+ */
+const NODE_METHOD_HINTS: Array<{ pattern: RegExp; fix: string }> = [
+  { pattern: /\.findAll\b(?!Async)\(/,             fix: '.findAllAsync(' },
+  { pattern: /\.findOne\b(?!Async)\(/,             fix: '.findOneAsync(' },
+  { pattern: /\.findChildren\b(?!Async)\(/,        fix: '.findChildrenAsync(' },
+  { pattern: /\.findAllWithCriteria\b(?!Async)\(/, fix: '.findAllWithCriteriaAsync(' },
+  { pattern: /\.setReactions\b(?!Async)\(/,        fix: '.setReactionsAsync(' },
+];
+
+/**
  * Patterns that indicate destructive or out-of-scope operations.
  * Fail-fast: reject before execution, not after damage.
  */
@@ -91,6 +125,17 @@ export const handleJs = traced('handleJs()', 'jsHandler.ts', async function hand
     };
   }
 
+  // Early-reject sync node methods that cannot be silently rewritten.
+  // Emit a specific, actionable hint BEFORE the generic blocked-pattern check.
+  for (const { pattern, fix } of NODE_METHOD_HINTS) {
+    const m = code.match(pattern);
+    if (m) {
+      return {
+        error: `Sync API "${m[0]}" not available in documentAccess: dynamic-page mode. Use "${fix}" instead (await the result).`,
+      };
+    }
+  }
+
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(code)) {
       return {
@@ -113,11 +158,15 @@ export const handleJs = traced('handleJs()', 'jsHandler.ts', async function hand
 
   try {
     // Figma sandbox blocks eval(). Use FunctionConstructor() instead.
-    // Pit-of-success: auto-replace sync Figma APIs with async equivalents
-    // (sync versions throw "Cannot call with documentAccess: dynamic-page")
-    const asyncCode = code
-      .replace(/\bfigma\.getNodeById\b(?!Async)/g, 'await figma.getNodeByIdAsync')
-      .replace(/\bfigma\.getStyleById\b(?!Async)/g, 'await figma.getStyleByIdAsync');
+    // Pit-of-success: auto-rewrite common safe sync→async mappings (top-level
+    // figma.* only, where `await asyncVer()` is a drop-in equivalent). Node
+    // methods (.findAll, .findOne, etc.) are early-rejected above with an
+    // actionable hint — NOT silently rewritten, because their results are
+    // commonly chained synchronously.
+    let asyncCode = code;
+    for (const { from, to } of SYNC_API_REWRITES) {
+      asyncCode = asyncCode.replace(from, to);
+    }
     const hasReturn = /\breturn\b/.test(asyncCode);
     const hasArrow = /=>/.test(asyncCode);
 

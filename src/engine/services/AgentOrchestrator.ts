@@ -16,7 +16,6 @@ import { ThinkingLevel } from '../llm-client/types';
 import { emit } from '@create-figma-plugin/utilities';
 import { TelemetryService } from './TelemetryService';
 
-import { initializeSkills, skillRegistry } from '../agent/skills';
 import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolicy';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { clearIconCache } from '../figma-adapter/assets/iconify';
@@ -69,23 +68,12 @@ import { DEFAULT_PROVIDER_CAPABILITIES } from '../llm-client/providers/types';
 import { IpcBridge } from '../agent/ipcBridge';
 
 export class AgentOrchestrator {
-  private static initializationPromise: Promise<void> | null = null;
   private activeAgent: AgentRuntime | null = null;
   private currentProvider: LLMProvider | null = null;
   private ipcBridge: IpcBridge | null = null;
   private fallbackEventSequence = 0;
 
   constructor(private options: OrchestratorOptions) {}
-
-  private static async ensureSkillsInitialized(enabled: boolean): Promise<void> {
-    if (!enabled) return;
-    
-    if (!AgentOrchestrator.initializationPromise) {
-      AgentOrchestrator.initializationPromise = initializeSkills();
-    }
-    
-    return AgentOrchestrator.initializationPromise;
-  }
 
   private emitFallbackRuntimeEvent(event: RuntimeEventPayload): void {
     if (!this.options.onRuntimeEvent) return;
@@ -120,7 +108,6 @@ export class AgentOrchestrator {
 
   async generate(prompt: string, pluginData: AgentPluginData) {
     const loopPolicy = resolveAgentLoopPolicy(this.options.loopPolicy);
-    await AgentOrchestrator.ensureSkillsInitialized(loopPolicy.useSkillSystem);
 
     if (prompt.trim().startsWith('/debug')) {
       this.handleDebugCommand(prompt.trim(), pluginData, loopPolicy);
@@ -258,13 +245,18 @@ export class AgentOrchestrator {
       console.log('\n' + '='.repeat(80));
       console.log('DEBUG: SKILL REGISTRY');
       console.log('='.repeat(80));
-      const allSkills = skillRegistry.getAll();
-      for (const skill of allSkills) {
-        const state = skillRegistry.getState(skill.id);
-        console.log(`  [${state?.enabled ? 'ON' : 'OFF'}] ${skill.id} — ${skill.description}`);
+      const knowledgeIndex = require('../../generated/knowledge-index.json') as Array<{
+        id: string;
+        name: string;
+        description: string;
+        category: string;
+      }>;
+      const skillEntries = knowledgeIndex.filter(e => e.category === 'skill');
+      for (const skill of skillEntries) {
+        console.log(`  ${skill.id} — ${skill.description}`);
       }
       console.log('='.repeat(80) + '\n');
-      this.emitDebugComplete(`${allSkills.length} skills dumped to console.`);
+      this.emitDebugComplete(`${skillEntries.length} skills dumped to console.`);
     } else if (subCommand === 'config') {
       console.log('\n' + '='.repeat(80));
       console.log('DEBUG: AGENT CONFIG');

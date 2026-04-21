@@ -2,9 +2,6 @@
 id: design-system
 name: Design System Creation
 description: Use when creating or managing Figma design systems — variable collections, modes (light/dark), component variants, and variable bindings for brand tokens and themes.
-category: figma
-priority: 3
-enabledByDefault: true
 ---
 
 ## DESIGN SYSTEM — Variables, Modes & Component Variants

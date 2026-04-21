@@ -2,9 +2,6 @@
 id: component-set
 name: Component Set Creation
 description: Use when creating a Figma ComponentSet with a variant matrix — clone cascading for diffs and combine_components to assemble the final set, avoiding known pitfalls.
-category: figma
-priority: 3
-enabledByDefault: true
 ---
 
 ## COMPONENT SET — Variant Matrix Creation

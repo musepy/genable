@@ -8,7 +8,7 @@ import { useState } from 'preact/hooks';
 import { Code, Plus, Search } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
 import { useTranslations } from '../i18n';
-import skillRegistry from '../../generated/skills-registry.json';
+import knowledgeIndex from '../../generated/knowledge-index.json';
 import { Input } from './Input';
 import { usePopover } from '../hooks/usePopover';
 
@@ -24,13 +24,18 @@ type SkillSummary = {
   description: string;
 };
 
-const availableSkills: SkillSummary[] = Object.values(skillRegistry as Record<string, any>)
-  .map((entry: any) => ({
-    id: entry.id || entry.frontmatter?.id || '',
-    name: entry.name || entry.frontmatter?.name || entry.id || 'Unknown Skill',
-    description: entry.description || entry.frontmatter?.description || '',
+const availableSkills: SkillSummary[] = (knowledgeIndex as Array<{
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+}>)
+  .filter(entry => entry.category === 'skill')
+  .map(entry => ({
+    id: entry.id,
+    name: entry.name,
+    description: entry.description,
   }))
-  .filter(entry => entry.id)
 
 function searchSkills(query: string): SkillSummary[] {
   const normalized = query.trim().toLowerCase()

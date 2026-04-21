@@ -2,9 +2,6 @@
 id: design-knowledge
 name: Design Knowledge
 description: Use when you need to search for design patterns, component anatomy, style guides, or layout rules from the knowledge library before making decisions.
-category: knowledge
-priority: 3
-enabledByDefault: true
 ---
 
 ## DESIGN KNOWLEDGE

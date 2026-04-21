@@ -2,9 +2,6 @@
 id: agent-page
 name: Agent Page — Visual Design System Dashboard
 description: Use when initializing or managing the .agent Figma page that holds the visual design system dashboard — Palette (color/spacing/typography) and Guide (usage docs) via component templates.
-category: figma
-priority: 2
-enabledByDefault: true
 ---
 
 ## AGENT PAGE — Visual Design System Dashboard

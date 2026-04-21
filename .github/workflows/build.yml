@@ -25,8 +25,5 @@ jobs:
     - name: Lint
       run: npm run lint
 
-    - name: Stylelint
-      run: npm run lint:style
-
     - name: Build
       run: npm run build

@@ -151,11 +151,6 @@ function stringifyArgs(input: Record<string, any> | undefined): string {
 function stringifyResult(data: any): string {
   if (data == null) return '';
   if (typeof data === 'string') return truncate(data, TOOL_RESULT_MAX_CHARS);
-  if (data._compressed && typeof data.summary === 'string') {
-    const idMapStr = data.idMap ? ` idMap=${truncate(safeStringify(data.idMap), 400)}` : '';
-    const errStr = data.error != null ? ` error=${truncate(String(data.error), 200)}` : '';
-    return `${data.summary}${idMapStr}${errStr}`;
-  }
   return truncate(safeStringify(data), TOOL_RESULT_MAX_CHARS);
 }
 

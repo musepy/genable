@@ -22,7 +22,6 @@
 
 import { LLMMessage, ContentBlock, LLMProvider } from '../../llm-client/providers/types';
 import { buildCompressionSummary, capSummary } from './contextSummarizer';
-import { compressConsumedToolResults } from './turnResultCompressor';
 import { getContextProfile } from './constants';
 import type {
   ContextLayerBreakdown,
@@ -87,18 +86,6 @@ export class ContextManager {
    */
   async endTurn(): Promise<void> {
     await this.compressIfNeeded();
-  }
-
-  /**
-   * Intra-turn compression of consumed tool results. Safe to call every
-   * iteration — mutates tool_result blocks in place, skipping the latest.
-   */
-  compressConsumedResults(): number {
-    const turnStart = this.findCurrentTurnStart();
-    if (turnStart < 0) return 0;
-    const slice: LLMMessage[] = [];
-    for (let i = turnStart; i < this.messages.length; i++) slice.push(this.messages[i]);
-    return compressConsumedToolResults(slice);
   }
 
   /** Whether no user turn has completed yet. */

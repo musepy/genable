@@ -102,38 +102,6 @@ describe('buildCompressionSummary', () => {
     expect(prompt).toContain('tool_call name="jsx"');
   });
 
-  it('serializes tool results including _compressed pre-summaries', async () => {
-    const provider = createStubProvider({ response: { text: 'ok' } });
-
-    const messages: LLMMessage[] = [
-      { id: 'u1', role: 'user', content: 'Create dashboard' },
-      {
-        id: 'm1', role: 'model', content: [
-          { type: 'tool_call', id: 'call_1', name: 'jsx', input: { parent: '0:1' } },
-        ],
-      },
-      {
-        id: 't1', role: 'tool', content: [
-          {
-            type: 'tool_result', id: 'call_1', name: 'jsx',
-            data: {
-              _compressed: true,
-              summary: 'created 3 nodes',
-              idMap: { Dashboard: '1:1', Header: '1:2', Footer: '1:3' },
-            },
-          },
-        ],
-      },
-    ];
-    await buildCompressionSummary(provider, messages);
-
-    const userMsg = provider.lastRequest!.messages[0];
-    const prompt = typeof userMsg.content === 'string' ? userMsg.content : '';
-    expect(prompt).toContain('created 3 nodes');
-    expect(prompt).toContain('Dashboard');
-    expect(prompt).toContain('tool_result');
-  });
-
   it('marks error results with error="true"', async () => {
     const provider = createStubProvider({ response: { text: 'ok' } });
 

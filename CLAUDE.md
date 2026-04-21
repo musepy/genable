@@ -40,7 +40,7 @@ Layer 4: turnMessages         — current turn only, moved to history at turn en
 
 Each LLM call receives `[systemPrompt, summary, ...conversationHistory, ...turnMessages]`. Context budget = **70% of model context window** (e.g. ~140K for Claude 200K, ~7K for Flash 8K). Lazy compression — only compresses oldest turns when budget exceeded.
 
-Two-tier compression: `turnResultCompressor.ts` compresses consumed tool results intra-turn; `contextSummarizer.ts` compresses oldest conversation turns at turn boundaries.
+Summary compression: `contextSummarizer.ts` compresses oldest conversation turns at turn boundaries when the context budget is exceeded. Intra-turn tool results are never compressed — they stay full-fidelity so the LLM keeps seeing success signals from prior calls.
 
 ### Entry Point
 ```

@@ -306,10 +306,10 @@ describe('createBuiltinHooksWithState', () => {
     // + emptyArgsGuard(2: counter + skip)
     // + consecutiveFailure(1) + partialFailure(1) + budget(1) + stepWarning(1)
     // + inspectGate(2: gate + dirty) + inspectStub(1)
-    // + toolPlanTriggers(5: jsxMarkupSize, jsxNodeCount, editUnknownId, knownIdObserver, deleteRebuild)
+    // + toolPlanTriggers(4: jsxNodeCount, editUnknownId, knownIdObserver, deleteRebuild)
     // + truncationRecovery(1) + truncationPlaceholderGuard(1)
-    // = 17
-    expect(hooks).toHaveLength(17);
+    // = 16
+    expect(hooks).toHaveLength(16);
     expect(typeof reset).toBe('function');
     // reset should not throw
     reset();

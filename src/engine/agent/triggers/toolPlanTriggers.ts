@@ -1,22 +1,7 @@
 /**
  * @file toolPlanTriggers.ts
- * @description Hard caps on the agent's tool-plan — enforced at beforeToolExec / afterToolExec.
+ * @description Tool-plan triggers — enforced at beforeToolExec / afterToolExec.
  *
- * Historical measurement (6 qwen3.6-plus runs, pre-experiment):
- *  - 65% of jsx calls exceed 1500 chars (28 of 43)
- *  - 28% of jsx calls exceed 60 nodes (12 of 43)
- *  - P2-Fitness retried a 7K-char broken jsx 7 times before giving up
- *  - 9 delete→rebuild cycles across 6 runs (each wastes ~2-4K output tokens)
- *
- * Experiment (April 2026): jsx char cap relaxed from 1500 → 10000 to observe
- * whether node-count cap (T5, 60 nodes) is a sufficient primary guardrail.
- * The 10K char cap remains as a safety net for pathological markup (e.g. a
- * 50K byte blob that would otherwise burn tokens before node-count rejects).
- *
- * The runtime enforces:
- *
- *  T4 — jsx markup > 10000 chars           → beforeToolExec, REJECT (skip) priority 10
- *  T5 — jsx subtree > 60 nodes             → beforeToolExec, REJECT (skip) priority 11
  *  T6 — edit targets unknown node ID       → beforeToolExec, REJECT (skip) priority 12
  *  T_delete_rebuild — delete→jsx same parent within 3 steps → afterToolExec, hint  priority 50
  *
@@ -33,7 +18,6 @@ import { TurnState, extractKnownIdsFromResult } from './turnState';
 // Thresholds
 // ---------------------------------------------------------------------------
 
-export const JSX_MARKUP_CHAR_CAP = 10000;
 export const JSX_SUBTREE_NODE_CAP = Infinity;
 /** Look-back window for delete→rebuild heuristic (number of tool calls). */
 export const DELETE_REBUILD_WINDOW = 3;
@@ -81,37 +65,6 @@ function extractJsxParentHint(args: any): string | undefined {
 function extractDeleteTargetId(args: any): string | undefined {
   if (args && typeof args.node === 'string') return args.node;
   return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// T4 — jsx markup > 1500 chars → reject
-// ---------------------------------------------------------------------------
-
-export function createJsxMarkupSizeTrigger(): HookRegistration {
-  return {
-    id: 'trigger:jsxMarkupSize',
-    event: 'beforeToolExec',
-    priority: 10,
-    fn: async (ctx: HookContext): Promise<HookResult | void> => {
-      const tc = ctx.currentToolCall;
-      if (!tc || tc.name !== 'jsx') return;
-      const markup = tc.input?.markup;
-      if (typeof markup !== 'string') return;
-      const len = markup.length;
-      if (len <= JSX_MARKUP_CHAR_CAP) return;
-
-      return {
-        action: 'skip',
-        code: CAP_REJECT_CODE,
-        reason:
-          `jsx markup is ${len} chars (max ${JSX_MARKUP_CHAR_CAP}). ` +
-          `Split across calls: (1) first jsx creates the root frame — save the returned id; ` +
-          `(2) each follow-up jsx MUST pass parent: "<that id>" (or a descendant id) to nest directly, ` +
-          `plus index when sibling order matters. ` +
-          `Do NOT recreate pieces at page root and move_node them later — that duplicates work and wastes tokens.`,
-      };
-    },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +253,6 @@ export function createToolPlanTriggers(state: TurnState): {
 } {
   return {
     hooks: [
-      createJsxMarkupSizeTrigger(),
       createJsxNodeCountTrigger(),
       createEditUnknownIdTrigger(state),
       createKnownIdObserver(state),

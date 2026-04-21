@@ -9,13 +9,11 @@ import { describe, it, expect } from 'vitest';
 import { HookContext, HookRegistration, HookResult } from '../../hooks/hookTypes';
 import { createTurnState, collectIdsFromInspectTree, extractKnownIdsFromResult } from '../turnState';
 import {
-  createJsxMarkupSizeTrigger,
   createJsxNodeCountTrigger,
   createEditUnknownIdTrigger,
   createKnownIdObserver,
   createDeleteRebuildTrigger,
   countJsxNodes,
-  JSX_MARKUP_CHAR_CAP,
   JSX_SUBTREE_NODE_CAP,
   CAP_REJECT_CODE,
 } from '../toolPlanTriggers';
@@ -68,67 +66,6 @@ describe('countJsxNodes', () => {
 
   it('is case-insensitive', () => {
     expect(countJsxNodes('<FRAME><Text>a</Text></FRAME>')).toBe(2);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════
-// T4 — jsx markup size cap
-// ═══════════════════════════════════════════════════════════════
-
-describe('T4: jsxMarkupSizeTrigger', () => {
-  const trigger = createJsxMarkupSizeTrigger();
-
-  it('registers at beforeToolExec with priority 10', () => {
-    expect(trigger.event).toBe('beforeToolExec');
-    expect(trigger.priority).toBe(10);
-    expect(trigger.id).toBe('trigger:jsxMarkupSize');
-  });
-
-  it('allows markup at exactly the cap', async () => {
-    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP);
-    const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
-    const result = await invoke(trigger, ctx);
-    expect(result).toBeUndefined();
-  });
-
-  it('allows markup just under the cap', async () => {
-    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP - 1);
-    const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
-    const result = await invoke(trigger, ctx);
-    expect(result).toBeUndefined();
-  });
-
-  it('rejects markup just over the cap with correct reason', async () => {
-    const len = JSX_MARKUP_CHAR_CAP + 1;
-    const markup = 'a'.repeat(len);
-    const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
-    const result = await invoke(trigger, ctx);
-    expect(result).toBeDefined();
-    expect(result!.action).toBe('skip');
-    expect(result!.reason).toContain(`${len} chars`);
-    expect(result!.reason).toContain(`max ${JSX_MARKUP_CHAR_CAP}`);
-    expect(result!.reason).toContain('Split');
-  });
-
-  it('stamps code=CAP_REJECT so metrics can exclude the reject from errors', async () => {
-    const markup = 'a'.repeat(JSX_MARKUP_CHAR_CAP + 1);
-    const ctx = makeCtx({ currentToolCall: call('jsx', { markup }) });
-    const result = await invoke(trigger, ctx);
-    expect(result?.code).toBe(CAP_REJECT_CODE);
-  });
-
-  it('ignores non-jsx tool calls', async () => {
-    const ctx = makeCtx({
-      currentToolCall: call('edit', { node: '1:2', props: { x: 'a'.repeat(5000) } }),
-    });
-    const result = await invoke(trigger, ctx);
-    expect(result).toBeUndefined();
-  });
-
-  it('ignores jsx with non-string markup', async () => {
-    const ctx = makeCtx({ currentToolCall: call('jsx', { markup: null }) });
-    const result = await invoke(trigger, ctx);
-    expect(result).toBeUndefined();
   });
 });
 

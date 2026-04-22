@@ -175,6 +175,11 @@ export interface SelectNodeHandler extends EventHandler {
   handler: (data: { nodeId: string; smooth?: boolean; durationMs?: number }) => void;
 }
 
+export interface UnselectNodesHandler extends EventHandler {
+  name: 'UNSELECT_NODES';
+  handler: (data: { nodeIds: string[] }) => void;
+}
+
 export interface GetSelectionHandler extends EventHandler {
   name: 'GET_SELECTION';
   handler: () => void;

@@ -301,6 +301,20 @@
     ]
   },
   {
+    "id": "help:selection-reading",
+    "name": "Selection Reading Strategy",
+    "description": "Use when the user message contains a <selected_nodes> block — explains how to read the referenced nodes at appropriate depth without exhausting the context window.",
+    "category": "help",
+    "tags": [
+      "selection",
+      "inspect",
+      "describe",
+      "screenshot",
+      "depth",
+      "context"
+    ]
+  },
+  {
     "id": "help:style-collaboration",
     "name": "Style Collaboration Playbook",
     "description": "Use when style is under-specified before the first jsx call — semantic product-to-style matching + ask_user template + post-pick action.",

@@ -261,6 +261,12 @@ const lightModeTokens = `
     --panel-solid: rgba(255, 255, 255, 1);
     --panel-translucent: rgba(255, 255, 255, 0.8);
 
+    /* Figma component/instance purple — used by ContextTag component variant */
+    --component-fg: #7c3aed;
+    --component-bg: rgba(151, 71, 255, 0.08);
+    --component-border: rgba(151, 71, 255, 0.22);
+    --component-hover: rgba(151, 71, 255, 0.40);
+
     /* Radius */
     --radius-1: 3px; --radius-1-max: 3px;
     --radius-2: 4px; --radius-2-max: 4px;
@@ -384,6 +390,12 @@ const darkModeTokens = `
     --panel-default: rgba(30, 30, 30, 0.8);
     --panel-solid: var(--gray-2);
     --panel-translucent: rgba(25, 25, 25, 0.8);
+
+    /* Figma component/instance purple — slightly brighter in dark mode */
+    --component-fg: #a78bfa;
+    --component-bg: rgba(151, 71, 255, 0.14);
+    --component-border: rgba(151, 71, 255, 0.30);
+    --component-hover: rgba(151, 71, 255, 0.55);
 `;
 
 export const cssTokens = lightModeTokens + `

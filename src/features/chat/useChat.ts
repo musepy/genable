@@ -372,9 +372,20 @@ export function useChat({
     const skillTokens = (options?.attachments ?? [])
       .filter((a): a is Extract<ContextAttachment, { type: 'skill' }> => a.type === 'skill')
       .map(a => `@${a.skillId}`)
-    const enrichedPrompt = skillTokens.length > 0
-      ? `${skillTokens.join(' ')} ${normalizedPrompt}`
-      : normalizedPrompt
+
+    // Inject selection as ID references — agent decides when/how deep to inspect.
+    // See knowledge entry help:selection-reading for the recommended read strategy.
+    const selectionNodes = (options?.attachments ?? [])
+      .filter((a): a is Extract<ContextAttachment, { type: 'selection' }> => a.type === 'selection')
+      .flatMap(a => a.nodes)
+    const selectionBlock = selectionNodes.length > 0
+      ? `<selected_nodes>\n${JSON.stringify(
+          selectionNodes.map(n => ({ id: n.id, name: n.name, type: n.type })),
+        )}\n</selected_nodes>\n`
+      : ''
+
+    const prefix = skillTokens.length > 0 ? `${skillTokens.join(' ')} ` : ''
+    const enrichedPrompt = `${selectionBlock}${prefix}${normalizedPrompt}`
 
     setLoading(true)
     setError(null)

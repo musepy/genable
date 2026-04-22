@@ -12,6 +12,7 @@ import {
   SendLocalComponentsHandler,
   ToolCallHandler,
   SelectNodeHandler,
+  UnselectNodesHandler,
   GetSelectionHandler,
   SendSelectionHandler,
   SendFileInfoHandler
@@ -72,13 +73,28 @@ export default async function () {
     await smoothPanTo(target, durationMs, 8);
   });
 
-  on<GetSelectionHandler>('GET_SELECTION', function () {
-    const selection = figma.currentPage.selection.map(node => ({
+  const serializeSelection = () =>
+    figma.currentPage.selection.map(node => ({
       id: node.id,
       name: node.name,
       type: node.type,
     }));
-    emit<SendSelectionHandler>('SEND_SELECTION', { selection });
+
+  on<GetSelectionHandler>('GET_SELECTION', function () {
+    emit<SendSelectionHandler>('SEND_SELECTION', { selection: serializeSelection() });
+  });
+
+  on<UnselectNodesHandler>('UNSELECT_NODES', function (data) {
+    if (!data.nodeIds || data.nodeIds.length === 0) return;
+    const drop = new Set(data.nodeIds);
+    figma.currentPage.selection = figma.currentPage.selection.filter(n => !drop.has(n.id));
+  });
+
+  // Reactive selection sync — keep UI chips in lockstep with canvas.
+  // Note: UI requests initial snapshot via GET_SELECTION on mount (see chat/index.tsx).
+  // Don't emit eagerly before showUI() — UI iframe isn't ready yet.
+  figma.on('selectionchange', () => {
+    emit<SendSelectionHandler>('SEND_SELECTION', { selection: serializeSelection() });
   });
 
   // ==========================================

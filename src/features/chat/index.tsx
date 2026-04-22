@@ -23,10 +23,11 @@ import { CanvasTextBlock as TextBlock } from '../../ui/components/canvas-markdow
 import { ModelPopover } from '../../ui/components/ModelPopover'
 import { on, emit } from '@create-figma-plugin/utilities'
 import {
-  SendSelectionHandler, GetSelectionHandler,
+  SendSelectionHandler, GetSelectionHandler, SelectNodeHandler, UnselectNodesHandler,
   ContextAttachment,
 } from '../../types'
 import { ContextTag } from '../../ui/components/ContextTag'
+import { NodeTypeIcon, SkillIcon, PageIcon, isComponentType } from '../../ui/components/NodeTypeIcon'
 import type { PluginState } from '../../ui/index'
 
 import { useChat, UseChatProps } from './useChat'
@@ -288,9 +289,7 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
             <div key={msg.id || `msg-${i}`} style={{ ...userItemStyle, marginTop }}>
               {msg.attachments && msg.attachments.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                  {msg.attachments.map((att: ContextAttachment, ai: number) => (
-                    <ContextTag key={ai} icon={attachmentIcon(att)} label={attachmentLabel(att)} />
-                  ))}
+                  {renderAttachmentChips(msg.attachments)}
                 </div>
               )}
               <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
@@ -339,36 +338,85 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
   );
 }
 
-// --- Attachment helpers ---
+// --- Attachment rendering ---
 
-function selectionSummary(nodes: { name: string; type: string }[]): string {
-  if (nodes.length === 0) return 'Empty'
-  if (nodes.length === 1) return nodes[0].name
-  // Group by type, show first name + count
-  const names = nodes.slice(0, 2).map(n => n.name)
-  const rest = nodes.length - names.length
-  return rest > 0 ? `${names.join(', ')} +${rest}` : names.join(', ')
+/** Format the count label on an aggregated "+N" chip. */
+function aggregateLabel(count: number): string {
+  if (count >= 1000) return '999+'
+  if (count >= 100) return '99+'
+  if (count >= 10) return '9+'
+  return `+${count}`
 }
 
-function attachmentLabel(att: ContextAttachment): string {
-  switch (att.type) {
-    case 'page': return att.pageName
-    case 'selection': return selectionSummary(att.nodes)
-    case 'skill': return att.name
-  }
+type NodeRef = { id: string; name: string; type: string }
+
+interface ChipHandlers {
+  onNodeClick?: (nodeId: string) => void
+  onNodeRemove?: (nodeId: string) => void
+  onSkillRemove?: (skillId: string) => void
+  onAggregateRemove?: (nodeIds: string[]) => void
 }
 
-function attachmentIcon(att: ContextAttachment): h.JSX.Element {
-  const size = 12
-  const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round' as const }
-  switch (att.type) {
-    case 'page':
-      return <svg {...props}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
-    case 'selection':
-      return <svg {...props}><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>
-    case 'skill':
-      return <svg {...props}><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+/** Convert attachments into the flat list of v5-style chips rendered above the textarea. */
+function renderAttachmentChips(
+  attachments: ContextAttachment[],
+  handlers?: ChipHandlers,
+): h.JSX.Element[] {
+  const chips: h.JSX.Element[] = []
+
+  for (const att of attachments) {
+    if (att.type === 'skill') {
+      chips.push(
+        <ContextTag
+          key={`skill-${att.skillId}`}
+          icon={<SkillIcon />}
+          label={att.name}
+          onRemove={handlers?.onSkillRemove ? () => handlers.onSkillRemove!(att.skillId) : undefined}
+        />,
+      )
+      continue
+    }
+    if (att.type === 'page') {
+      chips.push(
+        <ContextTag key={`page-${att.pageId}`} icon={<PageIcon />} label={att.pageName} />,
+      )
+      continue
+    }
+    // selection — split into per-node chips with progressive aggregation
+    const nodes = att.nodes as NodeRef[]
+    if (nodes.length === 0) continue
+    const headCount = nodes.length <= 3 ? nodes.length : 2
+    const head = nodes.slice(0, headCount)
+    const tail = nodes.slice(headCount)
+
+    for (const n of head) {
+      chips.push(
+        <ContextTag
+          key={`node-${n.id}`}
+          icon={<NodeTypeIcon nodeType={n.type} />}
+          label={n.name}
+          title={n.name}
+          variant={isComponentType(n.type) ? 'component' : 'default'}
+          onClick={handlers?.onNodeClick ? () => handlers.onNodeClick!(n.id) : undefined}
+          onRemove={handlers?.onNodeRemove ? () => handlers.onNodeRemove!(n.id) : undefined}
+        />,
+      )
+    }
+
+    if (tail.length > 0) {
+      const tailIds = tail.map(n => n.id)
+      chips.push(
+        <ContextTag
+          key={`agg-${tailIds.join(',')}`}
+          label={aggregateLabel(tail.length)}
+          title={tail.map(n => n.name).join(', ')}
+          onRemove={handlers?.onAggregateRemove ? () => handlers.onAggregateRemove!(tailIds) : undefined}
+        />,
+      )
+    }
   }
+
+  return chips
 }
 
 export function ChatFeature(props: UseChatProps) {
@@ -415,12 +463,20 @@ export function ChatFeature(props: UseChatProps) {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Listen for selection context from main thread (replacing old JSON dump)
+  // Reactive selection sync — replace (not append) the selection attachment.
+  // Empty canvas selection removes the attachment; any non-empty update replaces it.
   useEffect(() => {
-    return on<SendSelectionHandler>('SEND_SELECTION', (data) => {
-      if (data.selection.length === 0) return
-      addAttachment({ type: 'selection', nodes: data.selection })
+    const unsub = on<SendSelectionHandler>('SEND_SELECTION', (data) => {
+      setAttachments(prev => {
+        const withoutSelection = prev.filter(a => a.type !== 'selection')
+        if (data.selection.length === 0) return withoutSelection
+        return [...withoutSelection, { type: 'selection', nodes: data.selection }]
+      })
     })
+    // Request initial snapshot once UI is mounted — main thread can't emit eagerly
+    // (would fire before showUI creates the iframe).
+    emit<GetSelectionHandler>('GET_SELECTION')
+    return unsub
   }, [])
 
   const {
@@ -588,14 +644,29 @@ export function ChatFeature(props: UseChatProps) {
           canSubmit={canSubmit}
           contextTags={attachments.length > 0 ? (
             <Fragment>
-              {attachments.map((att, i) => (
-                <ContextTag
-                  key={att.type === 'skill' ? att.skillId : att.type}
-                  icon={attachmentIcon(att)}
-                  label={attachmentLabel(att)}
-                  onRemove={att.type === 'page' ? undefined : () => removeAttachment(i)}
-                />
-              ))}
+              {renderAttachmentChips(attachments, {
+                onNodeClick: (nodeId) => emit<SelectNodeHandler>('SELECT_NODE', { nodeId }),
+                onNodeRemove: (nodeId) => {
+                  emit<UnselectNodesHandler>('UNSELECT_NODES', { nodeIds: [nodeId] })
+                  setAttachments(prev => prev
+                    .map(a => a.type === 'selection'
+                      ? { ...a, nodes: a.nodes.filter(n => n.id !== nodeId) }
+                      : a)
+                    .filter(a => a.type !== 'selection' || a.nodes.length > 0))
+                },
+                onAggregateRemove: (nodeIds) => {
+                  emit<UnselectNodesHandler>('UNSELECT_NODES', { nodeIds })
+                  const idSet = new Set(nodeIds)
+                  setAttachments(prev => prev
+                    .map(a => a.type === 'selection'
+                      ? { ...a, nodes: a.nodes.filter(n => !idSet.has(n.id)) }
+                      : a)
+                    .filter(a => a.type !== 'selection' || a.nodes.length > 0))
+                },
+                onSkillRemove: (skillId) => {
+                  setAttachments(prev => prev.filter(a => !(a.type === 'skill' && a.skillId === skillId)))
+                },
+              })}
             </Fragment>
           ) : undefined}
           leftElement={

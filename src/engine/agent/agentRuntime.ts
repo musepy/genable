@@ -10,13 +10,12 @@
  */
 
 import { LLMProvider, LLMMessage, LLMResponse, ToolCallBlock } from '../llm-client/providers/types';
-import { ToolDefinition, allToolDefinitions, ToolExecutor } from './tools';
+import { ToolDefinition, ToolExecutor } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
 import type { InspectionTracker } from './hooks/inspectionTracker';
-import { ToolResultCleaner } from './context/toolResultCleaner';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
@@ -80,7 +79,6 @@ export class AgentRuntime {
   // ─── Layered context (delegated to ContextManager) ───
   private readonly contextManager: ContextManager;
 
-  private cleaner: ToolResultCleaner;
   private llmCoordinator: LLMGenerationCoordinator;
   private toolDispatcher: ToolDispatcher;
   private allowedExecutionToolNames: Set<string>;
@@ -124,12 +122,8 @@ export class AgentRuntime {
       contextBudgetChars: Math.floor(contextWindowTokens * 0.7) * 4,
       provider: options.provider,
     });
-    // ToolResultCleaner uses command definitions (not the `run` wrapper)
-    // so it can route to the correct cleaning strategy per command.
-    this.cleaner = new ToolResultCleaner(allToolDefinitions);
     this.llmCoordinator = new LLMGenerationCoordinator(
       options.provider,
-      this.cleaner,
       {
         throttleMs: this.THROTTLE_MS,
         generateId: (prefix) => this.generateId(prefix),

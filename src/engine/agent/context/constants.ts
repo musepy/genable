@@ -18,9 +18,6 @@ export interface ContextProfile {
   /** Char threshold for auto-degrading inspect full → structural + hint */
   readAutoDegradeChars: number;
 
-  /** Max chars for a single tool call's args when stored in history */
-  maxHistoryArgsChars: number;
-
   /** Max chars for user request in summary (0 = no truncation) */
   summaryUserRequestChars: number;
 
@@ -38,7 +35,6 @@ export interface ContextProfile {
 export const TIGHT_PROFILE: ContextProfile = {
   toolResultMaxDataChars: 3000,
   readAutoDegradeChars: 2500,
-  maxHistoryArgsChars: 1500,
   summaryUserRequestChars: 120,
   summaryAgentResponseChars: 150,
   summaryMaxChars: 2000,
@@ -51,7 +47,6 @@ export const TIGHT_PROFILE: ContextProfile = {
 export const RELAXED_PROFILE: ContextProfile = {
   toolResultMaxDataChars: 30000,
   readAutoDegradeChars: 25000,
-  maxHistoryArgsChars: 15000,
   summaryUserRequestChars: 500,
   summaryAgentResponseChars: 500,
   summaryMaxChars: 8000,
@@ -94,5 +89,4 @@ export function getContextProfile(): ContextProfile {
 export const CONTEXT_CONSTANTS = {
   get TOOL_RESULT_MAX_DATA_CHARS() { return activeProfile.toolResultMaxDataChars; },
   get READ_AUTO_DEGRADE_CHARS() { return activeProfile.readAutoDegradeChars; },
-  get MAX_HISTORY_ARGS_CHARS() { return activeProfile.maxHistoryArgsChars; },
 } as const;

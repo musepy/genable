@@ -8,7 +8,6 @@
 import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, ToolCallBlock } from '../llm-client/providers/types';
 import { ToolDefinition } from './tools';
 import { ToolCallMode } from './agentLoopPolicy';
-import { ToolResultCleaner } from './context/toolResultCleaner';
 import { EmptyResponseError } from '../llm-client/providers/shared/providerErrors';
 import { withRetry } from '../llm-client/providers/shared/withRetry';
 
@@ -71,7 +70,6 @@ export class LLMGenerationCoordinator {
 
   constructor(
     private provider: LLMProvider,
-    private cleaner: ToolResultCleaner,
     public config: LLMGenerationCoordinatorConfig,
   ) {}
 
@@ -243,7 +241,7 @@ export class LLMGenerationCoordinator {
         this.pendingTextDelta = '';
       }
 
-      // --- Normalize & sanitize tool calls ---
+      // --- Normalize tool call IDs ---
       const rawToolCalls = response.toolCalls || [];
       const rawToolCallsForLoopDetection = [...rawToolCalls];
 
@@ -252,8 +250,6 @@ export class LLMGenerationCoordinator {
       }
 
       const toolCallsForExecution = rawToolCalls;
-      const historyToolCalls = this.cleaner.sanitizeToolCallsForHistory(rawToolCalls);
-      response.toolCalls = historyToolCalls;
 
       // Log provider-reported cache hit
       if (response.usage?.cachedTokens) {

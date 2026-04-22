@@ -3,12 +3,14 @@
  * @description Handler for the `jsx` command.
  *
  * Pipeline:
- *   1. compileAndExecute() — sucrase JSX → JS → VNode tree
- *   2. collectIconNames() + prefetchIcons() — batch icon prefetch
- *   3. walkTree() — VNode → Figma nodes via nodeFactory (atomic rollback)
+ *   1. compileAndExecute()  — sucrase JSX → JS → VNode tree
+ *   2. normalizeTree()      — shorthand + enum + layout defaults + margin→gap
+ *   3. prefetchIcons()      — batch icon prefetch in parallel
+ *   4. walkTree()           — VNode → Figma nodes via nodeFactory (atomic rollback)
  *
- * Template functions (solid, col, pad, etc.) replace string parsing.
- * No intermediate IR — VNode tree walks directly into Figma API.
+ * Separation of concerns: normalize is pure CPU on VNode props; walkTree only
+ * touches the Figma API. Template functions (solid, col, pad, etc.) replace
+ * string parsing. No intermediate IR — VNode tree walks directly into Figma API.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
@@ -19,6 +21,7 @@ import {
   type WalkContext,
   type WalkResult,
 } from '../../engine/jsx/templateCompiler';
+import { normalizeTree, type NormalizeWarning } from '../../engine/jsx/normalizeTree';
 import {
   centerNodeInViewport,
   prefetchIcons,
@@ -78,7 +81,15 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     };
   }
 
-  // Step 2: Prefetch all icons in parallel
+  // Step 2a: Normalize VNode tree (shorthand, layout defaults, margin→gap,
+  // enum validation, ICON size→w/h, IMAGE placeholder→name, TEXT characters).
+  // walkTree now only touches Figma API — all prop preparation lives here.
+  tracer.enter('normalizeTree()', 'normalizeTree.ts');
+  const normalizeWarnings: NormalizeWarning[] = [];
+  normalizeTree(vnodes, normalizeWarnings);
+  tracer.exit({ warnings: normalizeWarnings.length });
+
+  // Step 2b: Prefetch all icons in parallel
   const iconNames = collectIconNames(vnodes);
   if (iconNames.length > 0) await prefetchIcons(iconNames);
 
@@ -114,7 +125,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   const ctx: WalkContext = {
     symbolMap: new Map(),
     rollbackStack: [],
-    warnings: [],
+    warnings: normalizeWarnings.map(w => ({ code: w.code, message: w.message })),
     counter: 0,
   };
 

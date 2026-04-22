@@ -275,7 +275,7 @@ const SHAPE_TYPES = new Set([
 ]);
 
 /** Safety net: normalize any remaining lowercase types that slipped through preprocessing. */
-const LOWERCASE_TYPE_MAP: Record<string, string> = {
+export const LOWERCASE_TYPE_MAP: Record<string, string> = {
   frame: 'FRAME', text: 'TEXT', rect: 'RECTANGLE', rectangle: 'RECTANGLE',
   ellipse: 'ELLIPSE', line: 'LINE', icon: 'ICON', image: 'IMAGE',
   group: 'GROUP', section: 'SECTION', vector: 'VECTOR',
@@ -341,73 +341,37 @@ export async function walkTree(
       }
 
     // ── Text ──
+    // Props (incl. characters from string children) already normalized by
+    // normalizeTree; walkTree only handles Figma-context sizing + creation.
     } else if (nodeType === 'TEXT') {
-      const textChildren = vnode.children.filter(
-        (c): c is string => typeof c === 'string',
-      );
-      if (textChildren.length > 0 && props.characters === undefined) {
-        props.characters = textChildren.join('');
-      }
-      const normalized = normalizeProps(
-        props, { nodeType: 'TEXT', isCreate: true }, pushWarn,
-      );
-      normalizeSizingInProps(normalized, null, parentNode, true);
-      result = await createText(parentNode, normalized);
+      normalizeSizingInProps(props, null, parentNode, true);
+      result = await createText(parentNode, props);
 
     // ── Icon ──
+    // icon→iconName + size→w/h already handled by normalizeTree.
     } else if (nodeType === 'ICON') {
-      const iconName =
-        (props.icon as string) || (props.iconName as string) || name;
-      props.iconName = iconName;
-      delete props.icon;
-
-      if (props.size !== undefined) {
-        const s = typeof props.size === 'number'
-          ? props.size
-          : parseFloat(String(props.size));
-        if (!isNaN(s)) { props.width = s; props.height = s; }
-        delete props.size;
-      }
-
-      const normalized = normalizeProps(props, {}, pushWarn);
-      result = await createIcon(parentNode, normalized);
+      result = await createIcon(parentNode, props);
 
     // ── Image (placeholder) ──
+    // placeholder→name + default fills + layout defaults already handled
+    // by normalizeTree.
     } else if (nodeType === 'IMAGE') {
-      applyMarginToGap(vnode, props);
-      applyLayoutDefaults(nodeType, props);
-      const placeholder = props.placeholder || props.name || 'Image Placeholder';
-      if (!props.fills) props.fills = ['#E0E0E0'];
-      props.name = placeholder;
-      const normalized = normalizeProps(
-        props, { nodeType: 'FRAME', isCreate: true }, pushWarn,
-      );
-      normalizeSizingInProps(normalized, null, parentNode, false);
-      result = await createFrame(parentNode, normalized);
+      normalizeSizingInProps(props, null, parentNode, false);
+      result = await createFrame(parentNode, props);
 
     // ── Component ──
     } else if (nodeType === 'COMPONENT') {
-      applyMarginToGap(vnode, props);
-      applyLayoutDefaults(nodeType, props);
-      const normalized = normalizeProps(
-        props, { nodeType: 'FRAME', isCreate: true }, pushWarn,
-      );
-      normalizeSizingInProps(normalized, null, parentNode, false);
-      result = await createComponent(parentNode, normalized, sym);
+      normalizeSizingInProps(props, null, parentNode, false);
+      result = await createComponent(parentNode, props, sym);
 
     // ── Shape or Frame ──
     } else {
-      applyMarginToGap(vnode, props);
-      applyLayoutDefaults(nodeType, props);
-      const normalized = normalizeProps(
-        props, { nodeType, isCreate: true }, pushWarn,
-      );
-      normalizeSizingInProps(normalized, null, parentNode, false);
+      normalizeSizingInProps(props, null, parentNode, false);
 
       if (SHAPE_TYPES.has(nodeType)) {
-        result = await createShape(nodeType, parentNode, normalized);
+        result = await createShape(nodeType, parentNode, props);
       } else {
-        result = await createFrame(parentNode, normalized);
+        result = await createFrame(parentNode, props);
       }
     }
   } catch (e: any) {
@@ -461,7 +425,7 @@ export async function walkTree(
 /**
  * Convert children's CSS-style margins into parent gap (Figma has no margins).
  */
-function applyMarginToGap(
+export function applyMarginToGap(
   vnode: VNode,
   parentProps: Record<string, any>,
 ): void {
@@ -510,7 +474,7 @@ const LAYOUT_KEYWORD_TO_MODE: Record<string, string> = {
  * if the key is missing from LAYOUT_KEYWORD_TO_MODE, the defaults
  * simply don't run (the expander will throw next).
  */
-function applyLayoutDefaults(
+export function applyLayoutDefaults(
   nodeType: string,
   props: Record<string, any>,
 ): void {

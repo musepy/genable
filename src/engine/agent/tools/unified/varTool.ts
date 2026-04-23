@@ -158,13 +158,15 @@ export const bindVariableDefinition: ToolDefinition = {
   mutates: true,
   description: `Bind a variable to a node property.
 
+prop is a flat Figma field name (e.g. fills, strokes, fontSize, itemSpacing,
+paddingTop, cornerRadius, opacity, visible, width, height). Common shorthands
+are also accepted: bg/fill → fills, stroke → strokes, gap → itemSpacing,
+padding → paddingTop, corner → cornerRadius, font-size → fontSize.
+Deep paths like fills[0] or effects[0].color are NOT supported.
+
 When selecting which variable to bind: if the node is a Tablet or Mobile variant
 (name or variant property contains "Tablet"/"Mobile"), match the node's property
 value against the Tablet/Mobile mode column from list_variables — not Desktop.
-
-prop supports paths for nested paint targets:
-  fills[0], strokes[0], effects[0].color,
-  fills[0].gradientStops[2].color
 
 Examples:
   bind_variable({node: "1:2", prop: "fills", variable: "VariableID:1:5"})
@@ -178,7 +180,7 @@ Examples:
       },
       prop: {
         type: 'string',
-        description: 'Node property to bind (fills, fontSize, paddingTop, fills[0], etc.)',
+        description: 'Flat Figma field name (e.g. fills, fontSize, paddingTop, itemSpacing)',
       },
       variable: {
         type: 'string',

@@ -36,8 +36,7 @@ For instances, use component property DISPLAY NAMES (e.g. "Label") — edit reso
       node: { type: 'string', description: 'Node ID (e.g. "1:2") from jsx/inspect results' },
       nodes: {
         type: 'array',
-        maxItems: 8,
-        description: 'Batch: array of {node, props?, content?} objects. Cap 8 per call — larger batches risk the LLM response being truncated by the output-token limit, producing malformed props.',
+        description: 'Batch: array of {node, props?, content?} objects. No hard item cap — real ceiling is LLM output stream length (~10KB+ of rendered params can stall mid-JSON). If a batch is large and props are rich, split into 2 calls.',
         items: {
           type: 'object',
           description: '{node, props?, content?} — at least one of props or content is required',

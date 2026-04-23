@@ -15,16 +15,23 @@ export const jsToolDefinition: ToolDefinition = {
   description: `Execute JavaScript in the Figma plugin runtime — full figma.* API access. Escape hatch for reads and API patterns the dedicated tools don't cover. For visual properties — fills, text, layout, stroke — the dedicated setters (set_fill, set_text, set_layout, set_stroke) run the same idMap + validation pipeline the rest of the agent relies on; prefer them so changes stay traceable.
 
 Examples:
-  js({code: "figma.currentPage.children.length"})
-  js({code: "figma.currentPage.findAll(n => n.type === 'TEXT').map(n => ({name: n.name, size: n.fontSize}))"})
-  js({code: "figma.currentPage.selection.map(n => n.name)"})
+  js({code: "return figma.currentPage.children.length"})
+  js({code: "var n = figma.getNodeById('1:5'); n.fills = [{type:'SOLID', color:{r:1,g:0,b:0}}]; return n.id"})
+  js({code: "var all = await figma.currentPage.findAllAsync(); return all.filter(n => n.type === 'VECTOR').map(n => n.id)"})
 
 Rules:
   - Full access to figma global (Figma Plugin API)
   - Use return for multi-statement code
   - Async/await supported
   - Results auto-serialized (nodes -> {id, type, name, width, height})
-  - Arrays capped at 100 items`,
+  - Arrays capped at 100 items
+
+Gotchas (sandbox is strict, parser errors don't include line numbers):
+  - Writes: use flat top-level \`var x = figma.getNodeById(id); x.prop = value;\` — avoid method-chain assignment like \`figma.getNodeById(x).fills = Y\`
+  - \`findAll\` (sync) is blocked — use \`await findAllAsync()\` then filter client-side
+  - Predicate callbacks inside findAllAsync may fail — prefer filter-after
+  - fills/effects are frozen — build a new array and assign, don't mutate in place
+  - On "expecting ';'" errors with no line info, shrink the script by halves to isolate`,
   parameters: {
     type: 'object',
     properties: {

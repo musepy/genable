@@ -1,8 +1,11 @@
 /**
  * @file varTool.ts
- * @description Variable (design token) tools — verb_noun first-class tools.
+ * @description Variable (design token) tools — 6 first-class tools.
  *
- * 4 tools replacing the old `var({action})` action-routed pattern.
+ * Addressing: pure Figma IDs — `VariableID:x:y`, `VariableCollectionId:x:y`,
+ * modeId like `"1:0"`. No path / no name-lookup.
+ *
+ * Field names are Figma-native: `variableCollectionId`, `resolvedType`, `valuesByMode`.
  */
 
 import { ToolDefinition } from '../types';
@@ -10,43 +13,74 @@ import { ToolDefinition } from '../types';
 export const listVariablesDefinition: ToolDefinition = {
   name: 'list_variables',
   executionStrategy: 'parallel',
-  description: `List variable collections and variables, including per-mode values.
+  description: `List variables as a flat array with referenced collections.
 
-Returns structured data with every variable's value in every mode of its collection —
-enough to render a full variable table without further calls.
+Returns {data: {variables[], collections[], nextCursor?}}. Each variable carries
+its full Figma shape: id, name, variableCollectionId, resolvedType, valuesByMode.
+collections[] only includes collections referenced by the returned variables
+(use for mode-name resolution).
 
-Shape:
-  {
-    listing: "<human-readable summary>",
-    count: <total variable count>,
-    collections: [
-      {
-        id, name,
-        modes: [{id, name}, ...],
-        variables: [
-          {
-            id, name, type,            // type: COLOR | FLOAT | BOOLEAN | STRING
-            valuesByMode: {
-              "<modeName>": {value: "#FFFFFF"}          // literal (COLOR as #hex, FLOAT as number, etc.)
-              "<modeName>": {alias: "colors/gray-900", aliasId: "..."}  // alias to another variable
-            }
-          }, ...
-        ]
-      }, ...
-    ]
-  }
+Parameters:
+  collection — VariableCollectionId to filter by
+  filter     — substring match on variable name (case-insensitive)
+  cursor     — opaque pagination cursor from a previous call
+  limit      — max variables per page (default 100)
 
 Examples:
-  list_variables()                        // all collections, all variables, all modes
-  list_variables({collection: "Theme"})   // filter by collection name (substring match)`,
+  list_variables()
+  list_variables({collection: "VariableCollectionId:1:2"})
+  list_variables({filter: "bg"})
+  list_variables({cursor: "100"})`,
   parameters: {
     type: 'object',
     properties: {
       collection: {
         type: 'string',
-        description: 'Filter by collection name (substring, case-insensitive)',
+        description: 'VariableCollectionId to filter by',
+      },
+      filter: {
+        type: 'string',
+        description: 'Substring match on variable name (case-insensitive)',
+      },
+      cursor: {
+        type: 'string',
+        description: 'Opaque pagination cursor from a previous call',
+      },
+      limit: {
+        type: 'number',
+        description: 'Max variables per page (default 100)',
       },
     },
+  },
+};
+
+export const createCollectionDefinition: ToolDefinition = {
+  name: 'create_collection',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Create a VariableCollection with named modes.
+
+The first mode in the array becomes the default mode. Returns
+{data: {id, modes: [{modeId, name}]}} — use those modeIds with
+set_variable_value and set_variable_mode.
+
+Examples:
+  create_collection({name: "Theme", modes: ["Light", "Dark"]})
+  create_collection({name: "Device", modes: ["Desktop", "Tablet", "Mobile"]})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Collection name',
+      },
+      modes: {
+        type: 'array',
+        description: 'Mode names (first becomes default)',
+        items: { type: 'string', description: 'Mode name' },
+      },
+    },
+    required: ['name', 'modes'],
   },
 };
 
@@ -54,48 +88,67 @@ export const createVariableDefinition: ToolDefinition = {
   name: 'create_variable',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Create a variable or variable collection.
+  description: `Create a variable in an existing collection.
 
-Variable: provide variable + type + value.
-Collection: provide collection (+ optional modes).
+No value is set here — use set_variable_value after. Returns {data: {id}}.
 
 Examples:
-  create_variable({variable: "colors/primary", type: "COLOR", value: "#1A1A1A"})
-  create_variable({collection: "Theme", modes: ["Light", "Dark"]})
-  create_variable({variable: "Theme/bg", type: "COLOR", value: "#FFFFFF", mode: "Light"})
-  create_variable({variable: "spacing/md", type: "FLOAT", value: "16"})
-
-Variable types: COLOR, FLOAT, BOOLEAN, STRING.`,
+  create_variable({collection: "VariableCollectionId:1:2", name: "Theme/bg", type: "COLOR"})
+  create_variable({collection: "VariableCollectionId:1:2", name: "spacing/md", type: "FLOAT"})`,
   parameters: {
     type: 'object',
     properties: {
-      variable: {
+      collection: {
         type: 'string',
-        description: 'Variable path "collection/name"',
+        description: 'VariableCollectionId to create the variable in',
+      },
+      name: {
+        type: 'string',
+        description: 'Variable name (slashes denote hierarchy in the Figma UI)',
       },
       type: {
         type: 'string',
         description: 'Variable type',
         enum: ['COLOR', 'FLOAT', 'BOOLEAN', 'STRING'],
       },
-      value: {
+    },
+    required: ['collection', 'name', 'type'],
+  },
+};
+
+export const setVariableValueDefinition: ToolDefinition = {
+  name: 'set_variable_value',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Set a variable's value for a specific mode.
+
+Thin wrapper over Figma's variable.setValueForMode(modeId, value). Call once per
+mode. Value is a raw value (COLOR/FLOAT/STRING/BOOLEAN) OR an alias object
+{type: "VARIABLE_ALIAS", id: "VariableID:x:y"}. Hex strings are accepted for
+COLOR and normalized to {r,g,b,a} in 0-1 range.
+
+Examples:
+  set_variable_value({variable: "VariableID:1:5", mode: "1:0", value: "#FFFFFF"})
+  set_variable_value({variable: "VariableID:1:5", mode: "1:1", value: {r: 0.1, g: 0.1, b: 0.1, a: 1}})
+  set_variable_value({variable: "VariableID:1:6", mode: "1:0", value: 16})
+  set_variable_value({variable: "VariableID:1:7", mode: "1:0", value: {type: "VARIABLE_ALIAS", id: "VariableID:1:9"}})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      variable: {
         type: 'string',
-        description: 'Variable value — #hex for COLOR, number for FLOAT, true/false, or string',
-      },
-      collection: {
-        type: 'string',
-        description: 'Collection name (for collection creation)',
-      },
-      modes: {
-        type: 'array',
-        description: 'Mode names for collection creation',
-        items: { type: 'string', description: 'Mode name' },
+        description: 'VariableID to set',
       },
       mode: {
         type: 'string',
-        description: 'Target mode for per-mode value setting',
+        description: 'Mode id from the variable\'s collection (e.g. "1:0")',
+      },
+      value: {
+        type: 'object',
+        description: 'Raw value (COLOR/FLOAT/STRING/BOOLEAN) or {type: "VARIABLE_ALIAS", id}',
       },
     },
+    required: ['variable', 'mode', 'value'],
   },
 };
 
@@ -105,9 +158,17 @@ export const bindVariableDefinition: ToolDefinition = {
   mutates: true,
   description: `Bind a variable to a node property.
 
+When selecting which variable to bind: if the node is a Tablet or Mobile variant
+(name or variant property contains "Tablet"/"Mobile"), match the node's property
+value against the Tablet/Mobile mode column from list_variables — not Desktop.
+
+prop supports paths for nested paint targets:
+  fills[0], strokes[0], effects[0].color,
+  fills[0].gradientStops[2].color
+
 Examples:
-  bind_variable({node: "1:2", prop: "fills", variable: "Theme/bg"})
-  bind_variable({node: "1:3", prop: "fontSize", variable: "sizing/heading"})`,
+  bind_variable({node: "1:2", prop: "fills", variable: "VariableID:1:5"})
+  bind_variable({node: "1:3", prop: "fontSize", variable: "VariableID:1:6"})`,
   parameters: {
     type: 'object',
     properties: {
@@ -117,11 +178,11 @@ Examples:
       },
       prop: {
         type: 'string',
-        description: 'Node property to bind (fills, fontSize, paddingTop, etc.)',
+        description: 'Node property to bind (fills, fontSize, paddingTop, fills[0], etc.)',
       },
       variable: {
         type: 'string',
-        description: 'Variable path "collection/name"',
+        description: 'VariableID to bind',
       },
     },
     required: ['node', 'prop', 'variable'],
@@ -138,8 +199,8 @@ This controls which variable values the node displays. For example, set a frame
 to use "Dark" mode of the "Theme" collection so all bound variables show dark values.
 
 Examples:
-  set_variable_mode({node: "1:2", collection: "Theme", mode: "Dark"})
-  set_variable_mode({node: "1:5", collection: "Device", mode: "Mobile"})`,
+  set_variable_mode({node: "1:2", collection: "VariableCollectionId:1:2", mode: "1:1"})
+  set_variable_mode({node: "1:5", collection: "VariableCollectionId:1:3", mode: "1:2"})`,
   parameters: {
     type: 'object',
     properties: {
@@ -149,44 +210,13 @@ Examples:
       },
       collection: {
         type: 'string',
-        description: 'Variable collection name (e.g. "Theme")',
+        description: 'VariableCollectionId',
       },
       mode: {
         type: 'string',
-        description: 'Mode name to activate (e.g. "Dark")',
+        description: 'Mode id (e.g. "1:1")',
       },
     },
     required: ['node', 'collection', 'mode'],
-  },
-};
-
-export const aliasVariableDefinition: ToolDefinition = {
-  name: 'alias_variable',
-  executionStrategy: 'sequential',
-  mutates: true,
-  description: `Create a per-mode variable alias (semantic → primitive).
-
-mode is required. Call once per mode to set different aliases per mode.
-
-Examples:
-  alias_variable({variable: "Theme/bg", target: "colors/white", mode: "Light"})
-  alias_variable({variable: "Theme/bg", target: "colors/gray-900", mode: "Dark"})`,
-  parameters: {
-    type: 'object',
-    properties: {
-      variable: {
-        type: 'string',
-        description: 'Source variable path "collection/name"',
-      },
-      target: {
-        type: 'string',
-        description: 'Target variable path "collection/name"',
-      },
-      mode: {
-        type: 'string',
-        description: 'Mode name to set this alias for (e.g. "Light", "Dark"). Required.',
-      },
-    },
-    required: ['variable', 'target', 'mode'],
   },
 };

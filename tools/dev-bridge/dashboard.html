@@ -197,12 +197,8 @@
       border-color: #3b82f6;
     }
 
-    /* Main document — single reading column */
-    .doc {
-      max-width: 1024px;
-      margin: 0 auto;
-      padding: 24px 20px 80px;
-    }
+    /* Main content */
+    .main { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
 
     /* Mode panels */
     .mode-panel { display: none; align-items: center; gap: 8px; }
@@ -247,35 +243,880 @@
       margin-bottom: 12px;
     }
 
-    /* Overview — compact horizontal strip */
+    /* Overview */
+    .overview-prompt {
+      font-size: 14px;
+      color: var(--text-heading);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
     .overview-stats {
       display: flex;
-      gap: 14px;
+      gap: 24px;
       flex-wrap: wrap;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .stat-value {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .stat-value.model { color: #a78bfa; }
+    .stat-value.duration { color: #f59e0b; }
+    .stat-value.tools { color: #22c55e; }
+    .stat-value.errors { color: #ef4444; }
+    .stat-value.iterations { color: #3b82f6; }
+
+    /* Timeline */
+    .timeline-row {
+      display: flex;
       align-items: center;
-      font-size: 12px;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-row);
+    }
+    .timeline-row:last-child { border-bottom: none; }
+    .timeline-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      width: 56px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .timeline-label.setup { color: var(--text-dimmed); font-style: italic; }
+    .timeline-ctx {
+      font-size: 10px;
+      color: #f59e0b;
+      background: rgba(245,158,11,.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      white-space: nowrap;
+      cursor: default;
+    }
+    /* Context layer stacked bar */
+    .ctx-layers {
+      display: flex;
+      height: 14px;
+      width: 80px;
+      border-radius: 3px;
+      overflow: hidden;
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .ctx-layer {
+      height: 100%;
+      min-width: 1px;
+      transition: width .2s;
+    }
+    .ctx-l1 { background: #6366f1; } /* system prompt — indigo */
+    .ctx-l2 { background: #f59e0b; } /* summary — amber */
+    .ctx-l3 { background: #22c55e; } /* conversation history — green */
+    .ctx-l4 { background: #3b82f6; } /* turn messages — blue */
+
+    /* Context layer separator in conversation flow */
+    .conv-layer-sep {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      margin: 8px 0;
+      border-top: 1px solid var(--border-card);
+    }
+    .conv-layer-sep:first-child { border-top: none; margin-top: 0; }
+    .conv-layer-dot {
+      width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+    }
+    .conv-layer-sep-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-dimmed);
+    }
+    .conv-layer-sep-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+    /* System message avatar */
+    .conv-avatar.system { background: #6366f1; color: #c7d2fe; }
+    .conv-avatar.tool { background: #166534; color: #86efac; }
+    /* Iteration tabs */
+    .conv-iter-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .conv-iter-tab {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      background: var(--bg-input);
+      border: 1px solid var(--border-input);
       color: var(--text-secondary);
     }
-    .overview-stats .stat-sep {
-      color: var(--text-dimmed);
-      opacity: 0.6;
+    .conv-iter-tab:hover { background: var(--bg-hover); }
+    .conv-iter-tab.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
     }
-    .overview-stats .stat-val {
+    .timeline-bars {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+    }
+    .bar {
+      height: 26px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-bar);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 36px;
+      position: relative;
+      cursor: default;
+    }
+    .bar-llm {
+      background: #1e40af;
+      border: 1px solid #2563eb;
+    }
+    .bar-tool-ok {
+      background: #166534;
+      border: 1px solid #22c55e;
+    }
+    .bar-tool-err {
+      background: #7f1d1d;
+      border: 1px solid #ef4444;
+    }
+    .bar-text {
+      background: #581c87;
+      border: 1px solid #a855f7;
+    }
+    .bar-live {
+      background: var(--bg-bar-live);
+      border: 1px solid var(--border-bar-live);
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; }
+      100% { opacity: 0.7; }
+    }
+    .timeline-duration {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      flex-shrink: 0;
+      width: 50px;
+      text-align: right;
+    }
+
+    /* Tooltip */
+    .bar[data-tooltip]:hover::after,
+    .ctx-layers[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 0;
+      background: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      white-space: pre;
+      z-index: 50;
+      pointer-events: none;
+      border: 1px solid var(--border-tooltip);
+      max-width: 400px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    }
+    .ctx-layers {
+      position: relative;
+    }
+
+    /* Tool call details */
+    .tool-detail {
+      border-bottom: 1px solid var(--border-detail);
+    }
+    .tool-detail:last-child { border-bottom: none; }
+    .tool-detail summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+    }
+    .tool-detail summary::-webkit-details-marker { display: none; }
+    .tool-detail summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .tool-detail[open] summary::before { transform: rotate(90deg); }
+    .tool-detail summary:hover { background: var(--bg-detail-hover); }
+    .tool-idx {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .tool-name { font-weight: 600; color: var(--text-primary); }
+    .tool-status-ok { color: #22c55e; font-size: 11px; }
+    .tool-status-err { color: #ef4444; font-size: 11px; }
+    .tool-dur { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+    .tool-body {
+      padding: 8px 12px 12px 28px;
+      background: var(--bg-tool-body);
+    }
+    .tool-section-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin: 8px 0 4px 0;
+    }
+    .tool-section-label:first-child { margin-top: 0; }
+    .tool-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+    .tool-error-banner {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+    [data-theme="light"] .tool-error-banner {
+      color: #dc2626;
+    }
+    .expand-btn {
+      background: none;
+      border: none;
+      color: #3b82f6;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 4px 0;
+    }
+    .expand-btn:hover { text-decoration: underline; }
+
+    /* ===== Pipeline Architecture ===== */
+    .pipe-arch { display: flex; flex-direction: column; gap: 0; position: relative; }
+
+    /* Shared nodes */
+    .pipe-shared {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 8px 0;
+    }
+    .pipe-node {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
       font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      position: relative;
+    }
+    .pipe-node:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+    .pipe-node.llm { background: #1e3a5f; border-color: #2563eb; color: #93c5fd; }
+    .pipe-node.dispatch { background: #3b1f5e; border-color: #7c3aed; color: #c4b5fd; }
+    .pipe-node.present { background: #1a3a2a; border-color: #16a34a; color: #86efac; }
+    .pipe-node .pipe-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #f59e0b;
+      color: #000;
+      font-size: 9px;
+      font-weight: 700;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pipe-node.inactive { opacity: 0.3; cursor: default; }
+    .pipe-node.inactive:hover { transform: none; box-shadow: none; }
+
+    /* Arrow connector */
+    .pipe-arrow {
+      text-align: center;
+      color: var(--text-dimmed);
+      font-size: 18px;
+      line-height: 1;
+      padding: 2px 0;
+    }
+    .pipe-arrow-h {
+      color: var(--text-dimmed);
+      font-size: 14px;
+      margin: 0 2px;
+    }
+
+    /* Tool columns */
+    .pipe-cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      padding: 0 8px;
+    }
+    .pipe-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .pipe-col-head {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .15s;
+      border: 1px solid;
+      position: relative;
+    }
+    .pipe-col-head:hover { transform: translateY(-1px); }
+    .pipe-col-head .pipe-col-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .pipe-col-head .pipe-col-count {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    .pipe-col-head.jsx { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+    .pipe-col-head.inspect { background: #1a3a2a; border-color: #22c55e; color: #86efac; }
+    .pipe-col-head.edit { background: #3b2f10; border-color: #f59e0b; color: #fcd34d; }
+    .pipe-col-head.run { background: #3b1f5e; border-color: #a855f7; color: #d8b4fe; }
+    .pipe-col-head.inactive { opacity: 0.25; cursor: default; }
+    .pipe-col-head.inactive:hover { transform: none; }
+
+    /* Stage pills inside columns */
+    .pipe-stages {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+      padding: 0 4px;
+    }
+    .pipe-stage-arrow {
+      color: var(--text-dimmed);
+      font-size: 11px;
+      line-height: 1;
+      opacity: 0.4;
+    }
+    .pipe-stage {
+      width: 100%;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      text-align: center;
+      background: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      cursor: default;
+      transition: all .15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pipe-stage.active {
+      border-color: #3b82f6;
+      background: rgba(59,130,246,.1);
       color: var(--text-primary);
     }
-    .overview-stats .stat-val.model { color: #a78bfa; }
-    .overview-stats .stat-val.duration { color: #f59e0b; }
-    .overview-stats .stat-val.tools { color: #22c55e; }
-    .overview-stats .stat-val.errors { color: #ef4444; }
-    .overview-stats .stat-val.iterations { color: #3b82f6; }
-
-    /* Screenshot + final text (footer, stacked naturally) */
-    .screenshot-img {
+    .pipe-stage .pipe-stage-file {
+      font-size: 9px;
+      color: var(--text-dimmed);
       display: block;
-      max-width: 800px;
+    }
+
+    /* Pipeline detail panel (expands below) */
+    .pipe-detail {
+      margin-top: 16px;
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+      animation: fadeIn .2s;
+    }
+    .pipe-detail-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-input);
+      border-bottom: 1px solid var(--border-card);
+      font-size: 12px;
+    }
+    .pipe-detail-header .pipe-detail-title {
+      font-weight: 600;
+      color: var(--text-heading);
+    }
+    .pipe-detail-header .pipe-detail-close {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-dimmed);
+      font-size: 16px;
+      background: none;
+      border: none;
+      padding: 0 4px;
+    }
+    .pipe-detail-header .pipe-detail-close:hover { color: var(--text-primary); }
+    .pipe-detail-body {
+      padding: 12px 14px;
+    }
+    /* Trace row: horizontal flow of stages */
+    .pipe-trace {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pipe-trace-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-row);
+    }
+    .pipe-trace-row:last-child { border-bottom: none; }
+    .pipe-trace-idx {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .pipe-trace-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .pipe-trace-stages {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .pipe-trace-stage {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .pipe-trace-stage:hover { filter: brightness(1.2); }
+    .pipe-trace-stage.stage-dispatch { background: #3b1f5e; border: 1px solid #7c3aed; color: #d8b4fe; }
+    .pipe-trace-stage.stage-handler { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
+    .pipe-trace-stage.stage-exec { background: #1a3a2a; border: 1px solid #22c55e; color: #86efac; }
+    .pipe-trace-stage.stage-present { background: #3b2f10; border: 1px solid #f59e0b; color: #fcd34d; }
+    .pipe-trace-stage.stage-err { background: #3b1010; border: 1px solid #ef4444; color: #fca5a5; }
+    .pipe-trace-arrow { color: var(--text-dimmed); font-size: 10px; flex-shrink: 0; }
+    .pipe-trace-dur {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      flex-shrink: 0;
+      width: 50px;
+      text-align: right;
+    }
+    .pipe-trace-status-ok { color: #22c55e; font-size: 10px; }
+    .pipe-trace-status-err { color: #ef4444; font-size: 10px; }
+
+    /* Data popup for trace stage click */
+    .pipe-data-popup {
+      margin-top: 8px;
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      background: var(--bg-tool-body);
+      animation: fadeIn .15s;
+    }
+    .pipe-data-popup-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-card);
+    }
+    .pipe-data-popup-title { font-size: 11px; font-weight: 600; color: var(--text-heading); }
+    .pipe-data-popup-close {
+      margin-left: auto;
+      cursor: pointer;
+      color: var(--text-dimmed);
+      background: none;
+      border: none;
+      font-size: 14px;
+    }
+    .pipe-data-popup-body { padding: 8px 12px; }
+    /* Data view toggle */
+    .data-view-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .data-view-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-input);
+      background: var(--bg-input);
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .data-view-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+    .data-view-btn:hover:not(.active) { background: var(--bg-hover); }
+    .data-view-btn.raw-btn.active { background: #7c3aed; border-color: #7c3aed; }
+    .data-view-btn.llm-btn.active { background: #f59e0b; border-color: #f59e0b; color: #000; }
+    .data-view-spacer { flex: 1; }
+    .stringify-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .stringify-toggle input { cursor: pointer; }
+    .data-diff-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(245,158,11,.15);
+      color: #f59e0b;
+    }
+
+    .pipe-data-section { font-size: 10px; color: var(--text-dimmed); text-transform: uppercase; margin: 6px 0 3px; }
+    .pipe-data-section:first-child { margin-top: 0; }
+    .pipe-data-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 10px;
+      line-height: 1.4;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+
+    [data-theme="light"] .pipe-node.llm { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+    [data-theme="light"] .pipe-node.dispatch { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+    [data-theme="light"] .pipe-node.present { background: #dcfce7; border-color: #16a34a; color: #166534; }
+    [data-theme="light"] .pipe-col-head.jsx { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+    [data-theme="light"] .pipe-col-head.inspect { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    [data-theme="light"] .pipe-col-head.edit { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    [data-theme="light"] .pipe-col-head.run { background: #ede9fe; border-color: #a855f7; color: #5b21b6; }
+    [data-theme="light"] .pipe-trace-stage.stage-dispatch { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; }
+    [data-theme="light"] .pipe-trace-stage.stage-handler { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+    [data-theme="light"] .pipe-trace-stage.stage-exec { background: #dcfce7; border-color: #22c55e; color: #166534; }
+    [data-theme="light"] .pipe-trace-stage.stage-present { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    [data-theme="light"] .pipe-trace-stage.stage-err { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+
+    /* ===== Conversation Flow ===== */
+    .conv-flow { display: flex; flex-direction: column; gap: 12px; }
+    .conv-msg {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .conv-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .conv-avatar.user { background: #1e40af; color: #93c5fd; }
+    .conv-avatar.model { background: #581c87; color: #d8b4fe; }
+    .conv-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .conv-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-dimmed);
+      margin-bottom: 4px;
+    }
+    .conv-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--bg-tool-body);
+      border-radius: 6px;
+      padding: 10px 14px;
+      border: 1px solid var(--border-card);
+    }
+    .conv-text.collapsed {
+      max-height: 120px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+    }
+    .conv-text.collapsed::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 40px;
+      background: linear-gradient(transparent, var(--bg-tool-body));
+      pointer-events: none;
+    }
+    .conv-text-toggle {
+      font-size: 11px;
+      color: #3b82f6;
+      cursor: pointer;
+      padding: 4px 0;
+      user-select: none;
+    }
+    .conv-text-toggle:hover { text-decoration: underline; }
+    }
+    .conv-text:empty { display: none; }
+    .conv-toolcalls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .conv-tc {
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .conv-tc summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      background: var(--bg-card);
+      transition: background .15s;
+    }
+    .conv-tc summary::-webkit-details-marker { display: none; }
+    .conv-tc summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .conv-tc[open] summary::before { transform: rotate(90deg); }
+    .conv-tc summary:hover { background: var(--bg-detail-hover); }
+    .conv-tc-name { font-weight: 600; color: var(--text-primary); }
+    .conv-tc-status-ok { color: #22c55e; font-size: 11px; }
+    .conv-tc-status-err { color: #ef4444; font-size: 11px; }
+    .conv-tc-body {
+      padding: 8px 12px 12px 12px;
+      background: var(--bg-tool-body);
+    }
+    .conv-tc-section {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin: 8px 0 4px 0;
+    }
+    .conv-tc-section:first-child { margin-top: 0; }
+    .conv-tc-json {
+      background: var(--bg-code);
+      border: 1px solid var(--border-card);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text-code);
+    }
+    .conv-tc-error {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.3);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #fca5a5;
+    }
+    [data-theme="light"] .conv-tc-error { color: #dc2626; }
+
+    /* ===== LLM Context card ===== */
+    .llm-ctx-list { display: flex; flex-direction: column; gap: 8px; }
+    .llm-ctx-item {
+      border: 1px solid var(--border-card);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .llm-ctx-item summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      list-style: none;
+      background: var(--bg-card);
+    }
+    .llm-ctx-item summary::-webkit-details-marker { display: none; }
+    .llm-ctx-item summary::before {
+      content: '\25B6';
+      font-size: 8px;
+      color: var(--text-dimmed);
+      transition: transform .15s;
+    }
+    .llm-ctx-item[open] summary::before { transform: rotate(90deg); }
+    .llm-ctx-item summary:hover { background: var(--bg-detail-hover); }
+    .llm-ctx-iter {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      background: var(--bg-idx);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .llm-ctx-label { font-weight: 600; color: var(--text-primary); }
+    .llm-ctx-meta { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+    .llm-ctx-body {
+      padding: 10px 14px;
+      background: var(--bg-tool-body);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .llm-ctx-msgs {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .llm-ctx-msg {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+    }
+    .llm-ctx-msg-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      width: 52px;
+      flex-shrink: 0;
+    }
+    .llm-ctx-msg-role.system { color: #f59e0b; }
+    .llm-ctx-msg-role.user { color: #3b82f6; }
+    .llm-ctx-msg-role.model { color: #a855f7; }
+    .llm-ctx-msg-role.tool { color: #22c55e; }
+    .llm-ctx-msg-len {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .llm-ctx-msg-flags {
+      font-size: 10px;
+      color: var(--text-dimmed);
+    }
+    .llm-ctx-tools {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-card);
+    }
+    .llm-ctx-tools-label {
+      font-size: 10px;
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .llm-ctx-tool-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .llm-ctx-tool-tag {
+      font-size: 10px;
+      background: var(--bg-idx);
+      color: var(--text-secondary);
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .llm-ctx-cache {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-card);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Footer: screenshot + final text */
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) {
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+    .screenshot-img {
       width: 100%;
-      height: auto;
       border-radius: 6px;
       border: 1px solid var(--border-card);
     }
@@ -286,98 +1127,6 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
-
-    /* Overview thumbnail (right side of overview strip) */
-    .overview-strip {
-      display: flex;
-      gap: 16px;
-      align-items: flex-start;
-    }
-    .overview-main {
-      flex: 1;
-      min-width: 0;
-    }
-    .overview-prompt {
-      font-size: 14px;
-      color: var(--text-heading);
-      margin-bottom: 10px;
-      line-height: 1.5;
-      word-break: break-word;
-    }
-    .overview-prompt.clamp {
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      cursor: pointer;
-    }
-    .overview-thumb {
-      flex-shrink: 0;
-      width: 80px;
-      height: 60px;
-      border-radius: 4px;
-      border: 1px solid var(--border-card);
-      object-fit: cover;
-      cursor: pointer;
-      background: var(--bg-input);
-    }
-    .overview-thumb.hidden { display: none; }
-
-    /* Inline LLM request block inside iteration separator */
-    .evlog-iter-llm-btn {
-      display: inline-flex;
-      align-items: center;
-      margin-left: 8px;
-      padding: 1px 8px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-input);
-      border-radius: 3px;
-      color: #3b82f6;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .evlog-iter-llm-btn:hover { background: var(--bg-hover); }
-    .evlog-iter-llm-btn.active { background: rgba(59,130,246,.15); border-color: #3b82f6; }
-    .evlog-iter-llm-block {
-      padding: 10px 14px 12px 34px;
-      background: var(--bg-tool-body);
-      border-bottom: 1px solid var(--border-row);
-      border-left: 3px solid #3b82f6;
-      font-size: 11px;
-      color: var(--text-primary);
-    }
-    .evlog-iter-llm-head {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
-    }
-    .evlog-iter-llm-msgs {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
-    }
-    .evlog-iter-llm-msg {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .evlog-iter-llm-role {
-      width: 52px;
-      font-weight: 600;
-      text-transform: lowercase;
-      font-size: 11px;
-    }
-    .evlog-iter-llm-role.system { color: #f59e0b; }
-    .evlog-iter-llm-role.user { color: #3b82f6; }
-    .evlog-iter-llm-role.model { color: #a855f7; }
-    .evlog-iter-llm-role.tool { color: #22c55e; }
-    .evlog-iter-llm-len { color: var(--text-muted); font-size: 11px; }
-    .evlog-iter-llm-flag { color: var(--text-dimmed); font-size: 10px; }
 
     /* Empty state */
     .empty-state {
@@ -420,287 +1169,25 @@
     .live-tool-item .dot.ok { background: #22c55e; }
     .live-tool-item .dot.err { background: #ef4444; }
 
-    /* ===== Event Log ===== */
-    .evlog-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      background: var(--bg-input);
-      border: 1px solid var(--border-input);
-      border-radius: 6px;
-      margin-bottom: 10px;
-      font-size: 11px;
+    /* Light theme bar adjustments */
+    [data-theme="light"] .bar-llm {
+      background: #2563eb;
+      border-color: #1d4ed8;
     }
-    .evlog-toolbar label.evlog-chk {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-card);
-      border-radius: 3px;
-      cursor: pointer;
-      user-select: none;
-      color: var(--text-secondary);
+    [data-theme="light"] .bar-tool-ok {
+      background: #16a34a;
+      border-color: #15803d;
     }
-    .evlog-toolbar label.evlog-chk input {
-      margin: 0;
-      cursor: pointer;
+    [data-theme="light"] .bar-tool-err {
+      background: #dc2626;
+      border-color: #b91c1c;
     }
-    .evlog-toolbar .evlog-spacer {
-      flex: 1 1 auto;
-      min-width: 8px;
+    [data-theme="light"] .bar-text {
+      background: #7c3aed;
+      border-color: #6d28d9;
     }
-    .evlog-toolbar button.evlog-btn {
-      padding: 4px 10px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-input);
-      border-radius: 3px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 11px;
-      font-family: inherit;
-    }
-    .evlog-toolbar button.evlog-btn:hover {
-      background: var(--bg-hover);
-      color: var(--text-primary);
-    }
-    .evlog-toolbar input.evlog-search {
-      padding: 4px 8px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-input);
-      border-radius: 3px;
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 11px;
-      min-width: 180px;
-    }
-    .evlog-feed {
-      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
-      font-size: 12px;
-      border: 1px solid var(--border-card);
-      border-radius: 4px;
-      background: var(--bg-code);
-    }
-    .evlog-iter-sep {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      background: var(--bg-input);
-      border-bottom: 1px solid var(--border-row);
-      border-top: 1px solid var(--border-row);
-      font-size: 11px;
-      color: var(--text-dimmed);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      user-select: none;
-      cursor: pointer;
-    }
-    .evlog-iter-sep:first-child { border-top: none; }
-    .evlog-iter-sep .evlog-iter-toggle {
-      display: inline-block;
-      width: 12px;
-      color: var(--text-muted);
-      transition: transform .15s;
-    }
-    .evlog-iter-sep.folded .evlog-iter-toggle { transform: rotate(-90deg); }
-    .evlog-iter-sep .evlog-iter-count {
-      margin-left: auto;
-      color: var(--text-muted);
-      font-weight: 400;
-      text-transform: none;
-      letter-spacing: 0;
-    }
-    .evlog-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 10px;
-      border-left: 3px solid var(--border-card);
-      border-bottom: 1px solid var(--border-row);
-      cursor: pointer;
-      transition: background .1s;
-    }
-    .evlog-row:hover { background: var(--bg-hover); }
-    .evlog-row[data-type="user"]       { border-left-color: #3b82f6; }
-    .evlog-row[data-type="agent-text"] { border-left-color: #a855f7; }
-    .evlog-row[data-type="tool-ok"]    { border-left-color: #22c55e; }
-    .evlog-row[data-type="tool-cap"]   { border-left-color: #f59e0b; }
-    .evlog-row[data-type="tool-err"]   { border-left-color: #ef4444; }
-    .evlog-row[data-type="hook"]       { border-left-color: #eab308; }
-    .evlog-row[data-type="turn-end"]   { border-left-color: var(--text-dimmed); }
-    .evlog-icon {
-      width: 18px;
-      flex-shrink: 0;
-      text-align: center;
-      font-size: 12px;
-    }
-    .evlog-iter-badge {
-      display: inline-block;
-      min-width: 32px;
-      padding: 1px 6px;
-      background: var(--bg-idx);
-      color: var(--text-muted);
-      border-radius: 2px;
-      font-size: 10px;
-      text-align: center;
-      flex-shrink: 0;
-    }
-    .evlog-type-chip {
-      display: inline-block;
-      min-width: 70px;
-      padding: 1px 6px;
-      border-radius: 2px;
-      font-size: 10px;
-      text-align: center;
-      flex-shrink: 0;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      font-weight: 600;
-    }
-    .evlog-type-chip[data-type="user"]       { background: rgba(59,130,246,.15); color: #3b82f6; }
-    .evlog-type-chip[data-type="agent-text"] { background: rgba(168,85,247,.15); color: #a855f7; }
-    .evlog-type-chip[data-type="tool-ok"]    { background: rgba(34,197,94,.15); color: #22c55e; }
-    .evlog-type-chip[data-type="tool-cap"]   { background: rgba(245,158,11,.15); color: #f59e0b; }
-    .evlog-type-chip[data-type="tool-err"]   { background: rgba(239,68,68,.15); color: #ef4444; }
-    .evlog-type-chip[data-type="hook"]       { background: rgba(234,179,8,.15); color: #eab308; }
-    .evlog-type-chip[data-type="turn-end"]   { background: var(--bg-idx); color: var(--text-dimmed); }
-    .evlog-preview {
-      flex: 1 1 auto;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--text-primary);
-    }
-    .evlog-dur {
-      flex-shrink: 0;
-      color: var(--text-muted);
-      font-size: 11px;
-    }
-    .evlog-raw {
-      display: none;
-      margin: 0;
-      padding: 10px 14px 10px 34px;
-      background: var(--bg-tool-body);
-      border-bottom: 1px solid var(--border-row);
-      border-left: 3px solid var(--border-card);
-      color: var(--text-code);
-      font-size: 11px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      overflow-x: auto;
-    }
-    .evlog-raw.open { display: block; }
-    .evlog-empty {
-      padding: 30px;
-      text-align: center;
-      color: var(--text-empty);
-      font-size: 12px;
-    }
-
-    /* ===== ID cross-reference (lineage tracing) ===== */
-    .evlog-id-ref {
-      cursor: pointer;
-      padding: 0 2px;
-      border-radius: 3px;
-      background: transparent;
-      border-bottom: 1px dashed var(--text-dimmed);
-      transition: background .12s, border-color .12s;
-    }
-    .evlog-id-ref:hover {
-      background: rgba(234, 179, 8, 0.15);
-      border-bottom-color: #eab308;
-    }
-    .evlog-id-ref.active {
-      background: rgba(234, 179, 8, 0.25);
-      border-bottom-color: #eab308;
-      border-bottom-style: solid;
-    }
-    .evlog-row.evlog-id-highlight-producer {
-      background: rgba(34, 197, 94, 0.12) !important;
-      box-shadow: inset 3px 0 0 #22c55e;
-    }
-    .evlog-row.evlog-id-highlight {
-      background: rgba(234, 179, 8, 0.10) !important;
-      box-shadow: inset 3px 0 0 #eab308;
-    }
-    /* The producing/consuming row emphasizes its matching id spans */
-    .evlog-row.evlog-id-highlight-producer .evlog-id-ref.active,
-    .evlog-row.evlog-id-highlight .evlog-id-ref.active {
-      background: rgba(234, 179, 8, 0.35);
-    }
-    [data-theme="light"] .evlog-row.evlog-id-highlight-producer {
-      background: rgba(34, 197, 94, 0.18) !important;
-    }
-    [data-theme="light"] .evlog-row.evlog-id-highlight {
-      background: rgba(234, 179, 8, 0.18) !important;
-    }
-
-    /* Sticky banner shown while a node id is highlighted */
-    .evlog-id-banner {
-      position: sticky;
-      top: 53px;
-      z-index: 90;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      min-height: 36px;
-      background: rgba(234, 179, 8, 0.12);
-      border-top: 1px solid #eab308;
-      border-bottom: 1px solid #eab308;
-      font-size: 12px;
-      color: var(--text-primary);
-      backdrop-filter: blur(6px);
-    }
-    [data-theme="light"] .evlog-id-banner {
-      background: rgba(234, 179, 8, 0.18);
-    }
-    .evlog-id-banner-label {
-      color: var(--text-muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-    .evlog-id-banner-id {
-      padding: 2px 6px;
-      border-radius: 3px;
-      background: rgba(234, 179, 8, 0.2);
-      border: 1px solid #eab308;
-      color: var(--text-heading);
-      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Cascadia Code', monospace;
-      font-size: 12px;
-    }
-    .evlog-id-banner-sep {
-      color: var(--text-dimmed);
-    }
-    .evlog-id-banner-meta {
-      color: var(--text-secondary);
-      font-size: 11px;
-    }
-    .evlog-id-banner-close {
-      margin-left: auto;
-      background: transparent;
-      border: 1px solid var(--border-input);
-      color: var(--text-secondary);
-      width: 22px;
-      height: 22px;
-      line-height: 1;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 14px;
-      font-family: inherit;
-      padding: 0;
-      transition: background .12s, color .12s;
-    }
-    .evlog-id-banner-close:hover {
-      background: var(--bg-hover);
-      color: var(--text-heading);
+    [data-theme="light"] .timeline-ctx {
+      background: rgba(245,158,11,.15);
     }
   </style>
 </head>
@@ -736,63 +1223,61 @@
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark"></button>
   </div>
 
-  <main class="doc">
-    <!-- ID cross-reference banner (visible only while highlighting) -->
-    <div id="evlog-id-banner" class="evlog-id-banner" style="display:none">
-      <span class="evlog-id-banner-label">Highlighting</span>
-      <code class="evlog-id-banner-id" id="evlog-id-banner-id">1:1</code>
-      <span class="evlog-id-banner-sep">&middot;</span>
-      <span class="evlog-id-banner-meta" id="evlog-id-banner-meta"></span>
-      <button class="evlog-id-banner-close" type="button" id="evlog-id-banner-close" aria-label="Clear highlight">&times;</button>
-    </div>
-
-    <!-- Overview: compact strip with prompt + stats + screenshot thumb -->
+  <div class="main">
+    <!-- Overview -->
     <div class="card" id="overview-card" style="display:none">
-      <div class="overview-strip">
-        <div class="overview-main">
-          <div class="overview-prompt clamp" id="overview-prompt" title="Click to toggle full prompt"></div>
-          <div class="overview-stats" id="overview-stats"></div>
-        </div>
-        <img id="overview-thumb" class="overview-thumb hidden" alt="Screenshot thumb" title="Click to jump to full screenshot">
-      </div>
+      <div class="card-title">Overview</div>
+      <div class="overview-prompt" id="overview-prompt"></div>
+      <div class="overview-stats" id="overview-stats"></div>
     </div>
 
-    <!-- Live tool feed (live mode only) -->
+    <!-- Timeline -->
+    <div class="card" id="timeline-card" style="display:none">
+      <div class="card-title">Iteration Timeline</div>
+      <div id="timeline-container"></div>
+    </div>
+
+    <!-- Live tool feed -->
     <div class="card" id="live-feed-card" style="display:none">
       <div class="card-title">Live Tool Calls</div>
       <div class="live-tools" id="live-tools"></div>
     </div>
 
-    <!-- Event Log — primary reading view -->
-    <div class="card" id="evlog-card" style="display:none">
-      <div class="card-title">Event Log</div>
-      <div class="evlog-toolbar" id="evlog-toolbar">
-        <label class="evlog-chk"><input type="checkbox" data-evlog-type="user" checked> user</label>
-        <label class="evlog-chk"><input type="checkbox" data-evlog-type="agent-text" checked> agent</label>
-        <label class="evlog-chk"><input type="checkbox" data-evlog-type="tool-ok" checked> tool-ok</label>
-        <label class="evlog-chk"><input type="checkbox" data-evlog-type="tool-err" checked> tool-err</label>
-        <label class="evlog-chk"><input type="checkbox" data-evlog-type="hook" checked> hook</label>
-        <label class="evlog-chk"><input type="checkbox" data-evlog-type="turn-end" checked> turn</label>
-        <button class="evlog-btn" id="evlog-only-errors" type="button">only errors</button>
-        <button class="evlog-btn" id="evlog-only-hooks" type="button">only hooks</button>
-        <button class="evlog-btn" id="evlog-reset" type="button">reset</button>
-        <span class="evlog-spacer"></span>
-        <input class="evlog-search" id="evlog-search" type="text" placeholder="search preview...">
+    <!-- Pipeline Architecture -->
+    <div class="card" id="pipe-card" style="display:none">
+      <div class="card-title">Execution Pipeline</div>
+      <div id="pipe-container"></div>
+    </div>
+
+    <!-- Conversation Flow -->
+    <div class="card" id="conv-card" style="display:none">
+      <div class="card-title">Conversation Flow</div>
+      <div class="conv-flow" id="conv-container"></div>
+    </div>
+
+    <!-- LLM Context (per iteration) -->
+    <div class="card" id="llm-ctx-card" style="display:none">
+      <div class="card-title">LLM Context (per iteration)</div>
+      <div class="llm-ctx-list" id="llm-ctx-container"></div>
+    </div>
+
+    <!-- Tool call details -->
+    <div class="card" id="tools-card" style="display:none">
+      <div class="card-title">Tool Call Details</div>
+      <div id="tools-container"></div>
+    </div>
+
+    <!-- Footer: screenshot + final text -->
+    <div class="footer-grid" id="footer-grid" style="display:none">
+      <div class="card" id="screenshot-card">
+        <div class="card-title">Screenshot</div>
+        <img id="screenshot-img" class="screenshot-img" style="display:none">
+        <div id="screenshot-empty" class="empty-state" style="padding:30px">No screenshot</div>
       </div>
-      <div class="evlog-feed" id="evlog-feed"></div>
-    </div>
-
-    <!-- Final text (agent response) -->
-    <div class="card" id="finaltext-card" style="display:none">
-      <div class="card-title">Agent Response</div>
-      <div class="final-text" id="final-text"></div>
-    </div>
-
-    <!-- Screenshot (natural closing) -->
-    <div class="card" id="screenshot-card" style="display:none">
-      <div class="card-title">Screenshot</div>
-      <img id="screenshot-img" class="screenshot-img" style="display:none">
-      <div id="screenshot-empty" class="empty-state" style="padding:30px;display:none">No screenshot</div>
+      <div class="card" id="finaltext-card">
+        <div class="card-title">Agent Response</div>
+        <div class="final-text" id="final-text"></div>
+      </div>
     </div>
 
     <!-- Empty state -->
@@ -800,7 +1285,7 @@
       <div class="icon">&#9776;</div>
       <div>Select a recording or send a live prompt to begin</div>
     </div>
-  </main>
+  </div>
 
 <script>
 // ===== Theme =====
@@ -1029,70 +1514,48 @@ function updateLastLiveTool(name, status, durationMs) {
 // ===== Rendering =====
 function clearDisplay() {
   document.getElementById('overview-card').style.display = 'none';
-  document.getElementById('evlog-card').style.display = 'none';
-  document.getElementById('finaltext-card').style.display = 'none';
-  document.getElementById('screenshot-card').style.display = 'none';
+  document.getElementById('timeline-card').style.display = 'none';
+  document.getElementById('pipe-card').style.display = 'none';
+  document.getElementById('conv-card').style.display = 'none';
+  document.getElementById('llm-ctx-card').style.display = 'none';
+  document.getElementById('tools-card').style.display = 'none';
+  document.getElementById('footer-grid').style.display = 'none';
   document.getElementById('live-feed-card').style.display = 'none';
   document.getElementById('empty-state').style.display = '';
   document.getElementById('live-tools').innerHTML = '';
-  const evlogFeed = document.getElementById('evlog-feed');
-  if (evlogFeed) evlogFeed.innerHTML = '';
-  const thumb = document.getElementById('overview-thumb');
-  if (thumb) { thumb.classList.add('hidden'); thumb.src = ''; }
-  // Reset ID cross-reference state
-  evlogLineage = { producers: new Map(), consumers: new Map() };
-  clearEvlogHighlight();
 }
 
 function renderFull(id, events, meta) {
   document.getElementById('empty-state').style.display = 'none';
-  renderOverview(id, events, meta);
-  renderEventLog(id, events, meta);
+  renderOverview(meta);
+  renderTimeline(events);
+  renderPipeline(events, meta);
+  renderConversation(meta.conversationHistory || [], events);
+  renderLLMContext(events);
+  renderToolDetails(meta.toolCallDetails || []);
   renderFooter(id, meta);
 }
 
-function renderOverview(id, events, meta) {
+function renderOverview(meta) {
   const card = document.getElementById('overview-card');
   card.style.display = '';
 
-  // Prompt
+  // Extract prompt from conversation history
   const prompt = meta.conversationHistory?.[0]?.text || meta.logs?.match(/Prompt: "(.+?)"/)?.[1] || '(unknown)';
-  const promptEl = document.getElementById('overview-prompt');
-  promptEl.textContent = prompt;
-  promptEl.classList.add('clamp');
-  promptEl.onclick = () => promptEl.classList.toggle('clamp');
+  document.getElementById('overview-prompt').textContent = '"' + prompt + '"';
 
-  // Stats — compact inline strip
+  const stats = document.getElementById('overview-stats');
   const s = meta.toolCallSummary || {};
-  const iters = countIterations(meta.runtimeEvents || []);
-  const parts = [];
-  parts.push(statPair('model', meta.modelName || '?'));
-  if (typeof s.total === 'number') parts.push(statPair('tools', s.total + (s.total === 1 ? ' tool' : ' tools')));
-  if (typeof s.errors === 'number' && s.errors > 0) parts.push(statPair('errors', s.errors + (s.errors === 1 ? ' error' : ' errors')));
-  if (iters > 0) parts.push(statPair('iterations', iters + (iters === 1 ? ' iteration' : ' iterations')));
-  parts.push(statPair('duration', formatDuration(meta.durationMs)));
-  if (meta.status) parts.push(statPair('', meta.status));
-  document.getElementById('overview-stats').innerHTML = parts.join('<span class="stat-sep">·</span>');
-
-  // Screenshot thumb on right — click jumps to full screenshot card
-  const thumb = document.getElementById('overview-thumb');
-  if (id) {
-    thumb.src = BASE + '/recordings/' + id + '/screenshot';
-    thumb.classList.remove('hidden');
-    thumb.onerror = () => thumb.classList.add('hidden');
-    thumb.onclick = () => {
-      const card = document.getElementById('screenshot-card');
-      if (card && card.style.display !== 'none') {
-        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    };
-  } else {
-    thumb.classList.add('hidden');
-  }
+  stats.innerHTML = statHTML('Model', meta.modelName || '?', 'model') +
+    statHTML('Duration', formatDuration(meta.durationMs), 'duration') +
+    statHTML('Tools', (s.total || 0) + ' calls', 'tools') +
+    statHTML('Errors', (s.errors || 0) + '', 'errors') +
+    statHTML('Iterations', countIterations(meta.runtimeEvents || []) + '', 'iterations') +
+    statHTML('Status', meta.status || '?', '');
 }
 
-function statPair(cls, value) {
-  return '<span class="stat-val ' + escHtml(cls) + '">' + escHtml(value) + '</span>';
+function statHTML(label, value, cls) {
+  return '<div class="stat"><span class="stat-label">' + label + '</span><span class="stat-value ' + cls + '">' + value + '</span></div>';
 }
 
 function countIterations(events) {
@@ -1103,773 +1566,996 @@ function countIterations(events) {
   return max;
 }
 
-// ===== Footer (screenshot + final text) =====
-function renderFooter(id, meta) {
-  // Final text card
-  const finalCard = document.getElementById('finaltext-card');
-  const finalEl = document.getElementById('final-text');
-  if (meta.finalText && meta.finalText.trim()) {
-    finalEl.textContent = meta.finalText;
-    finalCard.style.display = '';
-  } else {
-    finalEl.textContent = '';
-    finalCard.style.display = 'none';
+// ===== Timeline rendering =====
+function renderTimeline(events) {
+  const card = document.getElementById('timeline-card');
+  card.style.display = '';
+  const container = document.getElementById('timeline-container');
+  container.innerHTML = '';
+
+  // Group events by iteration
+  const groups = new Map(); // iteration -> events[]
+  const setupEvents = [];
+  for (const e of events) {
+    const iter = e.iteration || 0;
+    if (iter === 0) {
+      setupEvents.push(e);
+      continue;
+    }
+    if (!groups.has(iter)) groups.set(iter, []);
+    groups.get(iter).push(e);
   }
 
-  // Screenshot card
-  const screenCard = document.getElementById('screenshot-card');
-  const img = document.getElementById('screenshot-img');
-  const emptyScreen = document.getElementById('screenshot-empty');
-  if (id) {
-    img.src = BASE + '/recordings/' + id + '/screenshot';
-    img.style.display = '';
-    emptyScreen.style.display = 'none';
-    screenCard.style.display = '';
-    img.onerror = function() {
-      this.style.display = 'none';
-      emptyScreen.style.display = '';
-    };
-  } else {
-    screenCard.style.display = 'none';
+  // Calculate max total duration for scaling
+  let maxDuration = 0;
+  for (const [, evts] of groups) {
+    let dur = 0;
+    for (const e of evts) {
+      if (e.type === 'llm_response') dur += e.durationMs || 0;
+      if (e.type === 'tool_result') dur += e.toolResult?.durationMs || 0;
+    }
+    if (dur > maxDuration) maxDuration = dur;
+  }
+  if (maxDuration === 0) maxDuration = 1;
+
+  // Setup row
+  if (setupEvents.length > 0) {
+    const statusMsgs = setupEvents.filter(e => e.type === 'status').map(e => e.message).filter(Boolean);
+    if (statusMsgs.length > 0) {
+      const row = document.createElement('div');
+      row.className = 'timeline-row';
+      row.innerHTML = '<span class="timeline-label setup">Setup</span>' +
+        '<div class="timeline-bars"><span style="color:var(--text-muted);font-size:11px">' + statusMsgs.join(' \u2192 ') + '</span></div>';
+      container.appendChild(row);
+    }
+  }
+
+  // Iteration rows
+  for (const [iter, evts] of groups) {
+    const row = document.createElement('div');
+    row.className = 'timeline-row';
+
+    // Extract data
+    const llmReq = evts.find(e => e.type === 'llm_request');
+    const llmRes = evts.find(e => e.type === 'llm_response');
+    const toolCalls = evts.filter(e => e.type === 'tool_call');
+    const toolResults = evts.filter(e => e.type === 'tool_result');
+    const textDeltas = evts.filter(e => e.type === 'text_delta');
+    const ctxUsage = evts.find(e => e.type === 'context_usage');
+    const errors = evts.filter(e => e.type === 'error');
+
+    let barsHTML = '';
+
+    // LLM bar
+    if (llmRes) {
+      const llmDur = llmRes.durationMs || 0;
+      const pct = Math.max(8, (llmDur / maxDuration) * 100);
+      const shape = llmRes.responseShape || {};
+      const usage = llmRes.usage || {};
+      let tooltip = 'LLM ' + formatDuration(llmDur);
+      if (usage.promptTokens) tooltip += '\nPrompt: ' + usage.promptTokens + ' tok';
+      if (usage.completionTokens) tooltip += '\nCompletion: ' + usage.completionTokens + ' tok';
+      if (usage.cachedTokens) tooltip += '\nCached: ' + usage.cachedTokens + ' tok';
+      if (shape.toolCallCount) tooltip += '\nTool calls: ' + shape.toolCallCount;
+      if (shape.toolCallNames?.length) tooltip += ' (' + shape.toolCallNames.join(', ') + ')';
+      barsHTML += '<div class="bar bar-llm" style="width:' + pct + '%" data-tooltip="' + escHtml(tooltip) + '">' +
+        'LLM ' + formatDuration(llmDur) + '</div>';
+    }
+
+    // Tool bars
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      const tr = toolResults.find(r => r.toolResult?.id === tc.toolCall?.id) || toolResults[i];
+      const name = tc.toolCall?.displayName || tc.toolCall?.name || '?';
+      const success = tr?.toolResult?.success !== false;
+      const dur = tr?.toolResult?.durationMs || 0;
+      const pct = Math.max(5, (dur / maxDuration) * 100);
+      let tooltip = name + ' ' + formatDuration(dur);
+      if (tr?.toolResult?.error) tooltip += '\nError: ' + tr.toolResult.error.slice(0, 200);
+      const cls = success ? 'bar-tool-ok' : 'bar-tool-err';
+      barsHTML += '<div class="bar ' + cls + '" style="width:' + pct + '%" data-tooltip="' + escHtml(tooltip) + '">' +
+        name + ' ' + formatDuration(dur) + '</div>';
+    }
+
+    // Text output indicator
+    if (textDeltas.length > 0) {
+      const totalChars = textDeltas.reduce((s, e) => s + (e.text?.length || 0), 0);
+      barsHTML += '<div class="bar bar-text" style="width:auto;flex-shrink:0">' + totalChars + ' chars</div>';
+    }
+
+    // Error badges
+    for (const err of errors) {
+      barsHTML += '<div class="bar bar-tool-err" style="width:auto;flex-shrink:0" data-tooltip="' + escHtml(err.message || '') + '">ERR</div>';
+    }
+
+    // Context usage — stacked layer bar + msg count (click scrolls to conv flow)
+    let ctxHTML = '';
+    if (ctxUsage?.usage) {
+      const u = ctxUsage.usage;
+      const L = u.layers;
+      if (L) {
+        const total = L.systemPrompt.chars + L.summary.chars + L.conversationHistory.chars + L.turnMessages.chars || 1;
+        const pct = (c) => Math.max(c > 0 ? 1 : 0, (c / total * 100)).toFixed(1);
+        const tip = 'System: ' + L.systemPrompt.chars + ' chars (' + L.systemPrompt.msgs + ' msg)' +
+          '\\nSummary: ' + L.summary.chars + ' chars (' + L.summary.msgs + ' msg)' +
+          '\\nHistory: ' + L.conversationHistory.chars + ' chars (' + L.conversationHistory.msgs + ' msg)' +
+          '\\nTurn: ' + L.turnMessages.chars + ' chars (' + L.turnMessages.msgs + ' msg)' +
+          '\\n\\nClick to view in Conversation Flow';
+        const scrollFn = "document.querySelector('.conv-iter-tab[data-iter=\\'" + iter + "\\']')?.click();" +
+          "document.getElementById('conv-card')?.scrollIntoView({behavior:'smooth'})";
+        ctxHTML = '<div class="ctx-layers" style="cursor:pointer" data-tooltip="' + escHtml(tip) + '" onclick="' + scrollFn + '">' +
+          '<div class="ctx-layer ctx-l1" style="width:' + pct(L.systemPrompt.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l2" style="width:' + pct(L.summary.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l3" style="width:' + pct(L.conversationHistory.chars) + '%"></div>' +
+          '<div class="ctx-layer ctx-l4" style="width:' + pct(L.turnMessages.chars) + '%"></div>' +
+          '</div>' +
+          '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      } else {
+        ctxHTML = '<span class="timeline-ctx">' + u.visibleMessages + ' msg</span>';
+      }
+    }
+
+    // Total duration for this iteration
+    let totalDur = 0;
+    if (llmRes) totalDur += llmRes.durationMs || 0;
+    for (const tr of toolResults) totalDur += tr.toolResult?.durationMs || 0;
+
+    row.innerHTML = '<span class="timeline-label">Iter ' + iter + '</span>' +
+      ctxHTML +
+      '<div class="timeline-bars">' + barsHTML + '</div>' +
+      '<span class="timeline-duration">' + formatDuration(totalDur) + '</span>';
+    container.appendChild(row);
   }
 }
 
-// ===== Event Log =====
-let evlogState = {
-  recordingId: null,
-  rows: [],
-  filters: { user: true, 'agent-text': true, 'tool-ok': true, 'tool-cap': true, 'tool-err': true, hook: true, 'turn-end': true },
-  search: '',
-  collapsed: {},
+// ===== Pipeline Architecture =====
+// Pipeline stages — FALLBACK for recordings without _stages.
+// New recordings auto-report stages from PipelineTracer (src/ipc/commands/pipelineTracer.ts).
+// Synced to: 15 verb_noun tools + 4 first-class tools (f0e22c7)
+const TOOL_PIPELINES = {
+  jsx: {
+    color: 'jsx',
+    stages: [
+      { id: 'parse', label: 'parseJsx()', file: 'jsxParser.ts' },
+      { id: 'ir', label: 'jsxToIR()', file: 'jsxToIR.ts' },
+      { id: 'factory', label: 'nodeFactory.create*()', file: 'nodeFactory.ts' },
+      { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
+    ]
+  },
+  inspect: {
+    color: 'inspect',
+    stages: [
+      { id: 'route', label: 'handleInspect()', file: 'inspectHandler.ts' },
+      { id: 'read', label: 'readHandler()', file: 'readHandlers.ts' },
+      { id: 'score', label: 'scoreNodes()', file: 'qualityScorer.ts' },
+    ]
+  },
+  edit: {
+    color: 'edit',
+    stages: [
+      { id: 'resolve', label: 'resolveNode()', file: 'pathResolver.ts' },
+      { id: 'apply', label: 'nodeFactory.applyProps()', file: 'nodeFactory.ts' },
+    ]
+  },
+  describe: {
+    color: 'inspect',
+    stages: [
+      { id: 'resolve', label: 'resolveNode()', file: 'pathResolver.ts' },
+      { id: 'serialize', label: 'describeHandler()', file: 'describeHandler.ts' },
+    ]
+  },
+  search: {
+    color: 'run',
+    stages: [
+      { id: 'find', label: 'searchAdapter()', file: 'searchAdapter.ts' },
+      { id: 'handler', label: 'searchHandlers()', file: 'searchHandlers.ts' },
+    ]
+  },
+  structure: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'structureAdapter()', file: 'structureAdapter.ts' },
+      { id: 'handler', label: 'writeHandlers()', file: 'writeHandlers.ts' },
+    ]
+  },
+  var: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'varAdapter()', file: 'varAdapter.ts' },
+      { id: 'handler', label: 'varHandlers()', file: 'varHandlers.ts' },
+    ]
+  },
+  comp: {
+    color: 'run',
+    stages: [
+      { id: 'adapter', label: 'compAdapter()', file: 'compAdapter.ts' },
+      { id: 'handler', label: 'compHandlers()', file: 'compHandlers.ts' },
+    ]
+  },
+  js: {
+    color: 'edit',
+    stages: [
+      { id: 'eval', label: 'handleJs()', file: 'jsHandler.ts' },
+    ]
+  },
 };
 
-// Lineage index for ID cross-reference — rebuilt per recording load.
-// producers: Map<nodeId, rowKey>                — rowKey = 'tool-<toolCallId>' (one producer per id)
-// consumers: Map<nodeId, Array<rowKey>>          — excludes the producer row
-let evlogLineage = { producers: new Map(), consumers: new Map() };
-let evlogActiveId = null;
-
-// Regex: Figma node id is "\d+:\d+" appearing as a bare token (word boundaries on both sides).
-// Examples that should match: 1598:8044 · "1:2" · parentId:1598:8044
-// Examples that should NOT match: version 1.2.3 · time 12:30 (contains non-digit neighbor, excluded by \b\d+:\d+\b)
-const EVLOG_ID_REGEX = /\b(\d+:\d+)\b/g;
-
-function evlogTruncate(str, max) {
-  str = String(str == null ? '' : str);
-  if (str.length <= max) return str;
-  return str.slice(0, max) + '...';
+// Map tool names to pipeline keys
+function toolToPipeline(name) {
+  if (!name) return null;
+  const n = name.toLowerCase();
+  // Create
+  if (n === 'jsx' || n === 'mk' || n === 'render' || n === 'design' || n === 'create') return 'jsx';
+  // Read
+  if (n === 'inspect' || n === 'cat' || n === 'tree' || n === 'ls') return 'inspect';
+  if (n === 'describe') return 'describe';
+  // Update
+  if (n === 'edit' || n === 'update' || n === 'set_text' || n === 'set_fill' || n === 'set_stroke' || n === 'set_layout') return 'edit';
+  // Search
+  if (n === 'find_nodes' || n === 'discover_props' || n === 'replace_props' || n === 'grep' || n === 'sed') return 'search';
+  // Structure
+  if (n === 'delete_node' || n === 'move_node' || n === 'clone_node' || n === 'rm' || n === 'mv' || n === 'cp') return 'structure';
+  // Variables
+  if (n === 'list_variables' || n === 'create_collection' || n === 'create_variable' || n === 'set_variable_value' || n === 'bind_variable' || n === 'set_variable_mode') return 'var';
+  // Components
+  if (n === 'create_component' || n === 'combine_components' || n === 'add_component_prop' || n === 'list_component_props' || n === 'create_instance') return 'comp';
+  // JS escape hatch
+  if (n === 'js') return 'js';
+  // Legacy run
+  if (n === 'run' || n === 'man') return 'structure';
+  return null;
 }
 
-function evlogShortArgs(args) {
-  if (!args || typeof args !== 'object') return '';
-  const keys = Object.keys(args).slice(0, 2);
-  const parts = keys.map(k => {
-    let v = args[k];
-    if (typeof v === 'object' && v !== null) {
-      try { v = JSON.stringify(v); } catch { v = '[obj]'; }
-    }
-    v = String(v == null ? '' : v);
-    return k + ':' + evlogTruncate(v, 30);
-  });
-  const extra = Object.keys(args).length > keys.length ? ', ...' : '';
-  return '{' + parts.join(', ') + extra + '}';
-}
-
-function evlogShortResult(raw) {
-  if (!raw || typeof raw !== 'object') return '';
-  const data = raw.data;
-  if (data && typeof data === 'object' && data.id) return 'id:"' + data.id + '"';
-  if (data && typeof data === 'object') {
-    const keys = Object.keys(data).slice(0, 3);
-    if (keys.length) return '{' + keys.join(',') + '}';
-  }
-  return '';
-}
-
-function buildEventRows(events, meta) {
-  const rows = [];
-  const byId = new Map();
-
-  // 1. user prompt row (from meta)
-  const userPrompt = (meta && (meta.userPrompt ||
-    (meta.conversationHistory && meta.conversationHistory[0] && meta.conversationHistory[0].text))) || '';
-  if (userPrompt) {
-    rows.push({
-      type: 'user',
-      iteration: 1,
-      id: 'user-0',
-      preview: evlogTruncate(userPrompt, 120),
-      raw: { source: 'meta.userPrompt', text: userPrompt },
-      timestamp: (events[0] && events[0].timestamp) || null,
-    });
-  }
-
-  // 2. accumulate text_delta per iteration
-  const textByIter = new Map();
-
+/** Extract _stages from tool_result events in runtimeEvents. */
+function extractStagesFromEvents(events) {
+  const stagesMap = {}; // toolResultId → _stages array
   for (const e of events) {
-    if (!e || !e.type) continue;
-    const iter = e.iteration || 1;
-
-    if (e.type === 'text_delta') {
-      if (!textByIter.has(iter)) {
-        textByIter.set(iter, { text: '', timestamp: e.timestamp, raws: [] });
-      }
-      const acc = textByIter.get(iter);
-      acc.text += (e.text || '');
-      acc.raws.push(e);
-      continue;
-    }
-
-    if (e.type === 'tool_call') {
-      const tc = e.toolCall || {};
-      byId.set(tc.id, { iter, call: e, result: null });
-      continue;
-    }
-
-    if (e.type === 'tool_result') {
-      const tr = e.toolResult || {};
-      const entry = byId.get(tr.id);
-      if (entry) entry.result = e;
-      continue;
+    if (e.type !== 'tool_result') continue;
+    const raw = e.toolResult?.raw;
+    if (!raw) continue;
+    // _stages can be at top level or inside data
+    const stages = raw._stages || raw.data?._stages;
+    if (stages && Array.isArray(stages)) {
+      stagesMap[e.toolResult.id] = stages;
     }
   }
+  return stagesMap;
+}
 
-  // 3. walk events again in order to emit rows (preserve order, merge tool_call+result)
-  const emittedTool = new Set();
-  const emittedText = new Set();
-  for (const e of events) {
-    if (!e || !e.type) continue;
-    const iter = e.iteration || 1;
-
-    if (e.type === 'iteration_start') {
-      // agent-text flush if present for previous iteration
-      if (e.iteration > 1) {
-        const prev = e.iteration - 1;
-        if (textByIter.has(prev) && !emittedText.has(prev)) {
-          const acc = textByIter.get(prev);
-          if (acc.text.trim()) {
-            rows.push({
-              type: 'agent-text',
-              iteration: prev,
-              id: 'text-' + prev,
-              preview: evlogTruncate(acc.text.trim(), 120),
-              raw: { accumulated: acc.text, deltas: acc.raws.length },
-              timestamp: acc.timestamp,
-            });
-          }
-          emittedText.add(prev);
-        }
-      }
-      continue;
-    }
-
-    if (e.type === 'tool_call') {
-      const tc = e.toolCall || {};
-      if (emittedTool.has(tc.id)) continue;
-      emittedTool.add(tc.id);
-      const entry = byId.get(tc.id) || { call: e, result: null };
-      const tr = entry.result && entry.result.toolResult;
-      const raw = tr && tr.raw;
-      const toolName = tc.name || '?';
-      const argsStr = evlogShortArgs(tc.args);
-      let rowType = 'tool-ok';
-      let preview = '';
-      if (!tr) {
-        // no result yet (partial recording)
-        rowType = 'tool-ok';
-        preview = toolName + '(' + argsStr + ') (pending)';
-      } else if (raw && raw.error) {
-        const code = raw.code || '';
-        if (code === 'CAP_REJECT') {
-          rowType = 'tool-cap';
-          preview = toolName + '(' + argsStr + ') ✗ CAP_REJECT: ' + evlogTruncate(raw.error, 80);
-        } else {
-          rowType = 'tool-err';
-          preview = toolName + '(' + argsStr + ') ✗ ' + evlogTruncate(raw.error, 80);
-        }
-      } else {
-        rowType = 'tool-ok';
-        const rstr = evlogShortResult(raw);
-        preview = toolName + '(' + argsStr + ')' + (rstr ? ' → ' + rstr : '');
-      }
-      preview = evlogTruncate(preview, 140);
-      rows.push({
-        type: rowType,
-        iteration: iter,
-        id: 'tool-' + tc.id,
-        preview,
-        raw: { toolCall: tc, toolResult: tr || null },
-        durationMs: tr ? tr.durationMs : null,
-        timestamp: e.timestamp,
-      });
-      continue;
-    }
-
-    if (e.type === 'trigger_fired') {
-      const hookId = e.hookId || e.trigger || '(hook)';
-      const action = e.action || '?';
-      const reason = e.reason || e.code || '';
-      const preview = hookId + ' · ' + action + (reason ? ' · ' + evlogTruncate(reason, 80) : '');
-      rows.push({
-        type: 'hook',
-        iteration: iter,
-        id: 'hook-' + (e.sequence || rows.length),
-        preview: evlogTruncate(preview, 180),
-        raw: e,
-        timestamp: e.timestamp,
-      });
-      continue;
-    }
-
-    if (e.type === 'turn_end') {
-      // flush accumulated text for this iteration if not yet
-      if (textByIter.has(iter) && !emittedText.has(iter)) {
-        const acc = textByIter.get(iter);
-        if (acc.text.trim()) {
-          rows.push({
-            type: 'agent-text',
-            iteration: iter,
-            id: 'text-' + iter,
-            preview: evlogTruncate(acc.text.trim(), 120),
-            raw: { accumulated: acc.text, deltas: acc.raws.length },
-            timestamp: acc.timestamp,
-          });
-        }
-        emittedText.add(iter);
-      }
-      const summary = e.summary || {};
-      const totalIter = e.totalIterations || iter;
-      const totalMs = summary.totalDurationMs || summary.durationMs;
-      const preview = 'Turn ended — ' + totalIter + ' iterations' +
-        (totalMs != null ? ' · ' + formatDuration(totalMs) : '') +
-        (e.phase ? ' · ' + e.phase : '');
-      rows.push({
-        type: 'turn-end',
-        iteration: iter,
-        id: 'turn-' + iter,
-        preview,
-        raw: e,
-        timestamp: e.timestamp,
-      });
-      continue;
-    }
+/** Build per-pipeline stages from runtime data, falling back to hardcoded. */
+function getPipelineStages(pipeKey, toolCallStages) {
+  if (toolCallStages && toolCallStages.length > 0) {
+    return toolCallStages.map((s, i) => ({
+      id: 'runtime-' + i,
+      label: s.label,
+      file: s.file,
+      durationMs: s.durationMs,
+      meta: s.meta,
+    }));
   }
+  // Fallback to hardcoded
+  return TOOL_PIPELINES[pipeKey]?.stages || [];
+}
 
-  // Flush any remaining accumulated text (for last iteration without turn_end/iteration_start transition)
-  for (const [iter, acc] of textByIter.entries()) {
-    if (emittedText.has(iter)) continue;
-    if (!acc.text.trim()) continue;
-    rows.push({
-      type: 'agent-text',
-      iteration: iter,
-      id: 'text-' + iter,
-      preview: evlogTruncate(acc.text.trim(), 120),
-      raw: { accumulated: acc.text, deltas: acc.raws.length },
-      timestamp: acc.timestamp,
-    });
-    emittedText.add(iter);
-  }
+let pipeDetailData = null; // currently selected detail
 
-  // Sort rows by timestamp-then-iteration to keep chronological order where possible
-  rows.sort((a, b) => {
-    if (a.timestamp && b.timestamp && a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-    if (a.iteration !== b.iteration) return a.iteration - b.iteration;
-    return 0;
+function renderPipeline(events, meta) {
+  const card = document.getElementById('pipe-card');
+  card.style.display = '';
+  const container = document.getElementById('pipe-container');
+  container.innerHTML = '';
+
+  // Extract _stages from runtime events (keyed by tool result ID)
+  const stagesMap = extractStagesFromEvents(events);
+  // Also try to get _stages from toolCallDetails result (alternative path)
+  const toolResultEvents = events.filter(e => e.type === 'tool_result');
+
+  // Gather tool call data
+  const toolCalls = (meta.toolCallDetails || []).map((tc, i) => {
+    // Try to find matching runtime _stages
+    const matchingEvent = toolResultEvents[i]; // position-based fallback
+    let runtimeStages = matchingEvent ? stagesMap[matchingEvent.toolResult?.id] : null;
+    // Also check if result JSON contains _stages
+    if (!runtimeStages && tc.result) {
+      try {
+        const parsed = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
+        if (parsed._stages) runtimeStages = parsed._stages;
+      } catch {}
+    }
+    return {
+      ...tc,
+      index: i + 1,
+      pipeline: toolToPipeline(tc.name),
+      runtimeStages: runtimeStages || null,
+    };
   });
 
-  return rows;
-}
-
-function evlogIconFor(type) {
-  switch (type) {
-    case 'user': return '\uD83D\uDCAC'; // 💬
-    case 'agent-text': return '\uD83E\uDDE0'; // 🧠
-    case 'tool-ok': return '\u26A1'; // ⚡
-    case 'tool-cap': return '\u26A0'; // ⚠
-    case 'tool-err': return '\u2717'; // ✗
-    case 'hook': return '\uD83E\uDE9D'; // 🪝
-    case 'turn-end': return '\u25A0'; // ■
-    default: return '·';
+  // Count per pipeline — initialize all keys from TOOL_PIPELINES
+  const counts = {};
+  for (const k of Object.keys(TOOL_PIPELINES)) counts[k] = 0;
+  for (const tc of toolCalls) {
+    if (tc.pipeline && counts[tc.pipeline] !== undefined) counts[tc.pipeline]++;
   }
+
+  // LLM call count
+  const llmCount = events.filter(e => e.type === 'llm_response').length;
+  const totalDur = meta.durationMs;
+
+  // === Build architecture diagram ===
+  let html = '<div class="pipe-arch">';
+
+  // LLM node
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node llm" onclick="pipeShowLLM()" title="Click: show LLM call details">' +
+      'LLM Generate' +
+      '<span class="pipe-badge">' + llmCount + '</span>' +
+    '</div></div>';
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // Dispatcher
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node dispatch">' +
+      'toolDispatcher.dispatch()' +
+      '<span class="pipe-badge">' + toolCalls.length + '</span>' +
+    '</div></div>';
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // 4 tool columns
+  html += '<div class="pipe-cols">';
+  for (const [key, pipe] of Object.entries(TOOL_PIPELINES)) {
+    const count = counts[key];
+    const isActive = count > 0;
+    // Use runtime stages from first matching call, fallback to hardcoded
+    const firstCallWithStages = toolCalls.find(tc => tc.pipeline === key && tc.runtimeStages);
+    const displayStages = firstCallWithStages
+      ? firstCallWithStages.runtimeStages.map((s, i) => ({ id: 'rt-' + i, label: s.label, file: s.file }))
+      : pipe.stages;
+    const isRuntime = !!firstCallWithStages;
+
+    html += '<div class="pipe-col">';
+    html += '<div class="pipe-col-head ' + key + (isActive ? '' : ' inactive') + '"' +
+      (isActive ? ' onclick="pipeShowTool(\'' + key + '\')" title="Click: show ' + key + ' calls"' : '') + '>' +
+      '<div class="pipe-col-name">' + key + (isRuntime ? ' *' : '') + '</div>' +
+      '<div class="pipe-col-count">' + count + ' call' + (count !== 1 ? 's' : '') + '</div>' +
+    '</div>';
+
+    // Stages
+    html += '<div class="pipe-stages">';
+    for (let si = 0; si < displayStages.length; si++) {
+      const s = displayStages[si];
+      html += '<div class="pipe-stage-arrow">\u2193</div>';
+      html += '<div class="pipe-stage' + (isActive ? ' active' : '') + '" title="' + escHtml(s.file || '') + '">' +
+        s.label + '<span class="pipe-stage-file">' + (s.file || '') + '</span></div>';
+    }
+    html += '</div>'; // stages
+    html += '</div>'; // col
+  }
+  html += '</div>'; // cols
+
+  html += '<div class="pipe-arrow">\u2193</div>';
+
+  // presentForLLM
+  html += '<div class="pipe-shared">' +
+    '<div class="pipe-node present">' +
+      'presentForLLM()' +
+      '<span class="pipe-badge">' + toolCalls.length + '</span>' +
+    '</div></div>';
+
+  // Detail panel placeholder
+  html += '<div id="pipe-detail-slot"></div>';
+
+  html += '</div>'; // pipe-arch
+  container.innerHTML = html;
+
+  // Store data for click handlers
+  pipeDetailData = { events, meta, toolCalls, counts, llmCount };
 }
 
-/**
- * Render inline LLM request summary for an iteration.
- * llmPairs: Array<{ req: llm_request event, resp: llm_response event | null }>
- */
-function renderIterLLMBlock(llmPairs) {
-  const parts = [];
-  for (let i = 0; i < llmPairs.length; i++) {
-    const { req, resp } = llmPairs[i];
-    const msgCount = req.messageCount || (req.messages && req.messages.length) || 0;
-    const toolCount = (req.toolNames && req.toolNames.length) || 0;
-    const usage = (resp && resp.usage) || {};
-    const thinking = (req.config && req.config.thinkingLevel) || '?';
-    const durMs = resp && resp.durationMs;
+function pipeShowLLM() {
+  if (!pipeDetailData) return;
+  const slot = document.getElementById('pipe-detail-slot');
+  const { events } = pipeDetailData;
+  const llmReqs = events.filter(e => e.type === 'llm_request');
+  const llmResps = events.filter(e => e.type === 'llm_response');
 
-    // Head line: callN · msgs · tools · prompt tok · cached · think · duration
-    const head = [];
-    head.push('LLM Request' + (llmPairs.length > 1 ? ' #' + (i + 1) : ''));
-    head.push(msgCount + ' msg' + (msgCount === 1 ? '' : 's'));
-    head.push(toolCount + ' tool' + (toolCount === 1 ? '' : 's'));
-    if (usage.promptTokens != null) {
-      let tok = usage.promptTokens + ' prompt tok';
-      if (usage.cachedTokens) tok += ' (' + usage.cachedTokens + ' cached)';
-      head.push(tok);
-    }
-    head.push('think=' + escHtml(String(thinking)));
-    if (durMs != null) head.push(formatDuration(durMs));
+  let html = '<div class="pipe-detail">';
+  html += '<div class="pipe-detail-header">' +
+    '<span class="pipe-detail-title">LLM Calls (' + llmResps.length + ')</span>' +
+    '<button class="pipe-detail-close" onclick="this.closest(\'.pipe-detail\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-detail-body"><div class="pipe-trace">';
 
-    parts.push('<div class="evlog-iter-llm-head">' + head.map(escHtml).join(' \u00b7 ') + '</div>');
+  for (let i = 0; i < llmResps.length; i++) {
+    const req = llmReqs[i];
+    const resp = llmResps[i];
+    const usage = resp?.usage || {};
+    const shape = resp?.responseShape || {};
+    html += '<div class="pipe-trace-row">' +
+      '<span class="pipe-trace-idx">Iter ' + (resp?.iteration || i+1) + '</span>' +
+      '<div class="pipe-trace-stages">' +
+        '<span class="pipe-trace-stage stage-handler">' +
+          (req?.messageCount || '?') + ' msgs \u2192 LLM' +
+        '</span>' +
+        '<span class="pipe-trace-arrow">\u2192</span>' +
+        '<span class="pipe-trace-stage stage-exec">' +
+          (usage.promptTokens || '?') + ' prompt tok' +
+          (usage.cachedTokens ? ' (' + usage.cachedTokens + ' cached)' : '') +
+        '</span>' +
+        '<span class="pipe-trace-arrow">\u2192</span>' +
+        '<span class="pipe-trace-stage stage-present">' +
+          'text=' + (shape.textLength || 0) + ' tools=' + (shape.toolCallCount || 0) +
+          (shape.toolCallNames?.length ? ' (' + shape.toolCallNames.join(',') + ')' : '') +
+        '</span>' +
+      '</div>' +
+      '<span class="pipe-trace-dur">' + formatDuration(resp?.durationMs) + '</span>' +
+    '</div>';
+  }
 
-    if (req.messages && req.messages.length > 0) {
-      parts.push('<div class="evlog-iter-llm-msgs">');
-      for (const m of req.messages) {
-        const role = String(m.role || '?');
-        const roleCls = role === 'system' ? 'system'
-          : role === 'user' ? 'user'
-          : role === 'model' || role === 'assistant' ? 'model'
-          : role === 'tool' ? 'tool'
-          : '';
-        const flags = [];
-        if (m.pinned) flags.push('\uD83D\uDCCC'); // 📌
-        if (m.hidden) flags.push('hidden');
-        parts.push('<div class="evlog-iter-llm-msg">' +
-          '<span class="evlog-iter-llm-role ' + roleCls + '">' + escHtml(role) + '</span>' +
-          '<span class="evlog-iter-llm-len">' + (m.contentLength || 0) + ' chars</span>' +
-          (flags.length ? '<span class="evlog-iter-llm-flag">' + escHtml(flags.join(' ')) + '</span>' : '') +
-        '</div>');
+  html += '</div></div></div>';
+  slot.innerHTML = html;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pipeShowTool(pipeKey) {
+  if (!pipeDetailData) return;
+  const slot = document.getElementById('pipe-detail-slot');
+  const { toolCalls } = pipeDetailData;
+  const pipe = TOOL_PIPELINES[pipeKey];
+  const calls = toolCalls.filter(tc => tc.pipeline === pipeKey);
+
+  let html = '<div class="pipe-detail">';
+  html += '<div class="pipe-detail-header">' +
+    '<span class="pipe-detail-title">' + pipeKey + ' calls (' + calls.length + ')</span>' +
+    '<button class="pipe-detail-close" onclick="this.closest(\'.pipe-detail\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-detail-body"><div class="pipe-trace">';
+
+  for (const tc of calls) {
+    const isErr = tc.status === 'error';
+    const hasRuntime = tc.runtimeStages && tc.runtimeStages.length > 0;
+
+    // Build stage trace — use runtime stages when available
+    const stages = [];
+    stages.push({ label: 'dispatch', cls: 'stage-dispatch', dur: null });
+    if (hasRuntime) {
+      for (const s of tc.runtimeStages) {
+        const cls = s.label.includes('executor') || s.label.includes('executeIR') ? 'stage-exec'
+          : s.label.includes('present') ? 'stage-present'
+          : 'stage-handler';
+        stages.push({ label: s.label, cls, dur: s.durationMs });
       }
-      parts.push('</div>');
-    }
-  }
-  return parts.join('');
-}
-
-/**
- * Build two lineage maps from tool rows:
- *  - producers[nodeId]  = rowKey of the FIRST row whose tool_result produced this id
- *  - consumers[nodeId]  = [rowKey, ...] of rows whose tool_call args reference this id (excluding the producer)
- *
- * Producer detection walks tool_result.raw.data recursively looking for:
- *   - .id (string matching /^\d+:\d+$/)
- *   - .idMap values (object) — every value that matches the id pattern
- *   - any string value in data that matches the id pattern (catch-all for nested fields like .nodeId, .rootId)
- *
- * Consumer detection walks tool_call.args recursively and collects any string value matching the id pattern.
- */
-function buildLineageIndex(rows) {
-  const producers = new Map();
-  const consumers = new Map();
-  const ID_SHAPE = /^\d+:\d+$/;
-
-  // Collect every id string found anywhere in a value graph (handles nested objects + arrays).
-  function collectIds(val, out) {
-    if (val == null) return;
-    if (typeof val === 'string') {
-      if (ID_SHAPE.test(val)) out.add(val);
-      return;
-    }
-    if (typeof val !== 'object') return;
-    if (Array.isArray(val)) {
-      for (const v of val) collectIds(v, out);
-      return;
-    }
-    for (const k of Object.keys(val)) collectIds(val[k], out);
-  }
-
-  for (const row of rows) {
-    if (!row || !row.raw) continue;
-    const rowKey = row.id;
-
-    // Producer side — only tool-ok rows with a toolResult.raw.data
-    const tr = row.raw && row.raw.toolResult;
-    const data = tr && tr.raw && tr.raw.data;
-    if (data) {
-      const produced = new Set();
-      collectIds(data, produced);
-      for (const nodeId of produced) {
-        if (!producers.has(nodeId)) producers.set(nodeId, rowKey);
+    } else {
+      for (const s of pipe.stages) {
+        stages.push({ label: s.label, cls: 'stage-handler', dur: null });
       }
     }
+    stages.push({ label: 'presentForLLM', cls: 'stage-present', dur: null });
+    if (isErr) stages.push({ label: 'ERROR', cls: 'stage-err', dur: null });
 
-    // Consumer side — tool_call args
-    const tc = row.raw && row.raw.toolCall;
-    const args = tc && tc.args;
-    if (args) {
-      const consumed = new Set();
-      collectIds(args, consumed);
-      for (const nodeId of consumed) {
-        // exclude the row itself (a row producing X shouldn't also list itself as consumer of X)
-        if (producers.get(nodeId) === rowKey) continue;
-        if (!consumers.has(nodeId)) consumers.set(nodeId, []);
-        const arr = consumers.get(nodeId);
-        if (arr[arr.length - 1] !== rowKey) arr.push(rowKey);
-      }
+    let stagesHTML = '';
+    for (let si = 0; si < stages.length; si++) {
+      if (si > 0) stagesHTML += '<span class="pipe-trace-arrow">\u2192</span>';
+      const durSuffix = stages[si].dur != null ? ' ' + formatDuration(stages[si].dur) : '';
+      stagesHTML += '<span class="pipe-trace-stage ' + stages[si].cls + '" ' +
+        'onclick="pipeShowCallData(' + tc.index + ', \'' + escHtml(stages[si].label) + '\')">' +
+        escHtml(stages[si].label) + durSuffix + '</span>';
+    }
+
+    html += '<div class="pipe-trace-row">' +
+      '<span class="pipe-trace-idx">#' + tc.index + '</span>' +
+      '<span class="pipe-trace-name">' + escHtml(tc.name) + '</span>' +
+      '<div class="pipe-trace-stages">' + stagesHTML + '</div>' +
+      '<span class="' + (isErr ? 'pipe-trace-status-err' : 'pipe-trace-status-ok') + '">' +
+        (isErr ? '\u2717' : '\u2713') + '</span>' +
+      '<span class="pipe-trace-dur">' + formatDuration(tc.durationMs) + '</span>' +
+    '</div>';
+  }
+
+  html += '</div><div id="pipe-call-data-slot"></div></div></div>';
+  slot.innerHTML = html;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pipeShowCallData(index, stage) {
+  if (!pipeDetailData) return;
+  const tc = pipeDetailData.toolCalls.find(t => t.index === index);
+  if (!tc) return;
+
+  const slot = document.getElementById('pipe-call-data-slot');
+  if (!slot) return;
+
+  const viewId = 'pipe-' + index;
+
+  let html = '<div class="pipe-data-popup">';
+  html += '<div class="pipe-data-popup-header">' +
+    '<span class="pipe-data-popup-title">#' + index + ' ' + escHtml(tc.name) + ' \u2014 ' + escHtml(stage) + '</span>' +
+    '<button class="pipe-data-popup-close" onclick="this.closest(\'.pipe-data-popup\').remove()">\u2715</button>' +
+  '</div>';
+  html += '<div class="pipe-data-popup-body">';
+
+  html += buildDataViewer(viewId, tc.name, tc.params, tc.result, tc.durationMs);
+
+  if (tc.error) {
+    html += '<div class="pipe-data-section">Error</div>' +
+      '<div class="conv-tc-error">' + escHtml(tc.error) + '</div>';
+  }
+
+  html += '</div></div>';
+  slot.innerHTML = html;
+}
+
+// ===== presentForLLM simulation (client-side) =====
+// Mirrors src/engine/agent/tools/unified/presentation.ts KEEP_FIELDS
+const LLM_KEEP_FIELDS = {
+  cp: ['idMap'], rm: ['deleted'], mv: ['id','name'], tree: ['tree'],
+  grep: ['results','properties'], sed: ['replaced','details'], man: null,
+  inspect: null, jsx: null, describe: null, js: null,
+  edit: ['id','name','type','updated','results'],
+  set_text: ['id','name','type','updated','results'],
+  set_fill: ['id','name','type','updated','results'],
+  set_stroke: ['id','name','type','updated','results'],
+  set_layout: ['id','name','type','updated','results'],
+  find_nodes: ['results'], discover_props: null, replace_props: ['replaced','details'],
+  delete_node: ['deleted'], move_node: ['id','name'], clone_node: ['idMap'],
+};
+
+/** Simulate presentForLLM: flatten data, apply KEEP_FIELDS, add _meta. */
+function simulatePresent(raw, toolName, durationMs) {
+  if (!raw || typeof raw !== 'object') return raw;
+  let data = raw.data;
+  if (!data || typeof data !== 'object') {
+    return { ...(raw.error != null ? { error: raw.error } : {}), _meta: '[' + formatDuration(durationMs) + ']' };
+  }
+  // Apply KEEP_FIELDS
+  const keep = LLM_KEEP_FIELDS[toolName];
+  let cleaned;
+  if (keep === null || keep === undefined) {
+    cleaned = { ...data };
+  } else {
+    cleaned = {};
+    for (const f of keep) {
+      if (data[f] !== undefined && data[f] !== null) cleaned[f] = data[f];
     }
   }
-
-  return { producers, consumers };
+  // Strip internal fields
+  delete cleaned._stages;
+  delete cleaned._stderr;
+  if (raw.error != null) cleaned.error = raw.error;
+  cleaned._meta = '[' + formatDuration(durationMs) + ']';
+  if (raw._stderr) cleaned._stderr = raw._stderr;
+  return cleaned;
 }
 
-/**
- * Wrap any Figma node id (shape \d+:\d+ with word boundaries) in an escaped-HTML string
- * with a clickable span. Must operate on ALREADY-ESCAPED HTML so that angle brackets from
- * the wrapper template aren't themselves escaped.
- */
-function evlogWrapIdRefs(escapedHtml) {
-  if (!escapedHtml) return escapedHtml;
-  return escapedHtml.replace(EVLOG_ID_REGEX, function(_m, id) {
-    return '<span class="evlog-id-ref" data-id="' + id + '">' + id + '</span>';
-  });
+/** Global stringify mode */
+let globalStringify = false;
+
+/** Format data for display, respecting stringify toggle. */
+function formatDataView(obj, stringify) {
+  if (obj === null || obj === undefined) return '(empty)';
+  if (stringify) return JSON.stringify(obj);
+  return JSON.stringify(obj, null, 2);
 }
 
-function setEvlogHighlight(nodeId) {
-  evlogActiveId = nodeId;
-  const producerKey = evlogLineage.producers.get(nodeId);
-  const consumerKeys = evlogLineage.consumers.get(nodeId) || [];
+/** Build a data viewer with Raw/LLM toggle and stringify switch. */
+function buildDataViewer(id, toolName, params, rawResult, durationMs) {
+  const raw = parseIfString(rawResult);
+  const presented = simulatePresent(raw, toolName, durationMs);
+  const rawStr = formatDataView(raw, globalStringify);
+  const presentStr = formatDataView(presented, globalStringify);
+  const isDifferent = rawStr !== presentStr;
 
-  // Clear previous highlight classes
-  document.querySelectorAll('#evlog-feed .evlog-row.evlog-id-highlight, #evlog-feed .evlog-row.evlog-id-highlight-producer').forEach(r => {
-    r.classList.remove('evlog-id-highlight');
-    r.classList.remove('evlog-id-highlight-producer');
-  });
-  document.querySelectorAll('#evlog-feed .evlog-id-ref.active').forEach(s => s.classList.remove('active'));
-
-  // Apply producer class
-  let producerRow = null;
-  if (producerKey) {
-    producerRow = document.querySelector('#evlog-feed .evlog-row[data-row-key="' + producerKey + '"]');
-    if (producerRow) producerRow.classList.add('evlog-id-highlight-producer');
-  }
-  // Apply consumer class
-  for (const key of consumerKeys) {
-    const r = document.querySelector('#evlog-feed .evlog-row[data-row-key="' + key + '"]');
-    if (r) r.classList.add('evlog-id-highlight');
-  }
-  // Emphasize the matching id spans across the whole feed
-  document.querySelectorAll('#evlog-feed .evlog-id-ref[data-id="' + nodeId + '"]').forEach(s => s.classList.add('active'));
-
-  // Banner
-  const banner = document.getElementById('evlog-id-banner');
-  const idEl = document.getElementById('evlog-id-banner-id');
-  const metaEl = document.getElementById('evlog-id-banner-meta');
-  if (banner && idEl && metaEl) {
-    idEl.textContent = nodeId;
-    const nConsumers = consumerKeys.length;
-    const producerLabel = producerKey
-      ? 'producer: ' + evlogProducerLabel(producerKey)
-      : 'producer: not found';
-    metaEl.textContent = producerLabel + ' \u00b7 ' + nConsumers + ' consumer' + (nConsumers === 1 ? '' : 's');
-    banner.style.display = '';
-  }
-
-  // Scroll producer row into view (or first consumer if no producer)
-  const focusRow = producerRow
-    || (consumerKeys.length ? document.querySelector('#evlog-feed .evlog-row[data-row-key="' + consumerKeys[0] + '"]') : null);
-  if (focusRow) {
-    try { focusRow.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch {}
-  }
+  return '<div class="data-view-bar">' +
+    '<button class="data-view-btn raw-btn active" onclick="switchDataView(this,\'' + id + '\',\'raw\')">Handler Raw</button>' +
+    '<button class="data-view-btn llm-btn" onclick="switchDataView(this,\'' + id + '\',\'llm\')">LLM View' +
+      (isDifferent ? ' <span class="data-diff-badge">diff</span>' : '') + '</button>' +
+    '<span class="data-view-spacer"></span>' +
+    '<label class="stringify-toggle"><input type="checkbox" ' + (globalStringify ? 'checked' : '') +
+      ' onchange="toggleStringify(this,\'' + id + '\',\'' + escHtml(toolName) + '\',' + (durationMs||0) + ')"> stringify</label>' +
+  '</div>' +
+  '<div class="pipe-data-section">Parameters</div>' +
+  '<pre class="pipe-data-json">' + escHtml(formatDataView(parseIfString(params), globalStringify)) + '</pre>' +
+  '<div class="pipe-data-section">Result</div>' +
+  '<pre class="pipe-data-json" id="data-result-' + id + '" data-raw=\'' + escAttr(JSON.stringify(raw)) + '\' data-presented=\'' + escAttr(JSON.stringify(presented)) + '\' data-view="raw">' +
+    escHtml(rawStr) + '</pre>';
 }
 
-function evlogProducerLabel(rowKey) {
-  // Find the row and return a short label like "iter 2"
-  const row = document.querySelector('#evlog-feed .evlog-row[data-row-key="' + rowKey + '"]');
-  if (!row) return rowKey;
-  const iter = row.dataset.iter || '?';
-  return 'iter ' + iter;
+function parseIfString(val) {
+  if (!val) return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return val; }
+  }
+  return val;
 }
 
-function clearEvlogHighlight() {
-  evlogActiveId = null;
-  document.querySelectorAll('#evlog-feed .evlog-row.evlog-id-highlight, #evlog-feed .evlog-row.evlog-id-highlight-producer').forEach(r => {
-    r.classList.remove('evlog-id-highlight');
-    r.classList.remove('evlog-id-highlight-producer');
-  });
-  document.querySelectorAll('#evlog-feed .evlog-id-ref.active').forEach(s => s.classList.remove('active'));
-  const banner = document.getElementById('evlog-id-banner');
-  if (banner) banner.style.display = 'none';
+function escAttr(s) { return String(s||'').replace(/'/g, '&#39;').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+function switchDataView(btn, id, view) {
+  const el = document.getElementById('data-result-' + id);
+  if (!el) return;
+  // Toggle active button
+  btn.parentElement.querySelectorAll('.data-view-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  el.dataset.view = view;
+  const data = view === 'llm' ? JSON.parse(el.dataset.presented) : JSON.parse(el.dataset.raw);
+  el.textContent = formatDataView(data, globalStringify);
 }
 
-function renderEventLog(id, events, meta) {
-  const card = document.getElementById('evlog-card');
-  const feed = document.getElementById('evlog-feed');
-  if (!card || !feed) return;
-  feed.innerHTML = '';
-  evlogState.recordingId = id;
-  evlogState.rows = buildEventRows(events || [], meta || {});
+function toggleStringify(checkbox, id, toolName, durationMs) {
+  globalStringify = checkbox.checked;
+  const el = document.getElementById('data-result-' + id);
+  if (!el) return;
+  const view = el.dataset.view || 'raw';
+  const data = view === 'llm' ? JSON.parse(el.dataset.presented) : JSON.parse(el.dataset.raw);
+  el.textContent = formatDataView(data, globalStringify);
+  // Also update params
+  const paramsEl = el.previousElementSibling?.previousElementSibling?.previousElementSibling;
+  // skip — params don't change between views
+}
 
-  // Build the lineage index once for this recording.
-  evlogLineage = buildLineageIndex(evlogState.rows);
-  clearEvlogHighlight();
+// ===== Conversation Flow =====
+function renderConversation(history, events) {
+  const card = document.getElementById('conv-card');
+  const container = document.getElementById('conv-container');
+  container.innerHTML = '';
 
-  // Restore collapse state from localStorage
-  let collapsed = {};
-  try {
-    const stored = localStorage.getItem('evlog-collapsed-' + id);
-    if (stored) collapsed = JSON.parse(stored) || {};
-  } catch {}
-  evlogState.collapsed = collapsed;
+  // Collect per-iteration layer data from context_usage events
+  const ctxEvents = (events || []).filter(e => e.type === 'context_usage' && e.usage?.layers);
 
-  // Index llm_request / llm_response per iteration (for inline iteration [llm] expansion)
-  const llmByIter = new Map();
-  const llmRespByCallId = new Map();
-  for (const e of events || []) {
-    if (!e || !e.type) continue;
-    if (e.type === 'llm_response' && e.llmCallId) llmRespByCallId.set(e.llmCallId, e);
-  }
-  for (const e of events || []) {
-    if (!e || !e.type) continue;
-    if (e.type === 'llm_request') {
-      const iter = e.iteration || 1;
-      if (!llmByIter.has(iter)) llmByIter.set(iter, []);
-      llmByIter.get(iter).push({ req: e, resp: e.llmCallId ? llmRespByCallId.get(e.llmCallId) : null });
-    }
-  }
-
-  // Group rows by iteration, preserving order
-  const iterOrder = [];
-  const iterMap = new Map();
-  for (const r of evlogState.rows) {
-    if (!iterMap.has(r.iteration)) {
-      iterMap.set(r.iteration, []);
-      iterOrder.push(r.iteration);
-    }
-    iterMap.get(r.iteration).push(r);
-  }
-
-  if (iterOrder.length === 0) {
-    feed.innerHTML = '<div class="evlog-empty">No runtime events recorded.</div>';
+  // If we have layer data, show iteration tabs + layer-aware view
+  if (ctxEvents.length > 0) {
     card.style.display = '';
+    // Tabs
+    const tabsDiv = document.createElement('div');
+    tabsDiv.className = 'conv-iter-tabs';
+    // "Final" tab for the classic flat view
+    for (const ce of ctxEvents) {
+      const tab = document.createElement('span');
+      tab.className = 'conv-iter-tab';
+      tab.dataset.iter = ce.iteration;
+      tab.textContent = 'Iter ' + ce.iteration;
+      tab.onclick = () => renderConvIteration(container, ce, tabsDiv);
+      tabsDiv.appendChild(tab);
+    }
+    const finalTab = document.createElement('span');
+    finalTab.className = 'conv-iter-tab';
+    finalTab.dataset.iter = 'final';
+    finalTab.textContent = 'Final';
+    finalTab.onclick = () => { renderConvFinal(container, history, tabsDiv); };
+    tabsDiv.appendChild(finalTab);
+    container.appendChild(tabsDiv);
+
+    // Default: show last iteration
+    const flowDiv = document.createElement('div');
+    flowDiv.className = 'conv-flow';
+    flowDiv.id = 'conv-flow-inner';
+    container.appendChild(flowDiv);
+    renderConvIteration(flowDiv, ctxEvents[ctxEvents.length - 1], tabsDiv);
     return;
   }
 
-  for (const iter of iterOrder) {
-    const sep = document.createElement('div');
-    sep.className = 'evlog-iter-sep' + (evlogState.collapsed[iter] ? ' folded' : '');
-    sep.dataset.iter = String(iter);
-    const rowsForIter = iterMap.get(iter);
-    const llmPairs = llmByIter.get(iter) || [];
-    const hasLLM = llmPairs.length > 0;
-    sep.innerHTML = '<span class="evlog-iter-toggle">\u25BE</span>' +
-      '<span>Iteration ' + iter + '</span>' +
-      (hasLLM ? '<button class="evlog-iter-llm-btn" type="button" data-iter="' + iter + '">llm</button>' : '') +
-      '<span class="evlog-iter-count">' + rowsForIter.length + ' events</span>';
-    sep.addEventListener('click', (ev) => {
-      // If the llm button was clicked, don't toggle fold
-      if (ev.target && ev.target.classList && ev.target.classList.contains('evlog-iter-llm-btn')) return;
-      toggleIterationFold(iter);
-    });
-    feed.appendChild(sep);
-
-    // Inline LLM expansion block (hidden by default)
-    if (hasLLM) {
-      const llmBlock = document.createElement('div');
-      llmBlock.className = 'evlog-iter-llm-block';
-      llmBlock.dataset.iter = String(iter);
-      llmBlock.style.display = 'none';
-      llmBlock.innerHTML = renderIterLLMBlock(llmPairs);
-      feed.appendChild(llmBlock);
-      // Wire up the button
-      const btn = sep.querySelector('.evlog-iter-llm-btn');
-      if (btn) {
-        btn.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          const open = llmBlock.style.display !== 'none';
-          llmBlock.style.display = open ? 'none' : '';
-          btn.classList.toggle('active', !open);
-        });
-      }
-    }
-
-    for (const row of rowsForIter) {
-      const line = document.createElement('div');
-      line.className = 'evlog-row';
-      line.dataset.type = row.type;
-      line.dataset.iter = String(iter);
-      line.dataset.rowKey = row.id;
-      line.dataset.preview = (row.preview || '').toLowerCase();
-      if (evlogState.collapsed[iter]) line.style.display = 'none';
-
-      const durText = row.durationMs != null ? formatDuration(row.durationMs) : '';
-      const previewHtml = evlogWrapIdRefs(escHtml(row.preview || ''));
-      line.innerHTML =
-        '<span class="evlog-icon">' + escHtml(evlogIconFor(row.type)) + '</span>' +
-        '<span class="evlog-iter-badge">i' + iter + '</span>' +
-        '<span class="evlog-type-chip" data-type="' + row.type + '">' + row.type + '</span>' +
-        '<span class="evlog-preview">' + previewHtml + '</span>' +
-        (durText ? '<span class="evlog-dur">' + escHtml(durText) + '</span>' : '');
-
-      const raw = document.createElement('pre');
-      raw.className = 'evlog-raw';
-      let rawStr;
-      try { rawStr = JSON.stringify(row.raw, null, 2); }
-      catch { rawStr = String(row.raw); }
-      // Escape first, then wrap id refs — keeps <, >, & safe while the wrap template's own <>
-      // survive because it's injected post-escape.
-      raw.innerHTML = evlogWrapIdRefs(escHtml(rawStr));
-      if (evlogState.collapsed[iter]) raw.style.display = 'none';
-
-      line.addEventListener('click', () => {
-        raw.classList.toggle('open');
-      });
-      feed.appendChild(line);
-      feed.appendChild(raw);
-    }
-  }
-
-  bindEventLogControls();
-  bindEvlogIdRefs();
-  applyEventLogFilters();
+  // Fallback: classic flat view (no layer data)
+  if (!history || history.length === 0) return;
   card.style.display = '';
+  const flowDiv = document.createElement('div');
+  flowDiv.className = 'conv-flow';
+  container.appendChild(flowDiv);
+  renderConvMessages(flowDiv, history);
 }
 
-let evlogIdRefsBound = false;
-function bindEvlogIdRefs() {
-  if (evlogIdRefsBound) return;
-  evlogIdRefsBound = true;
+/** Render a single iteration's 4-layer prompt using conv-msg styling */
+function renderConvIteration(parentOrId, ctxEvent, tabsDiv) {
+  const flow = typeof parentOrId === 'string'
+    ? document.getElementById(parentOrId)
+    : document.getElementById('conv-flow-inner') || parentOrId;
+  flow.innerHTML = '';
+  // Highlight active tab
+  tabsDiv.querySelectorAll('.conv-iter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.iter == ctxEvent.iteration));
 
-  const feed = document.getElementById('evlog-feed');
-  if (feed) {
-    // Delegated handler — captures every .evlog-id-ref click inside the feed (preview or raw pre)
-    feed.addEventListener('click', (ev) => {
-      const target = ev.target;
-      if (!target || !target.classList || !target.classList.contains('evlog-id-ref')) return;
-      // Don't let the row-expand click fire
-      ev.stopPropagation();
-      ev.preventDefault();
-      const nodeId = target.dataset.id;
-      if (!nodeId) return;
-      if (evlogActiveId === nodeId) {
-        clearEvlogHighlight();
-      } else {
-        setEvlogHighlight(nodeId);
-      }
-    });
-  }
+  const L = ctxEvent.usage.layers;
+  const layerDefs = [
+    { key: 'systemPrompt', label: 'System Prompt', color: '#6366f1' },
+    { key: 'summary', label: 'Summary', color: '#f59e0b' },
+    { key: 'conversationHistory', label: 'Conversation History', color: '#22c55e' },
+    { key: 'turnMessages', label: 'Turn Messages', color: '#3b82f6' },
+  ];
 
-  const closeBtn = document.getElementById('evlog-id-banner-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      clearEvlogHighlight();
-    });
-  }
-}
+  for (const ld of layerDefs) {
+    const layer = L[ld.key];
+    if (!layer || (layer.msgs === 0 && layer.chars === 0)) continue;
 
-let evlogControlsBound = false;
-function bindEventLogControls() {
-  if (evlogControlsBound) return;
-  evlogControlsBound = true;
+    // Layer separator header
+    const sep = document.createElement('div');
+    sep.className = 'conv-layer-sep';
+    sep.innerHTML = '<span class="conv-layer-dot" style="background:' + ld.color + '"></span>' +
+      '<span class="conv-layer-sep-label">' + ld.label + '</span>' +
+      '<span class="conv-layer-sep-meta">' + layer.chars + ' chars \u00b7 ' + layer.msgs + ' msg</span>';
+    flow.appendChild(sep);
 
-  document.querySelectorAll('#evlog-toolbar input[data-evlog-type]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const t = cb.dataset.evlogType;
-      evlogState.filters[t] = cb.checked;
-      // tool-err checkbox also controls tool-cap (single "tool-err" type chip covers both error variants)
-      if (t === 'tool-err') evlogState.filters['tool-cap'] = cb.checked;
-      applyEventLogFilters();
-    });
-  });
-
-  const search = document.getElementById('evlog-search');
-  if (search) {
-    search.addEventListener('input', () => {
-      evlogState.search = search.value.trim().toLowerCase();
-      applyEventLogFilters();
-    });
-  }
-
-  const onlyErrors = document.getElementById('evlog-only-errors');
-  if (onlyErrors) {
-    onlyErrors.addEventListener('click', () => {
-      for (const k of Object.keys(evlogState.filters)) {
-        evlogState.filters[k] = (k === 'tool-err' || k === 'tool-cap');
-      }
-      syncEvlogCheckboxes();
-      applyEventLogFilters();
-    });
-  }
-
-  const onlyHooks = document.getElementById('evlog-only-hooks');
-  if (onlyHooks) {
-    onlyHooks.addEventListener('click', () => {
-      for (const k of Object.keys(evlogState.filters)) {
-        evlogState.filters[k] = (k === 'hook');
-      }
-      syncEvlogCheckboxes();
-      applyEventLogFilters();
-    });
-  }
-
-  const reset = document.getElementById('evlog-reset');
-  if (reset) {
-    reset.addEventListener('click', () => {
-      for (const k of Object.keys(evlogState.filters)) evlogState.filters[k] = true;
-      evlogState.search = '';
-      const sbox = document.getElementById('evlog-search');
-      if (sbox) sbox.value = '';
-      syncEvlogCheckboxes();
-      applyEventLogFilters();
-    });
-  }
-}
-
-function syncEvlogCheckboxes() {
-  document.querySelectorAll('#evlog-toolbar input[data-evlog-type]').forEach(cb => {
-    const t = cb.dataset.evlogType;
-    cb.checked = !!evlogState.filters[t];
-  });
-}
-
-function applyEventLogFilters() {
-  // Iteration LLM blocks: hide when iteration is folded, otherwise respect last toggled state
-  document.querySelectorAll('#evlog-feed .evlog-iter-llm-block').forEach(block => {
-    const iter = block.dataset.iter;
-    const folded = !!evlogState.collapsed[iter];
-    if (folded) block.style.display = 'none';
-    // When unfolded, leave current display (button controls it)
-  });
-
-  const rows = document.querySelectorAll('#evlog-feed .evlog-row');
-  const search = evlogState.search;
-  rows.forEach(row => {
-    const type = row.dataset.type;
-    const iter = row.dataset.iter;
-    const typeOk = !!evlogState.filters[type];
-    const searchOk = !search || (row.dataset.preview || '').indexOf(search) !== -1;
-    const folded = !!evlogState.collapsed[iter];
-    const visible = typeOk && searchOk && !folded;
-    row.style.display = visible ? '' : 'none';
-    const raw = row.nextElementSibling;
-    if (raw && raw.classList && raw.classList.contains('evlog-raw')) {
-      if (!visible) {
-        raw.classList.remove('open');
-        raw.style.display = 'none';
-      } else {
-        raw.style.display = '';
+    // Render each message as a conv-msg with collapse/expand for long content
+    if (layer.messages) {
+      for (const m of layer.messages) {
+        const div = document.createElement('div');
+        div.className = 'conv-msg';
+        const avatarCls = m.role === 'system' ? 'system' : m.role === 'model' ? 'model' : m.role === 'tool' ? 'tool' : 'user';
+        const avatarIcon = m.role === 'system' ? 'S' : m.role === 'model' ? 'A' : m.role === 'tool' ? 'T' : 'U';
+        const roleLabel = m.role === 'system' ? 'System' : m.role === 'model' ? 'Agent' : m.role === 'tool' ? 'Tool' : 'User';
+        const metaHTML = '<span style="color:var(--text-dimmed);font-size:10px;margin-left:8px">' +
+          escHtml(m.id) + ' \u00b7 ' + m.chars + ' chars</span>';
+        const isLong = m.preview.length > 400;
+        const textCls = 'conv-text' + (isLong ? ' collapsed' : '');
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'conv-body';
+        bodyDiv.innerHTML = '<div class="conv-role">' + roleLabel + metaHTML + '</div>';
+        const textEl = document.createElement('div');
+        textEl.className = textCls;
+        textEl.textContent = m.preview;
+        bodyDiv.appendChild(textEl);
+        if (isLong) {
+          const toggle = document.createElement('div');
+          toggle.className = 'conv-text-toggle';
+          toggle.textContent = 'Show full content (' + m.chars + ' chars)';
+          toggle.onclick = () => {
+            const collapsed = textEl.classList.toggle('collapsed');
+            toggle.textContent = collapsed
+              ? 'Show full content (' + m.chars + ' chars)'
+              : 'Collapse';
+          };
+          bodyDiv.appendChild(toggle);
+        }
+        div.innerHTML = '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>';
+        div.appendChild(bodyDiv);
+        flow.appendChild(div);
       }
     }
+  }
+}
+
+/** Render "Final" tab — classic flat conversation history */
+function renderConvFinal(parentOrId, history, tabsDiv) {
+  const flow = document.getElementById('conv-flow-inner') ||
+    (typeof parentOrId === 'string' ? document.getElementById(parentOrId) : parentOrId);
+  flow.innerHTML = '';
+  tabsDiv.querySelectorAll('.conv-iter-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.iter === 'final'));
+  if (history && history.length > 0) {
+    renderConvMessages(flow, history);
+  } else {
+    flow.innerHTML = '<div style="color:var(--text-dimmed);font-size:12px">No conversation history available</div>';
+  }
+}
+
+/** Classic flat message rendering (used by Final tab and fallback) */
+function renderConvMessages(container, history) {
+  let convMsgIdx = 0;
+  for (const msg of history) {
+    convMsgIdx++;
+    const isUser = msg.role === 'user';
+    const div = document.createElement('div');
+    div.className = 'conv-msg';
+    const avatarCls = isUser ? 'user' : 'model';
+    const avatarIcon = isUser ? 'U' : 'A';
+    let bodyHTML = '<div class="conv-role">' + (isUser ? 'User' : 'Agent') + '</div>';
+    if (msg.text) {
+      bodyHTML += '<div class="conv-text">' + escHtml(msg.text) + '</div>';
+    }
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      bodyHTML += '<div class="conv-toolcalls">';
+      for (let tci = 0; tci < msg.toolCalls.length; tci++) {
+        const tc = msg.toolCalls[tci];
+        const isErr = tc.status === 'error';
+        const viewId = 'conv-' + convMsgIdx + '-' + tci;
+        bodyHTML += '<details class="conv-tc">' +
+          '<summary>' +
+            '<span class="conv-tc-name">' + escHtml(tc.name || '?') + '</span>' +
+            '<span class="' + (isErr ? 'conv-tc-status-err' : 'conv-tc-status-ok') + '">' +
+              (isErr ? '\u2717 Error' : '\u2713 OK') + '</span>' +
+          '</summary>' +
+          '<div class="conv-tc-body">' +
+            buildDataViewer(viewId, tc.name, tc.parameters, tc.result, undefined) +
+            (tc.error ? '<div class="pipe-data-section">Error</div><div class="conv-tc-error">' + escHtml(tc.error) + '</div>' : '') +
+          '</div>' +
+        '</details>';
+      }
+      bodyHTML += '</div>';
+    }
+    div.innerHTML =
+      '<div class="conv-avatar ' + avatarCls + '">' + avatarIcon + '</div>' +
+      '<div class="conv-body">' + bodyHTML + '</div>';
+    container.appendChild(div);
+  }
+}
+
+// ===== LLM Context =====
+function renderLLMContext(events) {
+  const llmRequests = events.filter(e => e.type === 'llm_request');
+  if (llmRequests.length === 0) return;
+
+  const card = document.getElementById('llm-ctx-card');
+  card.style.display = '';
+  const container = document.getElementById('llm-ctx-container');
+  container.innerHTML = '';
+
+  // Pair with responses for token usage
+  const llmResponses = events.filter(e => e.type === 'llm_response');
+  const responseMap = {};
+  for (const r of llmResponses) {
+    responseMap[r.llmCallId] = r;
+  }
+
+  for (const req of llmRequests) {
+    const resp = responseMap[req.llmCallId];
+    const details = document.createElement('details');
+    details.className = 'llm-ctx-item';
+
+    // Summary line
+    const msgCount = req.messageCount || req.messages?.length || 0;
+    const toolCount = req.toolNames?.length || 0;
+    const usage = resp?.usage;
+    let metaStr = msgCount + ' msgs, ' + toolCount + ' tools';
+    if (usage) {
+      metaStr += ' | ' + (usage.promptTokens || 0) + ' prompt tok';
+      if (usage.cachedTokens) metaStr += ' (' + usage.cachedTokens + ' cached)';
+    }
+    if (req.config) {
+      metaStr += ' | think=' + (req.config.thinkingLevel || '?');
+    }
+
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<span class="llm-ctx-iter">Iter ' + req.iteration + '</span>' +
+      '<span class="llm-ctx-label">LLM Request</span>' +
+      '<span class="llm-ctx-meta">' + escHtml(metaStr) + '</span>';
+    details.appendChild(summary);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'llm-ctx-body';
+
+    // Messages table
+    let msgsHTML = '<div class="llm-ctx-msgs">';
+    if (req.messages && req.messages.length > 0) {
+      for (const m of req.messages) {
+        const roleCls = (m.role === 'system' ? 'system' : m.role === 'user' ? 'user' : m.role === 'model' || m.role === 'assistant' ? 'model' : 'tool');
+        const flags = [];
+        if (m.hidden) flags.push('hidden');
+        if (m.pinned) flags.push('📌');
+        msgsHTML += '<div class="llm-ctx-msg">' +
+          '<span class="llm-ctx-msg-role ' + roleCls + '">' + escHtml(m.role) + '</span>' +
+          '<span class="llm-ctx-msg-len">' + (m.contentLength || 0) + ' chars</span>' +
+          (flags.length ? '<span class="llm-ctx-msg-flags">' + flags.join(' ') + '</span>' : '') +
+        '</div>';
+      }
+    }
+    msgsHTML += '</div>';
+
+    // Tools available
+    let toolsHTML = '';
+    if (req.toolNames && req.toolNames.length > 0) {
+      toolsHTML = '<div class="llm-ctx-tools">' +
+        '<div class="llm-ctx-tools-label">Tools Available</div>' +
+        '<div class="llm-ctx-tool-tags">';
+      for (const t of req.toolNames) {
+        toolsHTML += '<span class="llm-ctx-tool-tag">' + escHtml(t) + '</span>';
+      }
+      toolsHTML += '</div></div>';
+    }
+
+    // Cache info
+    let cacheHTML = '';
+    if (req.cache) {
+      cacheHTML = '<div class="llm-ctx-cache">' +
+        'Cache: ' + req.cache.cacheableMessages + '/' + req.cache.totalMessages + ' msgs cacheable' +
+        ' (~' + req.cache.cacheableTokensEstimate + ' tok)' +
+      '</div>';
+    }
+
+    // Response shape
+    let respHTML = '';
+    if (resp) {
+      const shape = resp.responseShape || {};
+      respHTML = '<div class="llm-ctx-cache">' +
+        'Response: ' + formatDuration(resp.durationMs) +
+        ' | text=' + (shape.textLength || 0) + ' chars' +
+        ' | thoughts=' + (shape.thoughtsLength || 0) + ' chars' +
+        ' | tools=' + (shape.toolCallCount || 0);
+      if (shape.toolCallNames?.length) {
+        respHTML += ' (' + shape.toolCallNames.join(', ') + ')';
+      }
+      respHTML += '</div>';
+    }
+
+    body.innerHTML = msgsHTML + toolsHTML + cacheHTML + respHTML;
+    details.appendChild(body);
+    container.appendChild(details);
+  }
+}
+
+// ===== Tool call details =====
+function renderToolDetails(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return;
+  const card = document.getElementById('tools-card');
+  card.style.display = '';
+  const container = document.getElementById('tools-container');
+  container.innerHTML = '';
+
+  toolCalls.forEach((tc, i) => {
+    const details = document.createElement('details');
+    details.className = 'tool-detail';
+
+    const isError = tc.status === 'error';
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<span class="tool-idx">' + (i + 1) + '</span>' +
+      '<span class="tool-name">' + escHtml(tc.name || '?') + '</span>' +
+      '<span class="' + (isError ? 'tool-status-err' : 'tool-status-ok') + '">' + (isError ? 'Error' : 'OK') + '</span>' +
+      '<span class="tool-dur">' + formatDuration(tc.durationMs) + '</span>';
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'tool-body';
+
+    // Params
+    const paramsJSON = formatToolJSON(tc.params);
+    body.innerHTML = '<div class="tool-section-label">Parameters</div>' +
+      '<pre class="tool-json">' + escHtml(truncate(paramsJSON, 2000)) + '</pre>';
+    if (paramsJSON.length > 2000) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full (' + paramsJSON.length + ' chars)';
+      expandBtn.onclick = function() {
+        this.previousElementSibling.textContent = paramsJSON;
+        this.remove();
+      };
+      body.appendChild(expandBtn);
+    }
+
+    // Error
+    if (tc.error) {
+      body.innerHTML += '<div class="tool-section-label">Error</div>' +
+        '<div class="tool-error-banner">' + escHtml(tc.error) + '</div>';
+    }
+
+    // Result
+    const resultJSON = formatToolJSON(tc.result);
+    body.innerHTML += '<div class="tool-section-label">Result</div>' +
+      '<pre class="tool-json">' + escHtml(truncate(resultJSON, 2000)) + '</pre>';
+    if (resultJSON.length > 2000) {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn';
+      expandBtn.textContent = 'Show full (' + resultJSON.length + ' chars)';
+      expandBtn.onclick = function() {
+        this.previousElementSibling.textContent = resultJSON;
+        this.remove();
+      };
+      body.appendChild(expandBtn);
+    }
+
+    details.appendChild(body);
+    container.appendChild(details);
   });
 }
 
-function toggleIterationFold(iter) {
-  const key = String(iter);
-  evlogState.collapsed[iter] = !evlogState.collapsed[iter];
-  const sep = document.querySelector('#evlog-feed .evlog-iter-sep[data-iter="' + key + '"]');
-  if (sep) sep.classList.toggle('folded', !!evlogState.collapsed[iter]);
-  applyEventLogFilters();
-  // persist
-  if (evlogState.recordingId) {
-    try {
-      localStorage.setItem(
-        'evlog-collapsed-' + evlogState.recordingId,
-        JSON.stringify(evlogState.collapsed),
-      );
-    } catch {}
-  }
+// ===== Footer =====
+function renderFooter(id, meta) {
+  const grid = document.getElementById('footer-grid');
+  grid.style.display = '';
+
+  // Screenshot
+  const img = document.getElementById('screenshot-img');
+  const emptyScreen = document.getElementById('screenshot-empty');
+  img.src = BASE + '/recordings/' + id + '/screenshot';
+  img.style.display = '';
+  emptyScreen.style.display = 'none';
+  img.onerror = function() {
+    this.style.display = 'none';
+    emptyScreen.style.display = '';
+  };
+
+  // Final text
+  document.getElementById('final-text').textContent = meta.finalText || '(no text response)';
 }
 
 // ===== Helpers =====
@@ -1877,6 +2563,24 @@ function formatDuration(ms) {
   if (ms === undefined || ms === null) return '?';
   if (ms >= 1000) return (ms / 1000).toFixed(1) + 's';
   return ms + 'ms';
+}
+
+function formatToolJSON(raw) {
+  if (!raw) return '(empty)';
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return raw;
+    }
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
+function truncate(str, max) {
+  if (str.length <= max) return str;
+  return str.slice(0, max) + '\n... (' + (str.length - max) + ' chars truncated)';
 }
 
 function escHtml(str) {

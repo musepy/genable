@@ -2,375 +2,233 @@
  * @file varHandlers.ts
  * @description IPC handlers for variable management commands.
  * Runs on main thread with full figma.variables.* API access.
+ *
+ * Addressing: pure Figma IDs — VariableID:x:y, VariableCollectionId:x:y, modeId "1:0".
+ * No path resolution, no name lookup.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
-import { parseHexToRGBA, rgbaToHex } from '../../utils/colorUtils';
+import { parseHexToRGBA } from '../../utils/colorUtils';
 import { invalidateVariableCache } from '../../engine/actions/handlers/variableBindingHandler';
 import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
 import { traced } from './pipelineTracer';
 
-// ── Main dispatcher ──
+// ── list_variables ──
+//
+// Flat response: { variables[], collections[], nextCursor? }
+// - `collection` filter: only variables in that VariableCollectionId
+// - `filter`: substring match on variable name (case-insensitive)
+// - `cursor`: opaque string (currently stringified offset)
+// - `limit`: default 100
 
-export const handleVar = traced('handleVar()', 'varHandlers.ts', async function handleVar(parameters: any): Promise<ToolResponse> {
-  const sub = parameters.subcommand;
-  switch (sub) {
-    case 'ls': return handleVarLs(parameters);
-    case 'mk': return handleVarMk(parameters);
-    case 'mk-collection': return handleVarMkCollection(parameters);
-    case 'bind': return handleVarBind(parameters);
-    case 'alias': return handleVarAlias(parameters);
-    default:
-      return {
-        error: `Unknown var subcommand "${sub}". Use: ls, mk, bind, alias`,
-      };
-  }
-});
+const DEFAULT_LIMIT = 100;
 
-// ── var ls ──
+export const handleListVariables = traced('handleListVariables()', 'varHandlers.ts', async function handleListVariables(params: any): Promise<ToolResponse> {
+  const filterCollectionId = typeof params.collection === 'string' ? params.collection : undefined;
+  const filterSubstring = typeof params.filter === 'string' ? params.filter.toLowerCase() : undefined;
+  const rawLimit = typeof params.limit === 'number' ? params.limit : DEFAULT_LIMIT;
+  const limit = Math.max(1, Math.min(rawLimit, 1000));
+  const offset = parseCursor(params.cursor);
 
-export async function handleVarLs(params: any): Promise<ToolResponse> {
-  const filterCollection = params.collection as string | undefined;
-  const verbose = params.verbose as boolean | undefined;
-
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const allVariables = await figma.variables.getLocalVariablesAsync();
 
-  if (collections.length === 0) {
-    return { data: { listing: '(no variable collections)', count: 0, collections: [] } };
+  let filtered = allVariables;
+  if (filterCollectionId) {
+    filtered = filtered.filter(v => v.variableCollectionId === filterCollectionId);
+  }
+  if (filterSubstring) {
+    filtered = filtered.filter(v => v.name.toLowerCase().includes(filterSubstring));
   }
 
-  const lines: string[] = [];
-  const structured: StructuredCollection[] = [];
-  let totalVars = 0;
+  const page = filtered.slice(offset, offset + limit);
+  const nextOffset = offset + page.length;
+  const nextCursor = nextOffset < filtered.length ? String(nextOffset) : undefined;
 
-  for (const coll of collections) {
-    if (filterCollection && !coll.name.toLowerCase().includes(filterCollection.toLowerCase())) continue;
+  // Collect only referenced collections
+  const referencedCollectionIds = new Set(page.map(v => v.variableCollectionId));
+  const allCollections = await figma.variables.getLocalVariableCollectionsAsync();
+  const collections = allCollections
+    .filter(c => referencedCollectionIds.has(c.id))
+    .map(c => ({
+      id: c.id,
+      name: c.name,
+      modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
+    }));
 
-    const collVars = allVariables.filter(v => v.variableCollectionId === coll.id);
-    const modeNames = coll.modes.map(m => m.name).join(', ');
-    lines.push(`📁 ${coll.name}  (${collVars.length} vars, modes: ${modeNames})`);
-    totalVars += collVars.length;
+  const variables = page.map(v => ({
+    id: v.id,
+    name: v.name,
+    variableCollectionId: v.variableCollectionId,
+    resolvedType: v.resolvedType,
+    valuesByMode: v.valuesByMode,
+  }));
 
-    // Always build structured entry — per-mode values for every variable.
-    structured.push(buildStructuredCollection(coll, collVars, allVariables));
+  const data: any = { variables, collections };
+  if (nextCursor !== undefined) data.nextCursor = nextCursor;
 
-    if (!filterCollection && !verbose) {
-      // No collection specified → text summary only (collection names + counts).
-      // Structured array still carries full data above.
-      continue;
-    }
+  return { data };
+});
 
-    if (!verbose && collVars.length > 30) {
-      // Collection specified but too many vars → grouped text summary.
-      // Structured array still carries full per-variable data.
-      const groups = new Map<string, { count: number; types: Set<string>; examples: string[] }>();
-      for (const v of collVars) {
-        // Group by all segments except the last (e.g. "Colors/Gray/1" → "Colors/Gray")
-        const lastSlash = v.name.lastIndexOf('/');
-        const groupName = lastSlash > 0 ? v.name.slice(0, lastSlash) : '(root)';
-        if (!groups.has(groupName)) groups.set(groupName, { count: 0, types: new Set(), examples: [] });
-        const g = groups.get(groupName)!;
-        g.count++;
-        g.types.add(v.resolvedType);
-        if (g.examples.length < 2) {
-          const val = formatVarValue(v.valuesByMode[coll.modes[0].modeId], v.resolvedType, allVariables);
-          g.examples.push(`${v.name.slice(lastSlash + 1)}=${val}`);
-        }
-      }
-      for (const [groupName, g] of groups) {
-        const types = [...g.types].join(',');
-        lines.push(`  ${groupName.padEnd(30)} ${String(g.count).padStart(3)} ${types.padEnd(7)}  e.g. ${g.examples.join(', ')}`);
-      }
-      lines.push(`  ── ${groups.size} groups. Use: var ls "${coll.name}" -v  for full listing`);
-      lines.push('');
-      continue;
-    }
+function parseCursor(raw: unknown): number {
+  if (typeof raw !== 'string') return 0;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
-    // Verbose mode or small collection → full text listing.
-    for (const v of collVars) {
-      const values: string[] = [];
-      for (const mode of coll.modes) {
-        const val = v.valuesByMode[mode.modeId];
-        const formatted = formatVarValue(val, v.resolvedType, allVariables);
-        if (coll.modes.length === 1) {
-          values.push(formatted);
-        } else {
-          values.push(`${mode.name}=${formatted}`);
-        }
-      }
-      lines.push(`  ${v.resolvedType.padEnd(7)}  ${v.name.padEnd(30)}  ${values.join('  ')}`);
-    }
-    lines.push('');
+// ── create_collection ──
+
+export const handleCreateCollection = traced('handleCreateCollection()', 'varHandlers.ts', async function handleCreateCollection(params: any): Promise<ToolResponse> {
+  const name = typeof params.name === 'string' ? params.name.trim() : '';
+  const modes: unknown = params.modes;
+
+  if (!name) return { error: 'create_collection requires "name".' };
+  if (!Array.isArray(modes) || modes.length === 0) {
+    return { error: 'create_collection requires "modes" — a non-empty array of mode names.' };
+  }
+  const modeNames = modes.map(m => String(m).trim()).filter(Boolean);
+  if (modeNames.length === 0) {
+    return { error: 'create_collection requires at least one non-empty mode name.' };
   }
 
-  if (!filterCollection && !verbose) {
-    lines.push(`── ${collections.length} collections, ${totalVars} variables total. Use: var ls <collection>  to explore.`);
+  const collection = figma.variables.createVariableCollection(name);
+  collection.renameMode(collection.modes[0].modeId, modeNames[0]);
+  for (let i = 1; i < modeNames.length; i++) {
+    collection.addMode(modeNames[i]);
   }
+
+  invalidateCaches();
 
   return {
     data: {
-      listing: lines.join('\n'),
-      count: totalVars,
-      collections: structured,
+      id: collection.id,
+      modes: collection.modes.map(m => ({ modeId: m.modeId, name: m.name })),
     },
   };
-}
+});
 
-// ── Structured output types ──
+// ── create_variable ──
 
-interface StructuredMode {
-  id: string;
-  name: string;
-}
+export const handleCreateVariable = traced('handleCreateVariable()', 'varHandlers.ts', async function handleCreateVariable(params: any): Promise<ToolResponse> {
+  const collectionId = typeof params.collection === 'string' ? params.collection : '';
+  const name = typeof params.name === 'string' ? params.name.trim() : '';
+  const type = normalizeVarType(params.type);
 
-interface StructuredLiteralValue {
-  value: string | number | boolean;
-}
+  if (!collectionId) return { error: 'create_variable requires "collection" (VariableCollectionId).' };
+  if (!name) return { error: 'create_variable requires "name".' };
+  if (!type) return { error: 'create_variable requires "type" — one of COLOR, FLOAT, STRING, BOOLEAN.' };
 
-interface StructuredAliasValue {
-  alias: string;
-  aliasId: string;
-}
-
-type StructuredVarValue = StructuredLiteralValue | StructuredAliasValue;
-
-interface StructuredVariable {
-  id: string;
-  name: string;
-  type: VariableResolvedDataType;
-  /** Keyed by mode name — LLM-friendly (not mode ID). */
-  valuesByMode: Record<string, StructuredVarValue>;
-}
-
-interface StructuredCollection {
-  id: string;
-  name: string;
-  modes: StructuredMode[];
-  variables: StructuredVariable[];
-}
-
-function buildStructuredCollection(
-  coll: VariableCollection,
-  collVars: Variable[],
-  allVariables: Variable[],
-): StructuredCollection {
-  return {
-    id: coll.id,
-    name: coll.name,
-    modes: coll.modes.map(m => ({ id: m.modeId, name: m.name })),
-    variables: collVars.map(v => ({
-      id: v.id,
-      name: v.name,
-      type: v.resolvedType,
-      valuesByMode: buildValuesByMode(v, coll, allVariables),
-    })),
-  };
-}
-
-function buildValuesByMode(
-  v: Variable,
-  coll: VariableCollection,
-  allVariables: Variable[],
-): Record<string, StructuredVarValue> {
-  const out: Record<string, StructuredVarValue> = {};
-  for (const mode of coll.modes) {
-    const raw = v.valuesByMode[mode.modeId];
-    out[mode.name] = toStructuredValue(raw, v.resolvedType, allVariables);
+  const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+  if (!collection) {
+    return { error: `Collection "${collectionId}" not found. Use list_variables to discover collection ids.` };
   }
-  return out;
-}
 
-function toStructuredValue(
-  raw: unknown,
-  type: VariableResolvedDataType,
-  allVariables: Variable[],
-): StructuredVarValue {
-  // Alias — reference to another variable.
-  if (raw && typeof raw === 'object' && (raw as any).type === 'VARIABLE_ALIAS') {
-    const aliasId = (raw as any).id as string;
-    const target = allVariables.find(x => x.id === aliasId);
-    return { alias: target ? target.name : aliasId, aliasId };
+  const variable = figma.variables.createVariable(name, collection, type);
+
+  invalidateCaches();
+
+  return { data: { id: variable.id } };
+});
+
+// ── set_variable_value ──
+
+export const handleSetVariableValue = traced('handleSetVariableValue()', 'varHandlers.ts', async function handleSetVariableValue(params: any): Promise<ToolResponse> {
+  const variableId = typeof params.variable === 'string' ? params.variable : '';
+  const modeId = typeof params.mode === 'string' ? params.mode : '';
+  const rawValue = params.value;
+
+  if (!variableId) return { error: 'set_variable_value requires "variable" (VariableID).' };
+  if (!modeId) return { error: 'set_variable_value requires "mode" (modeId from the variable\'s collection).' };
+  if (rawValue === undefined || rawValue === null) {
+    return { error: 'set_variable_value requires "value".' };
+  }
+
+  const variable = await figma.variables.getVariableByIdAsync(variableId);
+  if (!variable) {
+    return { error: `Variable "${variableId}" not found.` };
+  }
+
+  let figmaValue: any;
+  try {
+    figmaValue = coerceValueForFigma(rawValue, variable.resolvedType);
+  } catch (e: any) {
+    return { error: `Invalid value for ${variable.resolvedType}: ${e?.message ?? e}` };
+  }
+
+  try {
+    variable.setValueForMode(modeId, figmaValue);
+  } catch (e: any) {
+    return { error: `setValueForMode failed: ${e?.message ?? e}` };
+  }
+
+  invalidateCaches();
+
+  return { data: { ok: true } };
+});
+
+/**
+ * Coerce an LLM-supplied value into the shape Figma's setValueForMode wants.
+ * - Alias objects pass through verbatim.
+ * - Hex strings become {r,g,b,a} in 0-1 range for COLOR.
+ * - Other types are type-checked lightly.
+ */
+function coerceValueForFigma(raw: any, type: VariableResolvedDataType): any {
+  // Alias passthrough
+  if (raw && typeof raw === 'object' && raw.type === 'VARIABLE_ALIAS') {
+    if (typeof raw.id !== 'string') throw new Error('VARIABLE_ALIAS requires "id"');
+    return { type: 'VARIABLE_ALIAS', id: raw.id };
   }
 
   if (type === 'COLOR') {
-    const rgba = raw as { r: number; g: number; b: number; a?: number } | undefined;
-    return { value: rgba && typeof rgba.r === 'number' ? rgbaToHex(rgba) : '#???' };
+    if (typeof raw === 'string') return parseHexToRGBA(raw);
+    if (raw && typeof raw === 'object' && typeof raw.r === 'number') {
+      const { r, g, b, a } = raw;
+      return { r, g, b, a: typeof a === 'number' ? a : 1 };
+    }
+    throw new Error('COLOR expects #hex string or {r,g,b,a?}');
   }
-  if (type === 'FLOAT') return { value: typeof raw === 'number' ? raw : Number(raw) };
-  if (type === 'BOOLEAN') return { value: Boolean(raw) };
-  // STRING
-  return { value: raw == null ? '' : String(raw) };
+  if (type === 'FLOAT') {
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string' && raw.trim() !== '' && !isNaN(Number(raw))) return Number(raw);
+    throw new Error('FLOAT expects a number');
+  }
+  if (type === 'BOOLEAN') {
+    if (typeof raw === 'boolean') return raw;
+    throw new Error('BOOLEAN expects true or false');
+  }
+  if (type === 'STRING') {
+    if (typeof raw === 'string') return raw;
+    throw new Error('STRING expects a string');
+  }
+  throw new Error(`Unknown resolvedType: ${type}`);
 }
 
-// ── var mk (create variable or set value) ──
+// ── bind_variable ──
 
-export async function handleVarMk(params: any): Promise<ToolResponse> {
-  const varPath = params.variable as string;
-  const rawType = params.varType as string | undefined;
-  const rawValue = params.value as string | undefined;
-  const modeName = params.mode as string | undefined;
+export const handleBindVariable = traced('handleBindVariable()', 'varHandlers.ts', async function handleBindVariable(params: any): Promise<ToolResponse> {
+  const nodeRef = typeof params.node === 'string' ? params.node : '';
+  const prop = typeof params.prop === 'string' ? params.prop : '';
+  const variableId = typeof params.variable === 'string' ? params.variable : '';
 
-  if (!varPath) {
-    return { error: 'Usage: var mk <collection/name> <TYPE> <value>' };
+  if (!nodeRef || !prop || !variableId) {
+    return { error: 'bind_variable requires "node", "prop", and "variable".' };
   }
 
-  // Parse collection/name from path
-  const slashIdx = varPath.indexOf('/');
-  if (slashIdx < 0) {
-    return { error: 'Variable path must include collection: var mk <collection/name> <TYPE> <value>' };
-  }
-  const collectionName = varPath.slice(0, slashIdx);
-  const variableName = varPath.slice(slashIdx + 1);
-
-  // Find or create collection
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
-  let collection = collections.find(c => c.name.toLowerCase() === collectionName.toLowerCase());
-  let createdCollection = false;
-
-  if (!collection) {
-    collection = figma.variables.createVariableCollection(collectionName);
-    createdCollection = true;
-  }
-
-  // Determine type
-  const type = normalizeVarType(rawType || guessType(rawValue || '', varPath));
-  if (!type) {
-    return { error: `Cannot determine variable type. Specify explicitly: var mk ${varPath} COLOR|FLOAT|BOOLEAN|STRING <value>` };
-  }
-
-  // Find or create variable
-  const allVars = await figma.variables.getLocalVariablesAsync();
-  const collVars = allVars.filter(v => v.variableCollectionId === collection!.id);
-  let variable = collVars.find(v => v.name === variableName);
-  let createdVariable = false;
-
-  if (!variable) {
-    variable = figma.variables.createVariable(variableName, collection, type);
-    createdVariable = true;
-  }
-
-  // Set value if provided
-  if (rawValue !== undefined) {
-    const figmaValue = parseValueForFigma(rawValue, type);
-    if (figmaValue === undefined) {
-      return { error: `Cannot parse "${rawValue}" as ${type}.` };
-    }
-
-    if (modeName) {
-      // Set for specific mode
-      const mode = collection.modes.find(m => m.name.toLowerCase() === modeName.toLowerCase());
-      if (!mode) {
-        return { error: `Mode "${modeName}" not found in collection "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` };
-      }
-      variable.setValueForMode(mode.modeId, figmaValue);
-    } else {
-      // Set for all modes (or default mode)
-      for (const mode of collection.modes) {
-        variable.setValueForMode(mode.modeId, figmaValue);
-      }
-    }
-  }
-
-  // Invalidate caches
-  invalidateCaches();
-
-  const actions: string[] = [];
-  if (createdCollection) actions.push(`created collection "${collectionName}"`);
-  if (createdVariable) actions.push(`created ${type} variable "${variableName}"`);
-  if (rawValue !== undefined) actions.push(`set value = ${rawValue}${modeName ? ` (mode: ${modeName})` : ''}`);
-
-  return {
-    data: {
-      message: actions.join(', '),
-      variableId: variable.id,
-      collection: collection.name,
-      variable: variable.name,
-      type,
-    },
-  };
-}
-
-// ── var mk --collection (create collection with modes) ──
-
-export async function handleVarMkCollection(params: any): Promise<ToolResponse> {
-  const collName = params.collection as string;
-  const modesStr = params.modes as string | undefined;
-
-  if (!collName) {
-    return { error: 'Usage: var mk --collection <name> [--modes Light,Dark]' };
-  }
-
-  // Check if collection already exists
-  const existing = await figma.variables.getLocalVariableCollectionsAsync();
-  const found = existing.find(c => c.name.toLowerCase() === collName.toLowerCase());
-  if (found) {
-    return {
-      data: {
-        message: `Collection "${found.name}" already exists`,
-        collectionId: found.id,
-        modes: found.modes.map(m => ({ name: m.name, id: m.modeId })),
-      },
-    };
-  }
-
-  const collection = figma.variables.createVariableCollection(collName);
-
-  // Handle modes
-  if (modesStr) {
-    const modeNames = modesStr.split(',').map(m => m.trim()).filter(Boolean);
-    if (modeNames.length > 0) {
-      // Rename default "Mode 1" to first mode name
-      collection.renameMode(collection.modes[0].modeId, modeNames[0]);
-      // Add remaining modes
-      for (let i = 1; i < modeNames.length; i++) {
-        collection.addMode(modeNames[i]);
-      }
-    }
-  }
-
-  invalidateCaches();
-
-  return {
-    data: {
-      message: `Created collection "${collName}" with modes: ${collection.modes.map(m => m.name).join(', ')}`,
-      collectionId: collection.id,
-      modes: collection.modes.map(m => ({ name: m.name, id: m.modeId })),
-    },
-  };
-}
-
-// ── var bind ──
-
-export async function handleVarBind(params: any): Promise<ToolResponse> {
-  const nodePath = params.nodePath as string;
-  const property = params.property as string;
-  const varPath = params.variable as string;
-
-  if (!nodePath || !property || !varPath) {
-    return { error: 'Usage: var bind <node-path> <property> <collection/varName>' };
-  }
-
-  // Resolve node
-  const resolved = await resolvePathToNode(nodePath);
+  const resolved = await resolvePathToNode(nodeRef);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
     return { error: 'Cannot bind variables to a page node.' };
   }
   const node = resolved.node;
 
-  // Find variable
-  const variable = await findVariableByPath(varPath);
+  const variable = await figma.variables.getVariableByIdAsync(variableId);
   if (!variable) {
-    return { error: `Variable "${varPath}" not found. Use "var ls" to list available variables.` };
+    return { error: `Variable "${variableId}" not found.` };
   }
 
-  // Bind
-  const normalizedProp = normalizeBindProperty(property);
+  const normalizedProp = normalizeBindProperty(prop);
   try {
     if (isPaintProperty(normalizedProp)) {
-      // Color variable → paint binding
       const paint = figma.variables.setBoundVariableForPaint(
         { type: 'SOLID', color: { r: 0, g: 0, b: 0 } },
         'color',
@@ -378,7 +236,6 @@ export async function handleVarBind(params: any): Promise<ToolResponse> {
       );
       (node as any)[normalizedProp] = [paint];
     } else {
-      // Numeric / boolean / string → direct binding
       node.setBoundVariable(normalizedProp as VariableBindableNodeField, variable);
     }
 
@@ -390,124 +247,53 @@ export async function handleVarBind(params: any): Promise<ToolResponse> {
       },
     };
   } catch (e: any) {
-    return {
-      error: `Failed to bind: ${e?.message ?? e}`,
-    };
+    return { error: `Failed to bind: ${e?.message ?? e}` };
   }
-}
+});
 
-// ── var alias ──
+// ── set_variable_mode ──
 
-export async function handleVarAlias(params: any): Promise<ToolResponse> {
-  const sourceVarPath = params.variable as string;
-  const targetVarPath = params.target as string;
+export const handleSetVariableMode = traced('handleSetVariableMode()', 'varHandlers.ts', async function handleSetVariableMode(params: any): Promise<ToolResponse> {
+  const nodeRef = typeof params.node === 'string' ? params.node : '';
+  const collectionId = typeof params.collection === 'string' ? params.collection : '';
+  const modeId = typeof params.mode === 'string' ? params.mode : '';
 
-  if (!sourceVarPath || !targetVarPath) {
-    return { error: 'Usage: var alias <semantic/name> <target/name>' };
-  }
-
-  // Find target variable
-  const targetVar = await findVariableByPath(targetVarPath);
-  if (!targetVar) {
-    return { error: `Target variable "${targetVarPath}" not found.` };
+  if (!nodeRef || !collectionId || !modeId) {
+    return { error: 'set_variable_mode requires "node", "collection", and "mode".' };
   }
 
-  // Parse source path
-  const slashIdx = sourceVarPath.indexOf('/');
-  if (slashIdx < 0) {
-    return { error: 'Alias path must include collection: var alias <collection/name> <target>' };
-  }
-  const collectionName = sourceVarPath.slice(0, slashIdx);
-  const variableName = sourceVarPath.slice(slashIdx + 1);
-
-  // Find or create collection
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
-  let collection = collections.find(c => c.name.toLowerCase() === collectionName.toLowerCase());
-  if (!collection) {
-    collection = figma.variables.createVariableCollection(collectionName);
-  }
-
-  // Find or create source variable
-  const allVars = await figma.variables.getLocalVariablesAsync();
-  const collVars = allVars.filter(v => v.variableCollectionId === collection!.id);
-  let sourceVar = collVars.find(v => v.name === variableName);
-
-  if (!sourceVar) {
-    sourceVar = figma.variables.createVariable(variableName, collection, targetVar.resolvedType);
-  }
-
-  // Set alias for specified mode (required) — per-mode aliasing is the intended use case
-  const modeName = params.mode as string | undefined;
-  if (!modeName) {
-    return { error: 'mode is required. Specify which mode to alias (e.g. "Light" or "Dark"). Call once per mode.' };
-  }
-  const targetMode = collection.modes.find(m => m.name === modeName);
-  if (!targetMode) {
-    const available = collection.modes.map(m => m.name).join(', ');
-    return { error: `Mode "${modeName}" not found in collection "${collectionName}". Available: ${available}` };
-  }
-
-  const alias = figma.variables.createVariableAlias(targetVar);
-  sourceVar.setValueForMode(targetMode.modeId, alias);
-
-  invalidateCaches();
-
-  return {
-    data: {
-      message: `Aliased: ${sourceVarPath} [${modeName}] → ${targetVarPath}`,
-      sourceId: sourceVar.id,
-      targetId: targetVar.id,
-    },
-  };
-}
-
-// ── var set-mode ──
-
-export async function handleVarSetMode(params: any): Promise<ToolResponse> {
-  const nodePath = params.nodePath as string;
-  const collectionName = params.collection as string;
-  const modeName = params.mode as string;
-
-  if (!nodePath || !collectionName || !modeName) {
-    return { error: 'Required: node, collection, mode' };
-  }
-
-  // Resolve node
-  const resolved = await resolvePathToNode(nodePath);
+  const resolved = await resolvePathToNode(nodeRef);
   if (!resolved.ok) return resolved.response;
   if (resolved.isPage) {
     return { error: 'Cannot set variable mode on a page node.' };
   }
   const node = resolved.node;
 
-  // Find collection
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
-  const collection = collections.find(c => c.name.toLowerCase() === collectionName.toLowerCase());
+  const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
   if (!collection) {
-    return { error: `Collection "${collectionName}" not found. Available: ${collections.map(c => c.name).join(', ')}` };
+    return { error: `Collection "${collectionId}" not found.` };
   }
 
-  // Find mode
-  const mode = collection.modes.find(m => m.name.toLowerCase() === modeName.toLowerCase());
+  const mode = collection.modes.find(m => m.modeId === modeId);
   if (!mode) {
-    return { error: `Mode "${modeName}" not found in "${collection.name}". Available: ${collection.modes.map(m => m.name).join(', ')}` };
+    const available = collection.modes.map(m => `${m.modeId}(${m.name})`).join(', ');
+    return { error: `Mode "${modeId}" not found in collection. Available: ${available}` };
   }
 
-  // Set explicit variable mode
   try {
     (node as SceneNode).setExplicitVariableModeForCollection(collection, mode.modeId);
     return {
       data: {
-        message: `Set "${node.name}" to use "${mode.name}" mode of "${collection.name}"`,
+        message: `Set "${node.name}" to use mode "${mode.name}" of "${collection.name}"`,
         nodeId: node.id,
-        collection: collection.name,
-        mode: mode.name,
+        collection: collection.id,
+        mode: mode.modeId,
       },
     };
   } catch (e: any) {
     return { error: `Failed to set mode: ${e?.message ?? e}` };
   }
-}
+});
 
 // ── Helpers ──
 
@@ -516,78 +302,14 @@ function invalidateCaches(): void {
   figmaVariableCache.invalidate();
 }
 
-/** Find a variable by path (collection/name or just name with suffix matching). */
-async function findVariableByPath(varPath: string): Promise<Variable | null> {
-  const allVars = await figma.variables.getLocalVariablesAsync();
-  const lower = varPath.toLowerCase();
-
-  // 1. Exact match on full name within any collection
-  // The varPath might be "collection/name" — match against var.name which is just the "name" part
-  // First try matching against collection-prefixed name
-  const collections = await figma.variables.getLocalVariableCollectionsAsync();
-  const collMap = new Map(collections.map(c => [c.id, c.name]));
-
-  for (const v of allVars) {
-    const collName = collMap.get(v.variableCollectionId) || '';
-    const fullPath = `${collName}/${v.name}`.toLowerCase();
-    if (fullPath === lower) return v;
-  }
-
-  // 2. Match against just variable name (without collection prefix)
-  const nameOnly = varPath.includes('/') ? varPath.slice(varPath.indexOf('/') + 1) : varPath;
-  for (const v of allVars) {
-    if (v.name.toLowerCase() === nameOnly.toLowerCase()) return v;
-  }
-
-  // 3. Suffix match
-  for (const v of allVars) {
-    if (v.name.toLowerCase().endsWith(lower) || lower.endsWith(v.name.toLowerCase())) return v;
-  }
-
-  return null;
-}
-
-function normalizeVarType(raw: string): VariableResolvedDataType | null {
+function normalizeVarType(raw: unknown): VariableResolvedDataType | null {
+  if (typeof raw !== 'string') return null;
   const t = raw.toUpperCase();
-  if (t === 'COLOR' || t === 'COLOUR') return 'COLOR';
-  if (t === 'FLOAT' || t === 'NUMBER' || t === 'DIMENSION') return 'FLOAT';
-  if (t === 'BOOLEAN' || t === 'BOOL') return 'BOOLEAN';
-  if (t === 'STRING' || t === 'TEXT') return 'STRING';
+  if (t === 'COLOR') return 'COLOR';
+  if (t === 'FLOAT') return 'FLOAT';
+  if (t === 'BOOLEAN') return 'BOOLEAN';
+  if (t === 'STRING') return 'STRING';
   return null;
-}
-
-function guessType(value: string, name: string): string {
-  const v = value.toLowerCase();
-  if (v.startsWith('#') || v.startsWith('rgb')) return 'COLOR';
-  if (v === 'true' || v === 'false') return 'BOOLEAN';
-  if (!isNaN(parseFloat(value.replace('px', '')))) return 'FLOAT';
-
-  const n = name.toLowerCase();
-  if (n.includes('color') || n.includes('bg') || n.includes('fill') || n.includes('stroke')) return 'COLOR';
-  if (n.includes('size') || n.includes('space') || n.includes('radius') || n.includes('gap') || n.includes('padding')) return 'FLOAT';
-
-  return 'STRING';
-}
-
-function parseValueForFigma(value: string, type: VariableResolvedDataType): any {
-  if (type === 'COLOR') return parseHexToRGBA(value);
-  if (type === 'FLOAT') return parseFloat(value.replace('px', ''));
-  if (type === 'BOOLEAN') return value.toLowerCase() === 'true';
-  return value; // STRING
-}
-
-function formatVarValue(val: any, type: VariableResolvedDataType, allVars: Variable[]): string {
-  if (val && typeof val === 'object' && val.type === 'VARIABLE_ALIAS') {
-    const target = allVars.find(v => v.id === val.id);
-    return target ? `→ ${target.name}` : '→ ?';
-  }
-  if (type === 'COLOR') {
-    const rgba = val as { r: number; g: number; b: number; a?: number };
-    if (!rgba || typeof rgba.r !== 'number') return '#???';
-    return rgbaToHex(rgba);
-  }
-  if (type === 'FLOAT') return `${val}`;
-  return String(val);
 }
 
 const PAINT_PROPS = new Set(['fills', 'strokes']);
@@ -603,7 +325,7 @@ function normalizeBindProperty(prop: string): string {
     fill: 'fills',
     stroke: 'strokes',
     gap: 'itemSpacing',
-    padding: 'paddingTop', // will need all 4 for full padding
+    padding: 'paddingTop',
     'padding-top': 'paddingTop',
     'padding-right': 'paddingRight',
     'padding-bottom': 'paddingBottom',

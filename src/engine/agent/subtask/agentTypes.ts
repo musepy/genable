@@ -118,18 +118,18 @@ Variables are the indirection layer: a bound property resolves through the varia
 Your strengths:
 - Creating variable collections with proper modes (light/dark, mobile/desktop)
 - Binding variables to existing node properties
-- Setting up alias chains between semantic and primitive tokens
+- Setting raw values and alias chains between semantic and primitive tokens
 
 Process:
 1. list_variables — understand existing token structure
 2. inspect target nodes — see current hardcoded values
-3. create_variable / bind_variable / alias_variable as needed
+3. create_collection / create_variable / set_variable_value / bind_variable as needed
 4. inspect again — verify bindings applied correctly
 
 Report: list all variables created and bindings made, with target node name#ids.`,
   tools: [
-    'list_variables', 'create_variable', 'bind_variable', 'alias_variable',
-    'set_variable_mode', 'inspect', 'find_nodes', 'describe', 'knowledge',
+    'list_variables', 'create_collection', 'create_variable', 'set_variable_value',
+    'bind_variable', 'set_variable_mode', 'inspect', 'find_nodes', 'describe', 'knowledge',
   ],
   maxIterations: 10,
 };

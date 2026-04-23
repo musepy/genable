@@ -23,7 +23,7 @@ import { handleScanTokens } from './tokenScanner';
 // verb_noun tool adapters
 import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './searchAdapter';
 import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAdapter';
-import { handleListVariables, handleCreateVariable, handleBindVariable, handleSetVariableMode, handleAliasVariable } from './varAdapter';
+import { handleListVariables, handleCreateCollection, handleCreateVariable, handleSetVariableValue, handleBindVariable, handleSetVariableMode } from './varAdapter';
 import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './compAdapter';
 import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from './setterAdapter';
 import { handleListMemories, handleSaveMemory, handleDeleteMemory } from './memoryAdapter';
@@ -52,10 +52,11 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   clone_node: handleCloneNode,
   // Variable tools
   list_variables: handleListVariables,
+  create_collection: handleCreateCollection,
   create_variable: handleCreateVariable,
+  set_variable_value: handleSetVariableValue,
   bind_variable: handleBindVariable,
   set_variable_mode: handleSetVariableMode,
-  alias_variable: handleAliasVariable,
   // Component tools
   create_component: handleCreateComponent,
   combine_components: handleCombineComponents,

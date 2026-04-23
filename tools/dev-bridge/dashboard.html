@@ -1796,7 +1796,7 @@ function toolToPipeline(name) {
   // Structure
   if (n === 'delete_node' || n === 'move_node' || n === 'clone_node' || n === 'rm' || n === 'mv' || n === 'cp') return 'structure';
   // Variables
-  if (n === 'list_variables' || n === 'create_variable' || n === 'bind_variable' || n === 'alias_variable') return 'var';
+  if (n === 'list_variables' || n === 'create_collection' || n === 'create_variable' || n === 'set_variable_value' || n === 'bind_variable' || n === 'set_variable_mode') return 'var';
   // Components
   if (n === 'create_component' || n === 'combine_components' || n === 'add_component_prop' || n === 'list_component_props' || n === 'create_instance') return 'comp';
   // JS escape hatch

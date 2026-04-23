@@ -2,7 +2,7 @@
  * @file unified/index.ts
  * @description Barrel export for unified tool definitions.
  *
- * LLM-facing API: 24 first-class tools, all structured JSON, verb_noun naming.
+ * LLM-facing API: first-class tools, all structured JSON, verb_noun naming.
  */
 
 import { jsxDefinition } from './jsx';
@@ -12,7 +12,7 @@ import { editDefinition } from './edit';
 import { findNodesDefinition, discoverPropsDefinition, replacePropsDefinition } from './searchTool';
 import { deleteNodeDefinition, moveNodeDefinition, cloneNodeDefinition } from './structureTool';
 import { knowledgeDefinition } from './knowledgeTool';
-import { listVariablesDefinition, createVariableDefinition, bindVariableDefinition, setVariableModeDefinition, aliasVariableDefinition } from './varTool';
+import { listVariablesDefinition, createCollectionDefinition, createVariableDefinition, setVariableValueDefinition, bindVariableDefinition, setVariableModeDefinition } from './varTool';
 import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
 import { jsToolDefinition } from './jsTool';
 import { setTextDefinition, setFillDefinition, setStrokeDefinition, setLayoutDefinition } from './setterTools';
@@ -43,10 +43,11 @@ export const unifiedTools: ToolDefinition[] = [
   knowledgeDefinition,
   // Variables
   listVariablesDefinition,
+  createCollectionDefinition,
   createVariableDefinition,
+  setVariableValueDefinition,
   bindVariableDefinition,
   setVariableModeDefinition,
-  aliasVariableDefinition,
   // Components
   createComponentDefinition,
   combineComponentsDefinition,

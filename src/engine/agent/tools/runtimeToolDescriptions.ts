@@ -99,13 +99,36 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     tool: 'list_variables',
     mode: 'EXECUTION',
     required: [],
-    repairHint: 'optionally provide "collection" to filter',
+    repairHint: 'optionally provide "collection" (VariableCollectionId), "filter", "cursor", or "limit"',
+  },
+  {
+    tool: 'create_collection',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'name', trim: true, check: 'required' },
+      { name: 'modes', check: 'required' },
+    ],
+    repairHint: 'provide "name" and "modes" (array of mode names, first is default)',
   },
   {
     tool: 'create_variable',
     mode: 'EXECUTION',
-    required: [],
-    repairHint: 'provide "variable"+"type"+"value" for a variable, or "collection" for a collection',
+    required: [
+      { name: 'collection', trim: true, check: 'required' },
+      { name: 'name', trim: true, check: 'required' },
+      { name: 'type', trim: true, check: 'required' },
+    ],
+    repairHint: 'provide "collection" (VariableCollectionId), "name", and "type" (COLOR/FLOAT/STRING/BOOLEAN)',
+  },
+  {
+    tool: 'set_variable_value',
+    mode: 'EXECUTION',
+    required: [
+      { name: 'variable', trim: true, check: 'required' },
+      { name: 'mode', trim: true, check: 'required' },
+      { name: 'value', check: 'required' },
+    ],
+    repairHint: 'provide "variable" (VariableID), "mode" (modeId), and "value"',
   },
   {
     tool: 'bind_variable',
@@ -115,16 +138,17 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
       { name: 'prop', trim: true, check: 'required' },
       { name: 'variable', trim: true, check: 'required' },
     ],
-    repairHint: 'provide "node", "prop", and "variable" path',
+    repairHint: 'provide "node", "prop", and "variable" (VariableID)',
   },
   {
-    tool: 'alias_variable',
+    tool: 'set_variable_mode',
     mode: 'EXECUTION',
     required: [
-      { name: 'variable', trim: true, check: 'required' },
-      { name: 'target', trim: true, check: 'required' },
+      { name: 'node', trim: true, check: 'required' },
+      { name: 'collection', trim: true, check: 'required' },
+      { name: 'mode', trim: true, check: 'required' },
     ],
-    repairHint: 'provide "variable" and "target" paths',
+    repairHint: 'provide "node" (id), "collection" (VariableCollectionId), and "mode" (modeId)',
   },
   // Component tools
   {

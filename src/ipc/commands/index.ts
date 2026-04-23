@@ -10,7 +10,7 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 
 // Command handler groups
 import { registerSessionNodes } from './pathResolver';
-import { handleTree, handleCat } from './readHandlers';
+import { handleTree } from './readHandlers';
 import { handleRm, handleMv, handleCp } from './writeHandlers';
 // grep/sed removed — no callers after verb_noun migration
 import { handleJs } from './jsHandler';
@@ -77,7 +77,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   }),
   // Legacy command names — internal use only (adapters + scratchpad routing)
   tree: handleTree,
-  cat: handleCat,
   'scan-tokens': handleScanTokens,
 };
 

@@ -1,6 +1,6 @@
 /**
  * @file readHandlers.ts
- * @description ls, tree, cat command handlers — read operations on the Figma scene graph.
+ * @description tree command handler — read operations on the Figma scene graph.
  *
  * Each handler is self-contained: validates args, executes, formats output.
  */
@@ -8,9 +8,7 @@
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
-import { logger } from '../../utils/logger';
 import { resolvePathToNode, buildNodeRef } from './pathResolver';
-import { exportNodeToBase64 } from './shared';
 
 // ── tree ──
 
@@ -114,51 +112,4 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
   if (suggestedReads.length > 0) treeData.suggestedReads = suggestedReads;
 
   return { data: treeData };
-}
-
-// ── cat ──
-
-export async function handleCat(parameters: any): Promise<ToolResponse> {
-  const catPath = parameters.path || '/';
-  const catDepth = Math.min(parameters.depth || 5, 10);
-  const wantScreenshot = parameters.screenshot;
-
-  const resolved = await resolvePathToNode(catPath);
-  if (!resolved.ok) return resolved.response;
-
-  if (resolved.isPage) {
-    const page = resolved.page;
-    const topLevel = page.children.map(n => {
-      const minimal = NodeSerializer.serializeMinimal(n, false);
-      return JsonNodeSerializer.serialize(minimal, { minimal: true });
-    });
-    return {
-      data: {
-        page: { name: page.name, childCount: page.children.length },
-        children: topLevel,
-        hint: 'Use inspect({node: "/"}) to see structure.',
-      },
-    };
-  }
-
-  const catNode = resolved.node;
-  const catSerialized = NodeSerializer.serializeWithCompression(catNode, {
-    maxDepth: catDepth,
-    pruneDefaults: true,
-  });
-
-  const catJson = JsonNodeSerializer.serialize(catSerialized, { maxDepth: catDepth });
-  const catData: any = {};
-  Object.assign(catData, catJson);
-
-  if (wantScreenshot && catNode.visible && catNode.width > 0 && catNode.height > 0) {
-    try {
-      const ssResult = await exportNodeToBase64(catNode);
-      catData.__image = ssResult.__image;
-    } catch (e: any) {
-      logger.info(`Screenshot bundling failed for ${catPath}: ${e?.message}`);
-    }
-  }
-
-  return { data: catData };
 }

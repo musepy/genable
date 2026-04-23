@@ -103,6 +103,6 @@ One batch call for ALL text overrides.
 | 2b. Props | add_component_prop | N | Yes |
 | 3. Assemble | jsx | 1 | - |
 | 4. Overrides | set_text | 1 | - |
-| Verify | inspect+screenshot | 1 | - |
+| Verify | get_screenshot | 1 | - |
 
 Total: ~6-10 calls depending on prop count.

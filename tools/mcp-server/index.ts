@@ -46,7 +46,7 @@ function buildMcpContent(
   const data = response.data ?? response;
   const content: any[] = [];
 
-  // Extract image if present (inspect tool with screenshot=true)
+  // Extract image if present (get_screenshot tool — data.__image)
   if (data?.__image) {
     const { __image, ...rest } = data;
     content.push({ type: 'text', text: JSON.stringify(rest) });

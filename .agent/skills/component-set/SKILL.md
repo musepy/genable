@@ -69,7 +69,7 @@ add_component_prop({node: setId, name: "Label", type: "TEXT", default: "Button",
 ### Phase 4: Verify (1 call)
 
 ```
-inspect({node: setId, screenshot: true})
+get_screenshot({node: setId})
 ```
 
 ### Call Count

@@ -16,6 +16,7 @@ import { handleRm, handleMv, handleCp } from './writeHandlers';
 import { handleJs } from './jsHandler';
 import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';
+import { handleGetScreenshot } from './screenshotHandler';
 import { handleDescribe } from './describeHandler';
 import { handleEdit } from './editHandler';
 import { handleScanTokens } from './tokenScanner';
@@ -67,6 +68,8 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   set_layout: handleSetLayout,
   // Selection (opt-in, LLM calls when needed)
   get_selection: handleGetSelection,
+  // Visual verification (screenshot)
+  get_screenshot: handleGetScreenshot,
   // knowledge is handled locally in sandbox — should not arrive at IPC
   knowledge: async () => ({
     error: 'knowledge is handled locally. This is an internal routing error.',

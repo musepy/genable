@@ -21,7 +21,7 @@ const RELAY_SECRET = process.env.RELAY_SECRET || '';
 const TOOL_TIMEOUTS: Record<string, number> = {
   jsx: 120_000,     // creates many nodes + font loading + icon fetch
   replace: 90_000,  // recursive tree traversal + font loading per text node
-  inspect: 60_000,  // exportAsync for screenshot can be slow on complex nodes
+  get_screenshot: 60_000, // exportAsync can be slow on complex nodes
 };
 const DEFAULT_TIMEOUT_MS = 30_000;
 

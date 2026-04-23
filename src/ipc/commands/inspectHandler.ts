@@ -4,24 +4,22 @@
  *
  * Two modes:
  *   - tree (default): skeleton JSON with role, summary, children
- *   - detail: full properties, optional screenshot
+ *   - detail: full properties
  *
- * Pure read — no quality scoring. Use `describe` for lint/validation.
+ * Pure read — no quality scoring, no screenshot (use `get_screenshot`).
+ * Use `describe` for lint/validation.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
-import { resolvePathToNode, buildNodeRef } from './pathResolver';
-import { exportNodeToBase64 } from './shared';
-import { logger } from '../../utils/logger';
+import { resolvePathToNode } from './pathResolver';
 import { PipelineTracer } from './pipelineTracer';
 
 export async function handleInspect(parameters: any): Promise<ToolResponse> {
   const ref = parameters.node || parameters.path;
   const mode = parameters.mode || 'tree';
   const depth = Math.min(parameters.depth || 5, 10);
-  const wantScreenshot = parameters.screenshot && mode === 'detail';
 
   if (!ref) {
     return {
@@ -40,10 +38,7 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
 
   if (mode === 'detail') {
     tracer.enter('readHandler()', 'readHandlers.ts');
-    result = buildDetailResult(resolved, depth, wantScreenshot);
-    if (wantScreenshot && !resolved.isPage) {
-      await attachScreenshot(result, resolved.node);
-    }
+    result = buildDetailResult(resolved, depth);
     tracer.exit();
   } else {
     // tree mode (default) — skeleton JSON
@@ -96,7 +91,6 @@ function buildTreeResult(
 function buildDetailResult(
   resolved: Extract<Awaited<ReturnType<typeof resolvePathToNode>>, { ok: true }>,
   depth: number,
-  _wantScreenshot: boolean,
 ): ToolResponse {
   if (resolved.isPage) {
     const page = resolved.page;
@@ -142,18 +136,3 @@ function buildDetailResult(
 
   return { data: detail };
 }
-
-// ── Screenshot attachment ──
-
-async function attachScreenshot(result: ToolResponse, node: SceneNode): Promise<void> {
-  if (!node.visible || node.width <= 0 || node.height <= 0) return;
-  try {
-    const ssResult = await exportNodeToBase64(node);
-    if (result.data && ssResult.__image) {
-      result.data.__image = ssResult.__image;
-    }
-  } catch (e: any) {
-    logger.info(`Screenshot failed for ${buildNodeRef(node)}: ${e?.message}`);
-  }
-}
-

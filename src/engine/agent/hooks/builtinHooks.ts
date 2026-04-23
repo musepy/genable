@@ -109,7 +109,7 @@ export function createBuiltinHooksWithState(): {
   const inspectGate = createInspectGateHook(tracker, unifiedTools);
   const inspectStub = createInspectStubHook(tracker);
   const turnState = createTurnState();
-  const toolPlanTriggers = createToolPlanTriggers(turnState);
+  const toolPlanTriggers = createToolPlanTriggers(turnState, tracker);
   const truncationRecovery = createTruncationRecovery();
   const truncationPlaceholderGuard = createTruncationPlaceholderGuard();
 

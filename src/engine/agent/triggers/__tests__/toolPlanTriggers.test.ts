@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { HookContext, HookRegistration, HookResult } from '../../hooks/hookTypes';
 import { createTurnState, collectIdsFromInspectTree, extractKnownIdsFromResult } from '../turnState';
+import { createInspectionTracker, InspectionTracker } from '../../hooks/inspectionTracker';
 import {
   createJsxNodeCountTrigger,
   createEditUnknownIdTrigger,
@@ -228,7 +229,8 @@ describe('T6: editUnknownIdTrigger', () => {
 describe('knownIdObserver', () => {
   it('harvests IDs from inspect tree results', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const ctx = makeCtx({
       currentToolCall: call('inspect', { node: '1:2' }),
       toolResult: {
@@ -246,11 +248,15 @@ describe('knownIdObserver', () => {
     expect(state.knownNodeIds.has('1:3')).toBe(true);
     expect(state.knownNodeIds.has('1:4')).toBe(true);
     expect(state.knownNodeIds.has('1:5')).toBe(true);
+    // Also marked in InspectionTracker
+    expect(tracker.isInspected('1:2')).toBe(true);
+    expect(tracker.isInspected('1:3')).toBe(true);
   });
 
   it('harvests IDs from find_nodes results', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const ctx = makeCtx({
       currentToolCall: call('find_nodes', { query: 'Card' }),
       toolResult: {
@@ -263,11 +269,36 @@ describe('knownIdObserver', () => {
     });
     await invoke(observer, ctx);
     expect(state.knownNodeIds.has('1:10')).toBe(true);
+    expect(tracker.isInspected('1:10')).toBe(true);
+  });
+
+  it('harvests IDs from get_selection results', async () => {
+    const state = createTurnState();
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
+    const ctx = makeCtx({
+      currentToolCall: call('get_selection', {}),
+      toolResult: {
+        data: {
+          selection: [
+            { id: '2:20', name: 'SelectedFrame', type: 'FRAME' },
+            { id: '2:21', name: 'ButtonText', type: 'TEXT' },
+          ],
+          count: 2,
+        },
+      },
+    });
+    await invoke(observer, ctx);
+    expect(state.knownNodeIds.has('2:20')).toBe(true);
+    expect(state.knownNodeIds.has('2:21')).toBe(true);
+    expect(tracker.isInspected('2:20')).toBe(true);
+    expect(tracker.isInspected('2:21')).toBe(true);
   });
 
   it('does not harvest from error results', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const ctx = makeCtx({
       currentToolCall: call('inspect', { node: '1:2' }),
       toolResult: { error: 'NOT_FOUND' },
@@ -278,7 +309,8 @@ describe('knownIdObserver', () => {
 
   it('records delete_node into recentToolCalls', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const ctx = makeCtx({
       currentToolCall: call('delete_node', { node: '1:2' }),
       toolResult: { data: {} },
@@ -304,7 +336,8 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
 
   it('injects hint when delete → jsx within 3 steps', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const trigger = createDeleteRebuildTrigger(state);
 
     // Step 1: delete_node
@@ -334,7 +367,8 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
 
   it('injects hint on delete → jsx (no explicit parent, same file prefix)', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const trigger = createDeleteRebuildTrigger(state);
 
     await invoke(
@@ -359,7 +393,8 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
 
   it('does NOT inject hint when delete is outside the 3-step window', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const trigger = createDeleteRebuildTrigger(state);
 
     // delete
@@ -413,7 +448,8 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
 
   it('does not double-hint — recording happens after look-back', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const trigger = createDeleteRebuildTrigger(state);
 
     await invoke(
@@ -461,7 +497,8 @@ describe('T_delete_rebuild: deleteRebuildTrigger', () => {
   // MUST fire under this shape — this is the dominant real-world pattern.
   it('replays real P3 batch: two deletes then jsx with prefix-match parent', async () => {
     const state = createTurnState();
-    const observer = createKnownIdObserver(state);
+    const tracker = createInspectionTracker();
+    const observer = createKnownIdObserver(state, tracker);
     const trigger = createDeleteRebuildTrigger(state);
 
     await invoke(

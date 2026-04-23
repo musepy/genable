@@ -13,6 +13,7 @@
  */
 import { HookRegistration, HookContext, HookResult } from '../hooks/hookTypes';
 import { TurnState, extractKnownIdsFromResult } from './turnState';
+import { InspectionTracker } from '../hooks/inspectionTracker';
 
 // ---------------------------------------------------------------------------
 // Thresholds
@@ -208,7 +209,7 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
  *
  * Also records delete_node for the delete-rebuild window.
  */
-export function createKnownIdObserver(state: TurnState): HookRegistration {
+export function createKnownIdObserver(state: TurnState, tracker: InspectionTracker): HookRegistration {
   return {
     id: 'trigger:knownIdObserver',
     event: 'afterToolExec',
@@ -229,7 +230,11 @@ export function createKnownIdObserver(state: TurnState): HookRegistration {
       // Harvest IDs from read-oriented tool results
       if (!ctx.toolResult || ctx.toolResult.error) return;
       const ids = extractKnownIdsFromResult(tc.name, ctx.toolResult);
-      if (ids.length > 0) state.addKnownIds(ids);
+      if (ids.length > 0) {
+        state.addKnownIds(ids);
+        // Also mark in InspectionTracker so inspectGateHook allows mutations
+        for (const id of ids) tracker.markInspected(id);
+      }
     },
   };
 }
@@ -248,14 +253,14 @@ export interface ToolPlanTriggersBundle {
  * Create the tool-plan triggers bundle with shared turn state.
  * Caller wires `hooks` into HookRegistry and `reset` into turn-start.
  */
-export function createToolPlanTriggers(state: TurnState): {
+export function createToolPlanTriggers(state: TurnState, tracker: InspectionTracker): {
   hooks: HookRegistration[];
 } {
   return {
     hooks: [
       createJsxNodeCountTrigger(),
       createEditUnknownIdTrigger(state),
-      createKnownIdObserver(state),
+      createKnownIdObserver(state, tracker),
       createDeleteRebuildTrigger(state),
     ],
   };

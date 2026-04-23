@@ -102,7 +102,7 @@ export function collectIdsFromInspectTree(data: any, acc: Set<string> = new Set(
  *  - jsx: data.id + data.createdIds[]
  *  - inspect/describe: recurse data tree for all id fields
  *  - find_nodes: data.results[].id
- *  - get_selection: data.results[].id (same shape as find_nodes)
+ *  - get_selection: data.selection[].id
  *  - others: no-op
  */
 export function extractKnownIdsFromResult(toolName: string, rawResult: any): string[] {
@@ -126,7 +126,7 @@ export function extractKnownIdsFromResult(toolName: string, rawResult: any): str
     return Array.from(s);
   }
 
-  if (toolName === 'find_nodes' || toolName === 'get_selection') {
+  if (toolName === 'find_nodes') {
     if (Array.isArray(data.results)) {
       for (const entry of data.results) {
         if (entry && typeof entry.id === 'string') ids.push(entry.id);
@@ -135,11 +135,27 @@ export function extractKnownIdsFromResult(toolName: string, rawResult: any): str
     return ids;
   }
 
-  // clone_node / create_instance etc: pull from idMap values if present
+  if (toolName === 'get_selection') {
+    if (Array.isArray(data.selection)) {
+      for (const entry of data.selection) {
+        if (entry && typeof entry.id === 'string') ids.push(entry.id);
+      }
+    }
+    return ids;
+  }
+
+  // clone_node / create_instance / create_component / combine_components etc:
+  // pull from idMap values, createdIds, and nodeId. idMap is alias→rootId only;
+  // createdIds lists all newly-materialised node IDs (including descendants);
+  // nodeId is used by component handlers that return a single new node.
   if (data.idMap && typeof data.idMap === 'object') {
     for (const v of Object.values(data.idMap)) {
       if (typeof v === 'string') ids.push(v);
     }
   }
+  if (Array.isArray(data.createdIds)) {
+    for (const id of data.createdIds) if (typeof id === 'string') ids.push(id);
+  }
+  if (typeof data.nodeId === 'string') ids.push(data.nodeId);
   return ids;
 }

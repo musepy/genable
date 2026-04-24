@@ -20,6 +20,7 @@ import { getSelectionDefinition } from './selectionTool';
 import { getScreenshotDefinition } from './screenshotTool';
 import { askUserDefinition } from './askUser';
 import { subtaskDefinition } from './subtask';
+import { findReferencesDefinition } from './findReferencesTool';
 import { ToolDefinition } from '../types';
 
 /**
@@ -36,6 +37,7 @@ export const unifiedTools: ToolDefinition[] = [
   findNodesDefinition,
   discoverPropsDefinition,
   replacePropsDefinition,
+  findReferencesDefinition,
   // Structure
   deleteNodeDefinition,
   moveNodeDefinition,

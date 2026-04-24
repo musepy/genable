@@ -20,6 +20,7 @@ import { handleEdit } from './editHandler';
 import { handleScanTokens } from './tokenScanner';
 // verb_noun tool adapters
 import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './searchAdapter';
+import { handleFindReferences } from './findReferencesHandler';
 import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAdapter';
 import { handleListVariables, handleCreateCollection, handleCreateVariable, handleSetVariableValue, handleBindVariable, handleSetVariableMode } from './varAdapter';
 import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './componentAdapter';
@@ -43,6 +44,7 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   find_nodes: handleFindNodes,
   discover_props: handleDiscoverProps,
   replace_props: handleReplaceProps,
+  find_references: handleFindReferences,
   // Structure tools
   delete_node: handleDeleteNode,
   move_node: handleMoveNode,

@@ -11,6 +11,7 @@
  */
 
 import { h, ComponentChildren } from 'preact';
+import { useState, useRef, useCallback } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { CloseIcon, ICON_SIZE } from './NodeTypeIcon';
 
@@ -19,9 +20,10 @@ export type ContextTagVariant = 'default' | 'component';
 export interface ContextTagProps {
   /** Left-side icon (14px) — typically a NodeTypeIcon / SkillIcon */
   icon?: ComponentChildren;
-  /** Label text; truncates with ellipsis past ~120px */
+  /** Label text; truncates with ellipsis past ~80px */
   label: string;
-  /** Full name shown on hover when label is truncated; defaults to label */
+  /** Full name shown on hover when label is truncated; defaults to label.
+   *  If explicitly provided and differs from label, always shows on hover (e.g. +N aggregated chips). */
   title?: string;
   /** Variant affects color system (component = purple) */
   variant?: ContextTagVariant;
@@ -36,6 +38,9 @@ const X_OFFSET = 3;       // distance from chip right edge → concentric radius
 const PAD_Y = 3;
 const PAD_L = 8;
 const PAD_R = X_SLOT + X_OFFSET + 4; // icon + offset + 4px gutter from label
+
+const TOOLTIP_DELAY_MS = 200;
+const TOOLTIP_BG = '#1a1a1a';
 
 export function ContextTag({
   icon,
@@ -53,6 +58,37 @@ export function ContextTag({
   const borderHover = isComponent ? 'var(--component-hover, rgba(151,71,255,0.40))' : 'var(--gray-a7)';
   const removeBgHover = isComponent ? 'var(--component-border, rgba(151,71,255,0.22))' : 'var(--gray-a6, rgba(0,0,0,0.14))';
 
+  // --- Tooltip state ---
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The text to show in the tooltip.
+  // If caller passed a title that differs from label, always use it (e.g. "+3" chip).
+  // Otherwise fall back to label (shown only when truncated).
+  const tooltipText = title ?? label;
+  const alwaysShow = title !== undefined && title !== label;
+
+  const handleMouseEnter = useCallback(() => {
+    timerRef.current = setTimeout(() => {
+      // Check if label is truncated (scrollWidth > clientWidth).
+      const span = labelRef.current;
+      const isTruncated = span ? span.scrollWidth > span.clientWidth : false;
+
+      if (alwaysShow || isTruncated) {
+        setTooltipVisible(true);
+      }
+    }, TOOLTIP_DELAY_MS);
+  }, [alwaysShow]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setTooltipVisible(false);
+  }, []);
+
   return (
     <div
       style={{
@@ -67,11 +103,18 @@ export function ContextTag({
         cursor: onClick ? 'pointer' : 'default',
         transition: 'border-color 120ms, background 120ms',
         color,
+        // Entrance — plays once on first mount (chips are keyed by node.id)
+        animation: 'chip-enter 180ms cubic-bezier(0.32, 0.72, 0, 1)',
       }}
       onClick={onClick}
-      onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = borderHover)}
-      onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = border)}
-      title={title ?? label}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = borderHover;
+        handleMouseEnter();
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = border;
+        handleMouseLeave();
+      }}
     >
       {icon && (
         <span
@@ -89,12 +132,13 @@ export function ContextTag({
         </span>
       )}
       <span
+        ref={labelRef}
         style={{
           fontSize: tokens.fontSize[1],
           fontWeight: tokens.fontWeight.medium,
           lineHeight: '16px',
           color,
-          maxWidth: 120,
+          maxWidth: 80,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -133,6 +177,51 @@ export function ContextTag({
         >
           <CloseIcon />
         </button>
+      )}
+
+      {/* Custom tooltip bubble — replaces native title attribute */}
+      {tooltipVisible && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 8px)',
+            left: '50%',
+            transform: tooltipVisible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(2px)',
+            background: TOOLTIP_BG,
+            color: '#fff',
+            padding: '5px 9px',
+            borderRadius: 5,
+            fontSize: 11,
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            maxWidth: 240,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+            zIndex: 20,
+            pointerEvents: 'none',
+            opacity: 1,
+            transition: 'opacity 120ms ease, transform 120ms ease',
+            // Ensure the tooltip text uses the default chip body font (not inherited color from chip)
+            lineHeight: '1.4',
+          }}
+        >
+          {tooltipText}
+          {/* Downward-pointing triangle arrow */}
+          <span
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 0,
+              height: 0,
+              border: '4px solid transparent',
+              borderTopColor: TOOLTIP_BG,
+              display: 'block',
+            }}
+          />
+        </div>
       )}
     </div>
   );

@@ -172,7 +172,7 @@ export type ContextAttachment =
 
 export interface SelectNodeHandler extends EventHandler {
   name: 'SELECT_NODE';
-  handler: (data: { nodeId: string; smooth?: boolean; durationMs?: number }) => void;
+  handler: (data: { nodeId: string; smooth?: boolean; durationMs?: number; preserveSelection?: boolean }) => void;
 }
 
 export interface UnselectNodesHandler extends EventHandler {

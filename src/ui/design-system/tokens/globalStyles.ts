@@ -336,6 +336,17 @@ export const globalStyles = `
     corner-shape: var(--corner-shape);
   }
 
+  /* --- Spin Border (conic-gradient rotating ring for focus + loading) --- */
+  @property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  @keyframes spin-border {
+    to { --angle: 360deg; }
+  }
+
   /* --- Thinking Shimmer (moved from ThinkingStream.tsx) --- */
   @keyframes shimmer {
     0% { background-position: -200% center; }
@@ -357,6 +368,12 @@ export const globalStyles = `
   @keyframes tool-slide-up {
     from { transform: translateY(100%); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Context chip entrance — harmonized with textarea grow curve */
+  @keyframes chip-enter {
+    from { opacity: 0; transform: translateY(-2px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   @keyframes skeleton-pulse {

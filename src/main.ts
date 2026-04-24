@@ -55,14 +55,16 @@ export default async function () {
   }
 
   on<SelectNodeHandler>('SELECT_NODE', async (data) => {
-    const { nodeId, smooth = true, durationMs = 250 } = data;
+    const { nodeId, smooth = true, durationMs = 250, preserveSelection = false } = data;
     const node = await figma.getNodeByIdAsync(nodeId) as SceneNode | null;
     if (!node) {
       emit<SendLogHandler>('SEND_LOG', { message: `Node ${nodeId} not found`, type: 'warn' });
       return;
     }
 
-    figma.currentPage.selection = [node];
+    if (!preserveSelection) {
+      figma.currentPage.selection = [node];
+    }
 
     if (!smooth) {
       figma.viewport.scrollAndZoomIntoView([node]);
@@ -70,6 +72,8 @@ export default async function () {
     }
 
     const target = getNodeCenter(node);
+    const current = figma.viewport.center;
+    if (Math.abs(target.x - current.x) < 4 && Math.abs(target.y - current.y) < 4) return;
     await smoothPanTo(target, durationMs, 8);
   });
 
@@ -90,9 +94,9 @@ export default async function () {
     figma.currentPage.selection = figma.currentPage.selection.filter(n => !drop.has(n.id));
   });
 
-  // Reactive selection sync — keep UI chips in lockstep with canvas.
-  // Note: UI requests initial snapshot via GET_SELECTION on mount (see chat/index.tsx).
-  // Don't emit eagerly before showUI() — UI iframe isn't ready yet.
+  // Reactive sync: push selection to UI whenever canvas selection changes.
+  // UI decides whether to display chips based on its own state (e.g. don't
+  // re-add a node the user just dismissed via X).
   figma.on('selectionchange', () => {
     emit<SendSelectionHandler>('SEND_SELECTION', { selection: serializeSelection() });
   });

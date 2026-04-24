@@ -15,7 +15,7 @@
  */
 
 import { h, ComponentChildren } from 'preact';
-import { useRef, useLayoutEffect } from 'preact/hooks';
+import { useRef, useLayoutEffect, useState } from 'preact/hooks';
 import { ArrowUp } from 'lucide-preact';
 import { ActionPopover } from './ActionPopover';
 import { tokens } from '../design-system/tokens';
@@ -24,9 +24,11 @@ import { t } from '../i18n';
 const inputAreaContainer = {
   position: 'relative' as const,
   background: tokens.colors.surface,
-  border: 'none',
+  // Real 1px border in default state — same width as activeBorder so swapping
+  // doesn't shift layout AND avoids "two strokes" (inset shadow + transparent border gap).
+  border: '1px solid var(--gray-a4)',
   borderRadius: 'var(--radius-5)',
-  boxShadow: `inset 0 0 0 0.5px var(--gray-a4), ${tokens.colors.shadowFocus}`,
+  boxShadow: `${tokens.colors.shadowFocus}`,
 };
 const inputAreaTextarea = {
   width: '100%',
@@ -45,7 +47,7 @@ const inputAreaTextarea = {
   fontFamily: tokens.font.sans,
   lineHeight: tokens.lineHeight[2],
   boxSizing: 'border-box' as const,
-  transition: 'height 200ms cubic-bezier(0, 0, 0.2, 1)',
+  transition: 'height 260ms cubic-bezier(0.32, 0.72, 0, 1)',
 };
 
 export interface PromptInputProps {
@@ -81,10 +83,16 @@ export function PromptInput({
   onSkillSelect,
 }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
   const autoResize = (el: HTMLTextAreaElement) => {
+    const prev = el.style.height;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    const target = Math.min(el.scrollHeight, 120);
+    el.style.height = prev;
+    requestAnimationFrame(() => {
+      el.style.height = `${target}px`;
+    });
   };
 
   const handleInput = (e: Event) => {
@@ -114,37 +122,53 @@ export function PromptInput({
     }
   }, [value]);
 
-  const runningBorder = loading ? {
+  const activeBorder = (loading || isFocused) ? {
     border: '1px solid transparent',
     boxShadow: '0 0 0 2px var(--accent-a2), 0 0 12px var(--accent-a3)',
+    background: 'linear-gradient(var(--color-surface), var(--color-surface)) padding-box, conic-gradient(from var(--angle), var(--accent-a2) 0%, var(--accent-a3) 10%, var(--accent-a5) 20%, var(--accent-a3) 30%, var(--accent-a2) 50%, var(--accent-a3) 60%, var(--accent-a5) 70%, var(--accent-a3) 80%, var(--accent-a2) 100%) border-box',
+    animation: 'spin-border 4s linear infinite',
   } : undefined;
 
   return (
-    <div style={{ ...inputAreaContainer, ...runningBorder } as h.JSX.CSSProperties}>
+    <div style={{ ...inputAreaContainer, ...activeBorder } as h.JSX.CSSProperties}>
       {/* Context Tags row */}
       {contextTags && (
         <div style={{
           display: 'flex',
           flexWrap: 'wrap' as const,
-          gap: tokens.space[3],
+          gap: 4,
           padding: `${tokens.space[3]}px ${tokens.grid.blockPad}px 0`,
         }}>
           {contextTags}
         </div>
       )}
 
-      {/* Textarea */}
-      <textarea
-        ref={textareaRef}
-        className="focusable"
-        style={inputAreaTextarea as h.JSX.CSSProperties}
-        value={value}
-        onInput={handleInput}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        aria-disabled={disabled}
-        readOnly={disabled}
-      />
+      {/* Textarea (with gradient mask above when context tags are present) */}
+      <div style={{ position: 'relative' }}>
+        {contextTags && (
+          <div style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0,
+            height: 16,
+            background: 'linear-gradient(to bottom, var(--color-surface) 0%, var(--color-surface) 40%, transparent 100%)',
+            pointerEvents: 'none',
+            zIndex: 1,
+          }} />
+        )}
+        <textarea
+          ref={textareaRef}
+          className="focusable"
+          style={inputAreaTextarea as h.JSX.CSSProperties}
+          value={value}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder={placeholder}
+          aria-disabled={disabled}
+          readOnly={disabled}
+        />
+      </div>
 
       {/* Footer Row: [+] [Model v] [▶] */}
       <div style={{

@@ -463,18 +463,23 @@ export function ChatFeature(props: UseChatProps) {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Reactive selection sync — replace (not append) the selection attachment.
-  // Empty canvas selection removes the attachment; any non-empty update replaces it.
+  // Additive sync with canvas: new selections become chips, but existing chips
+  // persist — only an explicit X removes them. Partial/full canvas deselect never
+  // removes chips (the node just stays in the prompt context). If a node is
+  // re-selected after being X'd, a fresh chip appears (X only clears current state).
   useEffect(() => {
     const unsub = on<SendSelectionHandler>('SEND_SELECTION', (data) => {
+      if (data.selection.length === 0) return // never remove on canvas deselect
       setAttachments(prev => {
+        const existing = prev.find((a): a is Extract<ContextAttachment, { type: 'selection' }> => a.type === 'selection')
+        const existingIds = new Set(existing?.nodes.map(n => n.id) ?? [])
+        const newNodes = data.selection.filter(n => !existingIds.has(n.id))
+        if (newNodes.length === 0) return prev // nothing new to add
+        const mergedNodes = [...(existing?.nodes ?? []), ...newNodes]
         const withoutSelection = prev.filter(a => a.type !== 'selection')
-        if (data.selection.length === 0) return withoutSelection
-        return [...withoutSelection, { type: 'selection', nodes: data.selection }]
+        return [...withoutSelection, { type: 'selection', nodes: mergedNodes }]
       })
     })
-    // Request initial snapshot once UI is mounted — main thread can't emit eagerly
-    // (would fire before showUI creates the iframe).
     emit<GetSelectionHandler>('GET_SELECTION')
     return unsub
   }, [])
@@ -645,7 +650,7 @@ export function ChatFeature(props: UseChatProps) {
           contextTags={attachments.length > 0 ? (
             <Fragment>
               {renderAttachmentChips(attachments, {
-                onNodeClick: (nodeId) => emit<SelectNodeHandler>('SELECT_NODE', { nodeId }),
+                onNodeClick: (nodeId) => emit<SelectNodeHandler>('SELECT_NODE', { nodeId, preserveSelection: true }),
                 onNodeRemove: (nodeId) => {
                   emit<UnselectNodesHandler>('UNSELECT_NODES', { nodeIds: [nodeId] })
                   setAttachments(prev => prev

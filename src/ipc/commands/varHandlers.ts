@@ -226,19 +226,19 @@ export const handleBindVariable = traced('handleBindVariable()', 'varHandlers.ts
     return { error: `Variable "${variableId}" not found.` };
   }
 
+  // COLOR variables are not bindable via this tool — the Figma API requires
+  // wrapping them in a Paint object, which either overwrites existing fills or
+  // silently creates one on a transparent container (unintended side effect).
+  // Direct the caller to the intent-aligned tools instead.
+  if (variable.resolvedType === 'COLOR') {
+    return {
+      error: `bind_variable does not bind COLOR variables — they need to be embedded in a Paint. Use set_fill({node, bg: "$${variable.name}"}) or set_stroke, or specify bg/fill="$${variable.name}" when creating the node via jsx.`,
+    };
+  }
+
   const normalizedProp = normalizeBindProperty(prop);
   try {
-    if (isPaintProperty(normalizedProp)) {
-      const paint = figma.variables.setBoundVariableForPaint(
-        { type: 'SOLID', color: { r: 0, g: 0, b: 0 } },
-        'color',
-        variable,
-      );
-      (node as any)[normalizedProp] = [paint];
-    } else {
-      node.setBoundVariable(normalizedProp as VariableBindableNodeField, variable);
-    }
-
+    node.setBoundVariable(normalizedProp as VariableBindableNodeField, variable);
     return {
       data: {
         message: `Bound "${variable.name}" (${variable.resolvedType}) → ${node.name}.${normalizedProp}`,
@@ -312,31 +312,26 @@ function normalizeVarType(raw: unknown): VariableResolvedDataType | null {
   return null;
 }
 
-const PAINT_PROPS = new Set(['fills', 'strokes']);
-
-function isPaintProperty(prop: string): boolean {
-  return PAINT_PROPS.has(prop);
-}
-
-/** Map common shorthand property names to Figma bindable fields. */
+/**
+ * Map common shorthand property names to Figma bindable fields.
+ * Color shorthands (bg/fill/stroke) are intentionally absent — COLOR binding
+ * is rejected upstream in handleBindVariable.
+ */
 function normalizeBindProperty(prop: string): string {
   const map: Record<string, string> = {
-    bg: 'fills',
-    fill: 'fills',
-    stroke: 'strokes',
     gap: 'itemSpacing',
     padding: 'paddingTop',
     'padding-top': 'paddingTop',
     'padding-right': 'paddingRight',
     'padding-bottom': 'paddingBottom',
     'padding-left': 'paddingLeft',
-    'corner': 'cornerRadius',
+    corner: 'cornerRadius',
     'corner-radius': 'cornerRadius',
     'font-size': 'fontSize',
-    'opacity': 'opacity',
-    'visible': 'visible',
-    'width': 'width',
-    'height': 'height',
+    opacity: 'opacity',
+    visible: 'visible',
+    width: 'width',
+    height: 'height',
   };
   return map[prop.toLowerCase()] || prop;
 }

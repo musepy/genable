@@ -156,21 +156,27 @@ export const bindVariableDefinition: ToolDefinition = {
   name: 'bind_variable',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Bind a variable to a node property.
+  description: `Bind a FLOAT, BOOLEAN, or STRING variable to a node property.
 
-prop is a flat Figma field name (e.g. fills, strokes, fontSize, itemSpacing,
-paddingTop, cornerRadius, opacity, visible, width, height). Common shorthands
-are also accepted: bg/fill → fills, stroke → strokes, gap → itemSpacing,
-padding → paddingTop, corner → cornerRadius, font-size → fontSize.
-Deep paths like fills[0] or effects[0].color are NOT supported.
+prop is a flat Figma bindable field (e.g. fontSize, itemSpacing, paddingTop,
+cornerRadius, opacity, visible, width, height, characters). Shorthands:
+gap → itemSpacing, padding → paddingTop, corner → cornerRadius,
+font-size → fontSize.
+
+COLOR variables are NOT bound here — they live inside Paint objects. To apply
+a color token, specify it at the source instead:
+  • At creation:  jsx <frame bg="$TokenName" ...> or fill="$TokenName"
+  • Post-hoc:     set_fill({node, bg: "$TokenName"}) or set_stroke
 
 When selecting which variable to bind: if the node is a Tablet or Mobile variant
 (name or variant property contains "Tablet"/"Mobile"), match the node's property
 value against the Tablet/Mobile mode column from list_variables — not Desktop.
 
 Examples:
-  bind_variable({node: "1:2", prop: "fills", variable: "VariableID:1:5"})
-  bind_variable({node: "1:3", prop: "fontSize", variable: "VariableID:1:6"})`,
+  bind_variable({node: "1:2", prop: "fontSize", variable: "VariableID:1:6"})
+  bind_variable({node: "1:3", prop: "paddingTop", variable: "VariableID:1:7"})
+  bind_variable({node: "1:4", prop: "visible", variable: "VariableID:1:8"})
+  bind_variable({node: "1:5", prop: "characters", variable: "VariableID:1:9"})`,
   parameters: {
     type: 'object',
     properties: {
@@ -180,11 +186,11 @@ Examples:
       },
       prop: {
         type: 'string',
-        description: 'Flat Figma field name (e.g. fills, fontSize, paddingTop, itemSpacing)',
+        description: 'Flat Figma bindable field (fontSize, paddingTop, itemSpacing, visible, characters, etc.). COLOR props (fills/strokes) not supported — use set_fill/jsx.',
       },
       variable: {
         type: 'string',
-        description: 'VariableID to bind',
+        description: 'VariableID to bind (FLOAT/BOOLEAN/STRING only)',
       },
     },
     required: ['node', 'prop', 'variable'],

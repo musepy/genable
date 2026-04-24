@@ -13,6 +13,76 @@ import { parseHexToRGBA } from '../../utils/colorUtils';
 import { invalidateVariableCache } from '../../engine/actions/handlers/variableBindingHandler';
 import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
 import { traced } from './pipelineTracer';
+import { getPropertyDef } from '../../constants/figma-property-registry-helpers';
+
+/**
+ * DSL-layer alias map for bind_variable's `prop` parameter.
+ * Translates shorthand names (LLM-friendly) → canonical Figma bindable field names.
+ * This is DSL sugar, NOT a Figma truth — registry owns the canonical names and their
+ * bindable typing. Identity entries (e.g. `opacity: 'opacity'`) are omitted; unmatched
+ * keys pass through to the registry lookup unchanged.
+ */
+export const BIND_ALIAS_MAP: Record<string, string> = {
+  gap: 'itemSpacing',
+  padding: 'paddingTop',
+  'padding-top': 'paddingTop',
+  'padding-right': 'paddingRight',
+  'padding-bottom': 'paddingBottom',
+  'padding-left': 'paddingLeft',
+  corner: 'cornerRadius',
+  'corner-radius': 'cornerRadius',
+  'font-size': 'fontSize',
+};
+
+/**
+ * Pure validator for bind_variable's prop/node-type/variable-type triple.
+ * Factored out for testability (no figma.* access) — applied inside
+ * handleBindVariable after the variable and node are resolved.
+ *
+ * Returns `null` when binding is allowed, otherwise an error message suitable
+ * for returning as `ToolResponse.error`.
+ */
+export function validateBindRequest(args: {
+  nodeType: string;
+  prop: string;
+  variableType: 'FLOAT' | 'BOOLEAN' | 'STRING' | 'COLOR';
+  variableName: string;
+}): { canonicalProp: string; error: string | null } {
+  const canonicalProp = BIND_ALIAS_MAP[args.prop.toLowerCase()] ?? args.prop;
+
+  // width/height are readonly (computed post-layout); reject with actionable redirect.
+  if (canonicalProp === 'width' || canonicalProp === 'height') {
+    const axis = canonicalProp === 'width' ? 'Horizontal' : 'Vertical';
+    const sizeKind = canonicalProp === 'width' ? 'Width' : 'Height';
+    return {
+      canonicalProp,
+      error:
+        `Cannot bind variable to ${canonicalProp} directly — ${canonicalProp} is computed post-layout and not writable. ` +
+        `Instead: set layoutSizing${axis} to "FIXED"/"FILL"/"HUG", or bind the variable to a size-contributing numeric prop ` +
+        `(padding*, itemSpacing, min${sizeKind}, max${sizeKind}).`,
+    };
+  }
+
+  const def = getPropertyDef(args.nodeType, canonicalProp);
+  if (!def || def.bindable === undefined) {
+    return {
+      canonicalProp,
+      error:
+        `Property "${canonicalProp}" is not bindable on ${args.nodeType} nodes. ` +
+        `Bindable examples for ${args.nodeType}: itemSpacing, paddingLeft, cornerRadius, opacity, visible.`,
+    };
+  }
+  if (def.bindable !== args.variableType) {
+    return {
+      canonicalProp,
+      error:
+        `Type mismatch: "${canonicalProp}" on ${args.nodeType} accepts ${def.bindable} variables, ` +
+        `but "${args.variableName}" is ${args.variableType}. Use a ${def.bindable} variable or bind to a different prop.`,
+    };
+  }
+
+  return { canonicalProp, error: null };
+}
 
 // ── list_variables ──
 //
@@ -236,12 +306,25 @@ export const handleBindVariable = traced('handleBindVariable()', 'varHandlers.ts
     };
   }
 
-  const normalizedProp = normalizeBindProperty(prop);
+  // Registry-driven validation (pure): alias resolution + bindable check + type check.
+  // Replaces the old hand-coded allowlist; adding a bindable prop to the registry
+  // automatically makes it accepted here.
+  const validation = validateBindRequest({
+    nodeType: node.type,
+    prop,
+    variableType: variable.resolvedType,
+    variableName: variable.name,
+  });
+  if (validation.error) {
+    return { error: validation.error };
+  }
+  const canonicalProp = validation.canonicalProp;
+
   try {
-    node.setBoundVariable(normalizedProp as VariableBindableNodeField, variable);
+    node.setBoundVariable(canonicalProp as VariableBindableNodeField, variable);
     return {
       data: {
-        message: `Bound "${variable.name}" (${variable.resolvedType}) → ${node.name}.${normalizedProp}`,
+        message: `Bound "${variable.name}" (${variable.resolvedType}) → ${node.name}.${canonicalProp}`,
         nodeId: node.id,
         variableId: variable.id,
       },
@@ -310,28 +393,4 @@ function normalizeVarType(raw: unknown): VariableResolvedDataType | null {
   if (t === 'BOOLEAN') return 'BOOLEAN';
   if (t === 'STRING') return 'STRING';
   return null;
-}
-
-/**
- * Map common shorthand property names to Figma bindable fields.
- * Color shorthands (bg/fill/stroke) are intentionally absent — COLOR binding
- * is rejected upstream in handleBindVariable.
- */
-function normalizeBindProperty(prop: string): string {
-  const map: Record<string, string> = {
-    gap: 'itemSpacing',
-    padding: 'paddingTop',
-    'padding-top': 'paddingTop',
-    'padding-right': 'paddingRight',
-    'padding-bottom': 'paddingBottom',
-    'padding-left': 'paddingLeft',
-    corner: 'cornerRadius',
-    'corner-radius': 'cornerRadius',
-    'font-size': 'fontSize',
-    opacity: 'opacity',
-    visible: 'visible',
-    width: 'width',
-    height: 'height',
-  };
-  return map[prop.toLowerCase()] || prop;
 }

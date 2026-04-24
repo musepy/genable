@@ -34,7 +34,7 @@ Multiple `<component>` elements in one jsx call. All land at canvas top level.
 **Step 2 — Add component properties** (inspect + add_component_prop)
 
 ```
-inspect({node: componentId, mode: "tree", depth: 3})  // get child IDs
+inspect({node: componentId, depth: 3})  // get child IDs (skeleton)
 add_component_prop({node: compId, name: "Label",       type: "TEXT",    default: "Label",       bind: labelNodeId})
 add_component_prop({node: compId, name: "Placeholder", type: "TEXT",    default: "Placeholder", bind: placeholderNodeId})
 add_component_prop({node: compId, name: "Show Icon",   type: "BOOLEAN", default: "true",        bind: iconNodeId})

@@ -69,6 +69,12 @@ Two config layers:
 - **AgentBehaviorConfig** — LLM-facing: designStrategy, visualQuality, thinkingLevel
 - **AgentLoopPolicy** — Runtime control: iteration limits, loop thresholds
 
+### Property Registry (SSOT)
+`src/constants/figma-property-registry.ts` is the single source of truth for Figma property metadata — per-node-type property lists tagged with role, writable, bindable, and facet. Both read and write sides derive from it:
+- **Read side**: inspect/nodeSerializer pick facets through `getFacetKeys()` / `getPropsForFacet()` in `figma-property-registry-helpers.ts`.
+- **Write side**: `bind_variable` type-checks via `getPropertyDef()`, `expandShorthands` + `prop-dsl` derive numeric/string classification from `valueType`.
+- **Adding a new Figma prop**: extend `BINDABLE_FIELDS` / `FACET_OVERRIDE` / `FORCE_NOT_WRITABLE` / `ROLE_MAP` in `tools/extract-figma-props.ts`, re-run it (or `node build.js` verifies sync), and every consumer picks it up. No hand-sync across tool files.
+
 ## Development
 
 - **Build**: `node build.js` (custom esbuild)

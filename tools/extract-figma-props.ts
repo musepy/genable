@@ -68,6 +68,62 @@ type Role =
   | 'style' | 'component'
   | 'prototype' | 'devresource' | 'computed' | 'deprecated' | 'structural';
 
+// ── Bindable node-level properties (mirrors Figma's VariableBindableNodeField union) ──
+// These are the ONLY properties where Figma allows variable binding at the node level.
+// COLOR bindings live on Paint.boundVariables.color, NOT on node properties like fills/strokes.
+// width/height are excluded deliberately — Figma allows binding but it's a visual no-op
+// (width/height are computed post-layout). Binding is redirected to layoutSizingHorizontal/Vertical
+// at the tool layer.
+//
+// Sourced from `type VariableBindableNodeField` in @figma/plugin-typings/plugin-api.d.ts,
+// plus fontSize/letterSpacing/lineHeight from VariableBindableTextField (these are the
+// text-range bindings Figma stores as VariableAlias[], but setBoundVariable() accepts
+// them on the node level too, so we surface them as node-level bindable on TEXT nodes).
+type BindableType = 'FLOAT' | 'BOOLEAN' | 'STRING' | 'COLOR';
+const BINDABLE_FIELDS: Record<string, BindableType> = {
+  // Spacing / sizing FLOATs
+  itemSpacing: 'FLOAT',
+  counterAxisSpacing: 'FLOAT',
+  paddingTop: 'FLOAT', paddingRight: 'FLOAT', paddingBottom: 'FLOAT', paddingLeft: 'FLOAT',
+  // Min/max sizing FLOATs (size-contributing, unlike width/height)
+  minWidth: 'FLOAT', maxWidth: 'FLOAT',
+  minHeight: 'FLOAT', maxHeight: 'FLOAT',
+  // Grid spacing FLOATs
+  gridRowGap: 'FLOAT', gridColumnGap: 'FLOAT',
+  // Corner radius
+  cornerRadius: 'FLOAT',
+  topLeftRadius: 'FLOAT', topRightRadius: 'FLOAT',
+  bottomLeftRadius: 'FLOAT', bottomRightRadius: 'FLOAT',
+  // Stroke weights
+  strokeWeight: 'FLOAT',
+  strokeTopWeight: 'FLOAT', strokeRightWeight: 'FLOAT',
+  strokeBottomWeight: 'FLOAT', strokeLeftWeight: 'FLOAT',
+  // Appearance FLOAT
+  opacity: 'FLOAT',
+  // Typography FLOATs (only on TEXT — emitter guards by presence of key on entry)
+  fontSize: 'FLOAT',
+  letterSpacing: 'FLOAT',
+  lineHeight: 'FLOAT',
+  // Booleans
+  visible: 'BOOLEAN',
+  // Text content (TEXT only)
+  characters: 'STRING',
+};
+
+// Properties whose facet (LLM-facing bucket) overrides the role-derived default.
+// boundVariables / explicitVariableModes have role='computed' but surface as 'variables'.
+const FACET_OVERRIDE: Record<string, string> = {
+  boundVariables: 'variables',
+  explicitVariableModes: 'variables',
+};
+
+// Properties that are forcibly writable:false even when typings mark them non-readonly.
+// - width/height: computed post-layout (typings agree, we state it explicitly so future churn can't flip).
+// - boundVariables/explicitVariableModes: variable-binding state is not writable through normal setters;
+//   goes through setBoundVariable() / setExplicitVariableModeForCollection() APIs instead. Registry
+//   stays honest about what `writable` means (= can be targeted by a generic setter).
+const FORCE_NOT_WRITABLE = new Set(['width', 'height', 'boundVariables', 'explicitVariableModes']);
+
 const ROLE_MAP: Record<string, Role> = {
   // ── Structural ──
   id: 'structural', type: 'structural', name: 'structural',
@@ -184,12 +240,40 @@ interface ExtractedProp {
   valueType: string;
   readonly: boolean;
   role: Role;
+  writable: boolean;
+  bindable?: BindableType;
+  facet?: string;
 }
 
 // Accumulated across all node types — flushed at end of generate()
 const unclassified: Array<{ key: string; nodeType: string }> = [];
 
-function classifyType(typeStr: string): string {
+/**
+ * Check whether `memberType` is a string-literal union — possibly including
+ * `unique symbol` (= PluginAPI['mixed']) and null/undefined — and nothing else.
+ * Expands through named type aliases (e.g. `BlendMode`, `StrokeCap`), so
+ * `blendMode: BlendMode` is detected as enum even though the surface typeString
+ * shows only the alias name.
+ */
+function isStringLiteralUnion(memberType: ts.Type): boolean {
+  if (!memberType.isUnion()) return false;
+  let hasStringLiteral = false;
+  for (const u of memberType.types) {
+    if (u.isStringLiteral()) {
+      hasStringLiteral = true;
+      continue;
+    }
+    // Tolerate Figma's `PluginAPI['mixed']` (resolves to `unique symbol`) and null/undefined.
+    if (u.flags & ts.TypeFlags.UniqueESSymbol) continue;
+    if (u.flags & ts.TypeFlags.Null) continue;
+    if (u.flags & ts.TypeFlags.Undefined) continue;
+    // Anything else (number, object, array, other references) disqualifies.
+    return false;
+  }
+  return hasStringLiteral;
+}
+
+function classifyType(typeStr: string, memberType: ts.Type): string {
   const clean = typeStr
     .replace(/\s*\|\s*PluginAPI\['mixed'\]/g, '')
     .replace(/PluginAPI\['mixed'\]\s*\|\s*/g, '')
@@ -198,7 +282,9 @@ function classifyType(typeStr: string): string {
   if (clean === 'number' || clean === 'number | null') return 'number';
   if (clean === 'string' || clean === 'string | null') return 'string';
   if (clean === 'boolean') return 'boolean';
-  if (clean.includes("'") && clean.includes('|') && !clean.includes('{')) return 'enum';
+  // Enum detection via TypeChecker — catches both inline `"A" | "B"` and named
+  // aliases like `BlendMode` or `StrokeCap | PluginAPI['mixed']`.
+  if (isStringLiteralUnion(memberType)) return 'enum';
   if (clean.startsWith('ReadonlyArray<') || clean.startsWith('Array<') || clean.endsWith('[]')) return 'array';
   return 'object';
 }
@@ -246,13 +332,27 @@ function extractProperties(checker: ts.TypeChecker, interfaceName: string, sourc
     }
 
     const typeStr = checker.typeToString(memberType);
-    const valueType = classifyType(typeStr);
+    const valueType = classifyType(typeStr, memberType);
     const role = ROLE_MAP[name];
     if (!role) {
       unclassified.push({ key: name, nodeType });
     }
 
-    props.push({ key: name, valueType, readonly: isReadonly, role: role || 'appearance' });
+    // writable = !readonly, with a forced override for width/height (computed post-layout).
+    const writable = FORCE_NOT_WRITABLE.has(name) ? false : !isReadonly;
+
+    // bindable — only set on the whitelisted node-level fields.
+    // characters is STRING and only exists on TEXT; the lookup is key-based so the guard
+    // is implicit: if a node type doesn't declare `characters`, the entry is never emitted.
+    const bindable = BINDABLE_FIELDS[name];
+
+    // facet — only set for the handful of properties whose LLM-facing bucket differs from role.
+    const facet = FACET_OVERRIDE[name];
+
+    const entry: ExtractedProp = { key: name, valueType, readonly: isReadonly, role: role || 'appearance', writable };
+    if (bindable !== undefined) entry.bindable = bindable;
+    if (facet !== undefined) entry.facet = facet;
+    props.push(entry);
   }
 
   return props;
@@ -305,7 +405,10 @@ function generate(check: boolean): void {
   for (const [nodeType, props] of Object.entries(registry)) {
     section1Lines.push(`  ${nodeType}: [`);
     for (const p of props) {
-      section1Lines.push(`    { key: '${p.key}', valueType: '${p.valueType}', readonly: ${p.readonly}, role: '${p.role}' },`);
+      const base = `key: '${p.key}', valueType: '${p.valueType}', readonly: ${p.readonly}, role: '${p.role}', writable: ${p.writable}`;
+      const bindablePart = p.bindable !== undefined ? `, bindable: '${p.bindable}'` : '';
+      const facetPart = p.facet !== undefined ? `, facet: '${p.facet}'` : '';
+      section1Lines.push(`    { ${base}${bindablePart}${facetPart} },`);
     }
     section1Lines.push('  ],');
   }
@@ -324,14 +427,28 @@ function generate(check: boolean): void {
   const header = [
     '/**',
     ' * @file figma-property-registry.ts',
-    ' * @description Single source of truth for Figma property discovery + metadata.',
+    ' * @description Single source of truth for Figma property metadata.',
     ' *',
-    ' * Three sections:',
-    ' *   1. PROPERTY_REGISTRY (auto-generated) — per-node-type property lists with roles',
+    ' * Section 1 (`PROPERTY_REGISTRY`) is **auto-generated** from @figma/plugin-typings',
+    ' * by `tools/extract-figma-props.ts`. Do not hand-edit — run the extractor to',
+    ' * re-sync after updating plugin-typings. The build (`node build.js`) verifies sync',
+    ' * via `--check` and fails if the registry drifts from the typings.',
+    ' *',
+    ' * To add / adjust a Figma property:',
+    ' *   - Update `ROLE_MAP`, `BINDABLE_FIELDS`, `FACET_OVERRIDE`, or `FORCE_NOT_WRITABLE`',
+    ' *     in `tools/extract-figma-props.ts`, then re-run the extractor.',
+    ' *   - Every downstream consumer (read side via figma-property-registry-helpers.ts,',
+    ' *     write side via bind_variable + expandShorthands + prop-dsl) picks up the',
+    ' *     change without additional wiring.',
+    ' *',
+    ' * Sections:',
+    ' *   1. PROPERTY_REGISTRY (auto-generated) — per-node-type property lists tagged with',
+    ' *      valueType, readonly, role, writable, bindable, facet.',
     ' *   2. (reserved)',
-    ' *   3. PROPERTY_META (hand-maintained) — enrichment: defaults, enums, constraints',
+    ' *   3. PROPERTY_META (hand-maintained) — enrichment: defaults, enums, constraints.',
     ' *',
-    ' * Re-generate section 1: npx tsx tools/extract-figma-props.ts',
+    ' * See also: `src/constants/figma-property-registry-helpers.ts` for pure-logic',
+    ' * queries (getFacetKeys, getWritableKeys, getBindableKeys, getPropertyDef).',
     ' */',
     '',
     'export interface PropertyDef {',
@@ -341,6 +458,12 @@ function generate(check: boolean): void {
     "  role: 'layout' | 'fill' | 'stroke' | 'effect' | 'appearance' | 'typography'",
     "      | 'style' | 'component'",
     "      | 'prototype' | 'devresource' | 'computed' | 'deprecated' | 'structural';",
+    '  /** Whether the property can be written by setters. Mirrors !readonly, except width/height which stay false (computed post-layout). */',
+    '  writable: boolean;',
+    "  /** Set only on properties where Figma allows node-level variable binding. COLOR bindings live on Paint.boundVariables.color, not here. */",
+    "  bindable?: 'FLOAT' | 'BOOLEAN' | 'STRING' | 'COLOR';",
+    '  /** Override for LLM-facing facet bucket. When omitted, consumers derive from role. Currently only boundVariables/explicitVariableModes → "variables". */',
+    '  facet?: string;',
     '}',
     '',
     '// ═══════════════════════════════════════════════════════════════',

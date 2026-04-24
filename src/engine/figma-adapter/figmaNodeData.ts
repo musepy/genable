@@ -6,7 +6,8 @@
  * our logic from the lived Figma API objects.
  */
 
-import { PROPERTY_REGISTRY, VISUAL_ROLES } from '../../constants/figma-property-registry';
+import { PROPERTY_REGISTRY } from '../../constants/figma-property-registry';
+import { getFacetKeys } from '../../constants/figma-property-registry-helpers';
 
 export interface FigmaNodeData {
     id: string;
@@ -49,8 +50,9 @@ export function extractFigmaNodeData(node: SceneNode, keys?: string[]): FigmaNod
         // Registry path: discover all properties for this node type
         const registry = PROPERTY_REGISTRY[node.type];
         if (registry) {
+            const visualKeys = getFacetKeys(node.type, 'visual');
             for (const prop of registry) {
-                if (!VISUAL_ROLES.has(prop.role)) continue;
+                if (!visualKeys.has(prop.key)) continue;
                 if (!(prop.key in node)) continue;
                 try {
                     const val = (node as any)[prop.key];

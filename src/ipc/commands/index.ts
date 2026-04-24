@@ -11,8 +11,6 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 // Command handler groups
 import { registerSessionNodes } from './pathResolver';
 import { handleTree } from './readHandlers';
-import { handleRm, handleMv, handleCp } from './writeHandlers';
-// grep/sed removed — no callers after verb_noun migration
 import { handleJs } from './jsHandler';
 import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';

@@ -10,6 +10,11 @@ import { effectSpec } from '../../domain/property-specs';
 
 /**
  * Read fills/strokes — filter invisible, keep Figma Paint format.
+ *
+ * Pass-through is intentional: per-Paint fields (including `boundVariables.color`
+ * for variable-bound fills) must survive untouched so inspect(facets:['paint'|'fill'])
+ * can surface bindings. Default pruning happens downstream in formatPaintForLLM,
+ * which was updated (Phase 3) to preserve boundVariables.
  */
 export function readPaints(figmaPaints: any): any[] {
   if (!Array.isArray(figmaPaints)) return [];

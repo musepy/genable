@@ -132,14 +132,20 @@ export function formatPaintForLLM(paint: any): string | Record<string, any> {
     const opacity = paint.opacity ?? 1;
     const hex = rgbaToHex({ r, g, b, a: opacity });
 
+    // Paint-level variable binding (e.g. {boundVariables:{color:{type:'VARIABLE_ALIAS',id:'...'}}}).
+    // Must survive default pruning so inspect(facets:['paint'|'fill']) can surface it.
+    const colorBinding = paint.boundVariables?.color;
+
     const hasNonDefaults =
       (paint.blendMode && paint.blendMode !== 'NORMAL') ||
-      (paint.visible === false);
+      (paint.visible === false) ||
+      colorBinding !== undefined;
     if (!hasNonDefaults) return hex;
 
     const result: Record<string, any> = { color: hex };
     if (paint.blendMode && paint.blendMode !== 'NORMAL') result.blendMode = paint.blendMode;
     if (paint.visible === false) result.visible = false;
+    if (colorBinding !== undefined) result.boundVariables = { color: colorBinding };
     return result;
   }
 

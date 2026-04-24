@@ -11,6 +11,7 @@
 import type { NodeLayer } from '../../schema/layerSchema';
 import { NODE_TYPES } from '../../constants/figma-api';
 import { PROPERTY_META, FIGMA_TO_DSL } from '../../constants/figma-property-registry';
+import { getFacetKeys } from '../../constants/figma-property-registry-helpers';
 import { PropertyTransformer } from './propertyTransformer';
 import { extractFigmaNodeData } from './figmaNodeData';
 import { readPaints, readEffects } from '../figma/figma-reader';
@@ -22,6 +23,20 @@ export interface SerializationOptions {
     maxChildrenPerLevel?: number;
     /** Max total nodes to serialize across the whole tree. Default: unlimited. */
     maxTotalNodes?: number;
+    /**
+     * Optional facet filter for property extraction.
+     *
+     * When undefined → legacy path (visual-facet filtering via extractFigmaNodeData).
+     * When provided → union of the listed facets decides which registry keys to emit.
+     *
+     * Special facet names: 'all' (no filter), 'variables' (boundVariables + explicitVariableModes),
+     * plus any role-backed name (layout/fill/stroke/effect/appearance/typography).
+     *
+     * Facets are additionally used to pull role:'computed' keys that the visual path
+     * skips — specifically boundVariables and explicitVariableModes, which are the
+     * primary reason this option exists (see inspect tool's `facets:['variables']`).
+     */
+    facets?: Set<string>;
 }
 
 /** Mutable counter shared across recursive calls to enforce maxTotalNodes. */
@@ -53,6 +68,7 @@ export class NodeSerializer {
      * - maxDepth: vertical depth limit (default: Infinity)
      * - maxChildrenPerLevel: horizontal children cap per node (default: Infinity)
      * - maxTotalNodes: global node count limit (default: Infinity)
+     * - facets: optional facet filter — see SerializationOptions.facets
      */
     static serializeWithCompression(
         node: SceneNode,
@@ -60,7 +76,7 @@ export class NodeSerializer {
         currentDepth: number = 0,
         state?: SerializationState
     ): NodeLayer {
-        const { maxDepth = Infinity, pruneDefaults = true, maxChildrenPerLevel = Infinity, maxTotalNodes = Infinity } = options;
+        const { maxDepth = Infinity, pruneDefaults = true, maxChildrenPerLevel = Infinity, maxTotalNodes = Infinity, facets } = options;
 
         // Initialize shared state on first call
         if (!state) {
@@ -73,11 +89,21 @@ export class NodeSerializer {
         // 1. Map Figma Type to DSL Type
         const type = this.mapFigmaType(node.type);
 
-        // 2. Extract Properties — registry-based (blacklist filtering in extractFigmaNodeData)
+        // 2. Build key set for extraction.
+        //    - No facets → legacy visual path via extractFigmaNodeData (byte-identical default).
+        //    - Facets present → union of requested facet keys. 'variables'/'all' additionally pull
+        //      boundVariables + explicitVariableModes (computed role, bypassed by the visual path).
+        //
+        // When facets are specified we also cap the iteration below to the allowed set so that
+        // the unconditional fills/strokes/effects overrides inside extractFigmaNodeData don't
+        // leak into e.g. a `facets:['variables']` response.
         const props: Record<string, any> = {};
-        const nodeData = extractFigmaNodeData(node);
+        const facetKeyList = facets ? this.buildFacetExtractionKeys(node.type, facets) : undefined;
+        const allowedKeys = facetKeyList ? new Set(facetKeyList) : undefined;
+        const nodeData = extractFigmaNodeData(node, facetKeyList);
 
         for (const [figmaKey, rawValue] of Object.entries(nodeData)) {
+            if (allowedKeys && !IDENTITY_KEYS.has(figmaKey) && !allowedKeys.has(figmaKey)) continue;
             if (IDENTITY_KEYS.has(figmaKey)) continue;
 
             // Translate Figma API name → DSL name (e.g. itemSpacing → gap)
@@ -133,7 +159,14 @@ export class NodeSerializer {
                 if (rawValue === undefined || rawValue === null) continue;
                 if (rawValue === 0 || rawValue === false || rawValue === '' || rawValue === 'NONE' || rawValue === 'AUTO') continue;
                 if (Array.isArray(rawValue) && rawValue.length === 0) continue;
-                if (typeof rawValue === 'object' && !Array.isArray(rawValue)) continue; // skip complex objects
+                // Variables facet: preserve boundVariables + explicitVariableModes objects.
+                // (Legacy path hits `continue` below because they're role:'computed' and not in PROP_META.)
+                if (typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+                    if (facets && (figmaKey === 'boundVariables' || figmaKey === 'explicitVariableModes')) {
+                        if (Object.keys(rawValue).length > 0) props[dslKey] = rawValue;
+                    }
+                    continue;
+                }
                 props[dslKey] = rawValue;
             }
         }
@@ -182,6 +215,66 @@ export class NodeSerializer {
         }
 
         return layer;
+    }
+
+    /**
+     * Build the explicit key list for facet-based extraction.
+     *
+     * Called only when callers pass `facets`. Unions the requested facets via
+     * `getFacetKeys`, then always adds boundVariables + explicitVariableModes
+     * when `variables` or `all` is requested — those have role:'computed' and
+     * would be filtered out by any role-based selection, but are the whole
+     * reason the variables facet exists.
+     *
+     * Paints (fills/strokes) and effects are always added so `SPECIAL_KEYS`
+     * handling still runs when the user asks for paint/fill/stroke/effect/all.
+     */
+    private static buildFacetExtractionKeys(nodeType: string, facets: Set<string>): string[] {
+        const keys = new Set<string>();
+
+        // Always include identity so downstream handlers have node.name.
+        keys.add('name');
+
+        const wantAll = facets.has('all');
+        const wantVariables = wantAll || facets.has('variables');
+
+        // Registry facet names (role-backed).
+        const ROLE_FACETS: Record<string, string> = {
+            layout: 'layout',
+            paint: 'fill',        // alias: 'paint' → fill role
+            fill: 'fill',
+            stroke: 'stroke',
+            text: 'typography',
+            typography: 'typography',
+            effects: 'effect',
+            appearance: 'appearance',
+        };
+
+        if (wantAll) {
+            // Pull every key the registry knows about.
+            for (const k of getFacetKeys(nodeType, 'all')) keys.add(k);
+        } else {
+            for (const f of facets) {
+                const role = ROLE_FACETS[f];
+                if (role) {
+                    for (const k of getFacetKeys(nodeType, role)) keys.add(k);
+                } else if (f === 'variables') {
+                    for (const k of getFacetKeys(nodeType, 'variables')) keys.add(k);
+                }
+            }
+        }
+
+        // Variables facet: always surface boundVariables + explicitVariableModes,
+        // even though they're role:'computed' (not captured by ROLE_FACETS above
+        // when only a non-variables facet is requested).
+        if (wantVariables) {
+            keys.add('boundVariables');
+            keys.add('explicitVariableModes');
+        }
+
+        // Ensure paint/effect/stroke facets also pull the shared fills/strokes/effects fields
+        // (already included via role match above for fill/stroke/effect; 'paint' alias handled via ROLE_FACETS).
+        return Array.from(keys);
     }
 
     /**

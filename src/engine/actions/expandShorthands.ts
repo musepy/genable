@@ -79,8 +79,8 @@ function mapGridAlign(v: string): string {
 }
 
 function resolveLayoutMode(all: Record<string, any>): string | undefined {
-  // Single entry point: `layout` shorthand only. Narrow vocabulary,
-  // unknown values rejected by the `layout` expander (not here).
+  if (all.layoutMode === 'GRID') return 'GRID';
+  if (all.cols !== undefined || all.rows !== undefined) return 'GRID';
   if (typeof all.layout === 'string') {
     return LAYOUT_MAP[norm(all.layout)];
   }

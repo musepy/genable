@@ -154,8 +154,32 @@ describe('expandShorthands', () => {
   });
 
   describe('gap / crossGap', () => {
-    it('gap → itemSpacing', () => {
+    it('gap → itemSpacing (no layout context)', () => {
       expect(expandShorthands({ gap: 8 })).toMatchObject({ itemSpacing: 8 });
+    });
+    it('gap with layout:row → itemSpacing (flex regression guard)', () => {
+      const result = expandShorthands({ layout: 'row', gap: 16 });
+      expect(result.itemSpacing).toBe(16);
+      expect(result.gridRowGap).toBeUndefined();
+      expect(result.gridColumnGap).toBeUndefined();
+    });
+    it('gap with cols+rows → gridRowGap + gridColumnGap (GRID via col/row presence)', () => {
+      const result = expandShorthands({ cols: 3, rows: 2, gap: 16 });
+      expect(result.gridRowGap).toBe(16);
+      expect(result.gridColumnGap).toBe(16);
+      expect(result.itemSpacing).toBeUndefined();
+    });
+    it('gap with layoutMode:GRID → gridRowGap + gridColumnGap (canonical form)', () => {
+      const result = expandShorthands({ layoutMode: 'GRID', gap: 16 });
+      expect(result.gridRowGap).toBe(16);
+      expect(result.gridColumnGap).toBe(16);
+      expect(result.itemSpacing).toBeUndefined();
+    });
+    it('gap with layout:"grid" → gridRowGap + gridColumnGap', () => {
+      const result = expandShorthands({ layout: 'grid', gap: 16 });
+      expect(result.gridRowGap).toBe(16);
+      expect(result.gridColumnGap).toBe(16);
+      expect(result.itemSpacing).toBeUndefined();
     });
     it('crossGap → counterAxisSpacing', () => {
       expect(expandShorthands({ crossGap: 12 })).toMatchObject({ counterAxisSpacing: 12 });

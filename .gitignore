@@ -23,6 +23,7 @@ test_output.txt
 .gstack/
 .env.local
 .opencode/
+.claude/worktrees/
 test-results/
 tools/ui-preview/
 tools/ui-baseline/

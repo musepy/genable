@@ -44,6 +44,27 @@ export type FetchProxy = (
  * (Cloudflare edge → China datacenter) plus model reasoning time. */
 const CONNECT_TIMEOUT_MS = 90000;
 
+// ═══════════════════════════════════════════════════════════════
+// SSE Chunk Debug Logger (manual toggle)
+// ═══════════════════════════════════════════════════════════════
+// Manually flip to `true` to capture raw SSE chunks for Kimi/DashScope streaming.
+// When enabled, each parsed chunk is POSTed in batches to the dev-bridge server,
+// which appends to /tmp/figma-bridge/sse-debug/<runId>.ndjson.
+// Zero overhead when false (early return at call site).
+//
+// Usage:
+//   1. Set DEBUG_SSE_CHUNKS = true below, rebuild (`node build.js`).
+//   2. Make sure dev-bridge server is running: `npx tsx tools/dev-bridge/server.ts`.
+//   3. Reproduce the issue in Figma plugin.
+//   4. Files land at /tmp/figma-bridge/sse-debug/sse-<timestamp>-<model>.ndjson.
+//      Each line is JSON: {ts, chunkIdx, deltaContent, toolCallDeltas, finishReason, raw}.
+//
+// Fallback: if dev-bridge is unreachable, chunks are dumped via console.log
+// with tag `SSE_CHUNK` so users can grep Figma DevTools Console.
+const DEBUG_SSE_CHUNKS = false;
+const DEBUG_SSE_BATCH_SIZE = 50;
+const DEBUG_SSE_BRIDGE_URL = 'http://localhost:3456';
+
 /**
  * Per-model max_output_tokens for DashScope. Documented values from
  * help.aliyun.com/zh/model-studio/models; others empirically probed via
@@ -79,6 +100,76 @@ function resolveDashScopeMaxOutput(modelName: string, requested?: number): numbe
 
 function randomId(prefix: string): string {
   return prefix + Math.random().toString(36).substring(7);
+}
+
+/**
+ * Batching SSE chunk logger. Only active when DEBUG_SSE_CHUNKS=true.
+ * Sends batches to dev-bridge /sse-log endpoint; on failure (or when
+ * dev-bridge is down) falls back to console.log with tag `SSE_CHUNK`.
+ */
+class SSEChunkDebugLogger {
+  private readonly runId: string;
+  private buffer: any[] = [];
+  private chunkIdx = 0;
+  private bridgeReachable = true;
+
+  constructor(modelName: string) {
+    this.runId = `sse-${Date.now()}-${modelName.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    // Tag the start so the user can correlate runId with Figma DevTools timing
+    console.log(`[SSE_CHUNK_DEBUG] start runId=${this.runId} model=${modelName}`);
+  }
+
+  /**
+   * Record a single parsed SSE chunk. Zero-cost callers should gate with
+   * DEBUG_SSE_CHUNKS before invoking.
+   */
+  record(parsed: any): void {
+    const choice = parsed?.choices?.[0];
+    const delta = choice?.delta;
+    const entry = {
+      ts: Date.now(),
+      chunkIdx: this.chunkIdx++,
+      deltaContent: delta?.content ?? null,
+      toolCallDeltas: delta?.tool_calls ?? null,
+      finishReason: choice?.finish_reason ?? null,
+      usage: parsed?.usage ?? null,
+      // Keep full raw so we can see exactly what server sent
+      raw: parsed,
+    };
+    this.buffer.push(entry);
+    if (this.buffer.length >= DEBUG_SSE_BATCH_SIZE) {
+      this.flush();
+    }
+  }
+
+  /** Called at stream end (success or failure) to drain remaining buffer. */
+  flush(): void {
+    if (this.buffer.length === 0) return;
+    const batch = this.buffer;
+    this.buffer = [];
+    const payload = JSON.stringify({ runId: this.runId, chunks: batch });
+
+    // Best-effort POST; on failure fall back to console.log
+    if (this.bridgeReachable) {
+      fetch(`${DEBUG_SSE_BRIDGE_URL}/sse-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      }).catch(() => {
+        this.bridgeReachable = false;
+        this.dumpToConsole(batch);
+      });
+    } else {
+      this.dumpToConsole(batch);
+    }
+  }
+
+  private dumpToConsole(batch: any[]): void {
+    for (const entry of batch) {
+      // Keep raw compact by stringifying — user can copy-paste into jsonl file
+      console.log(JSON.stringify({ tag: 'SSE_CHUNK', runId: this.runId, ...entry }));
+    }
+  }
 }
 
 export class DashScopeProvider implements LLMProvider {
@@ -281,8 +372,12 @@ export class DashScopeProvider implements LLMProvider {
     // Accumulate incremental tool calls across SSE chunks
     const toolCallAccumulator = new Map<number, { id: string; name: string; args: string }>();
 
+    // DEBUG: raw SSE chunk recorder — off by default, see DEBUG_SSE_CHUNKS above
+    const sseLogger = DEBUG_SSE_CHUNKS ? new SSEChunkDebugLogger(this.modelName) : null;
+
     try {
       await consumeStream(this.parseSSEStream(reader), (parsed: any) => {
+        if (sseLogger) sseLogger.record(parsed);
         const chunk = this.mapStreamChunkToLLMResponse(parsed, toolCallAccumulator);
         if (chunk.text) onProgress?.(chunk.text);
         if (chunk.thoughts) onThinking?.(chunk.thoughts);
@@ -290,6 +385,7 @@ export class DashScopeProvider implements LLMProvider {
       }, { abortSignal });
     } finally {
       reader.cancel().catch(() => {});
+      if (sseLogger) sseLogger.flush();
     }
 
     // Finalize accumulated tool calls → inject into accumulator

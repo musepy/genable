@@ -150,11 +150,12 @@ export async function fetchClaudeModels(apiKey: string): Promise<LLMModel[]> {
   }
   // DashScope Anthropic-compatible models
   return [
-    { name: 'kimi-k2.5', displayName: 'Kimi K2.5' },
-    { name: 'qwen3-coder-plus', displayName: 'Qwen3 Coder Plus' },
-    { name: 'qwen3-max', displayName: 'Qwen3 Max' },
+    { name: 'qwen3.6-plus', displayName: 'Qwen 3.6 Plus' },
     { name: 'qwen3.5-plus', displayName: 'Qwen3.5 Plus' },
+    { name: 'qwen3-max', displayName: 'Qwen3 Max' },
+    { name: 'qwen3-coder-plus', displayName: 'Qwen3 Coder Plus' },
     { name: 'qwen3-coder-flash', displayName: 'Qwen3 Coder Flash' },
+    { name: 'kimi-k2.5', displayName: 'Kimi K2.5' },
   ];
 }
 

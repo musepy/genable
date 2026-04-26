@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>design.md E2E 执行层面审计 — paws-and-paths</title>
+<style>
+  :root {
+    --bg:            #fafafa;
+    --panel:         #ffffff;
+    --panel-alt:     #f6f8fa;
+    --ink:           #1a1a1a;
+    --ink-mute:      #4a4a4a;
+    --ink-dim:       #6b7280;
+    --line:          #e3e5e8;
+    --line-strong:   #cfd2d6;
+    --ok:            #0a7f3f;
+    --ok-bg:         #e8f4ec;
+    --ok-line:       #c3dfcd;
+    --bad:           #b42318;
+    --bad-bg:        #f6e6e4;
+    --bad-line:      #e6c9c5;
+    --warn:          #92561a;
+    --warn-bg:       #f7ecdb;
+    --warn-line:     #e2cba4;
+    --code-bg:       #f4f6f8;
+    --code-line:     #e1e4e8;
+    --pill-neutral:  #eceef1;
+  }
+
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 28px 64px; }
+
+  /* ---- header ---- */
+  header.doc {
+    border-bottom: 1px solid var(--line-strong);
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+  }
+  header.doc h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+  }
+  header.doc .sub {
+    color: var(--ink-mute);
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  header.doc dl.meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 2px 22px;
+    margin: 0;
+    font-size: 12px;
+  }
+  header.doc dl.meta > div { display: flex; gap: 8px; }
+  header.doc dl.meta dt { color: var(--ink-dim); font-weight: 500; min-width: 78px; }
+  header.doc dl.meta dd {
+    margin: 0;
+    color: var(--ink);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 12px;
+  }
+
+  /* ---- section heading ---- */
+  h2.section {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-dim);
+    margin: 36px 0 12px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* ---- scorecard ---- */
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+  .scorecard .tile {
+    background: var(--panel);
+    padding: 12px 14px;
+  }
+  .scorecard .tile .label {
+    font-size: 11px;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .scorecard .tile .value {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .scorecard .tile .note {
+    font-size: 11px;
+    color: var(--ink-mute);
+    margin-top: 2px;
+  }
+  .value.ok   { color: var(--ok); }
+  .value.bad  { color: var(--bad); }
+  .value.warn { color: var(--warn); }
+
+  /* ---- pills ---- */
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 7px;
+    border-radius: 10px;
+    line-height: 1.5;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    border: 1px solid var(--line);
+    background: var(--pill-neutral);
+    color: var(--ink-mute);
+  }
+  .pill.sev-high { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+  .pill.sev-med  { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+  .pill.sev-low  { background: var(--pill-neutral); }
+  .pill.tier     { font-weight: 600; }
+
+  /* ---- gap card ---- */
+  .gap {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    margin-bottom: 18px;
+  }
+  .gap .hd {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-alt);
+  }
+  .gap .hd .num {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 12px;
+    color: var(--ink-dim);
+    min-width: 44px;
+  }
+  .gap .hd .title {
+    font-weight: 600;
+    font-size: 14px;
+    flex: 1;
+  }
+
+  .gap .shared {
+    padding: 10px 14px 0;
+  }
+  .gap .shared .shared-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-dim);
+    margin-bottom: 4px;
+  }
+
+  .ab {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .ab .col {
+    padding: 10px 14px 14px;
+    min-width: 0; /* allow inner pre overflow */
+  }
+  .ab .col.left  { border-right: 1px solid var(--line); }
+  .ab .col .col-hd {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .ab .col.left  .col-hd { color: var(--ok); }
+  .ab .col.right .col-hd { color: var(--bad); }
+  .ab .col .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .ab .col.left  .dot { background: var(--ok); }
+  .ab .col.right .dot { background: var(--bad); }
+  .ab .col .state-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-dim);
+    margin: 8px 0 4px;
+  }
+  .ab .col .state-body {
+    font-size: 13px;
+    color: var(--ink-mute);
+  }
+
+  .gap .foot {
+    border-top: 1px solid var(--line);
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: start;
+    background: var(--panel-alt);
+  }
+  .gap .foot .rc {
+    font-size: 13px;
+    color: var(--ink-mute);
+  }
+  .gap .foot .rc b { color: var(--ink); font-weight: 600; }
+
+  /* ---- code ---- */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-line);
+    border-radius: 2px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    white-space: pre;
+  }
+  pre code { font: inherit; }
+  code.inline {
+    background: var(--code-bg);
+    border: 1px solid var(--code-line);
+    border-radius: 2px;
+    padding: 0 4px;
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  }
+
+  /* ---- visual evidence ---- */
+  .evidence {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .evidence .item h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .evidence .item .meta {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-bottom: 6px;
+  }
+  .evidence .item p {
+    font-size: 13px;
+    margin: 0;
+    color: var(--ink-mute);
+  }
+  .evidence .item p.alert {
+    border-left: 2px solid var(--bad);
+    padding-left: 8px;
+    color: var(--bad);
+  }
+
+  /* ---- cluster ---- */
+  .clusters {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .cluster {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  .cluster .tag {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .cluster .tag small {
+    display: block;
+    font-weight: 400;
+    color: var(--ink-dim);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .cluster .body { font-size: 13px; color: var(--ink-mute); }
+  .cluster .body b { color: var(--ink); font-weight: 600; }
+
+  /* ---- recommendation table ---- */
+  table.rec {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    font-size: 13px;
+  }
+  table.rec th, table.rec td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.rec thead th {
+    background: var(--panel-alt);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-dim);
+  }
+  table.rec tbody tr:last-child td { border-bottom: 0; }
+  table.rec td.tier-cell { white-space: nowrap; }
+  table.rec td b { font-weight: 600; }
+
+  /* ---- error log ---- */
+  .errlog {
+    background: var(--panel);
+    border: 1px solid var(--line);
+  }
+  .errlog .caption {
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--ink-mute);
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-alt);
+  }
+  .errlog pre {
+    border: 0;
+    margin: 0;
+    background: var(--panel);
+    padding: 12px 14px;
+  }
+  .errlog .row { color: var(--ink); }
+  .errlog .row + .row { margin-top: 8px; display: block; }
+  .errlog .err { color: var(--bad); }
+
+  /* ---- narrow screens ---- */
+  @media (max-width: 820px) {
+    .ab { grid-template-columns: 1fr; }
+    .ab .col.left { border-right: 0; border-bottom: 1px solid var(--line); }
+    .cluster { grid-template-columns: 1fr; }
+    .evidence { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ====================================================== HEADER ====== -->
+<header class="doc">
+  <h1>design.md E2E 执行层面审计</h1>
+  <div class="sub">paws-and-paths · 2 次触发 · kimi-k2.5 · 2026-04-22</div>
+  <dl class="meta">
+    <div><dt>file key</dt><dd>ExvSLYAdjmpnKrmFeh5fsS</dd></div>
+    <div><dt>节点</dt><dd>1742-22309 · 1742-22356</dd></div>
+    <div><dt>模型</dt><dd>kimi-k2.5</dd></div>
+    <div><dt>exp-1 耗时</dt><dd>595 s</dd></div>
+    <div><dt>exp-1 调用</dt><dd>42 次工具调用 · 4 次错误</dd></div>
+    <div><dt>exp-2 耗时</dt><dd>236 s</dd></div>
+    <div><dt>exp-2 调用</dt><dd>62 次工具调用 · 4 次错误</dd></div>
+    <div><dt>来源</dt><dd>examples/paws-and-paths/design.md</dd></div>
+  </dl>
+</header>
+
+<!-- ====================================================== SCORECARD == -->
+<h2 class="section">完成度概览</h2>
+<div class="scorecard">
+  <div class="tile"><div class="label">颜色变量</div><div class="value ok">47 / 47</div><div class="note">已创建 · 部分绑定</div></div>
+  <div class="tile"><div class="label">字体变量</div><div class="value warn">8 / 8</div><div class="note">已创建 · 0 次绑定</div></div>
+  <div class="tile"><div class="label">间距变量</div><div class="value bad">0 / 8</div><div class="note">静默丢失</div></div>
+  <div class="tile"><div class="label">圆角变量</div><div class="value bad">0 / 6</div><div class="note">静默丢失</div></div>
+  <div class="tile"><div class="label">组件</div><div class="value warn">2 / 11</div><div class="note">1 个 variant set + 1 个单体</div></div>
+  <div class="tile"><div class="label">绑定</div><div class="value warn">60 成功 / 2 失败</div><div class="note">+ 1 次跨集合泄漏</div></div>
+  <div class="tile"><div class="label">重复错误签名</div><div class="value bad">4 × 2</div><div class="note">可复现，签名完全相同</div></div>
+</div>
+
+<!-- ====================================================== EVIDENCE === -->
+<h2 class="section">视觉证据（审计的两处表面）</h2>
+<div class="evidence">
+  <div class="item">
+    <h4>Profile Card — variant set</h4>
+    <div class="meta">节点 1742-22309 · 784 × 346</div>
+    <p>遛狗员个人主页的主卡片，以 variant set 形式组织（覆盖状态）。<b>主 CTA 的填充绑定到遗留 VariableID <code class="inline">1100:15658</code></b>（见 差异 5）。</p>
+    <p class="alert">"Start Walk" 按钮实际渲染为 <code class="inline">#1a1a1a</code>（黑色）——错误。期望的是 Golden Retriever 橙色 <code class="inline">#855300</code>。</p>
+  </div>
+  <div class="item">
+    <h4>Dog Profile Card — 单体 frame</h4>
+    <div class="meta">节点 1742-22356 · 340 × 350</div>
+    <p>与上方卡片结构相同但 ID 不同。主 CTA 的填充绑定到新创建的 VariableID <code class="inline">1742:22212</code>，属于 <code class="inline">PawsAndPaths Colors</code> 集合。</p>
+    <p class="alert">"Start Walk" 按钮实际渲染为 <code class="inline">#855300</code>（橙色）——正确。语义 token 相同，但两张卡视觉结果相反。</p>
+  </div>
+</div>
+
+<!-- ====================================================== GAPS ======= -->
+<h2 class="section">逐项差异分析</h2>
+
+<!-- GAP 1 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 01</span>
+    <span class="title">间距标尺静默丢失（0 / 8）</span>
+    <span class="pill sev-high">严重度 高</span>
+    <span class="pill tier">Tier 1</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入 — design.md frontmatter</div>
+<pre><code>spacing:
+  base: 8px
+  xs: 4px
+  sm: 12px
+  md: 24px
+  lg: 40px
+  xl: 64px
+  gutter: 16px
+  margin: 24px</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code>create_variable × 8  collection="PawsAndPaths Spacing"  type=FLOAT
+  → space/base    = 8
+  → space/xs      = 4
+  → space/sm      = 12
+  → space/md      = 24
+  → space/lg      = 40
+  → space/xl      = 64
+  → space/gutter  = 16
+  → space/margin  = 24
+bind_variable  node=&lt;frame&gt; prop=paddingLeft   var=space/md
+bind_variable  node=&lt;frame&gt; prop=itemSpacing    var=space/sm
+...</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">独立集合下的 8 个 FLOAT 变量；padding、gap、itemSpacing 均以变量绑定形式存在，可在 Variables UI 中统一编辑。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code># 两轮运行均未创建任何 spacing 变量
+list_variables → 不存在名为 "*Spacing*" 的集合
+
+# 所有间距以字面量形式落地
+set_layout  paddingLeft=24  paddingRight=24  itemSpacing=16
+set_layout  paddingTop=12   paddingBottom=12 itemSpacing=8
+set_layout  paddingTop=14   ...                 # 不在标尺内</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">所有 padding / gap 均为字面量：<code class="inline">24, 16, 12, 8, 14</code>。其中 <code class="inline">14</code> 甚至不在声明的标尺内——出现了自由漂移。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b>范围遗漏。Agent 内部检查清单停在 <i>colors + typography</i>，frontmatter 中的 spacing / rounded 区块虽被读取，但从未被翻译成工具调用。</div>
+    <span class="pill tier sev-low">prompt + 检查清单</span>
+  </div>
+</section>
+
+<!-- GAP 2 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 02</span>
+    <span class="title">圆角标尺静默丢失（0 / 6）</span>
+    <span class="pill sev-high">严重度 高</span>
+    <span class="pill tier">Tier 1</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入 — design.md frontmatter</div>
+<pre><code>rounded:
+  sm:      0.25rem
+  DEFAULT: 0.5rem
+  md:      0.75rem
+  lg:      1rem
+  xl:      1.5rem
+  full:    9999px</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code>create_variable × 6  collection="PawsAndPaths Radius"  type=FLOAT
+  → radius/sm       = 4
+  → radius/DEFAULT  = 8
+  → radius/md       = 12
+  → radius/lg       = 16
+  → radius/xl       = 24
+  → radius/full     = 9999
+bind_variable  node=&lt;card&gt;   prop=cornerRadius  var=radius/xl
+bind_variable  node=&lt;button&gt; prop=cornerRadius  var=radius/lg
+bind_variable  node=&lt;badge&gt;  prop=cornerRadius  var=radius/full</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">6 个 FLOAT 变量；卡片、按钮、输入、徽标等处的 cornerRadius 统一可绑定、可全局编辑。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code># 未创建任何 radius 变量
+list_variables → 不存在 "Radius" 集合
+
+# 全部字面量
+set_layout  cornerRadius=16     # 卡片
+set_layout  cornerRadius=12     # 按钮
+set_layout  cornerRadius=1000   # 徽标，粗糙的全圆</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">所有圆角都是字面量：<code class="inline">16, 12, 1000</code>。徽标用了 <code class="inline">1000</code> 而非规格中的 <code class="inline">9999</code>；"full" 的语义丢失。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b>与 差异 1 同类遗漏。rounded 区块被解析但未被执行。</div>
+    <span class="pill tier sev-low">prompt + 检查清单</span>
+  </div>
+</section>
+
+<!-- GAP 3 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 03</span>
+    <span class="title">字体以整体 STRING JSON 形式创建，从未成功绑定</span>
+    <span class="pill sev-high">严重度 高</span>
+    <span class="pill tier">Tier 2</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入 — 8 个字体 token 示例</div>
+<pre><code>typography:
+  display:
+    fontFamily:    Plus Jakarta Sans
+    fontSize:      44px
+    fontWeight:    "800"
+    lineHeight:    52px
+    letterSpacing: -0.02em
+  headline-md:
+    fontFamily:    Plus Jakarta Sans
+    fontSize:      24px
+    fontWeight:    "700"
+    lineHeight:    32px
+  # + headline-lg, title-lg, body-lg, body-md, label-md, label-sm</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code># 每个 token 拆解为原子变量
+create_variable  typo/display/fontFamily     STRING  "Plus Jakarta Sans"
+create_variable  typo/display/fontSize       FLOAT   44
+create_variable  typo/display/fontWeight     FLOAT   800
+create_variable  typo/display/lineHeight     FLOAT   52
+create_variable  typo/display/letterSpacing  FLOAT   -0.02
+
+# 8 个 token × ~5 个属性 ≈ 40 个原子变量
+# 按属性粒度绑定到文本节点
+bind_variable  node=&lt;text&gt; prop=fontSize    var=typo/display/fontSize
+bind_variable  node=&lt;text&gt; prop=fontFamily  var=typo/display/fontFamily
+bind_variable  node=&lt;text&gt; prop=lineHeight  var=typo/display/lineHeight</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">文本节点在属性级别完成绑定。改动 <code class="inline">typo/display/fontSize</code> 即可更新整个文件中所有 display 样式标题。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code># 8 个整体打包的 JSON-in-STRING 变量
+create_variable  typography/display  STRING
+  value = '{"fontFamily":"Plus Jakarta Sans","fontSize":44,...}'
+create_variable  typography/headline-md  STRING
+  value = '{"fontFamily":"Plus Jakarta Sans","fontSize":24,...}'
+# ... × 8
+
+# 唯一一次绑定尝试
+bind_variable  node=1742:22192  prop=fontSize  var=typography/headline-md
+  → ERROR: type mismatch (STRING variable, FLOAT property)
+  → ERROR: "Node 1742:22192 unknown — it hasn't appeared in any
+           inspect/describe/jsx result this turn."
+
+# 运行结束后，没有任何文本节点挂上字体绑定</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">8 个 STRING 变量存在但完全不起作用——Figma 无法把 STRING 变量绑定到 FLOAT 属性（<code class="inline">fontSize</code>）。文本样式最终回落成每节点内嵌的字面值。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b>Figma 变量体系没有 "typography" 复合类型。Agent 把每个 token 打包成 JSON 字符串，这种表示无法被绑定，且没有切换到分解策略。唯一一次绑定尝试还叠加了节点生命周期错误（见 差异 6）。</div>
+    <span class="pill tier">新工具 · import_design_md_typography</span>
+  </div>
+</section>
+
+<!-- GAP 4 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 04</span>
+    <span class="title">组件覆盖不全（2 / 11）</span>
+    <span class="pill sev-high">严重度 高</span>
+    <span class="pill tier">Tier 1 + 2</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入 — design.md 中声明的组件</div>
+<pre><code>components:
+  button-primary            button-primary-hover
+  button-secondary          button-secondary-hover
+  card-profile              card-walk-stat
+  input-field               list-item-walker
+  list-item-walker-hover    badge-status
+  # （共声明 11 个）</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code># 11 个组件；hover 对合并为 variant set
+create_component      button-primary
+create_component      button-primary-hover
+combine_components    [button-primary, button-primary-hover]   # → variant set
+create_component      button-secondary
+create_component      button-secondary-hover
+combine_components    [button-secondary, button-secondary-hover]
+create_component      card-profile
+create_component      card-walk-stat
+create_component      input-field
+create_component      list-item-walker
+create_component      list-item-walker-hover
+combine_components    [list-item-walker, list-item-walker-hover]
+create_component      badge-status</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">11 个组件（6 个独立发布 + 3 个 variant set），全部已绑定变量，可直接实例化到布局中。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code># 只完成了 2 个表面
+1742-22309  Profile Card (variant set)
+1742-22356  Dog Profile Card
+
+# 缺失 — 无任何组件或 frame 痕迹：
+  button-primary        button-secondary       input-field
+  list-item-walker      list-item-walker-hover badge-status
+  card-walk-stat
+  button-primary-hover  button-secondary-hover</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">声明的 11 个组件，两轮运行共缺失 9 个。已完成的两个属于 profile-card 表面，而不是可复用原子件。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b>Agent 把任务理解为 <i>搭一个示例表面</i>，而非 <i>穷举组件清单</i>。没有"遍历列表"的显式步骤。</div>
+    <span class="pill tier sev-low">prompt + 完成度检查清单</span>
+  </div>
+</section>
+
+<!-- GAP 5 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 05</span>
+    <span class="title">跨集合绑定泄漏 — 同一 primary token，一张卡渲染黑色，一张卡渲染橙色</span>
+    <span class="pill sev-high">严重度 高</span>
+    <span class="pill tier">Tier 3</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入 — design.md 中的 primary 语义</div>
+<pre><code>colors:
+  primary:      "#855300"   # Golden Retriever 橙
+  on-primary:   "#ffffff"
+# → 本次新建为 VariableID 1742:22212
+#   位于集合 1742:22195  (PawsAndPaths Colors)</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code># 所有指向 "primary" 的绑定都落到新建集合里
+bind_variable  node=&lt;button22309&gt;  prop=fill  var=1742:22212   # #855300
+bind_variable  node=&lt;button22356&gt;  prop=fill  var=1742:22212   # #855300</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">两个按钮填充指向同一 VariableID，都在项目自己的集合内；视觉一致，语义一致。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code># 节点 22309 — 绑到遗留变量，位于另一个集合
+inspect node=1742:22309 (按钮子节点)
+  fill.boundVariables.color = VariableID "1100:15658"
+  # collection:   遗留集合（文件中预先存在）
+  # variable.primary = #1a1a1a   (黑)
+  # → 画布上渲染为 #1a1a1a —— 错误
+
+# 节点 22356 — 绑到新建变量，集合正确
+inspect node=1742:22356 (按钮子节点)
+  fill.boundVariables.color = VariableID "1742:22212"
+  # collection:   PawsAndPaths Colors (1742:22195)
+  # variable.primary = #855300   (橙)
+  # → 画布上渲染为 #855300 —— 正确</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">两个并列组件，共用同一语义 token，<b>却指向不同的物理变量，画布视觉不一致</b>。左卡 CTA 黑色，右卡 CTA 橙色。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b><code class="inline">bind_variable</code> 看起来是按变量 <b>名称</b> 字符串（"primary"）解析的；它匹配到所有集合里的第一个命中，因此挑中了遗留的 <code class="inline">1100:15658</code>，根本没碰到刚创建的 <code class="inline">1742:22212</code>。工具 API 里没有集合级作用域。</div>
+    <span class="pill tier">runtime 护栏 · 集合作用域</span>
+  </div>
+</section>
+
+<!-- GAP 6 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 06</span>
+    <span class="title">节点生命周期的 4 项确定性失败（exp-1 ≡ exp-2）</span>
+    <span class="pill sev-high">严重度 高</span>
+    <span class="pill tier">Tier 3</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入</div>
+<pre><code>N/A —— 这是失败模式，不是具体输入片段</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code># 每个节点引用都在当前 turn 的工作记忆中
+inspect     node=1742:22192   → OK
+bind_variable  node=1742:22192  prop=fontSize  var=typo/headline-md/fontSize
+  → OK
+
+# 每轮运行 0 次生命周期错误</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">数据流顺畅：每个被引用的节点在本 turn 内都已出现过。不会出现 "Node unknown" 这类抖动。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code># 两轮运行出现完全相同的 4 项错误签名
+bind_variable    node=1742:22192  prop=fontSize  var=typography/headline-md
+  → "Node 1742:22192 unknown — it hasn't appeared in any
+     inspect/describe/jsx result this turn. Inspect it or create
+     it before modifying."
+
+add_component_prop  node=1742:22280
+  → "Node unknown"
+
+inspect          node=1742:22252
+  → "Node not found"   # 短暂失败，本 turn 稍后被解决
+
+move_node        node=1742:22310
+  → "Node unknown"</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">每轮运行 4 次硬失败。exp-1 与 exp-2 的节点 ID 和错误码完全相同——不是偶发，而是可复现的失败模式。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b>Agent 引用了上一 turn 由 <code class="inline">jsx</code> 返回的节点 ID，但当前 turn 的工作记忆集合里不包含这些 ID。要么 <code class="inline">jsx</code> 必须返回完整递归的 idMap，要么在绑定类工具调用前隐式执行一次 <code class="inline">describe</code> / turn 边界同步。</div>
+    <span class="pill tier">工具 API 加固</span>
+  </div>
+</section>
+
+<!-- GAP 7 -->
+<section class="gap">
+  <div class="hd">
+    <span class="num">差异 07</span>
+    <span class="title">颜色变量的绑定覆盖不全</span>
+    <span class="pill sev-med">严重度 中</span>
+    <span class="pill tier">差异 4 的下游</span>
+  </div>
+  <div class="shared">
+    <div class="shared-lbl">共同输入 — 颜色体量</div>
+<pre><code>两轮运行共创建 47 个颜色变量
+   (surface, on-surface, primary, secondary, tertiary, error,
+    container variants, fixed variants, inverse, outline, ...)</code></pre>
+  </div>
+  <div class="ab">
+    <div class="col left">
+      <div class="col-hd"><span class="dot"></span>理想</div>
+<pre><code># 大多数/全部颜色 token 通过真实绑定落到画布
+如果 11 个组件都被构建（差异 4）：
+  ≳ 35 / 47 颜色变量会被实际使用
+  孤立 token ≤ 12（真正可选的 token）</code></pre>
+      <div class="state-lbl">期望终态</div>
+      <div class="state-body">几乎每个语义颜色都能在已构建的组件中出现至少一次。</div>
+    </div>
+    <div class="col right">
+      <div class="col-hd"><span class="dot"></span>现实</div>
+<pre><code>inspect 1742:22309  → 11 个不同的 COLOR 变量被引用
+inspect 1742:22356  →  8 个不同的 COLOR 变量被引用
+并集                → ≈ 15 个变量被绑定
+
+# 47 − 15 ≈ 32 个颜色变量成为孤岛（从未在任何节点被绑定）</code></pre>
+      <div class="state-lbl">实际终态</div>
+      <div class="state-body">47 个颜色变量中只有约 15 个最终落到画布。剩下约 32 个定义完备但未被任何节点引用——因为 11 个组件只建了 2 个。</div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="rc"><b>根因。</b>批量创建没问题，消费端被组件数量卡住。本项是 差异 4 的派生结果，不是独立失败。</div>
+    <span class="pill tier sev-low">由 差异 4 的修复自动解除</span>
+  </div>
+</section>
+
+<!-- ====================================================== ERROR LOG == -->
+<h2 class="section">重复错误签名（逐字摘录）</h2>
+<div class="errlog">
+  <div class="caption">exp-1 与 exp-2 以完全相同的顺序命中同 4 项错误签名。可复现，非抖动。</div>
+<pre><code><span class="row"><span class="err">[1]</span> tool=bind_variable  node=1742:22192  prop=fontSize  var=typography/headline-md
+    error: "Node 1742:22192 unknown — it hasn't appeared in any
+            inspect/describe/jsx result this turn. Inspect it or
+            create it before modifying."
+    // 释义：节点 1742:22192 在本 turn 内从未在 inspect/describe/jsx 结果中出现</span>
+<span class="row"><span class="err">[2]</span> tool=add_component_prop  node=1742:22280
+    error: "Node unknown"</span>
+<span class="row"><span class="err">[3]</span> tool=inspect  node=1742:22252
+    error: "Node not found"   (短暂 — 本 turn 稍后被解决)</span>
+<span class="row"><span class="err">[4]</span> tool=move_node  node=1742:22310
+    error: "Node unknown"</span></code></pre>
+</div>
+
+<!-- ====================================================== CLUSTERS === -->
+<h2 class="section">根因聚类</h2>
+<div class="clusters">
+  <div class="cluster">
+    <div class="tag">聚类 A<small>范围 / 覆盖度</small></div>
+    <div class="body">
+      影响 <b>差异 1、2、4</b>。根因：Agent 的任务心智模型停留在"颜色 + 字体"与"一个示例表面"。修复：把所有标尺块（spacing / rounded）枚举齐全，并把组件清单作为显式检查清单逐项遍历。<b>仅需 prompt 改动，不改 runtime 代码。</b>
+    </div>
+  </div>
+  <div class="cluster">
+    <div class="tag">聚类 B<small>变量类型与绑定架构</small></div>
+    <div class="body">
+      影响 <b>差异 3、7</b>。根因：Figma 无 typography 复合类型，Agent 选择了不可绑定的 JSON-in-STRING 表示。修复：以专用工具（<code class="inline">import_design_md_typography</code>）显式承载分解策略，直接产出原子变量和配套绑定。差异 7 随 差异 4 一同消解。
+    </div>
+  </div>
+  <div class="cluster">
+    <div class="tag">聚类 C<small>节点生命周期与状态一致性</small></div>
+    <div class="body">
+      影响 <b>差异 5、6</b>。根因：<code class="inline">bind_variable</code> 按名字解析，静默撞上遗留集合；Agent 引用的节点 ID 已不在当前 turn 的工作记忆中。修复：runtime 护栏——集合作用域绑定 + turn 边界同步 / <code class="inline">jsx</code> 返回完整子树 idMap。
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== RECOMMEND == -->
+<h2 class="section">分级建议 — 三档修复顺序</h2>
+<table class="rec">
+  <thead>
+    <tr>
+      <th style="width:18%">档位</th>
+      <th style="width:40%">动作</th>
+      <th style="width:18%">覆盖差异</th>
+      <th>预期收益</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="tier-cell"><b>Tier 1 — prompt</b><div><span class="pill tier sev-low">零代码</span></div></td>
+      <td>
+        新增一条知识条目，枚举 <code class="inline">design.md</code> 中的 <b>所有标尺块</b>（colors / typography / spacing / rounded）。完成度检查清单："每个声明的组件对应一次 <code class="inline">create_component</code>；每对 hover 对应一次 <code class="inline">combine_components</code>。"
+      </td>
+      <td>差异 1、2、4</td>
+      <td>恢复约 14 个缺失变量 + 9 个缺失组件,约占与理想差距的 80%。无需改代码。</td>
+    </tr>
+    <tr>
+      <td class="tier-cell"><b>Tier 2 — 新工具</b><div><span class="pill tier sev-med">新工具</span></div></td>
+      <td>
+        <code class="inline">import_design_md_typography</code> —— 把每个字体 token 拆解为原子 FLOAT + STRING 变量，一次性产出所有绑定。可选：<code class="inline">import_design_md</code> 作为伞形工具，以同样的分解模式统一处理 colors / spacing / rounded。
+      </td>
+      <td>差异 3（以及通过 差异 4 的差异 7）</td>
+      <td>让字体真正可绑定。把原先 8 个死变量扩展成约 40 个原子、可绑定的变量。</td>
+    </tr>
+    <tr>
+      <td class="tier-cell"><b>Tier 3 — runtime</b><div><span class="pill tier sev-high">护栏</span></div></td>
+      <td>
+        (a) <code class="inline">bind_variable</code> 要求显式传入 <code class="inline">VariableID</code>（而非名称）；或接受带集合作用域的名称，并在内部先跑一次 <code class="inline">verify_no_legacy_conflict</code>。(b) turn 边界进行节点生命周期同步——或者把 <code class="inline">jsx</code> 返回扩展为完整递归 idMap,让后续工具调用不再撞到 "Node unknown"。
+      </td>
+      <td>差异 5、6</td>
+      <td>消除确定性的 4 项错误尾部,以及黑/橙视觉不一致。</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ====================================================== FOOTNOTE === -->
+<p style="margin-top:28px;font-size:12px;color:var(--ink-dim);">
+  来源：<code class="inline">/tmp/design-md-explore/design.md/examples/paws-and-paths/design.md</code>；
+  dev-bridge 触发 exp-1 / exp-2；
+  在文件 <code class="inline">ExvSLYAdjmpnKrmFeh5fsS</code> 中对节点 <code class="inline">1742:22309</code>、<code class="inline">1742:22356</code> 的 inspect 结果。
+</p>
+
+</div>
+</body>
+</html>

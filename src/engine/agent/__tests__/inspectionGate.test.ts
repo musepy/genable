@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createInspectionTracker, InspectionTracker } from '../hooks/inspectionTracker';
 import { createInspectGateHook } from '../hooks/inspectGateHook';
 import { createInspectStubHook } from '../hooks/inspectStubHook';
+import { createBuiltinHooksWithState } from '../hooks/builtinHooks';
 import { HookContext } from '../hooks/hookTypes';
 import { ToolDefinition } from '../tools/types';
 
@@ -96,6 +97,33 @@ describe('InspectionTracker', () => {
     tracker.markInspected('1:2');
     tracker.markInspected('1:2');
     expect(tracker.isInspected('1:2')).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// InspectionTracker session lifetime (Apr 2026)
+// ═══════════════════════════════════════════════════════════════
+// tracker is per-AgentRuntime-instance, NOT per-turn. The per-turn
+// reset() in builtinHooks must NOT clear the tracker, otherwise LLM
+// loses memory of nodes seen in earlier turns and re-inspect cost
+// kicks in (Phase B B3/B4 friction).
+
+describe('InspectionTracker survives turn boundary (per-session scope)', () => {
+  it('builtinHooks.reset() does NOT clear tracker', () => {
+    const { tracker, reset } = createBuiltinHooksWithState();
+    tracker.markInspected('1:2');
+    tracker.markInspected('3:4');
+    reset(); // simulates turn boundary
+    expect(tracker.isInspected('1:2')).toBe(true);
+    expect(tracker.isInspected('3:4')).toBe(true);
+  });
+
+  it('manual tracker.reset() still works (for new-session use)', () => {
+    const { tracker, reset } = createBuiltinHooksWithState();
+    tracker.markInspected('1:2');
+    reset();
+    tracker.reset(); // explicit session reset
+    expect(tracker.isInspected('1:2')).toBe(false);
   });
 });
 

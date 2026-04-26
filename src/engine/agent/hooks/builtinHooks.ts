@@ -139,7 +139,11 @@ export function createBuiltinHooksWithState(): {
       stepWarning.reset();
       inspectGate.reset();
       inspectStub.reset();
-      tracker.reset();
+      // tracker NOT reset here — inspectionTracker is per-session (AgentRuntime
+      // lifetime), not per-turn. Avoids forcing re-inspect when the LLM uses
+      // node IDs from earlier turns. Session boundary = new AgentRuntime
+      // instance (e.g. "New Design"). Deletes still tracked via dirtyHook;
+      // external removals fail downstream via figma.getNodeByIdAsync → null.
       turnState.reset();
       truncationRecovery.reset();
       truncationPlaceholderGuard.reset();

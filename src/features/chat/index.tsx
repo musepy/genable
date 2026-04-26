@@ -463,25 +463,22 @@ export function ChatFeature(props: UseChatProps) {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Additive sync with canvas: new selections become chips, but existing chips
-  // persist — only an explicit X removes them. Partial/full canvas deselect never
-  // removes chips (the node just stays in the prompt context). If a node is
-  // re-selected after being X'd, a fresh chip appears (X only clears current state).
+  // One-shot selection snapshot: SEND_SELECTION only fires via explicit user
+  // action (+ → "Add current selection"). Merges into existing chips; never
+  // removes. Only X removes. Canvas operations in between are ignored.
   useEffect(() => {
-    const unsub = on<SendSelectionHandler>('SEND_SELECTION', (data) => {
-      if (data.selection.length === 0) return // never remove on canvas deselect
+    return on<SendSelectionHandler>('SEND_SELECTION', (data) => {
+      if (data.selection.length === 0) return
       setAttachments(prev => {
         const existing = prev.find((a): a is Extract<ContextAttachment, { type: 'selection' }> => a.type === 'selection')
         const existingIds = new Set(existing?.nodes.map(n => n.id) ?? [])
         const newNodes = data.selection.filter(n => !existingIds.has(n.id))
-        if (newNodes.length === 0) return prev // nothing new to add
+        if (newNodes.length === 0) return prev
         const mergedNodes = [...(existing?.nodes ?? []), ...newNodes]
         const withoutSelection = prev.filter(a => a.type !== 'selection')
         return [...withoutSelection, { type: 'selection', nodes: mergedNodes }]
       })
     })
-    emit<GetSelectionHandler>('GET_SELECTION')
-    return unsub
   }, [])
 
   const {

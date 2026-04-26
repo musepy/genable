@@ -84,6 +84,9 @@ export default async function () {
       type: node.type,
     }));
 
+  // Selection → chip is a ONE-SHOT snapshot: user explicitly clicks
+  // + → "Add current selection" (Claude Code-style "explicit context" flow).
+  // Canvas operations outside that action do NOT push to UI.
   on<GetSelectionHandler>('GET_SELECTION', function () {
     emit<SendSelectionHandler>('SEND_SELECTION', { selection: serializeSelection() });
   });
@@ -92,13 +95,6 @@ export default async function () {
     if (!data.nodeIds || data.nodeIds.length === 0) return;
     const drop = new Set(data.nodeIds);
     figma.currentPage.selection = figma.currentPage.selection.filter(n => !drop.has(n.id));
-  });
-
-  // Reactive sync: push selection to UI whenever canvas selection changes.
-  // UI decides whether to display chips based on its own state (e.g. don't
-  // re-add a node the user just dismissed via X).
-  figma.on('selectionchange', () => {
-    emit<SendSelectionHandler>('SEND_SELECTION', { selection: serializeSelection() });
   });
 
   // ==========================================

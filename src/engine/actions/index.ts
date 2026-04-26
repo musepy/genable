@@ -4,9 +4,8 @@
  */
 
 export {
-  clearComponentRegistry,
-  getRegisteredSymbols,
-  registerComponent,
+  ComponentRegistry,
+  componentRegistry,
   applyProps,
   applyTextProps,
   createFrame,

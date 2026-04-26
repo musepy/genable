@@ -16,7 +16,7 @@ vi.mock('../editHandler', () => ({
   })),
 }));
 
-import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from '../setterAdapter';
+import { handleSetText, handleSetFill, handleSetStroke, handleSetLayout } from '../index';
 import { handleEdit } from '../editHandler';
 
 const mockHandleEdit = vi.mocked(handleEdit);

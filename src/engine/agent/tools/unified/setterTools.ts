@@ -7,7 +7,7 @@
  * accepts arbitrary props (batch_update role).
  *
  * All setters route to the same handler pipeline:
- *   setter params → IPC → setterAdapter → editHandler.applyEdit → nodeFactory
+ *   setter params → IPC → index.ts inline handlers → editHandler.applyEdit → nodeFactory
  */
 
 import type { ToolDefinition } from '../types';

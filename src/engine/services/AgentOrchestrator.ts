@@ -5,9 +5,8 @@
  */
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
-import { GeminiProvider, OpenRouterProvider, DashScopeProvider, AnthropicProvider, ANTHROPIC_CONFIG } from '../llm-client';
-import { ProxyProvider } from '../llm-client/providers/proxy';
 import { agentTools } from '../agent/tools';
+import { createProvider } from './ProviderFactory';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
 import { resolveBehavior } from '../agent/agentBehaviorConfig';
 import { createSubtaskExecutor, AgentConfig } from '../agent/agentFactory';
@@ -20,7 +19,7 @@ import { AgentLoopPolicy, resolveAgentLoopPolicy } from '../agent/agentLoopPolic
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { clearIconCache } from '../figma-adapter/assets/iconify';
 import { clearSessionNodes } from '../../ipc/commands/pathResolver';
-import { clearComponentRegistry } from '../actions/nodeFactory';
+import { componentRegistry } from '../actions/nodeFactory';
 import { LLMProvider } from '../llm-client/providers/types';
 import {
   ProviderError,
@@ -99,7 +98,7 @@ export class AgentOrchestrator {
     this.ipcBridge = null;
     clearIconCache();
     clearSessionNodes();
-    clearComponentRegistry();
+    componentRegistry.clear();
   }
 
   public answerQuestion(answer: string): void {
@@ -291,52 +290,17 @@ export class AgentOrchestrator {
 
     // Priority: 1. Explicit providerName, 2. Default to Gemini
     // [FIX] Removed heuristic auto-detection that overrode explicit user choice (e.g. modelName having '/')
-    let providerName = this.options.providerName || 'gemini';
+    const providerName = this.options.providerName || 'gemini';
 
-    // Initialize Provider
-    let provider: LLMProvider;
-    if (providerName === 'openrouter') {
-      provider = new OpenRouterProvider(apiKey, modelName);
-      emit('SEND_LOG', { message: `Using OpenRouter: ${modelName}`, type: 'ai' });
-    } else if (providerName === 'dashscope') {
-      const workerUrl = this.options.workerUrl;
-      let fetchProxy;
-      if (workerUrl) {
-        // Sync fallback: Route through Worker CORS proxy (sandbox fetch → Worker → DashScope)
-        fetchProxy = async (_url: string, init: any) => {
-          const res = await fetch(`${workerUrl}/api/dashscope/generate-sync`, {
-            method: 'POST',
-            headers: init.headers,
-            body: init.body,
-          });
-          const body = await res.text();
-          return { ok: res.ok, status: res.status, body };
-        };
-      }
-      // workerUrl enables streaming (SSE via /api/dashscope/generate); fetchProxy is sync fallback
-      // Vision capability varies by model — VL models and kimi-k2.5 support images
-      const supportsVision = /vl|kimi/i.test(modelName);
-      provider = new DashScopeProvider(apiKey, modelName, fetchProxy, workerUrl, { supportsVision });
-      emit('SEND_LOG', { message: `Using DashScope: ${modelName}`, type: 'ai' });
-    } else if (providerName === 'claude') {
-      // Auto-detect: sk-ant- prefix = native Anthropic, otherwise DashScope-compatible
-      const isNativeKey = apiKey.startsWith('sk-ant-');
-      const baseUrl = isNativeKey ? undefined : ANTHROPIC_CONFIG.DASHSCOPE_BASE_URL;
-      provider = new AnthropicProvider(apiKey, modelName, baseUrl);
-      emit('SEND_LOG', { message: `Using Claude${isNativeKey ? '' : ' (DashScope)'}: ${modelName}`, type: 'ai' });
-    } else if (providerName === 'proxy') {
-      const workerUrl = this.options.workerUrl;
-      const subscriptionToken = this.options.subscriptionToken;
-      if (!workerUrl || !subscriptionToken) {
-        throw new Error('[AgentOrchestrator] ProxyProvider requires workerUrl and subscriptionToken');
-      }
-      provider = new ProxyProvider(workerUrl, subscriptionToken, modelName);
-      emit('SEND_LOG', { message: `Using Proxy (${workerUrl}): ${modelName}`, type: 'ai' });
-    } else {
-      // Default to Gemini (existing behavior)
-      provider = new GeminiProvider(apiKey, modelName);
-      emit('SEND_LOG', { message: `Using Gemini: ${modelName}`, type: 'ai' });
-    }
+    // Initialize Provider via pure factory (no side-effects inside)
+    const { provider, resolvedDisplayName } = createProvider({
+      providerName,
+      modelName,
+      apiKey,
+      workerUrl: this.options.workerUrl,
+      subscriptionToken: this.options.subscriptionToken,
+    });
+    emit('SEND_LOG', { message: `Using ${resolvedDisplayName}: ${modelName}`, type: 'ai' });
 
     const resolvedLoopPolicy = loopPolicy || resolveAgentLoopPolicy(this.options.loopPolicy);
 

@@ -44,27 +44,51 @@ export interface PropResult {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Component Registry (module-level state, persists across tool calls)
+// Component Registry (explicit object — state is visible in the type)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Maps component symbols to real Figma node IDs (cross-batch) */
-const componentRegistry = new Map<string, string>();
-/** Maps toCamelCase(nodeName) → real Figma ID for name-based instance lookup */
-const componentNameRegistry = new Map<string, string>();
+/**
+ * Holds per-session component symbol → Figma node ID mappings.
+ *
+ * Exposed as a plain object so callers (AgentOrchestrator.endSession) can
+ * call `.clear()` directly — the state is now part of the public contract
+ * rather than a hidden module global behind a free-standing `clear*` function.
+ */
+export class ComponentRegistry {
+  /** symbol → real Figma node ID */
+  private readonly bySymbol = new Map<string, string>();
+  /** toCamelCase(nodeName) → real Figma ID */
+  private readonly byName = new Map<string, string>();
 
-export function clearComponentRegistry(): void {
-  componentRegistry.clear();
-  componentNameRegistry.clear();
+  register(symbol: string, nodeId: string, name?: string): void {
+    this.bySymbol.set(symbol, nodeId);
+    if (name) this.byName.set(toCamelCase(name), nodeId);
+  }
+
+  registerName(camelName: string, nodeId: string): void {
+    this.byName.set(camelName, nodeId);
+  }
+
+  get(ref: string): string | undefined {
+    return this.bySymbol.get(ref) ?? this.byName.get(ref) ?? this.byName.get(toCamelCase(ref));
+  }
+
+  getSymbol(symbol: string): string | undefined {
+    return this.bySymbol.get(symbol);
+  }
+
+  getSymbols(): ReadonlySet<string> {
+    return new Set(this.bySymbol.keys());
+  }
+
+  clear(): void {
+    this.bySymbol.clear();
+    this.byName.clear();
+  }
 }
 
-export function getRegisteredSymbols(): ReadonlySet<string> {
-  return new Set(componentRegistry.keys());
-}
-
-export function registerComponent(symbol: string, nodeId: string, name?: string): void {
-  componentRegistry.set(symbol, nodeId);
-  if (name) componentNameRegistry.set(toCamelCase(name), nodeId);
-}
+/** Module-level registry instance — shared across all tool calls within one session. */
+export const componentRegistry = new ComponentRegistry();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Property Application (shared by all paths)
@@ -416,8 +440,8 @@ export async function createComponent(
   if (parent && 'appendChild' in parent) parent.appendChild(comp);
   try {
     const { warnings } = await applyProps(comp, stripDenied(props));
-    if (symbol) registerComponent(symbol, comp.id, comp.name);
-    else if (comp.name) componentNameRegistry.set(toCamelCase(comp.name), comp.id);
+    if (symbol) componentRegistry.register(symbol, comp.id, comp.name);
+    else if (comp.name) componentRegistry.registerName(toCamelCase(comp.name), comp.id);
     return { nodeId: comp.id, warnings };
   } catch (e) {
     comp.remove();
@@ -438,8 +462,6 @@ export async function resolveComponent(
   const fromSymbol = symbolMap?.get(ref);
   const candidateId = fromSymbol
     || componentRegistry.get(ref)
-    || componentNameRegistry.get(ref)
-    || componentNameRegistry.get(toCamelCase(ref))
     || ref;
 
   const node = await figma.getNodeByIdAsync(candidateId);
@@ -542,7 +564,7 @@ export async function createComponentSet(
 ): Promise<NodeResult> {
   const components: ComponentNode[] = [];
   for (const compId of componentIds) {
-    const resolvedId = symbolMap?.get(compId) || componentRegistry.get(compId) || compId;
+    const resolvedId = symbolMap?.get(compId) || componentRegistry.getSymbol(compId) || compId;
     const node = await figma.getNodeByIdAsync(resolvedId);
     if (node && node.type === 'COMPONENT') {
       components.push(node as ComponentNode);
@@ -558,8 +580,8 @@ export async function createComponentSet(
   const componentSet = figma.combineAsVariants(components, setParent as BaseNode & ChildrenMixin);
   const propsWithLayout = { layoutMode: 'HORIZONTAL', ...stripDenied(props) };
   const { warnings } = await applyProps(componentSet, propsWithLayout);
-  if (symbol) registerComponent(symbol, componentSet.id, componentSet.name);
-  else if (componentSet.name) componentNameRegistry.set(toCamelCase(componentSet.name), componentSet.id);
+  if (symbol) componentRegistry.register(symbol, componentSet.id, componentSet.name);
+  else if (componentSet.name) componentRegistry.registerName(toCamelCase(componentSet.name), componentSet.id);
   return { nodeId: componentSet.id, warnings };
 }
 
@@ -573,7 +595,7 @@ export async function cloneNode(
   overrides?: Record<string, Record<string, any>>,
   symbolMap?: Map<string, string>,
 ): Promise<NodeResult> {
-  const resolvedId = symbolMap?.get(sourceId) || componentRegistry.get(sourceId) || sourceId;
+  const resolvedId = symbolMap?.get(sourceId) || componentRegistry.getSymbol(sourceId) || sourceId;
   const srcNode = await figma.getNodeByIdAsync(resolvedId);
   if (!srcNode) {
     return { nodeId: '', warnings: [{ code: 'CLONE_SOURCE_NOT_FOUND', severity: 'error' as any, message: `Clone source "${sourceId}" not found (resolved to ${resolvedId})` }] };
@@ -628,7 +650,7 @@ export async function cloneNode(
 
   // If source was a Component, register clone
   if (cloned.type === 'COMPONENT') {
-    componentNameRegistry.set(toCamelCase(cloned.name), cloned.id);
+    componentRegistry.registerName(toCamelCase(cloned.name), cloned.id);
   }
 
   // Collect all descendant IDs so the caller can register them for subsequent edits.

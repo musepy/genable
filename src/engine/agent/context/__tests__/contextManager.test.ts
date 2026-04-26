@@ -202,6 +202,96 @@ describe('ContextManager', () => {
     });
   });
 
+  // ─── tryCompress / applyCompressionResult (无副作用 API) ───
+
+  describe('tryCompress / applyCompressionResult', () => {
+    it('tryCompress returns result without modifying messages', async () => {
+      const tiny = new ContextManager({
+        systemPrompt: 'S',
+        contextBudgetChars: 200,
+        provider: stubProvider('summary text'),
+      });
+
+      tiny.addMessage(msg('user', 'A'.repeat(150)));
+      tiny.addMessage(msg('model', 'B'.repeat(150)));
+      tiny.addMessage(msg('user', 'current turn'));  // second turn starts
+
+      const beforeCount = tiny.getMessages().length;
+      const result = await tiny.tryCompress();
+
+      expect(result).not.toBeNull();
+      expect(tiny.getMessages().length).toBe(beforeCount);  // unchanged
+      expect(result!.messagesEvicted.length).toBe(2);  // user A + model B
+    });
+
+    it('applyCompressionResult modifies messages after tryCompress', async () => {
+      const tiny = new ContextManager({
+        systemPrompt: 'S',
+        contextBudgetChars: 200,
+        provider: stubProvider('summary text'),
+      });
+
+      tiny.addMessage(msg('user', 'A'.repeat(150)));
+      tiny.addMessage(msg('model', 'B'.repeat(150)));
+      tiny.addMessage(msg('user', 'current turn'));
+
+      const result = await tiny.tryCompress();
+      expect(result).not.toBeNull();
+
+      tiny.applyCompressionResult(result!);
+
+      const after = tiny.getMessages();
+      expect(after[0].summaryOf).toBeDefined();
+      expect(after[0].content).toContain('summary text');
+      expect(after.length).toBe(2);  // summary + current turn user
+    });
+
+    it('tryCompress returns null when under budget', async () => {
+      const result = await cm.tryCompress();  // cm has budget 100_000
+      expect(result).toBeNull();
+    });
+
+    it('tryCompress returns null when summarization fails', async () => {
+      const failProvider: LLMProvider = {
+        name: 'fail',
+        getCapabilities: () => ({ supportsTextStreaming: false, supportsReasoningStreaming: false, contextWindow: 200_000 }),
+        generate: async () => { throw new Error('LLM error'); },
+        formatResponse: () => ({ id: 'x', role: 'model', content: '' }),
+        formatToolResults: () => ({ id: 'x', role: 'tool', content: '' }),
+        getToolSystemInstruction: () => '',
+      };
+
+      const tiny = new ContextManager({
+        systemPrompt: 'S',
+        contextBudgetChars: 200,
+        provider: failProvider,
+      });
+
+      tiny.addMessage(msg('user', 'A'.repeat(150)));
+      tiny.addMessage(msg('model', 'B'.repeat(150)));
+      tiny.addMessage(msg('user', 'current turn'));
+
+      const beforeCount = tiny.getMessages().length;
+      const result = await tiny.tryCompress();
+
+      expect(result).toBeNull();
+      expect(tiny.getMessages().length).toBe(beforeCount);  // unchanged on failure
+    });
+
+    it('tryCompress returns null when nothing to evict (single turn)', async () => {
+      const tiny = new ContextManager({
+        systemPrompt: 'S',
+        contextBudgetChars: 50,
+        provider: stubProvider('summary'),
+      });
+
+      tiny.addMessage(msg('user', 'long message'));
+
+      const result = await tiny.tryCompress();
+      expect(result).toBeNull();  // cannot evict current turn
+    });
+  });
+
   // ─── estimateContextChars ─────────────────────────────────
 
   describe('estimateContextChars', () => {

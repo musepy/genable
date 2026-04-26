@@ -49,6 +49,12 @@ function makeSummaryMessage(summary: string): LLMMessage {
   };
 }
 
+export type CompressionResult = {
+  summary: string;
+  evictedRange: { startIdx: number; endIdx: number };
+  messagesEvicted: LLMMessage[];  // 保留引用，便于 telemetry
+};
+
 export class ContextManager {
   private readonly systemPrompt: string;
   private readonly contextBudgetChars: number;
@@ -77,15 +83,6 @@ export class ContextManager {
   assemblePrompt(): { system: string; messages: LLMMessage[] } {
     this.compressTurnIfOverBudget();
     return { system: this.systemPrompt, messages: this.messages.slice() };
-  }
-
-  /**
-   * End-of-turn pipeline: lazily evict oldest pre-turn messages into the
-   * summary when over budget. Intra-turn compression is disabled to preserve
-   * KV-cache hits and full tool-result context.
-   */
-  async endTurn(): Promise<void> {
-    await this.compressIfNeeded();
   }
 
   /** Whether no user turn has completed yet. */
@@ -236,31 +233,87 @@ export class ContextManager {
   // ─── Compression ────────────────────────────────────────────
 
   /**
-   * Lazy eviction: while over budget, peel the oldest pre-current-turn
-   * messages, summarize them, and splice a single summary message at the
-   * head (merging with any existing summary).
+   * Peek at the oldest non-summary "turn" from the journal WITHOUT modifying state.
+   * Used by tryCompress() to compute a summary before deciding to apply.
+   * Returns { messages, startIdx, endIdx } where messages is a copy (slice).
    */
-  private async compressIfNeeded(): Promise<void> {
-    const totalBefore = this.estimateContextChars();
-    if (totalBefore <= this.contextBudgetChars) {
-      console.log(`[Context] Lazy: ${totalBefore} chars, budget ${this.contextBudgetChars} — no compression needed`);
-      return;
-    }
+  private peekOldestTurnMessages(): { messages: LLMMessage[]; startIdx: number; endIdx: number } {
+    const currentTurnStart = this.findCurrentTurnStart();
+    if (currentTurnStart < 0) return { messages: [], startIdx: -1, endIdx: -1 };
 
-    console.log(`[Context] Lazy: ${totalBefore} chars exceeds budget ${this.contextBudgetChars} — compressing oldest messages`);
-    let compressions = 0;
+    const startIdx = this.messages[0] && isSummaryMessage(this.messages[0]) ? 1 : 0;
+    if (startIdx >= currentTurnStart) return { messages: [], startIdx: -1, endIdx: -1 };
 
-    while (this.estimateContextChars() > this.contextBudgetChars) {
-      const evicted = this.extractOldestTurnMessages();
-      if (evicted.length === 0) break;
-
-      const turnSummary = await buildCompressionSummary(this.provider, evicted);
-      if (turnSummary) {
-        this.mergeIntoSummary(turnSummary);
-        compressions++;
+    let endIdx = currentTurnStart;
+    for (let i = startIdx + 1; i < currentTurnStart; i++) {
+      if (this.messages[i].role === 'user' && !isSummaryMessage(this.messages[i])) {
+        endIdx = i;
+        break;
       }
     }
 
+    return {
+      messages: this.messages.slice(startIdx, endIdx),
+      startIdx,
+      endIdx,
+    };
+  }
+
+  /**
+   * Lazy eviction: compute compression result without modifying state.
+   * Caller decides whether to apply via applyCompressionResult().
+   * Returns null if: (a) under budget, (b) nothing to evict, (c) summarization fails.
+   */
+  async tryCompress(): Promise<CompressionResult | null> {
+    const totalBefore = this.estimateContextChars();
+    if (totalBefore <= this.contextBudgetChars) {
+      console.log(`[Context] Lazy: ${totalBefore} chars, budget ${this.contextBudgetChars} — no compression needed`);
+      return null;
+    }
+
+    console.log(`[Context] Lazy: ${totalBefore} chars exceeds budget ${this.contextBudgetChars} — computing compression`);
+
+    // Peek oldest turn (no state modification)
+    const peeked = this.peekOldestTurnMessages();
+    if (peeked.messages.length === 0) return null;
+
+    // Try summarization (may fail)
+    let turnSummary: string;
+    try {
+      turnSummary = await buildCompressionSummary(this.provider, peeked.messages);
+      if (!turnSummary) {
+        console.warn('[Context] buildCompressionSummary returned empty — compression aborted');
+        return null;
+      }
+    } catch (e) {
+      console.warn('[Context] buildCompressionSummary failed:', e);
+      return null;
+    }
+
+    // Success: return result without applying
+    return {
+      summary: turnSummary,
+      evictedRange: { startIdx: peeked.startIdx, endIdx: peeked.endIdx },
+      messagesEvicted: peeked.messages,
+    };
+  }
+
+  /**
+   * Apply a previously computed compression result.
+   * Splices evicted messages and merges summary at head.
+   * Safe to call multiple times (idempotent-ish: same result applied twice = double splice).
+   */
+  applyCompressionResult(result: CompressionResult): void {
+    const { startIdx, endIdx } = result.evictedRange;
+    if (startIdx < 0 || endIdx <= startIdx) return;
+
+    // Splice evicted range (mutates this.messages)
+    this.messages.splice(startIdx, endIdx - startIdx);
+
+    // Merge summary at head
+    this.mergeIntoSummary(result.summary);
+
+    // Cap summary length
     const maxChars = getContextProfile().summaryMaxChars;
     if (maxChars > 0) {
       const summary = this.messages[0];
@@ -272,9 +325,19 @@ export class ContextManager {
         }
       }
     }
+  }
 
-    const totalAfter = this.estimateContextChars();
-    console.log(`[Context] Compressed ${compressions} turn(s): ${totalBefore} → ${totalAfter} chars`);
+  /**
+   * Legacy: End-of-turn pipeline that auto-applies compression.
+   * Delegates to tryCompress + applyCompressionResult for backward compat.
+   */
+  async endTurn(): Promise<void> {
+    const result = await this.tryCompress();
+    if (result) {
+      this.applyCompressionResult(result);
+      const totalAfter = this.estimateContextChars();
+      console.log(`[Context] Compressed 1 turn: ${this.estimateContextChars() + result.messagesEvicted.reduce((a, m) => a + this.estimateMessageChars(m), 0)} → ${totalAfter} chars`);
+    }
   }
 
   /**
@@ -289,31 +352,6 @@ export class ContextManager {
       return;
     }
     this.messages.unshift(makeSummaryMessage(turnSummary));
-  }
-
-  /**
-   * Peel the oldest non-summary "turn" from the journal.
-   * A turn = a user message + all following model/tool messages up to (but
-   * excluding) the next user message, OR the tail if this is the only turn.
-   *
-   * Never evicts the current turn — that's the one the LLM is actively in.
-   */
-  private extractOldestTurnMessages(): LLMMessage[] {
-    const currentTurnStart = this.findCurrentTurnStart();
-    if (currentTurnStart < 0) return [];
-
-    const startIdx = this.messages[0] && isSummaryMessage(this.messages[0]) ? 1 : 0;
-    if (startIdx >= currentTurnStart) return [];
-
-    let endIdx = currentTurnStart;
-    for (let i = startIdx + 1; i < currentTurnStart; i++) {
-      if (this.messages[i].role === 'user' && !isSummaryMessage(this.messages[i])) {
-        endIdx = i;
-        break;
-      }
-    }
-
-    return this.messages.splice(startIdx, endIdx - startIdx);
   }
 
   // ─── Intra-turn budget gate ─────────────────────────────────

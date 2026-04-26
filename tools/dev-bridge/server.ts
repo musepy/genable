@@ -30,6 +30,7 @@ const BRIDGE_DIR = process.env.BRIDGE_DIR || '/tmp/figma-bridge';
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || '';
 const TRIGGER_FILE = join(BRIDGE_DIR, 'prompt.json');
 const RESULT_DIR = join(BRIDGE_DIR, 'results');
+const SSE_DEBUG_DIR = join(BRIDGE_DIR, 'sse-debug');
 const MAX_RESULTS = 5;
 
 // --- helpers ---
@@ -636,6 +637,18 @@ const server = createServer(async (req, res) => {
       const id = path.slice('/result/'.length);
       const waitSec = Number(url.searchParams.get('wait')) || 0;
       await handleResultById(id, waitSec, res);
+    } else if (path === '/sse-log' && method === 'POST') {
+      // Debug: provider posts raw SSE chunk batches for post-hoc analysis.
+      // Active only when provider has DEBUG_SSE_CHUNKS=true (see dashscope.ts).
+      const body = await readBody(req);
+      const payload = JSON.parse(body.toString('utf-8'));
+      const rawRunId = typeof payload.runId === 'string' ? payload.runId : `sse-${Date.now()}`;
+      const runId = rawRunId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const chunks = Array.isArray(payload.chunks) ? payload.chunks : [];
+      await mkdir(SSE_DEBUG_DIR, { recursive: true });
+      const lines = chunks.map(c => JSON.stringify(c)).join('\n') + (chunks.length > 0 ? '\n' : '');
+      await appendFile(join(SSE_DEBUG_DIR, `${runId}.ndjson`), lines);
+      json(res, 200, { ok: true, runId, appended: chunks.length });
     } else if (path.startsWith('/event/') && method === 'POST') {
       // Plugin posts tool call events as they happen
       const id = path.slice('/event/'.length);
@@ -759,6 +772,7 @@ const server = createServer(async (req, res) => {
 async function main() {
   await mkdir(BRIDGE_DIR, { recursive: true });
   await mkdir(RESULT_DIR, { recursive: true });
+  await mkdir(SSE_DEBUG_DIR, { recursive: true });
 
   // Clean up on startup — disabled, keep all results
   // await cleanupOldResults();
@@ -778,6 +792,7 @@ async function main() {
     console.log(`  GET  /recordings      - list recordings with runtime events`);
     console.log(`  GET  /recordings/:id/events - get runtime events for replay`);
     console.log(`  GET  /recordings/:id/screenshot - get screenshot PNG`);
+    console.log(`  POST /sse-log         - raw SSE chunk debug log (when DEBUG_SSE_CHUNKS=true)`);
     console.log(`  GET  /dashboard       - agent timeline dashboard\n`);
   });
 }

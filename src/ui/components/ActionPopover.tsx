@@ -1,15 +1,16 @@
 /**
  * @file ActionPopover.tsx
- * @description Action menu popover for the "+" button in PromptInput
+ * @description Action menu popover for the "+" button in PromptInput.
+ *   Single popover with action ("Add current selection" + Layers icon) and
+ *   skill list (unified Wand2 icon, single-line, ink-aligned divider).
+ *   No search input. "+" uses fill-only state changes (no rotation).
  */
 
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
-import { Code, Plus, Search } from 'lucide-preact';
+import { Layers, Plus, Wand2 } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
 import { useTranslations } from '../i18n';
 import knowledgeIndex from '../../generated/knowledge-index.json';
-import { Input } from './Input';
 import { usePopover } from '../hooks/usePopover';
 
 interface ActionPopoverProps {
@@ -21,58 +22,55 @@ interface ActionPopoverProps {
 type SkillSummary = {
   id: string;
   name: string;
-  description: string;
 };
 
 const availableSkills: SkillSummary[] = (knowledgeIndex as Array<{
   id: string;
   name: string;
-  description: string;
   category: string;
 }>)
   .filter(entry => entry.category === 'skill')
   .map(entry => ({
-    // knowledge-index normalizes skill ids to `skill:<id>`. The UI attaches
-    // `@<skillId>` to the prompt, so strip the prefix to match the prior UX.
+    // knowledge-index normalizes skill ids to `skill:<id>`; UI inserts `@<skillId>`.
     id: entry.id.startsWith('skill:') ? entry.id.slice('skill:'.length) : entry.id,
     name: entry.name,
-    description: entry.description,
-  }))
+  }));
 
-function searchSkills(query: string): SkillSummary[] {
-  const normalized = query.trim().toLowerCase()
-  if (!normalized) return availableSkills.slice(0, 6)
-  return availableSkills
-    .filter(skill => {
-      const haystack = `${skill.id} ${skill.name} ${skill.description}`.toLowerCase()
-      return haystack.includes(normalized)
-    })
-    .slice(0, 6)
-}
+const rowIconStyle: h.JSX.CSSProperties = {
+  color: tokens.colors.textSecondary,
+  flexShrink: 0,
+};
+const rowLabelStyle: h.JSX.CSSProperties = {
+  color: tokens.colors.textPrimary,
+  fontSize: tokens.fontSize[1],
+  fontWeight: tokens.fontWeight.regular,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  flex: 1,
+  minWidth: 0,
+};
 
 export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }: ActionPopoverProps) {
   const t = useTranslations();
-  const { isOpen, isClosing, ref, close, toggle, popoverClass } = usePopover();
-  const [skillQuery, setSkillQuery] = useState('');
+  const { isOpen, ref, close, toggle, popoverClass } = usePopover();
 
   const handleAction = (action: () => void) => {
     action();
     close();
   };
 
-  const skillResults = searchSkills(skillQuery)
+  const showSkills = !!onInsertSkill && availableSkills.length > 0;
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      {/* Trigger Button */}
       <button
         className="header-icon-btn"
         onClick={() => !disabled && toggle()}
         style={{
-          transition: 'var(--transition-normal)',
-          transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
           opacity: disabled ? 0.5 : 1,
           flexShrink: 0,
+          background: isOpen ? 'var(--gray-a3)' : undefined,
         }}
         disabled={disabled}
         aria-label={t.moreActions}
@@ -81,7 +79,6 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
         <Plus size={16} strokeWidth={1.5} />
       </button>
 
-      {/* Popover Content */}
       {isOpen && (
         <div
           className={popoverClass}
@@ -89,84 +86,40 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
             position: 'absolute',
             bottom: `calc(100% + ${tokens.space[2]}px)`,
             left: 0,
-            width: 260,
+            width: 240,
+            maxWidth: 'calc(100vw - 24px)',
             zIndex: tokens.zIndex.popover,
           }}
         >
           <div style={{ padding: tokens.space[1] }}>
             <div
               className="popover-item"
+              role="button"
               onClick={() => handleAction(onSerializeSelection)}
             >
-              <Code size={14} />
-              <span>{t.copySelectionJson}</span>
+              <Layers size={14} strokeWidth={1.5} style={rowIconStyle} />
+              <span style={rowLabelStyle}>{t.copySelectionJson}</span>
             </div>
 
-            {onInsertSkill && (
+            {showSkills && (
               <div style={{
-                marginTop: tokens.space[1],
-                paddingTop: tokens.space[1],
-                borderTop: 'var(--border-subtle)',
-              }}>
-                <div style={{ marginBottom: tokens.space[1] }}>
-                  <Input
-                    value={skillQuery}
-                    onInput={(e) => setSkillQuery((e.currentTarget as HTMLInputElement).value)}
-                    placeholder={t.searchSkills}
-                    leftElement={<Search size={12} strokeWidth={2} style={{ color: tokens.colors.textSecondary }} />}
-                    style={{
-                      height: 30,
-                      borderRadius: 'var(--radius-4)',
-                      background: tokens.colors.surface,
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1], maxHeight: 180, overflowY: 'auto' }}>
-                  {skillResults.length === 0 ? (
-                    <div style={{
-                      color: tokens.colors.textSecondary,
-                      fontSize: tokens.fontSize[1],
-                      padding: `${tokens.space[2]}px ${tokens.space[2]}px`,
-                    }}>
-                      {t.noMatchingSkills}
-                    </div>
-                  ) : (
-                    skillResults.map(skill => (
-                      <button
-                        key={skill.id}
-                        className="popover-item popover-item-multi"
-                        onClick={() => handleAction(() => onInsertSkill(skill.id))}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                          <span style={{
-                            color: tokens.colors.textPrimary,
-                            fontSize: tokens.fontSize[1],
-                            fontWeight: tokens.fontWeight.medium,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}>
-                            {skill.name}
-                          </span>
-                          <span style={{
-                            color: tokens.colors.textSecondary,
-                            fontSize: tokens.fontSize[1],
-                            lineHeight: '14px',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            maxWidth: 210,
-                          }}>
-                            @{skill.id}
-                          </span>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
+                height: 1,
+                background: 'var(--gray-a4)',
+                margin: '4px 8px',
+              }} />
             )}
+
+            {showSkills && availableSkills.map(skill => (
+              <div
+                key={skill.id}
+                className="popover-item"
+                role="button"
+                onClick={() => handleAction(() => onInsertSkill!(skill.id))}
+              >
+                <Wand2 size={14} strokeWidth={1.5} style={rowIconStyle} />
+                <span style={rowLabelStyle}>{skill.name}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

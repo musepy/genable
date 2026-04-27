@@ -8,7 +8,7 @@
  */
 
 import { h } from 'preact';
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { Settings, ChevronRight, ChevronDown, Check } from 'lucide-preact';
 import { usePopover } from '../hooks/usePopover';
 import { tokens } from '../design-system/tokens';
@@ -85,6 +85,15 @@ export function ModelPopover({
     setLocalApiKey(apiKey);
   }, [apiKey]);
 
+  // Scroll the currently-selected model into view when popover opens, so the
+  // user can locate the active model without scrolling through the full list.
+  const selectedRowRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (isOpen) {
+      selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [isOpen]);
+
   // Use dynamic models from props
   const sortedModels = sortModels(availableModels.length > 0 ? availableModels : (SUPPORTED_MODELS[providerName] || SUPPORTED_MODELS.gemini), currentModel);
   const hasApiKey = !!apiKey;
@@ -132,7 +141,7 @@ export function ModelPopover({
   const arrowIcon = (
     <ChevronDown
       size={14}
-      strokeWidth={2}
+      strokeWidth={1.5}
       style={{
         transition: 'var(--transition-normal)',
         transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
@@ -174,7 +183,7 @@ export function ModelPopover({
             minWidth: 220,
             maxWidth: 'calc(100vw - 24px)',
             zIndex: tokens.zIndex.popover,
-            maxHeight: 'min(360px, calc(100vh - 120px))',
+            maxHeight: 'min(410px, calc(100vh - 60px))',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -200,16 +209,17 @@ export function ModelPopover({
                 return (
                   <div
                     key={model.name}
+                    ref={shouldHighlight ? selectedRowRef : undefined}
                     role="option"
                     aria-selected={isSelected}
                     className={`popover-item ${shouldHighlight ? 'is-selected' : ''}`}
                     onClick={() => handleSelect(model.name)}
                   >
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: tokens.space[1], flex: 1 }}>
-                      <span style={{ 
+                      <span style={{
                         fontSize: tokens.fontSize[1],
-                        color: shouldHighlight ? tokens.colors.textPrimary : tokens.colors.textSecondary,
-                        fontWeight: shouldHighlight ? tokens.fontWeight.medium : tokens.fontWeight.regular,
+                        color: tokens.colors.textPrimary,
+                        fontWeight: tokens.fontWeight.regular,
                         lineHeight: 'var(--typography-line-height-1)',
                       }}>
                         {model.displayName || model.name}
@@ -233,21 +243,42 @@ export function ModelPopover({
             </div>
           )}
 
+          {hasApiKey && (
+            <div style={{
+              height: 1,
+              background: 'var(--gray-a4)',
+              margin: '0 12px',
+            }} />
+          )}
+
           {/* Settings Section (Apple HIG: settings at bottom) */}
-          <div style={{ 
+          <div style={{
             padding: tokens.space[1],
-            borderTop: hasApiKey ? 'var(--border-subtle)' : 'none',
           }}>
             {hasApiKey ? (
               // API Key Settings link
-              <div 
+              <div
                 className="popover-item"
                 onClick={() => { close(); onOpenSettings?.(); }}
-                style={{ height: tokens.space[6] }} // Ensure base height
               >
-                <Settings size={14} strokeWidth={2} />
-                <span>{t.apiKeySettings}</span>
-                <ChevronRight size={10} strokeWidth={2} style={{ marginLeft: 'auto' }} />
+                <Settings
+                  size={14}
+                  strokeWidth={1.5}
+                  style={{ color: tokens.colors.textSecondary, flexShrink: 0 }}
+                />
+                <span style={{
+                  color: tokens.colors.textPrimary,
+                  fontSize: tokens.fontSize[1],
+                  fontWeight: tokens.fontWeight.regular,
+                  flex: 1,
+                }}>
+                  {t.apiKeySettings}
+                </span>
+                <ChevronRight
+                  size={14}
+                  strokeWidth={1.5}
+                  style={{ marginLeft: 'auto', color: tokens.colors.textSecondary, flexShrink: 0 }}
+                />
               </div>
             ) : (
               // API Key Input (if not configured)

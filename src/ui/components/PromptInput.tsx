@@ -131,17 +131,24 @@ export function PromptInput({
 
   return (
     <div style={{ ...inputAreaContainer, ...activeBorder } as h.JSX.CSSProperties}>
-      {/* Context Tags row */}
-      {contextTags && (
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap' as const,
-          gap: 4,
-          padding: `${tokens.space[3]}px ${tokens.grid.blockPad}px 0`,
-        }}>
-          {contextTags}
+      {/* Context Tags row — grid 0fr↔1fr trick gives a smooth height grow/shrink
+          coordinated with the textarea's height transition. */}
+      <div style={{
+        display: 'grid',
+        gridTemplateRows: contextTags ? '1fr' : '0fr',
+        transition: 'grid-template-rows 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+      }}>
+        <div style={{ overflow: 'hidden', minHeight: 0 }}>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap' as const,
+            gap: 4,
+            padding: `${tokens.space[3]}px ${tokens.grid.blockPad}px 0`,
+          }}>
+            {contextTags}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Textarea (with gradient mask above when context tags are present) */}
       <div style={{ position: 'relative' }}>

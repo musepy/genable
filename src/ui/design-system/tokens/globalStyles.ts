@@ -376,6 +376,11 @@ export const globalStyles = `
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
 
+  @keyframes chip-exit {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(-2px) scale(0.96); }
+  }
+
   @keyframes skeleton-pulse {
     0%, 100% { opacity: 0.4; }
     50% { opacity: 0.7; }

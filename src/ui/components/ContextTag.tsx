@@ -11,6 +11,7 @@
  */
 
 import { h, ComponentChildren } from 'preact';
+import { createPortal } from 'preact/compat';
 import { useState, useRef, useCallback } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { CloseIcon, ICON_SIZE } from './NodeTypeIcon';
@@ -58,8 +59,22 @@ export function ContextTag({
   const borderHover = isComponent ? 'var(--component-hover, rgba(151,71,255,0.40))' : 'var(--gray-a7)';
   const removeBgHover = isComponent ? 'var(--component-border, rgba(151,71,255,0.22))' : 'var(--gray-a6, rgba(0,0,0,0.14))';
 
+  // --- Exit animation state ---
+  // When the user clicks X we don't unmount immediately; we play chip-exit and
+  // call onRemove after the animation finishes so the chip fades out smoothly.
+  const [isExiting, setIsExiting] = useState(false);
+  const handleRemove = useCallback(() => {
+    if (isExiting) return;
+    setIsExiting(true);
+    setTimeout(() => onRemove?.(), 180);
+  }, [isExiting, onRemove]);
+
   // --- Tooltip state ---
+  // The chip lives inside an overflow:hidden grow/shrink wrapper; rendering the
+  // tooltip via portal with viewport-relative coords avoids it being clipped.
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const chipRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -76,6 +91,14 @@ export function ContextTag({
       const isTruncated = span ? span.scrollWidth > span.clientWidth : false;
 
       if (alwaysShow || isTruncated) {
+        const chipEl = chipRef.current;
+        if (chipEl) {
+          const rect = chipEl.getBoundingClientRect();
+          setTooltipPos({
+            x: rect.left + rect.width / 2,
+            y: rect.top - 8,
+          });
+        }
         setTooltipVisible(true);
       }
     }, TOOLTIP_DELAY_MS);
@@ -91,6 +114,7 @@ export function ContextTag({
 
   return (
     <div
+      ref={chipRef}
       style={{
         position: 'relative',
         display: 'inline-flex',
@@ -103,8 +127,11 @@ export function ContextTag({
         cursor: onClick ? 'pointer' : 'default',
         transition: 'border-color 120ms, background 120ms',
         color,
-        // Entrance — plays once on first mount (chips are keyed by node.id)
-        animation: 'chip-enter 180ms cubic-bezier(0.32, 0.72, 0, 1)',
+        // Entrance on mount, exit when X is pressed (then unmount via setTimeout).
+        animation: isExiting
+          ? 'chip-exit 180ms cubic-bezier(0.32, 0.72, 0, 1) forwards'
+          : 'chip-enter 180ms cubic-bezier(0.32, 0.72, 0, 1)',
+        pointerEvents: isExiting ? 'none' : 'auto',
       }}
       onClick={onClick}
       onMouseEnter={(e) => {
@@ -151,7 +178,7 @@ export function ContextTag({
           type="button"
           onClick={(e) => {
             e.stopPropagation(); // don't trigger chip's onClick
-            onRemove();
+            handleRemove();
           }}
           style={{
             position: 'absolute',
@@ -179,14 +206,15 @@ export function ContextTag({
         </button>
       )}
 
-      {/* Custom tooltip bubble — replaces native title attribute */}
-      {tooltipVisible && (
+      {/* Tooltip rendered via portal so it can escape the chip container's
+          overflow:hidden (used for the height grow/shrink animation). */}
+      {tooltipVisible && tooltipPos && createPortal(
         <div
           style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
-            left: '50%',
-            transform: tooltipVisible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(2px)',
+            position: 'fixed',
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            transform: 'translate(-50%, -100%)',
             background: TOOLTIP_BG,
             color: '#fff',
             padding: '5px 9px',
@@ -198,11 +226,8 @@ export function ContextTag({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
-            zIndex: 20,
+            zIndex: 9999,
             pointerEvents: 'none',
-            opacity: 1,
-            transition: 'opacity 120ms ease, transform 120ms ease',
-            // Ensure the tooltip text uses the default chip body font (not inherited color from chip)
             lineHeight: '1.4',
           }}
         >
@@ -221,7 +246,8 @@ export function ContextTag({
               display: 'block',
             }}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

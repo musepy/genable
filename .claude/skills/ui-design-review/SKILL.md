@@ -81,6 +81,62 @@ npx tsc --noEmit && node build.js
 - Light/dark swap on `[data-theme]` attribute
 - Test both themes for every fix
 
+## Project Design SSOT
+
+These are project-specific values. Generic principles (ink alignment, optical compensation, popover binary, grid height trick, portal escape, exit animation, etc.) live in `~/.claude/skills/ui-ab-preview/SKILL.md` § Design Heuristics. Read both when proposing UI changes.
+
+### Footer button geometry (concentric)
+
+| Element | Size | Radius |
+|---|---|---|
+| input-area outer | — | `--radius-6` (16px) |
+| footer padding | 4px gap | — |
+| `+`, send, model selector trigger | **32×32** | **`--radius-5` (12px)** |
+
+Math: `16 − 4 = 12 ✓`. Comment in `globalStyles.ts:269` documents this. Don't change one without recomputing the others.
+
+### Footer stroke convention
+
+| Element | Surface | strokeWidth |
+|---|---|---|
+| `+` | transparent | 1.5 |
+| Model selector chevron-down | transparent | 1.5 |
+| Settings icon, ChevronRight in popover row | transparent | 1.5 |
+| Send arrow | filled `--gray-12` | 2.0 |
+
+Light-on-light needs 1.5; white-on-dark needs 2.0. Don't unify by number; unify by visual weight (see optical compensation in ui-ab-preview).
+
+### Chat input animation timings
+
+All use `cubic-bezier(0.32, 0.72, 0, 1)` (spring-out):
+
+| Element | Duration |
+|---|---|
+| chip-enter / chip-exit | 180ms |
+| contextTags container (grid `0fr↔1fr`) | 220ms |
+| textarea height grow | 260ms |
+
+Cascading durations create a ripple. Adding a new animated element? Pick a duration that fits the cascade (inner-fastest, outer-slowest).
+
+### Popover style (both footer popovers)
+
+ActionPopover (`+`) and ModelPopover (`kimi k2.5 ▾`) use **style B (floating)**, NOT stacked. Both:
+
+- Width: 240px fixed
+- Anchor: `position: absolute`, `bottom: calc(100% + tokens.space[2])`, `left: 0`
+- Shadow: `.popover-content` class default (`box-shadow: var(--shadow-md)`)
+- Hover: `.popover-item` default `gray-a2` background fill, no border/ring change
+
+When adding a third popover in the same surface, default to style B. Choosing A in one forces all to A.
+
+### Selected indicator pattern
+
+ModelPopover row selected state:
+- `<Check size={14} strokeWidth={2.5}>` trailing the row
+- Text stays `textPrimary` + `regular` weight (NOT medium-bold)
+
+Color emphasizes nothing extra; check is the binary signal.
+
 ## Anti-patterns (avoid)
 
 - **Never build-first** — always preview-verify before `node build.js`

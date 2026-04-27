@@ -118,8 +118,6 @@ const en = {
   // Actions
   moreActions: 'More actions',
   copySelectionJson: 'Add current selection',
-  searchSkills: 'Search skills...',
-  noMatchingSkills: 'No matching skills.',
 
   close: 'Close',
 
@@ -224,8 +222,6 @@ const zh: Translations = {
   // Actions
   moreActions: '更多操作',
   copySelectionJson: '添加当前选区',
-  searchSkills: '搜索技能...',
-  noMatchingSkills: '没有匹配的技能。',
 
   close: '关闭',
 
@@ -328,8 +324,6 @@ const fr: Translations = {
   // Actions
   moreActions: 'Plus d\'actions',
   copySelectionJson: 'Ajouter la selection actuelle',
-  searchSkills: 'Rechercher...',
-  noMatchingSkills: 'Aucun resultat.',
 
   close: 'Fermer',
 

@@ -19,12 +19,26 @@ import { handleDescribe } from './describeHandler';
 import { handleEdit } from './editHandler';
 import { handleScanTokens } from './tokenScanner';
 // verb_noun tool adapters
-import { handleFindNodes, handleDiscoverProps, handleReplaceProps } from './searchAdapter';
+import { handleReplaceProps } from './searchAdapter';
+import { handleGrep } from './searchHandlers';
 import { handleFindReferences } from './findReferencesHandler';
-import { handleDeleteNode, handleMoveNode, handleCloneNode } from './structureAdapter';
-import { handleListVariables, handleCreateCollection, handleCreateVariable, handleSetVariableValue, handleBindVariable, handleSetVariableMode } from './varAdapter';
-import { handleCreateComponent, handleCombineComponents, handleAddComponentProp, handleListComponentProps, handleCreateInstance } from './componentAdapter';
-import { handleGetSelection } from './selectionAdapter';
+import { handleCloneNode } from './structureAdapter';
+import { handleRm, handleMv } from './writeHandlers';
+import {
+  handleListVariables,
+  handleCreateCollection,
+  handleCreateVariable,
+  handleSetVariableValue,
+  handleBindVariable,
+  handleSetVariableMode,
+} from './varHandlers';
+import {
+  handleCompCreate,
+  handleCompCombine,
+  handleCompProp,
+  handleCompLs,
+  handleCompInstance,
+} from './componentHandlers';
 
 // ── Setter schema wrappers (narrow LLM-facing params → handleEdit) ──────────
 
@@ -119,6 +133,34 @@ export async function handleSetLayout(parameters: any): Promise<ToolResponse> {
   return handleEdit({ node: parameters.node, props });
 }
 
+// ── move_node param transform ──
+// Inline because the parent "/" → page-root-id resolution and required-arg
+// validation are non-trivial.
+async function handleMoveNodeInline(params: any): Promise<ToolResponse> {
+  const hasParent = typeof params.parent === 'string' && params.parent.length > 0;
+  const hasName = typeof params.name === 'string' && params.name.length > 0;
+  const hasIndex = params.index != null;
+
+  if (!hasParent && !hasName && !hasIndex) {
+    return { error: 'move_node requires "parent", "name", or "index".' };
+  }
+
+  // "/" → page root id; bare id → pass through; undefined → keep current parent
+  let parentId: string | undefined;
+  if (hasParent) {
+    parentId = (params.parent === '/' || params.parent === '')
+      ? figma.currentPage.id
+      : params.parent;
+  }
+
+  return handleMv({
+    sourceId: params.node,
+    parentId,
+    newName: hasName ? params.name : undefined,
+    atIndex: params.index,
+  });
+}
+
 // ── Command handler type ──
 
 export type CommandHandler = (parameters: any) => Promise<ToolResponse>;
@@ -133,13 +175,13 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   edit: handleEdit,
   js: handleJs,
   // Search tools
-  find_nodes: handleFindNodes,
-  discover_props: handleDiscoverProps,
+  find_nodes: (params) => handleGrep({ query: params.query || '', path: params.scope }),
+  discover_props: (params) => handleGrep({ mode: 'properties', path: params.node, properties: params.props }),
   replace_props: handleReplaceProps,
   find_references: handleFindReferences,
   // Structure tools
-  delete_node: handleDeleteNode,
-  move_node: handleMoveNode,
+  delete_node: (params) => handleRm({ sourceId: params.node }),
+  move_node: handleMoveNodeInline,
   clone_node: handleCloneNode,
   // Variable tools
   list_variables: handleListVariables,
@@ -149,18 +191,31 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   bind_variable: handleBindVariable,
   set_variable_mode: handleSetVariableMode,
   // Component tools
-  create_component: handleCreateComponent,
-  combine_components: handleCombineComponents,
-  add_component_prop: handleAddComponentProp,
-  list_component_props: handleListComponentProps,
-  create_instance: handleCreateInstance,
+  create_component: (params) => handleCompCreate({ paths: [params.node] }),
+  combine_components: (params) => handleCompCombine({ paths: params.nodes, name: params.name }),
+  add_component_prop: (params) => handleCompProp({
+    paths: [params.node],
+    name: params.name,
+    propType: params.type,
+    defaultValue: params.default,
+    bindTarget: params.bind,
+  }),
+  list_component_props: (params) => handleCompLs({ paths: [params.node] }),
+  create_instance: (params) => handleCompInstance({ paths: [params.node], parent: params.parent }),
   // Setters (focused, single-intent — delegate to editHandler)
   set_text: handleSetText,
   set_fill: handleSetFill,
   set_stroke: handleSetStroke,
   set_layout: handleSetLayout,
-  // Selection (opt-in, LLM calls when needed)
-  get_selection: handleGetSelection,
+  // Selection (opt-in, LLM calls when needed) — inlined: trivial figma.currentPage.selection map
+  get_selection: async () => {
+    const selection = figma.currentPage.selection.map(node => ({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+    }));
+    return { data: { selection, count: selection.length } };
+  },
   // Visual verification (screenshot)
   get_screenshot: handleGetScreenshot,
   // knowledge is handled locally in sandbox — should not arrive at IPC

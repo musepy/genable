@@ -1,40 +1,12 @@
 /**
  * @file structureAdapter.ts
- * @description Adapters for structure tools — maps tool params to writeHandlers.
+ * @description Adapter for clone_node — non-trivial fallback name resolution + post-clone
+ * variant structure warnings (component set siblings).
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { handleRm, handleMv, handleCp } from './writeHandlers';
+import { handleCp } from './writeHandlers';
 import { resolveSceneNode } from './pathResolver';
-
-export async function handleDeleteNode(params: any): Promise<ToolResponse> {
-  return handleRm({ sourceId: params.node });
-}
-
-export async function handleMoveNode(params: any): Promise<ToolResponse> {
-  const hasParent = typeof params.parent === 'string' && params.parent.length > 0;
-  const hasName = typeof params.name === 'string' && params.name.length > 0;
-  const hasIndex = params.index != null;
-
-  if (!hasParent && !hasName && !hasIndex) {
-    return { error: 'move_node requires "parent", "name", or "index".' };
-  }
-
-  // "/" → page root id; bare id → pass through; undefined → keep current parent
-  let parentId: string | undefined;
-  if (hasParent) {
-    parentId = (params.parent === '/' || params.parent === '')
-      ? figma.currentPage.id
-      : params.parent;
-  }
-
-  return handleMv({
-    sourceId: params.node,
-    parentId,
-    newName: hasName ? params.name : undefined,
-    atIndex: params.index,
-  });
-}
 
 export async function handleCloneNode(params: any): Promise<ToolResponse> {
   if (!params.node) {

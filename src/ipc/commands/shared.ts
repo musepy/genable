@@ -45,9 +45,7 @@ export async function exportNodeToBase64(
 
 // ── Replace property helpers (used by run grep + run sed) ──
 
-import { rgbaToHex as _rgbaToHex, parseHexToRGBA as _hexToRgba } from '../../utils/colorUtils';
-export const rgbaToHex = _rgbaToHex;
-export const hexToRgba = _hexToRgba;
+import { rgbaToHex, parseHexToRGBA as hexToRgba } from '../../utils/colorUtils';
 
 export function extractAllReplacePropertyValues(node: SceneNode, prop: string): (string | number)[] {
   switch (prop) {

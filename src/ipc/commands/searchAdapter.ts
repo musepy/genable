@@ -1,25 +1,10 @@
 /**
  * @file searchAdapter.ts
- * @description Adapters for search tools — maps structured params to searchHandlers.
+ * @description Adapter for replace_props — non-trivial rules-array → replacements-record transform.
  */
 
 import type { ToolResponse } from '../../engine/agent/tools/types';
-import { handleGrep, handleSed } from './searchHandlers';
-
-export async function handleFindNodes(params: any): Promise<ToolResponse> {
-  return handleGrep({
-    query: params.query || '',
-    path: params.scope,
-  });
-}
-
-export async function handleDiscoverProps(params: any): Promise<ToolResponse> {
-  return handleGrep({
-    mode: 'properties',
-    path: params.node,
-    properties: params.props,
-  });
-}
+import { handleSed } from './searchHandlers';
 
 export async function handleReplaceProps(params: any): Promise<ToolResponse> {
   // Convert rules array [{prop, from, to}] to Record<string, Array<{from, to}>>

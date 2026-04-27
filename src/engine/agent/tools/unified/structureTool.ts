@@ -12,7 +12,6 @@ export const deleteNodeDefinition: ToolDefinition = {
   name: 'delete_node',
   executionStrategy: 'sequential',
   mutates: true,
-  presentForLLM: (data) => keepFields(data, ['deleted']),
   description: `Delete a node and its children.
 
 Examples:
@@ -33,7 +32,6 @@ export const moveNodeDefinition: ToolDefinition = {
   name: 'move_node',
   executionStrategy: 'sequential',
   mutates: true,
-  presentForLLM: (data) => keepFields(data, ['id', 'name']),
   description: `Relocate a node without recreating it. Preserves IDs, bound variables, and component instances across the move, so callers tracking the node by ID never need to re-discover it. Use for: (a) changing child order within a container, (b) moving a subtree into a different parent, (c) fixing a placement mistake after jsx.
 
 Examples:

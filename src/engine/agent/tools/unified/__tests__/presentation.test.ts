@@ -57,7 +57,8 @@ describe('presentForLLM — flat response format', () => {
     };
     const presented = presentForLLM(result, 'find_nodes');
     expect(presented.results).toHaveLength(2);
-    expect(presented.totalSearched).toBeUndefined();
+    expect(presented.totalSearched).toBe(100);
+    expect(presented.data).toBeUndefined();
   });
 
   it('no success field on success', () => {
@@ -140,7 +141,7 @@ describe('presentForLLM — flat response format', () => {
     expect(presented.output).toBe('knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)');
   });
 
-  it('strips result to lean shape per keep-list', () => {
+  it('passes through edit result fields (no per-tool filter)', () => {
     const result = {
       data: {
         id: '100:1',
@@ -153,29 +154,24 @@ describe('presentForLLM — flat response format', () => {
       },
     };
     const presented = presentForLLM(result, 'edit');
-    // edit keeps: id, name, type, updated, results
     expect(presented.id).toBe('100:1');
     expect(presented.name).toBe('Card');
     expect(presented.updated).toBe(3);
     expect(presented.results).toHaveLength(1);
-    // Noise stripped
-    expect(presented.defaultsApplied).toBeUndefined();
-    expect(presented.warningCount).toBeUndefined();
+    expect(presented.defaultsApplied).toHaveLength(1);
+    expect(presented.warningCount).toBe(1);
   });
 
-  it('skips empty arrays and empty objects in keep fields', () => {
+  it('clone_node keepFields skips empty objects', () => {
     const result = {
       data: {
         idMap: {},
-        deleted: 0,
-        results: [],
+        createdIds: ['100:1', '100:2'],
       },
     };
-    // edit has a keep-list: ['id', 'name', 'type', 'updated', 'results']
-    const presented = presentForLLM(result, 'edit');
-    // Empty object and empty array stripped even if in keep-list
+    const presented = presentForLLM(result, 'clone_node');
     expect(presented.idMap).toBeUndefined();
-    expect(presented.results).toBeUndefined();
+    expect(presented.createdIds).toBeUndefined();
   });
 
   it('jsx result: node fields spread to top level', () => {

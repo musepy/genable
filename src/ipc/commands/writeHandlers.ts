@@ -124,8 +124,7 @@ export async function handleMv(parameters: {
   return wrapRunStages('Mv', {
     data: {
       id: node.id,
-      oldName,
-      newName: node.name,
+      name: node.name,
       renamed,
       moved,
       reordered,

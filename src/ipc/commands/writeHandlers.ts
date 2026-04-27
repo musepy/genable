@@ -46,7 +46,7 @@ export async function handleRm(parameters: { sourceId: string }): Promise<ToolRe
   deleteNode(node);
 
   const response: ToolResponse = {
-    data: { deleted: nodeName, id: nodeId },
+    data: { id: nodeId, name: nodeName, changed: true },
   };
   if (!isSession) {
     response.data = { ...response.data, warning: `⚠ "${nodeName}" was not created by you in this session.` };
@@ -125,6 +125,7 @@ export async function handleMv(parameters: {
     data: {
       id: node.id,
       name: node.name,
+      changed: renamed || moved || reordered,
       renamed,
       moved,
       reordered,

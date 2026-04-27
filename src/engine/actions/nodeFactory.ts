@@ -174,12 +174,21 @@ export async function applyTextProps(
     } as any);
   }
 
-  node.fontName = { family, style: loadedStyle };
+  const targetFont = { family, style: loadedStyle };
+  const fontChanged = currentFont?.family !== family || currentFont?.style !== loadedStyle;
+  node.fontName = targetFont;
+  if (fontChanged) {
+    diffs.push({ key: 'fontName', before: currentFont, after: targetFont, changed: true });
+  }
 
   // Parse rich text markup (markdown → plain text + ranges)
   if (props.characters !== undefined) {
     const { plainText, ranges } = parseRichText(props.characters);
+    const beforeText = node.characters;
     node.characters = plainText;
+    if (beforeText !== plainText) {
+      diffs.push({ key: 'characters', before: beforeText, after: plainText, changed: true });
+    }
 
     // Apply base props BEFORE range overrides
     const otherProps = { ...props };

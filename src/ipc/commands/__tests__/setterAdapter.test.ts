@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock editHandler before importing setterAdapter
 vi.mock('../editHandler', () => ({
   handleEdit: vi.fn(async (params: any) => ({
-    data: { updated: 1, _passedParams: params },
+    data: { changed: true, _passedParams: params },
   })),
 }));
 

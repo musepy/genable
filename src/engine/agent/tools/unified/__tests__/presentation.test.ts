@@ -147,7 +147,8 @@ describe('presentForLLM — flat response format', () => {
         id: '100:1',
         name: 'Card',
         type: 'frame',
-        updated: 3,
+        changed: true,
+        count: 3,
         results: [{ prop: 'fill', status: 'ok' }],
         defaultsApplied: [{ property: 'textAutoResize' }],
         warningCount: 1,
@@ -156,7 +157,8 @@ describe('presentForLLM — flat response format', () => {
     const presented = presentForLLM(result, 'edit');
     expect(presented.id).toBe('100:1');
     expect(presented.name).toBe('Card');
-    expect(presented.updated).toBe(3);
+    expect(presented.changed).toBe(true);
+    expect(presented.count).toBe(3);
     expect(presented.results).toHaveLength(1);
     expect(presented.defaultsApplied).toHaveLength(1);
     expect(presented.warningCount).toBe(1);

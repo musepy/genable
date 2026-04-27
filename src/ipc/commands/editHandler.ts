@@ -166,7 +166,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       return { error: 'Empty nodes array.' };
     }
 
-    const results: Array<{ nodeId: string; name: string; updated: boolean }> = [];
+    const results: Array<{ nodeId: string; name: string; changed: boolean }> = [];
     const errors: string[] = [];
 
     for (const entry of entries) {
@@ -188,7 +188,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       const changed = await applyEdit(resolved.node, merged);
       const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
       const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
-      results.push({ ...minJson, updated: changed });
+      results.push({ ...minJson, changed });
     }
 
     tracer.exit({ count: results.length });
@@ -202,10 +202,10 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     // past the hook guard), surface the per-entry errors alongside the results
     // so the LLM sees which entries failed and can retry only those. Dropping
     // `errors[]` here was the "silent partial success" bug — the LLM would see
-    // `updated: 3` and believe all 17 entries succeeded.
+    // `count: 3` and believe all 17 entries succeeded.
     return {
       data: {
-        updated: results.length,
+        count: results.length,
         results,
         ...(errors.length > 0 ? { errors, partial: true } : {}),
       },
@@ -248,7 +248,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
   const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
 
   return {
-    data: { ...minJson, updated: changed },
+    data: { ...minJson, changed },
     _stages: tracer.collect(),
   };
 }

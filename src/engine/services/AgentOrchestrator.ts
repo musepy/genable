@@ -226,7 +226,9 @@ export class AgentOrchestrator {
         promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
 
-      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, this.options.locale);
+      // Main runtime: skip menu in static prompt — agentRuntime injects it
+      // as a per-turn user-meta message (closer to user, KV-cache-stable system).
+      const systemPrompt = buildStaticSystemPrompt(tools, { getToolSystemInstruction: () => '' }, this.options.locale, { includeMenu: false });
 
       // Dump to console
       console.log('\n' + '='.repeat(80));
@@ -320,8 +322,10 @@ export class AgentOrchestrator {
     setContextProfile(contextProfile);
     console.log(`[AgentOrchestrator] Context profile: ${contextWindow >= 100_000 ? 'RELAXED' : 'TIGHT'} (contextWindow: ${contextWindow}, model: ${modelName})`);
 
-    // Build static system prompt (set once, never changes — enables KV cache)
-    const systemPrompt = buildStaticSystemPrompt(tools, provider);
+    // Build static system prompt (set once, never changes — enables KV cache).
+    // Menu is injected per-turn by agentRuntime (see run()), keeping this
+    // string stable across turns even as new skills/styles are added.
+    const systemPrompt = buildStaticSystemPrompt(tools, provider, undefined, { includeMenu: false });
 
     this.currentProvider = provider;
 

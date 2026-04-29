@@ -19,6 +19,20 @@ import { serializeTools } from './toolSerializer';
 import { KNOWLEDGE_LIBRARY_SECTION } from './knowledgeLibrarySection';
 import { LOCALE_FULL_NAMES, type Locale } from '../../../ui/i18n';
 
+export interface BuildStaticSystemPromptOptions {
+    /**
+     * When true, include the KNOWLEDGE LIBRARY menu inside the static prompt.
+     * Subtask agents (single-turn, focused) keep this so they can discover
+     * entries without a separate per-turn injection.
+     *
+     * The main runtime sets this to false and injects the menu as a per-turn
+     * user-meta message (see agentRuntime.run()) — this keeps the static
+     * prompt KV-cache-stable and positions the menu closer to the user
+     * message where attention recall is higher.
+     */
+    includeMenu?: boolean;
+}
+
 /**
  * Build the static system prompt that is set once and never changes.
  *
@@ -29,15 +43,19 @@ export function buildStaticSystemPrompt(
     tools: ToolDefinition[],
     provider: { getToolSystemInstruction: (tools: ToolDefinition[]) => string },
     locale?: Locale,
+    opts: BuildStaticSystemPromptOptions = {},
 ): string {
+    const { includeMenu = true } = opts;
     const parts: string[] = [];
 
     // 1. System prompt (WHAT & WHY: identity + environment + scene graph + design thinking + conventions)
     parts.push(SYSTEM.trim());
 
-    // 2. Knowledge library menu (full id + description list — lets the LLM pick
-    // entries directly via knowledge.read instead of guessing keywords with search)
-    parts.push(KNOWLEDGE_LIBRARY_SECTION.trim());
+    // 2. Knowledge library menu — only when the caller wants it inline.
+    // Main runtime opts out and injects per-turn (closer to user message).
+    if (includeMenu) {
+        parts.push(KNOWLEDGE_LIBRARY_SECTION.trim());
+    }
 
     // 3. Subtask delegation hint (typed agents)
     parts.push(

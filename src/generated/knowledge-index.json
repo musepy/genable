@@ -367,6 +367,12 @@
     "category": "skill"
   },
   {
+    "id": "skill:restyle",
+    "name": "Restyle Existing Design",
+    "description": "Use when changing visual style of an EXISTING design (keep content+structure). 换风格/改成/整成/做成X那种; restyle/redesign/make it Y. Inspect→edit, don't rebuild.",
+    "category": "skill"
+  },
+  {
     "id": "skill:rich-text",
     "name": "Rich Text Styling",
     "description": "Use when applying mixed inline styles (bold, color, weight) within a single text node via markdown markup — the runtime parses it and applies per-character ranges.",

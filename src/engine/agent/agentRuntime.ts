@@ -24,6 +24,7 @@ import { TOOL_NAMES } from './tools/unified';
 import { clearOverflows } from './overflowStore';
 import { OutputTooLongError } from '../llm-client/providers/shared/providerErrors';
 import { ContextManager } from './context/contextManager';
+import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
 
 
 // ---------------------------------------------------------------------------
@@ -473,6 +474,28 @@ export class AgentRuntime {
     this.runAbortController = new AbortController();
     this.canceled = false;
     this.cancelReason = 'Canceled by user';
+
+    // Inject the KNOWLEDGE LIBRARY menu as a user-meta message just before
+    // the user prompt — every turn, not just the first.
+    //
+    // Why every turn: in multi-turn sessions, a menu only injected at turn 1
+    // gets pushed far back in conversation history by turn 2+ tool calls and
+    // model messages, degrading the attention recall on its content. Re-
+    // injecting near each user prompt keeps it adjacent to the active prompt.
+    //
+    // Why user-meta instead of static system prompt:
+    //  - System prompt stays KV-cache-stable across skill/style additions
+    //  - Menu sits closer to the user message → higher attention recall
+    //  - Allows future incremental updates (only diff new entries since last
+    //    turn — see CC's sentSkillNames for the analogous pattern)
+    const menu = renderKnowledgeMenu();
+    if (menu && menu.trim().length > 0) {
+      this.contextManager.addMessage({
+        id: this.generateId('km'),
+        role: 'user',
+        content: `<system-reminder>\n${menu}\n</system-reminder>`,
+      });
+    }
 
     // Append user message — this starts the new turn (turn boundary is
     // inferred by walking back to the last user message).

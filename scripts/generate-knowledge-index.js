@@ -138,12 +138,12 @@ function scanSkills() {
 
     const raw = fs.readFileSync(skillPath, 'utf-8');
     const { data, body } = parseYamlFrontmatter(raw);
-    // Skills use their own id (not prefixed). Normalize to skill:<id>.
+    // Skills use Claude Code-style frontmatter: `name` is the slug (e.g. "create-page").
+    // Normalize to skill:<name>.
     if (!data) {
       throw new Error(`[knowledge-index] Missing frontmatter block in ${skillPath}`);
     }
     const missing = [];
-    if (!data.id) missing.push('id');
     if (!data.name) missing.push('name');
     if (!data.description) missing.push('description');
     if (missing.length) {
@@ -154,7 +154,7 @@ function scanSkills() {
     }
 
     entries.push({
-      id: `skill:${data.id}`,
+      id: `skill:${data.name}`,
       name: data.name,
       description: data.description,
       category: 'skill',

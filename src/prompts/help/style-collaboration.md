@@ -32,19 +32,33 @@ Read the KNOWLEDGE LIBRARY, match entries by use-case description, and propose 3
 ### Template
 
 ```
-ask_user({
-  question: "What aesthetic fits this settings page?",
-  options: [
-    {label: "Notion Zen — calm productivity", value: "style:notion-zen"},
-    {label: "Arctic Minimal — clean utility", value: "style:arctic-minimal"},
-    {label: "Corporate Blue Light — enterprise SaaS", value: "style:corporate-blue-light"},
-    {label: "Slate Data — dashboards", value: "style:slate-data"},
-    {label: "Surprise me", value: "__random__"},
-    {label: "I'll describe my own", value: "__custom__"},
-  ]
-})
+ask_user({ questions: [
+  {
+    header: "Aesthetic",
+    question: "What aesthetic fits this settings page?",
+    options: [
+      {label: "notion-zen", description: "Calm productivity"},
+      {label: "arctic-minimal", description: "Clean utility"},
+      {label: "corporate-blue-light", description: "Enterprise SaaS"},
+      {label: "Surprise me"},
+    ],
+  }
+]})
+```
+
+If you also need audience or content scope, bundle them as additional questions in the same call — don't split into separate turns:
+
+```
+ask_user({ questions: [
+  { header: "Audience", question: "Who is this for?", options: [{label:"Internal team"},{label:"Customer-facing"},{label:"Developer tools"}] },
+  { header: "Aesthetic", question: "What visual direction?", options: [{label:"notion-zen"},{label:"arctic-minimal"},{label:"corporate-blue-light"},{label:"Surprise me"}] },
+]})
 ```
 
 ### After the user picks
 
-Call `knowledge("style:<chosen>")` to load the full style guide — color tokens, typography, spacing, shape — before generating `jsx`. The menu shows only the description; the full content is what you need.
+Parse the response. If it's `{ answers: [...] }`, the chosen label for the aesthetic question is your style name. If it's `{ freeText: "..." }`, the user described their own — use that as your style intent.
+
+Call `style({ name: "<chosen>" })` to load the full style guide — color tokens, typography, spacing, shape — before generating `jsx`. The menu shows only the name; the full content is what you need.
+
+If the user picked "Surprise me", choose any reasonable style yourself based on the product type and proceed.

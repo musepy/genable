@@ -24,8 +24,17 @@ interface UseChatProps {
 }
 
 export interface UserQuestionRequest {
-  question: string
-  options: { label: string; description?: string }[]
+  questions: Array<{
+    question: string
+    header?: string
+    options: { label: string; description?: string }[]
+    multiSelect?: boolean
+  }>
+}
+
+export interface AskUserResponse {
+  answers?: Array<string | string[]>
+  freeText?: string
 }
 
 type RunState = 'idle' | 'running' | 'canceled' | 'error' | 'empty_response'
@@ -265,7 +274,7 @@ export function useChat({
         break
       }
       case 'ask_user_question': {
-        setPendingQuestion({ question: event.question, options: event.options })
+        setPendingQuestion({ questions: event.questions })
         break
       }
       case 'turn_end': {
@@ -444,18 +453,31 @@ export function useChat({
     }
 
     try {
+      const makeReaderExecutor = (category: string) => async (params: any) => {
+        const name = String(params?.name ?? '').trim()
+        if (!name) {
+          return {
+            success: false,
+            error: `Missing "name". Pass the bare ${category} name from the KNOWLEDGE LIBRARY menu, e.g. ${category}({ name: "..." }).`,
+          }
+        }
+        const id = `${category}:${name}`
+        const content = knowledgeSearch.read(id)
+        if (!content) {
+          return {
+            success: false,
+            error: `Unknown ${category} "${name}". Check the KNOWLEDGE LIBRARY menu — names are listed exactly as you must pass them.`,
+          }
+        }
+        return { success: true, data: { id, content } }
+      }
+
       const localExecutors = {
-        knowledge: async (params: any) => {
-          const id = params.id || ''
-          if (!id) {
-            return { success: false, error: 'Missing id. Check the KNOWLEDGE LIBRARY menu in your system context.' }
-          }
-          const content = knowledgeSearch.read(id)
-          if (!content) {
-            return { success: false, error: `Unknown id "${id}". Check the KNOWLEDGE LIBRARY menu in your system context.` }
-          }
-          return { success: true, data: { id, content } }
-        },
+        skill: makeReaderExecutor('skill'),
+        style: makeReaderExecutor('style'),
+        anatomy: makeReaderExecutor('anatomy'),
+        guideline: makeReaderExecutor('guideline'),
+        help: makeReaderExecutor('help'),
       }
 
       await activeOrchestratorRef.current.generate(enrichedPrompt, { toolExecutors: localExecutors })
@@ -515,8 +537,9 @@ export function useChat({
     await generateFromPrompt(retryPrompt)
   }
 
-  const respondToQuestion = (answer: string) => {
-    activeOrchestratorRef.current?.answerQuestion(answer)
+  const respondToQuestion = (response: AskUserResponse | string) => {
+    const normalized = typeof response === 'string' ? { freeText: response } : response
+    activeOrchestratorRef.current?.answerQuestion(normalized)
     setPendingQuestion(null)
   }
 

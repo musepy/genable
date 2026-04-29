@@ -344,37 +344,37 @@
   },
   {
     "id": "skill:agent-page",
-    "name": "Agent Page — Visual Design System Dashboard",
+    "name": "agent-page",
     "description": "Use when initializing or managing the .agent Figma page that holds the visual design system dashboard — Palette (color/spacing/typography) and Guide (usage docs) via component templates.",
     "category": "skill"
   },
   {
     "id": "skill:component-set",
-    "name": "Component Set Creation",
+    "name": "component-set",
     "description": "Use when creating a Figma ComponentSet with a variant matrix — clone cascading for diffs and combine_components to assemble the final set, avoiding known pitfalls.",
     "category": "skill"
   },
   {
+    "id": "skill:create-page",
+    "name": "create-page",
+    "description": "Use when creating a new design from scratch on empty canvas — \"design a\", \"make a\", \"做一个\", \"设计一个\", \"搞一个\". Detects vague prompts and asks ONE multi-question form before generating; specific prompts proceed directly. Call FIRST before style/jsx.",
+    "category": "skill"
+  },
+  {
     "id": "skill:design-system",
-    "name": "Design System Creation",
+    "name": "design-system",
     "description": "Use when creating or managing Figma design systems — variable collections, modes (light/dark), component variants, and variable bindings for brand tokens and themes.",
     "category": "skill"
   },
   {
-    "id": "skill:design-knowledge",
-    "name": "Design Knowledge",
-    "description": "Use when you need to search for design patterns, component anatomy, style guides, or layout rules from the knowledge library before making decisions.",
-    "category": "skill"
-  },
-  {
     "id": "skill:restyle",
-    "name": "Restyle Existing Design",
+    "name": "restyle",
     "description": "Use when changing visual style of an EXISTING design (keep content+structure). 换风格/改成/整成/做成X那种; restyle/redesign/make it Y. Inspect→edit, don't rebuild.",
     "category": "skill"
   },
   {
     "id": "skill:rich-text",
-    "name": "Rich Text Styling",
+    "name": "rich-text",
     "description": "Use when applying mixed inline styles (bold, color, weight) within a single text node via markdown markup — the runtime parses it and applies per-character ranges.",
     "category": "skill"
   },

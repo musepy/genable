@@ -101,8 +101,8 @@ export class AgentOrchestrator {
     componentRegistry.clear();
   }
 
-  public answerQuestion(answer: string): void {
-    this.activeAgent?.resolveQuestion(answer);
+  public answerQuestion(response: import('../../shared/protocol/agentRuntimeEvents').AskUserResponse | string): void {
+    this.activeAgent?.resolveQuestion(response);
   }
 
   async generate(prompt: string, pluginData: AgentPluginData) {

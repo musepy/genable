@@ -1,6 +1,5 @@
 ---
-id: restyle
-name: Restyle Existing Design
+name: restyle
 description: Use when changing visual style of an EXISTING design (keep content+structure). 换风格/改成/整成/做成X那种; restyle/redesign/make it Y. Inspect→edit, don't rebuild.
 ---
 

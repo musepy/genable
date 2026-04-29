@@ -19,11 +19,23 @@ export interface GenerateOptions {
   toolFilter?: string[]
 }
 
+interface AskUserResponse {
+  answers?: Array<string | string[]>
+  freeText?: string
+}
+
 interface DevBridgeCallbacks {
   generateFromPrompt: (prompt: string, options?: GenerateOptions) => Promise<void>
   handleRestore: () => void
   switchModel?: (provider: string, model: string) => void
-  respondToQuestion?: (answer: string) => void
+  respondToQuestion?: (response: AskUserResponse | string) => void
+}
+
+interface DevBridgeQuestion {
+  question: string
+  header?: string
+  options: { label: string; description?: string }[]
+  multiSelect?: boolean
 }
 
 interface DevBridgeState {
@@ -32,7 +44,7 @@ interface DevBridgeState {
   history: ChatMessage[]
   modelName: string
   eventBufferRef: RefObject<AgentRuntimeEvent[]>
-  pendingQuestion: { question: string; options: { label: string; description?: string }[] } | null
+  pendingQuestion: { questions: DevBridgeQuestion[] } | null
 }
 
 interface TriggerPayload {
@@ -146,46 +158,67 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     if (!callbacksRef.current.respondToQuestion) return
 
     const triggerId = triggerIdRef.current
-    const question = state.pendingQuestion
+    const pending = state.pendingQuestion
     let canceled = false
 
-    // Stream question event to bridge SSE
+    // Auto-fallback: pick first option per question (string for single-select, [first] for multi)
+    const buildAutoFallback = (): AskUserResponse => {
+      const answers: Array<string | string[]> = pending.questions.map(q =>
+        q.multiSelect ? [q.options[0]?.label || ''] : (q.options[0]?.label || '')
+      )
+      return { answers }
+    }
+
+    // Stream question event to bridge SSE — keep `question`/`options` shape for the
+    // first question for back-compat with bridge consumers that read those fields,
+    // and add `questions` array as the structured payload.
+    const firstQ = pending.questions[0]
     fetchBridge(`/event/${triggerId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         type: 'ask_user_question',
-        question: question.question,
-        options: question.options,
+        question: firstQ.question,
+        options: firstQ.options,
+        questions: pending.questions,
       }),
     }).catch(() => {})
 
-    console.log(`[DevBridge] ask_user: "${question.question}" — polling /answer/${triggerId}`)
+    console.log(`[DevBridge] ask_user: ${pending.questions.length} question(s) — polling /answer/${triggerId}`)
 
-    // Long-poll for answer (up to 120s)
+    // Long-poll for answer (up to 120s).
+    // Bridge can respond with either:
+    //   { answer: "string" }                  — legacy single-string (treated as freeText)
+    //   { answers: [...], freeText?: "..." }  — structured, matches AskUserResponse
     fetchBridge(`/answer/${triggerId}?wait=120`).then(async (res) => {
       if (canceled) return
-      // 200 with answer = explicit response from external caller
       if (res && res.ok) {
         try {
           const data = await res.json()
-          if (data.answer && callbacksRef.current.respondToQuestion) {
-            console.log(`[DevBridge] answer received: "${data.answer}"`)
-            callbacksRef.current.respondToQuestion(data.answer)
-            return
+          if (callbacksRef.current.respondToQuestion) {
+            if (Array.isArray(data.answers) || typeof data.freeText === 'string') {
+              console.log(`[DevBridge] structured answer received`)
+              callbacksRef.current.respondToQuestion({ answers: data.answers, freeText: data.freeText })
+              return
+            }
+            if (typeof data.answer === 'string' && data.answer) {
+              console.log(`[DevBridge] string answer received: "${data.answer}"`)
+              callbacksRef.current.respondToQuestion({ freeText: data.answer })
+              return
+            }
           }
         } catch { /* parse error — fall through to fallback */ }
       }
-      // Timeout (204), error (404/500), or no answer field → auto-select first option
+      // Timeout (204), error (404/500), or no usable answer → auto-fallback
       if (callbacksRef.current.respondToQuestion) {
-        const fallback = question.options[0]?.label || ''
-        console.log(`[DevBridge] no answer (status=${res?.status}), auto-selecting: "${fallback}"`)
+        const fallback = buildAutoFallback()
+        console.log(`[DevBridge] no answer (status=${res?.status}), auto-selecting:`, fallback.answers)
         callbacksRef.current.respondToQuestion(fallback)
       }
     }).catch(() => {
       if (!canceled && callbacksRef.current.respondToQuestion) {
-        const fallback = question.options[0]?.label || ''
-        console.log(`[DevBridge] answer fetch failed, auto-selecting: "${fallback}"`)
+        const fallback = buildAutoFallback()
+        console.log(`[DevBridge] answer fetch failed, auto-selecting:`, fallback.answers)
         callbacksRef.current.respondToQuestion(fallback)
       }
     })

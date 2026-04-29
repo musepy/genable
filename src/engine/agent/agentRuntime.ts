@@ -98,7 +98,7 @@ export class AgentRuntime {
   private currentRunId = '';
   private eventSequence = 0;
   private canceledEventEmitted = false;
-  private pendingQuestion: { resolve: (answer: string) => void } | null = null;
+  private pendingQuestion: { resolve: (response: import('../../shared/protocol/agentRuntimeEvents').AskUserResponse) => void } | null = null;
   private chatPanelId: string | null = null;
   private turnCreatedNodes: Array<{ id: string; name?: string; type?: string }> = [];
   private turnCreatedIds: string[] = [];
@@ -214,7 +214,7 @@ export class AgentRuntime {
     this.canceled = true;
     this.cancelReason = reason;
     if (this.pendingQuestion) {
-      this.pendingQuestion.resolve('');
+      this.pendingQuestion.resolve({});
       this.pendingQuestion = null;
     }
     if (this.activeAbortController && !this.activeAbortController.signal.aborted) {
@@ -226,8 +226,11 @@ export class AgentRuntime {
     this.emitCanceledEvent();
   }
 
-  public resolveQuestion(answer: string): void {
-    this.pendingQuestion?.resolve(answer);
+  public resolveQuestion(response: import('../../shared/protocol/agentRuntimeEvents').AskUserResponse | string): void {
+    if (!this.pendingQuestion) return;
+    // String input is treated as freeText (back-compat with old callers).
+    const normalized = typeof response === 'string' ? { freeText: response } : response;
+    this.pendingQuestion.resolve(normalized);
     this.pendingQuestion = null;
   }
 
@@ -245,24 +248,39 @@ export class AgentRuntime {
     if (this.allowedExecutionToolNames.has('ask_user')) {
       this.toolDispatcher.mergeExecutors({
         ask_user: async (args: any) => {
-          const { question, options } = args || {};
-          if (!question || !Array.isArray(options) || options.length < 2) {
-            return { error: 'ask_user requires a question and 2-4 options.' };
+          const { questions } = args || {};
+          if (!Array.isArray(questions) || questions.length < 1 || questions.length > 4) {
+            return { error: 'ask_user requires "questions" — an array of 1-4 entries.' };
           }
+          for (const q of questions) {
+            if (!q || typeof q.question !== 'string' || !q.question.trim()) {
+              return { error: 'each question requires a non-empty "question" string.' };
+            }
+            if (!Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) {
+              return { error: `question "${q.question}" requires 2-4 "options".` };
+            }
+          }
+          const normalized = questions.map((q: any) => ({
+            question: String(q.question),
+            header: q.header ? String(q.header) : undefined,
+            options: q.options.map((o: any) => ({ label: String(o.label), description: o.description ? String(o.description) : undefined })),
+            multiSelect: !!q.multiSelect,
+          }));
           this.emitRuntimeEvent({
             type: 'ask_user_question',
             phase: 'execution',
             iteration: this.currentIteration,
-            question,
-            options: options.map((o: any) => ({ label: o.label, description: o.description })),
+            questions: normalized,
           });
-          const answer = await new Promise<string>(r => {
+          const response = await new Promise<import('../../shared/protocol/agentRuntimeEvents').AskUserResponse>(r => {
             this.pendingQuestion = { resolve: r };
           });
           this.pendingQuestion = null;
           this.throwIfCanceled();
-          if (!answer) return { error: 'Question was canceled by user.' };
-          return { data: { answer } };
+          const hasAnswers = Array.isArray(response.answers) && response.answers.length > 0;
+          const hasFreeText = typeof response.freeText === 'string' && response.freeText.trim().length > 0;
+          if (!hasAnswers && !hasFreeText) return { error: 'Question was canceled by user.' };
+          return { data: response };
         },
       });
     }

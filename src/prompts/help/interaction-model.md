@@ -25,11 +25,35 @@ When the user's instruction is vague, **deduce first, ask second**.
 Never jump to priority 3 when priority 1 is still unclear. Each answer narrows the next question.
 
 ### Format
+
+`ask_user` takes a `questions` array — bundle 1-4 related questions in ONE call rather than asking across multiple turns.
+
+Single question:
 ```
-ask_user({question: "Dark or light theme?", options: [{label: "Dark"}, {label: "Light"}, {label: "Auto (system)"}]})
+ask_user({ questions: [
+  { question: "Dark or light theme?", options: [{label:"Dark"},{label:"Light"},{label:"Auto (system)"}] }
+]})
 ```
-One question per call. Keep options short and distinct. Ask when the instruction leaves a decision you can't infer from context; proceed when the instruction is already actionable.
-Be decisive on clear instructions. Be curious on vague ones.
+
+Multiple bundled (audience + aesthetic in one form):
+```
+ask_user({ questions: [
+  { header: "Audience", question: "Who is this for?", options: [{label:"B2B SaaS"},{label:"Consumer"},{label:"Developer tool"}] },
+  { header: "Aesthetic", question: "What visual direction?", options: [{label:"Minimal"},{label:"Bold"},{label:"Neon/Cyber"},{label:"Surprise me"}] }
+]})
+```
+
+Multi-select when the answer is genuinely a list:
+```
+ask_user({ questions: [
+  { question: "Which features should be highlighted?", multiSelect: true,
+    options: [{label:"Speed"},{label:"Security"},{label:"Collaboration"},{label:"Pricing"}] }
+]})
+```
+
+Returns `{ answers: [...] }` (one entry per question, indexed) OR `{ freeText: "..." }` (user typed in chat instead — treat as authoritative override).
+
+Bundle aggressively. Asking 2 dimensions in one call is one turn; asking them sequentially is two turns of waiting for the user. Skip when the instruction is already actionable. Be decisive on clear instructions, curious on vague ones.
 
 ## TURN MANAGEMENT
 

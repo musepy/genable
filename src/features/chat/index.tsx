@@ -264,13 +264,13 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
           fontWeight: 400,
           fontFamily: 'var(--typography-font-family-emphasis)',
           color: 'var(--gray-12)',
-          lineHeight: 1.25,
-          letterSpacing: '-0.2px',
+          lineHeight: 1.05,
+          letterSpacing: '-0.4px',
         }}>{t.buildSomething}<br />{t.great}</div>
         <div style={{
           fontSize: tokens.fontSize[1],
-          color: 'var(--gray-9)',
-          marginTop: tokens.space[1],
+          color: 'var(--gray-a11)',
+          marginTop: tokens.space[3],
           lineHeight: tokens.lineHeight[2],
         }}>{t.emptyStateHint}</div>
       </div>
@@ -419,6 +419,367 @@ function renderAttachmentChips(
   return chips
 }
 
+// ─── AskUserForm ─────────────────────────────────────────────────────────
+//
+// Wizard-style form for 1-4 questions. CC AskUserQuestion-aligned UX:
+//   - Horizontal tab bar at top showing each question + Submit (with answered ✓)
+//   - One question shown at a time in the body
+//   - Click an option (single-select) → answer recorded, auto-advance to next tab
+//   - Multi-select: tap to toggle, no auto-advance; user clicks next tab manually
+//   - Auto-injected "Other..." option per question — expands inline text input
+//     so users always have free-form per-question fallback (matches CC behavior)
+//   - Single-question single-select: collapses to direct-click-submit (no tabs)
+//
+// Global free-form bypass (typing in the chat input) is handled by ChatFeature,
+// not this component — it routes prompt text to respondToQuestion({ freeText }).
+
+interface AskUserQuestion {
+  question: string
+  header?: string
+  options: { label: string; description?: string }[]
+  multiSelect?: boolean
+}
+
+const OTHER_SENTINEL = '__OTHER__'
+
+function AskUserForm({
+  questions,
+  onSubmit,
+}: {
+  questions: AskUserQuestion[]
+  onSubmit: (answers: Array<string | string[]>) => void
+}) {
+  // selections[i]:
+  //   single-select: string (option label OR custom text from "Other") | null
+  //   multi-select:  string[] (entries are option labels OR custom text)
+  const [selections, setSelections] = useState<Array<string | string[] | null>>(
+    () => questions.map(q => (q.multiSelect ? [] : null)),
+  )
+  // Per-question UI state for the inline "Other..." text input
+  const [otherOpen, setOtherOpen] = useState<Record<number, boolean>>({})
+  const [otherText, setOtherText] = useState<Record<number, string>>({})
+  const [activeIdx, setActiveIdx] = useState(0)
+
+  const isSingleQuestion = questions.length === 1 && !questions[0].multiSelect
+
+  const isQuestionAnswered = (i: number): boolean => {
+    const s = selections[i]
+    if (questions[i].multiSelect) return Array.isArray(s) && s.length > 0
+    return typeof s === 'string' && s.length > 0
+  }
+
+  const allAnswered = questions.every((_, i) => isQuestionAnswered(i))
+
+  const advance = (fromIdx: number) => {
+    // Find next unanswered question; if none, jump to Submit slot (questions.length)
+    for (let j = fromIdx + 1; j < questions.length; j++) {
+      if (!isQuestionAnswered(j)) {
+        setActiveIdx(j)
+        return
+      }
+    }
+    setActiveIdx(questions.length)
+  }
+
+  const finalize = (sel: Array<string | string[] | null>) => {
+    const answers = sel.map((s, i) =>
+      questions[i].multiSelect ? ((s as string[]) || []) : (s as string),
+    )
+    onSubmit(answers)
+  }
+
+  const recordAnswer = (qIdx: number, value: string) => {
+    setSelections(prev => {
+      const next = [...prev]
+      const q = questions[qIdx]
+      if (q.multiSelect) {
+        const cur = (next[qIdx] as string[]) || []
+        next[qIdx] = cur.includes(value) ? cur.filter(l => l !== value) : [...cur, value]
+      } else {
+        next[qIdx] = next[qIdx] === value ? null : value
+      }
+      // Single-question short-circuit: submit immediately
+      if (isSingleQuestion && next[qIdx] !== null) {
+        setTimeout(() => finalize(next), 0)
+      }
+      return next
+    })
+    // Auto-advance for single-select multi-question forms
+    if (!questions[qIdx].multiSelect && !isSingleQuestion) {
+      setTimeout(() => advance(qIdx), 80)
+    }
+  }
+
+  const submitOtherText = (qIdx: number) => {
+    const text = (otherText[qIdx] || '').trim()
+    if (!text) return
+    recordAnswer(qIdx, text)
+    setOtherOpen(prev => ({ ...prev, [qIdx]: false }))
+    setOtherText(prev => ({ ...prev, [qIdx]: '' }))
+  }
+
+  const isOptionSelected = (qIdx: number, label: string): boolean => {
+    const s = selections[qIdx]
+    if (questions[qIdx].multiSelect) return Array.isArray(s) && s.includes(label)
+    return s === label
+  }
+
+  // ─── Style helpers (kept inline since this file uses inline styles) ──
+  const tabBarStyle: any = {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: tokens.space[1],
+    overflowX: 'auto',
+    paddingBottom: 2,
+  }
+
+  const tabStyle = (active: boolean, answered: boolean, enabled: boolean = true): any => ({
+    flexShrink: 0,
+    padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
+    border: active ? `1px solid ${tokens.colors.textPrimary}` : 'var(--border-default)',
+    borderRadius: 'var(--radius-2)',
+    background: active ? tokens.colors.alpha[2] : 'transparent',
+    color: enabled ? tokens.colors.textPrimary : tokens.colors.textSecondary,
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    fontFamily: tokens.font.sans,
+    fontSize: tokens.fontSize[1],
+    fontWeight: active ? 600 : 500,
+    whiteSpace: 'nowrap',
+    transition: 'var(--transition-crisp)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  })
+
+  const optionStyle = (selected: boolean): any => ({
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 2,
+    padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+    border: selected ? `1px solid ${tokens.colors.textPrimary}` : 'var(--border-default)',
+    borderRadius: 'var(--radius-2)',
+    background: selected ? tokens.colors.alpha[2] : 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+    width: '100%',
+    fontFamily: tokens.font.sans,
+    transition: 'var(--transition-crisp)',
+  })
+
+  // ─── Render: single-question fast-path (no tabs) ────────────────────
+  if (isSingleQuestion) {
+    const q = questions[0]
+    return (
+      <div
+        style={{
+          flexShrink: 0,
+          padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
+          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.space[2],
+          maxHeight: 320,
+          overflowY: 'auto',
+        }}
+      >
+        {q.header && (
+          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            {q.header}
+          </span>
+        )}
+        <span style={{ fontSize: tokens.fontSize[2], color: tokens.colors.textPrimary, fontWeight: 500, lineHeight: tokens.lineHeight[2] }}>
+          {q.question}
+        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+          {q.options.map(opt => (
+            <button key={opt.label} className="card-interactive" onClick={() => recordAnswer(0, opt.label)} style={optionStyle(false)}>
+              <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>{opt.label}</span>
+              {opt.description && (
+                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>{opt.description}</span>
+              )}
+            </button>
+          ))}
+          {/* Auto-injected Other option */}
+          {otherOpen[0] ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+              <input
+                type="text"
+                autoFocus
+                value={otherText[0] || ''}
+                onInput={(e: any) => setOtherText({ ...otherText, 0: e.target.value })}
+                onKeyDown={(e: any) => { if (e.key === 'Enter') submitOtherText(0) }}
+                placeholder="Type your answer…"
+                style={{
+                  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+                  border: 'var(--border-default)',
+                  borderRadius: 'var(--radius-2)',
+                  background: 'transparent',
+                  color: tokens.colors.textPrimary,
+                  fontFamily: tokens.font.sans,
+                  fontSize: tokens.fontSize[1],
+                  outline: 'none',
+                }}
+              />
+              <button onClick={() => submitOtherText(0)} disabled={!(otherText[0] || '').trim()} style={{ alignSelf: 'flex-end', padding: `${tokens.space[1]}px ${tokens.space[3]}px`, border: 'none', borderRadius: 'var(--radius-2)', background: tokens.colors.textPrimary, color: tokens.colors.background, fontFamily: tokens.font.sans, fontSize: tokens.fontSize[1], fontWeight: 600, cursor: 'pointer' }}>
+                Submit
+              </button>
+            </div>
+          ) : (
+            <button className="card-interactive" onClick={() => setOtherOpen({ ...otherOpen, 0: true })} style={optionStyle(false)}>
+              <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 500 }}>Other…</span>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Render: multi-question wizard with tabs ────────────────────────
+  const submitTabActive = activeIdx === questions.length
+  const onSubmitTab = submitTabActive
+  const cur = !onSubmitTab ? questions[activeIdx] : null
+
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
+        borderTop: `1px solid ${tokens.colors.alpha[3]}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: tokens.space[2],
+        maxHeight: 380,
+        overflowY: 'auto',
+      }}
+    >
+      {/* Tab bar */}
+      <div style={tabBarStyle}>
+        {questions.map((q, i) => {
+          const answered = isQuestionAnswered(i)
+          const active = i === activeIdx
+          return (
+            <button
+              key={i}
+              onClick={() => setActiveIdx(i)}
+              style={tabStyle(active, answered)}
+              title={q.question}
+            >
+              <span>{answered ? '✓' : '○'}</span>
+              <span>{q.header || `Q${i + 1}`}</span>
+            </button>
+          )
+        })}
+        <button
+          onClick={() => allAnswered && finalize(selections)}
+          disabled={!allAnswered}
+          style={tabStyle(submitTabActive, false, allAnswered)}
+        >
+          <span>↵</span>
+          <span>Submit</span>
+        </button>
+      </div>
+
+      {/* Active question body */}
+      {cur && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[2] }}>
+          {cur.header && (
+            <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              {cur.header}{cur.multiSelect && ' (multi)'}
+            </span>
+          )}
+          <span style={{ fontSize: tokens.fontSize[2], color: tokens.colors.textPrimary, fontWeight: 500, lineHeight: tokens.lineHeight[2] }}>
+            {cur.question}
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+            {cur.options.map(opt => {
+              const selected = isOptionSelected(activeIdx, opt.label)
+              return (
+                <button key={opt.label} className="card-interactive" onClick={() => recordAnswer(activeIdx, opt.label)} style={optionStyle(selected)}>
+                  <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>{opt.label}</span>
+                  {opt.description && (
+                    <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>{opt.description}</span>
+                  )}
+                </button>
+              )
+            })}
+            {/* Auto-injected Other */}
+            {otherOpen[activeIdx] ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
+                <input
+                  type="text"
+                  autoFocus
+                  value={otherText[activeIdx] || ''}
+                  onInput={(e: any) => setOtherText({ ...otherText, [activeIdx]: e.target.value })}
+                  onKeyDown={(e: any) => { if (e.key === 'Enter') submitOtherText(activeIdx) }}
+                  placeholder="Type your answer…"
+                  style={{
+                    padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+                    border: 'var(--border-default)',
+                    borderRadius: 'var(--radius-2)',
+                    background: 'transparent',
+                    color: tokens.colors.textPrimary,
+                    fontFamily: tokens.font.sans,
+                    fontSize: tokens.fontSize[1],
+                    outline: 'none',
+                  }}
+                />
+                <button onClick={() => submitOtherText(activeIdx)} disabled={!(otherText[activeIdx] || '').trim()} style={{ alignSelf: 'flex-end', padding: `${tokens.space[1]}px ${tokens.space[3]}px`, border: 'none', borderRadius: 'var(--radius-2)', background: tokens.colors.textPrimary, color: tokens.colors.background, fontFamily: tokens.font.sans, fontSize: tokens.fontSize[1], fontWeight: 600, cursor: 'pointer' }}>
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button className="card-interactive" onClick={() => setOtherOpen({ ...otherOpen, [activeIdx]: true })} style={optionStyle(false)}>
+                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 500 }}>Other…</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Submit pane (when Submit tab is active) */}
+      {onSubmitTab && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[2], padding: tokens.space[2] }}>
+          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
+            Review your answers and submit, or click any tab to revise.
+          </span>
+          {questions.map((q, i) => {
+            const s = selections[i]
+            const display = q.multiSelect
+              ? Array.isArray(s) && s.length > 0 ? s.join(', ') : '(none)'
+              : (typeof s === 'string' && s ? s : '(unanswered)')
+            return (
+              <div key={i} style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary }}>
+                <span style={{ color: tokens.colors.textSecondary }}>{q.header || `Q${i + 1}`}: </span>
+                {display}
+              </div>
+            )
+          })}
+          <button
+            onClick={() => allAnswered && finalize(selections)}
+            disabled={!allAnswered}
+            style={{
+              marginTop: tokens.space[1],
+              padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+              border: 'none',
+              borderRadius: 'var(--radius-2)',
+              background: allAnswered ? tokens.colors.textPrimary : tokens.colors.alpha[3],
+              color: allAnswered ? tokens.colors.background : tokens.colors.textSecondary,
+              cursor: allAnswered ? 'pointer' : 'not-allowed',
+              fontFamily: tokens.font.sans,
+              fontSize: tokens.fontSize[1],
+              fontWeight: 600,
+              transition: 'var(--transition-crisp)',
+            }}
+          >
+            Submit
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ChatFeature(props: UseChatProps) {
   const t = useTranslations();
   const {
@@ -502,9 +863,9 @@ export function ChatFeature(props: UseChatProps) {
   }
 
   const handleGenerate = () => {
-    // When ask_user is pending, route input to answer the question
+    // When ask_user is pending, route input as free-form text override
     if (pendingQuestion && prompt.trim()) {
-      respondToQuestion(prompt.trim())
+      respondToQuestion({ freeText: prompt.trim() })
       setPrompt('')
       return
     }
@@ -538,7 +899,7 @@ export function ChatFeature(props: UseChatProps) {
         />
 
         {isEmpty && chipsState.visible && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: tokens.space[4] }}>
             <PromptChips
               suggestions={t.promptSuggestions}
               onSelect={selectSavedPrompt}
@@ -551,58 +912,12 @@ export function ChatFeature(props: UseChatProps) {
         {/* Scroll anchor for bottom */}
       </div>
 
-      {/* Ask User Question Panel — outside scroll, needs outerPad */}
+      {/* Ask User Form — outside scroll, scrolls internally if 2-4 questions overflow */}
       {pendingQuestion && (
-        <div style={{
-          flexShrink: 0,
-          padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
-          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: tokens.space[2],
-        }}>
-          <span style={{
-            fontSize: tokens.fontSize[2],
-            color: tokens.colors.textPrimary,
-            fontWeight: 500,
-            lineHeight: tokens.lineHeight[2],
-          }}>
-            {pendingQuestion.question}
-          </span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-            {pendingQuestion.options.map(opt => (
-              <button
-                key={opt.label}
-                className="card-interactive"
-                onClick={() => respondToQuestion(opt.label)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  gap: 2,
-                  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-                  border: 'var(--border-default)',
-                  borderRadius: 'var(--radius-2)',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  width: '100%',
-                  fontFamily: tokens.font.sans,
-                  transition: 'var(--transition-crisp)',
-                }}
-              >
-                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>
-                  {opt.label}
-                </span>
-                {opt.description && (
-                  <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-                    {opt.description}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+        <AskUserForm
+          questions={pendingQuestion.questions}
+          onSubmit={(answers) => respondToQuestion({ answers })}
+        />
       )}
 
       {/* Status bar — fixed between scroll area and input */}
@@ -627,10 +942,10 @@ export function ChatFeature(props: UseChatProps) {
         );
       })()}
 
-      {/* Input Area — Flex-anchored at bottom */}
+      {/* Input Area — Flex-anchored at bottom. Top pad gives chip→composer breathing room (4 + 8 = 12) */}
       <div style={{
         flexShrink: 0,
-        padding: `0 ${tokens.space[3]}px ${tokens.space[3]}px`,
+        padding: `${tokens.space[2]}px ${tokens.space[3]}px ${tokens.space[3]}px`,
         background: tokens.colors.background,
         zIndex: 10,
         position: 'relative',

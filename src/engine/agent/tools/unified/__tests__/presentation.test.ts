@@ -135,10 +135,10 @@ describe('presentForLLM — flat response format', () => {
 
   it('wraps string data as output field', () => {
     const result = {
-      data: 'knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)',
+      data: 'multi-line\nstring payload\nfrom an arbitrary tool',
     };
-    const presented = presentForLLM(result, 'knowledge');
-    expect(presented.output).toBe('knowledge — search and read design knowledge\n\nUsage: knowledge(action, query)');
+    const presented = presentForLLM(result, 'arbitrary_tool');
+    expect(presented.output).toBe('multi-line\nstring payload\nfrom an arbitrary tool');
   });
 
   it('passes through edit result fields (no per-tool filter)', () => {

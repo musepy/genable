@@ -70,7 +70,8 @@ Report: what you created (node name#id, structure summary) in 2-3 sentences.`,
   tools: [
     'jsx', 'inspect', 'describe', 'edit', 'find_nodes',
     'set_text', 'set_fill', 'set_stroke', 'set_layout',
-    'knowledge', 'clone_node', 'ask_user',
+    'skill', 'style', 'anatomy', 'guideline', 'help',
+    'clone_node', 'ask_user',
   ],
   maxIterations: 15,
 };
@@ -103,7 +104,8 @@ For each issue:
 End with: VERDICT: PASS | FAIL | WARN`,
   tools: [
     'inspect', 'describe', 'find_nodes', 'discover_props',
-    'knowledge', 'list_variables', 'list_component_props', 'get_selection',
+    'skill', 'style', 'anatomy', 'guideline', 'help',
+    'list_variables', 'list_component_props', 'get_selection',
   ],
   maxIterations: 8,
 };
@@ -129,7 +131,8 @@ Process:
 Report: list all variables created and bindings made, with target node name#ids.`,
   tools: [
     'list_variables', 'create_collection', 'create_variable', 'set_variable_value',
-    'bind_variable', 'set_variable_mode', 'inspect', 'find_nodes', 'describe', 'knowledge',
+    'bind_variable', 'set_variable_mode', 'inspect', 'find_nodes', 'describe',
+    'skill', 'style', 'anatomy', 'guideline', 'help',
   ],
   maxIterations: 10,
 };

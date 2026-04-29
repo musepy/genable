@@ -87,12 +87,43 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     ],
     repairHint: 'provide "node" ref and "parent" path',
   },
-  // Knowledge
+  // ask_user — multi-question form (1-4 questions, each with 2-4 options)
   {
-    tool: 'knowledge',
+    tool: 'ask_user',
     mode: 'EXECUTION',
-    required: [{ name: 'id', trim: true, check: 'required' }],
-    repairHint: 'provide "id" from the KNOWLEDGE LIBRARY menu',
+    required: [{ name: 'questions', trim: false, check: 'required' }],
+    repairHint: 'provide "questions" — an array of 1-4 entries, each { question, options[2-4], multiSelect? }',
+  },
+  // Knowledge readers — one entry per category, all share the same shape
+  {
+    tool: 'skill',
+    mode: 'EXECUTION',
+    required: [{ name: 'name', trim: true, check: 'required' }],
+    repairHint: 'provide "name" — a bare skill name from the KNOWLEDGE LIBRARY menu, e.g. skill({ name: "restyle" })',
+  },
+  {
+    tool: 'style',
+    mode: 'EXECUTION',
+    required: [{ name: 'name', trim: true, check: 'required' }],
+    repairHint: 'provide "name" — a bare style name from the KNOWLEDGE LIBRARY menu, e.g. style({ name: "neon-cyber" })',
+  },
+  {
+    tool: 'anatomy',
+    mode: 'EXECUTION',
+    required: [{ name: 'name', trim: true, check: 'required' }],
+    repairHint: 'provide "name" — a bare anatomy name from the KNOWLEDGE LIBRARY menu, e.g. anatomy({ name: "data-table" })',
+  },
+  {
+    tool: 'guideline',
+    mode: 'EXECUTION',
+    required: [{ name: 'name', trim: true, check: 'required' }],
+    repairHint: 'provide "name" — a bare guideline name from the KNOWLEDGE LIBRARY menu, e.g. guideline({ name: "form" })',
+  },
+  {
+    tool: 'help',
+    mode: 'EXECUTION',
+    required: [{ name: 'name', trim: true, check: 'required' }],
+    repairHint: 'provide "name" — a bare help name from the KNOWLEDGE LIBRARY menu, e.g. help({ name: "interaction-model" })',
   },
   // Variable tools
   {

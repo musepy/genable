@@ -11,7 +11,7 @@ import { describeDefinition } from './describe';
 import { editDefinition } from './edit';
 import { findNodesDefinition, discoverPropsDefinition, replacePropsDefinition } from './searchTool';
 import { deleteNodeDefinition, moveNodeDefinition, cloneNodeDefinition } from './structureTool';
-import { knowledgeDefinition } from './knowledgeTool';
+import { knowledgeReaders } from './knowledgeReaders';
 import { listVariablesDefinition, createCollectionDefinition, createVariableDefinition, setVariableValueDefinition, bindVariableDefinition, setVariableModeDefinition } from './varTool';
 import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
 import { jsToolDefinition } from './jsTool';
@@ -42,8 +42,8 @@ export const unifiedTools: ToolDefinition[] = [
   deleteNodeDefinition,
   moveNodeDefinition,
   cloneNodeDefinition,
-  // Knowledge
-  knowledgeDefinition,
+  // Knowledge readers — one tool per content category (flat schema)
+  ...knowledgeReaders,
   // Variables
   listVariablesDefinition,
   createCollectionDefinition,

@@ -152,8 +152,20 @@ export interface AgentRuntimeAskUserQuestionEvent extends AgentRuntimeBaseEvent 
   type: 'ask_user_question';
   phase: AgentRuntimePhase;
   iteration: number;
-  question: string;
-  options: { label: string; description?: string }[];
+  questions: Array<{
+    question: string;
+    header?: string;
+    options: { label: string; description?: string }[];
+    multiSelect?: boolean;
+  }>;
+}
+
+/** Response shape from UI back to runtime when the user submits / answers. */
+export interface AskUserResponse {
+  /** One entry per question (in order). string = single-select label, string[] = multi-select labels. */
+  answers?: Array<string | string[]>;
+  /** Free-form text typed in chat — overrides the structured form. Authoritative when present. */
+  freeText?: string;
 }
 
 export interface AgentRuntimeCanceledEvent extends AgentRuntimeBaseEvent {

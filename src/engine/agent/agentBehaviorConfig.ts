@@ -24,6 +24,29 @@ import { ThinkingLevel } from '../llm-client/config';
 // AGENT BEHAVIOR CONFIGURATION
 // ============================================================
 
+/**
+ * Variable resolution mode — Phase 2 step 4 + 7 of the variable resolver
+ * redesign (docs/knowledge/variable-resolver-design-2026-05.md §5.4 / §9).
+ *
+ * - 'phase1'                — pre-step-4 behavior. Bare-name binding still
+ *   silently picks first match; mode coverage check is SKIPPED. This is the
+ *   emergency-rollback escape valve.
+ * - 'phase2-mode-coverage'  — step 4 active. Bare-name silent-pick still
+ *   occurs (Phase 1 warn_pick_record), but mode coverage validation now
+ *   blocks bindings with missing modes and emits MISSING_MODE_VALUES.
+ * - 'phase2-strict'         — full Phase 2 (steps 5+6 cutover). Bare-name
+ *   bindings rejected at the tool boundary. Not yet wired — gated on §5.2
+ *   advance condition.
+ * - 'auto'                  — self-managed via rollback metrics. Reserved
+ *   for Phase 3 of the rollout; behaves as 'phase2-mode-coverage' until
+ *   the auto-rollback path lands.
+ */
+export type VariableResolutionMode =
+  | 'phase1'
+  | 'phase2-mode-coverage'
+  | 'phase2-strict'
+  | 'auto';
+
 export interface AgentBehaviorConfig {
   /**
    * Thinking level for Gemini 3.0+ models.
@@ -35,6 +58,13 @@ export interface AgentBehaviorConfig {
    * Maximum agent loop iterations (overrides AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_ITERATIONS).
    */
   maxIterations: number;
+
+  /**
+   * Variable-resolver phase. See VariableResolutionMode.
+   * Default: 'phase2-mode-coverage' — step 4 (mode coverage) live; step 5/6
+   * (strict resolver cutover) deferred.
+   */
+  variableResolution: VariableResolutionMode;
 }
 
 // ============================================================
@@ -44,6 +74,7 @@ export interface AgentBehaviorConfig {
 export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   thinkingLevel: 'minimal',
   maxIterations: 80,
+  variableResolution: 'phase2-mode-coverage',
 };
 
 /**

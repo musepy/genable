@@ -171,11 +171,21 @@ string for STRING, boolean for BOOLEAN).
 idempotency_key formula: sha256(collection_id + "|" + name + "|" + type + "|"
 + canonical_json(values_by_mode)). Random keys rejected.
 
+Mode coverage policy (spec §6.2):
+  - mode_coverage_required: 'all' (default) — every mode in the collection
+    must have an explicit value. set_fill / bind_variable will REJECT
+    bindings that fall through to a missing mode (MISSING_MODE_VALUES).
+  - mode_coverage_required: 'opt-in-fallback' — fallback to default mode
+    is intended. Bindings emit FALLBACK_BINDING warning instead of failing.
+    Caller MUST provide fallback_reason containing the structured phrase
+    "fallback to <mode_name>" (machine-greppable).
+
 Returns {data: {variable_id, name, type, collection_id, mode_coverage[],
-reused?: true}, warnings?: [...]}.
+mode_coverage_required, reused?: true}, warnings?: [...]}.
 
 Examples:
-  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Text/Primary", type: "COLOR", values_by_mode: {Light: "#111", Dark: "#EEE"}, idempotency_key: "<sha256>"})`,
+  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Text/Primary", type: "COLOR", values_by_mode: {Light: "#111", Dark: "#EEE"}, idempotency_key: "<sha256>"})
+  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Spacing/desktop", type: "FLOAT", values_by_mode: {Desktop: 24}, idempotency_key: "<sha256>", mode_coverage_required: "opt-in-fallback", fallback_reason: "Desktop-only metric; fallback to Desktop in Mobile mode."})`,
   parameters: {
     type: 'object',
     properties: {
@@ -199,6 +209,15 @@ Examples:
       idempotency_key: {
         type: 'string',
         description: 'Canonical sha256 idempotency key — see spec §3.1',
+      },
+      mode_coverage_required: {
+        type: 'string',
+        description: 'Mode coverage policy — "all" (default; every mode must have explicit value) or "opt-in-fallback" (allow fallback, requires fallback_reason).',
+        enum: ['all', 'opt-in-fallback'],
+      },
+      fallback_reason: {
+        type: 'string',
+        description: 'REQUIRED iff mode_coverage_required="opt-in-fallback". Must contain the structured phrase "fallback to <mode_name>". Persisted on the variable for audit trail.',
       },
     },
     required: ['collection_id', 'name', 'type', 'values_by_mode', 'idempotency_key'],

@@ -373,6 +373,62 @@ export interface AgentRuntimeAmbiguousAutopickEvent extends AgentRuntimeBaseEven
 }
 
 /**
+ * Emitted when a variable binding fails MISSING_MODE_VALUES — the variable's
+ * `values_by_mode` is missing one or more modes in the target node's
+ * resolved-mode chain. Phase 2 step 4 of the variable resolver redesign:
+ * the binding is REJECTED at write time (no Figma mutation occurs) unless
+ * the variable is opt-in-fallback.
+ *
+ * Carries the data needed for rollback metric tracking (§5.4): `phase`
+ * indicates which AgentBehaviorConfig.variableResolution setting was active,
+ * `tool_name` lets the rollback tracker scope per-tool reverts.
+ *
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §6, §4.1.d.
+ */
+export interface AgentRuntimeMissingModeValuesEvent extends AgentRuntimeBaseEvent {
+  type: 'missing_mode_values';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  /** Tool that triggered the binding (e.g. "set_fill", "jsx", "bind_variable"). */
+  tool_name: string;
+  /** Node ID the binding was attempted on. */
+  node_id: string;
+  /** Variable ID whose mode coverage was insufficient. */
+  variable_id: string;
+  /** Modes the variable lacks values for, expressed as mode names. */
+  missing_modes: string[];
+  /** Current AgentBehaviorConfig.variableResolution at time of failure. */
+  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  /** Wall-clock ms (Date.now()) at failure point — duplicates `timestamp` for explicit auditing. */
+  ts: number;
+}
+
+/**
+ * Emitted when MISSING_MODE_VALUES failures attributed as "likely false
+ * positives" cross a per-session threshold (currently 3 within one session).
+ * Phase 2 step 7 of the variable resolver redesign — surfaces a signal that
+ * `agentBehaviorConfig.variableResolution` may need to be flipped to 'phase1'
+ * (the rollback escape valve, §5.4 / §7.2).
+ *
+ * This is OBSERVABILITY ONLY — the runtime DOES NOT auto-flip the setting.
+ * Auto-rollback lives in Phase 3 of the rollout. The signal lets dev-bridge
+ * dashboards / users see the regression before deciding to revert.
+ *
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §5.4 / §7.2.
+ */
+export interface AgentRuntimeRollbackSignalEvent extends AgentRuntimeBaseEvent {
+  type: 'rollback_signal';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  /** Tool that triggered the threshold (e.g. "set_fill", "bind_variable", "jsx"). */
+  tool_name: string;
+  /** Number of likely-false-positive failures observed for this tool in the current session. */
+  false_positive_count: number;
+  /** Wall-clock ms (Date.now()) when the threshold was crossed. */
+  ts: number;
+}
+
+/**
  * Emitted when a hook callback throws. Hook errors are non-fatal — the
  * runner logs the error, emits this event, and continues with the next hook.
  */
@@ -446,7 +502,9 @@ export type AgentRuntimeEvent =
   | AgentRuntimeToolLogEvent
   | AgentRuntimeHookErrorEvent
   | AgentRuntimeHookPerfEvent
-  | AgentRuntimeAmbiguousAutopickEvent;
+  | AgentRuntimeAmbiguousAutopickEvent
+  | AgentRuntimeMissingModeValuesEvent
+  | AgentRuntimeRollbackSignalEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -472,5 +530,7 @@ export type AgentRuntimeEventType =
   | 'tool_log'
   | 'hook_error'
   | 'hook_perf'
-  | 'ambiguous_autopick';
+  | 'ambiguous_autopick'
+  | 'missing_mode_values'
+  | 'rollback_signal';
 

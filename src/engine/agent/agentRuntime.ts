@@ -25,7 +25,19 @@ import { OutputTooLongError } from '../llm-client/providers/shared/providerError
 import { ContextManager } from './context/contextManager';
 import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
 import { RyowStore, VARIABLE_RELATED_TOOLS } from './ryowStore';
+import { setVariableResolutionMode } from '../actions/handlers/modeCoverageCheck';
 
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-tool likely-false-positive count that triggers a single
+ * `rollback_signal` event for the session. Spec §5.4 / §7.2 — purely
+ * observational, not used to auto-flip `variableResolution`.
+ */
+const ROLLBACK_SIGNAL_THRESHOLD = 3;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,11 +130,45 @@ export class AgentRuntime {
     toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
     tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
   };
+  /**
+   * Phase 2 step 7: per-session MISSING_MODE_VALUES failure tracking.
+   * Spec §5.4 — each entry records a binding rejection so the rollback
+   * detector can decide if any of them are regressions (variable's RYOW
+   * mode coverage matches the failure's missing modes ⇒ legitimate
+   * protection; mismatch ⇒ likely resolver bug).
+   *
+   * For Phase 1 of step 7 (this commit), we just track. The auto-revert
+   * decision logic lives in Phase 3 of the rollout.
+   */
+  private missingModeValuesFailures: Array<{
+    tool_name: string;
+    node_id: string;
+    variable_id: string;
+    missing_modes: string[];
+    iteration: number;
+    /** True when RyowStore says the variable lacks the modes ⇒ legitimate protection. */
+    likely_legitimate: boolean;
+    ts: number;
+  }> = [];
+  /**
+   * Per-tool likely-false-positive counter. When count >= ROLLBACK_SIGNAL_THRESHOLD
+   * we emit a single `rollback_signal` event so dashboards can surface the
+   * regression. We DO NOT auto-flip `variableResolution` — Phase 3 of the
+   * rollout owns auto-rollback. Spec §5.4 / §7.2.
+   */
+  private modeCoverageFailureCounters = new Map<string, { legit: number; false_positive: number }>();
+  /** Tools that already emitted rollback_signal this session — emit-once-per-tool. */
+  private rollbackSignalEmittedFor = new Set<string>();
 
   constructor(private options: AgentRuntimeOptions) {
     this.behaviorConfig = resolveBehavior(options.behaviorConfig);
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
+    // Sync the main-thread mode-coverage checker to the active resolver
+    // phase. Tests + local executors share this realm, so the setter takes
+    // effect immediately. Cross-thread (IPC) sync still happens per-call via
+    // `getRuntimeContext` below (toolCallHandler.ts).
+    setVariableResolutionMode(this.behaviorConfig.variableResolution);
     // Context budget: 70% of context window (leave 30% for model output + safety margin)
     // chars ≈ tokens * 4 (rough estimate)
     const contextWindowTokens = options.contextWindow
@@ -172,6 +218,12 @@ export class AgentRuntime {
         throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
         onToolCall: options.onToolCall,
         onToolResult: options.onToolResult,
+        // Phase 2 step 4 + 7: thread variableResolution from agent config
+        // to main-thread handlers via IPC context so the mode-coverage
+        // check honors the runtime escape valve.
+        getRuntimeContext: () => ({
+          variableResolution: this.behaviorConfig.variableResolution,
+        }),
         beforeToolExec: async (tc) => {
           const ctx: HookContext = {
             iteration: this.currentIteration,
@@ -613,6 +665,16 @@ export class AgentRuntime {
       }
     }
 
+    // ── 2.5. Emit MISSING_MODE_VALUES events + track failures ──
+    // Spec §6 / §5.4. Two surfaces produce this signal:
+    //  (a) bind_variable returns error="MISSING_MODE_VALUES: ..." with a
+    //      structured data payload (see varHandlers.ts).
+    //  (b) variableBindingHandler emits a Warning with code MISSING_MODE_VALUES
+    //      that rides as warning.warnings[] from set_fill / jsx — the binding
+    //      didn't happen but the rest of the tool succeeded, so it's a warning
+    //      not an error.
+    this.processMissingModeValues(tc, result);
+
     // ── 3. Inject _ryow snapshot for variable-related tools ──
     // The store's snapshot() returns undefined for non-variable tools, so
     // attaching unconditionally is safe — but we guard for clarity and to
@@ -625,6 +687,158 @@ export class AgentRuntime {
     }
 
     return result;
+  }
+
+  /**
+   * Detect MISSING_MODE_VALUES signals in a tool result and:
+   *  1. Emit `missing_mode_values` runtime events.
+   *  2. Track failures per-session for rollback detection (spec §5.4).
+   *
+   * Looks at:
+   *  (a) result.error / result.data.code === 'MISSING_MODE_VALUES' (bind_variable)
+   *  (b) result.warnings[].code === 'MISSING_MODE_VALUES' (set_fill / jsx)
+   */
+  private processMissingModeValues(tc: ToolCallBlock, result: any): void {
+    if (!result || typeof result !== 'object') return;
+    const toolName = tc.name;
+
+    type Failure = {
+      node_id: string;
+      variable_id: string;
+      missing_modes: string[];
+    };
+    const failures: Failure[] = [];
+
+    // (a) Hard error path (bind_variable).
+    if (result.data && result.data.code === 'MISSING_MODE_VALUES') {
+      const d = result.data;
+      if (typeof d.node_id === 'string' && typeof d.variable_id === 'string'
+          && Array.isArray(d.missing_modes)) {
+        failures.push({
+          node_id: d.node_id,
+          variable_id: d.variable_id,
+          missing_modes: d.missing_modes.filter((m: any) => typeof m === 'string'),
+        });
+      }
+    }
+
+    // (b) Warning-on-success path (jsx + set_fill emit warnings, the bind
+    // call simply did not happen for that property — see variableBindingHandler).
+    if (Array.isArray(result.warnings)) {
+      for (const w of result.warnings) {
+        if (!w || w.code !== 'MISSING_MODE_VALUES') continue;
+        const node_id = typeof w.node_id === 'string' ? w.node_id : '';
+        const variable_id = typeof w.variable_id === 'string' ? w.variable_id : '';
+        const missing_modes = Array.isArray(w.missing_modes)
+          ? w.missing_modes.filter((m: any) => typeof m === 'string')
+          : [];
+        if (node_id && variable_id && missing_modes.length > 0) {
+          failures.push({ node_id, variable_id, missing_modes });
+        }
+      }
+    }
+
+    if (failures.length === 0) return;
+
+    const ts = Date.now();
+    const phase = this.behaviorConfig.variableResolution;
+
+    // Snapshot RyowStore once per call — used by the rollback heuristic
+    // below. The store is per-turn, so the lookup is consistent across all
+    // failures captured in a single tool result.
+    const ryowSnapshot = this.ryowStore.snapshot('ensure_variable');
+
+    for (const f of failures) {
+      // Rollback heuristic (spec §5.4): if RyowStore tracks this variable
+      // with the missing modes ALREADY in mode_coverage, it would mean the
+      // resolver flagged a coverage that's actually present → resolver bug.
+      // Otherwise the variable genuinely lacks modes and the protection is
+      // legitimate.
+      const tracked = ryowSnapshot?.variables.find(v => v.id === f.variable_id);
+      let likely_legitimate = true;
+      if (tracked) {
+        const trackedSet = new Set(tracked.mode_coverage);
+        // If every "missing" mode reported by the resolver is genuinely
+        // missing from tracked coverage, protection is legitimate. If at
+        // least one missing mode IS in tracked coverage, we have a
+        // mismatch worth flagging as a likely false positive.
+        likely_legitimate = f.missing_modes.every(m => !trackedSet.has(m));
+      }
+      this.missingModeValuesFailures.push({
+        tool_name: toolName,
+        node_id: f.node_id,
+        variable_id: f.variable_id,
+        missing_modes: f.missing_modes,
+        iteration: this.currentIteration,
+        likely_legitimate,
+        ts,
+      });
+      this.emitRuntimeEvent({
+        type: 'missing_mode_values',
+        phase: 'execution',
+        iteration: this.currentIteration,
+        tool_name: toolName,
+        node_id: f.node_id,
+        variable_id: f.variable_id,
+        missing_modes: f.missing_modes,
+        resolutionPhase: phase,
+        ts,
+      });
+
+      // Per-tool counter — used to emit a single rollback_signal event when
+      // false_positive >= ROLLBACK_SIGNAL_THRESHOLD. Counters are NOT cleared
+      // at turn boundaries — the signal is per-session per-tool because a
+      // resolver bug spanning turns is the regression we want to flag.
+      const counters = this.modeCoverageFailureCounters.get(toolName)
+        ?? { legit: 0, false_positive: 0 };
+      if (likely_legitimate) {
+        counters.legit += 1;
+      } else {
+        counters.false_positive += 1;
+      }
+      this.modeCoverageFailureCounters.set(toolName, counters);
+
+      if (
+        !likely_legitimate
+        && counters.false_positive >= ROLLBACK_SIGNAL_THRESHOLD
+        && !this.rollbackSignalEmittedFor.has(toolName)
+      ) {
+        this.rollbackSignalEmittedFor.add(toolName);
+        this.emitRuntimeEvent({
+          type: 'rollback_signal',
+          phase: 'execution',
+          iteration: this.currentIteration,
+          tool_name: toolName,
+          false_positive_count: counters.false_positive,
+          ts,
+        });
+      }
+    }
+  }
+
+  /**
+   * Read-only accessor for tests / dev-bridge: per-tool failure-classification
+   * counters. Spec §5.4 / §7.2.
+   */
+  public getModeCoverageFailureCounters(): ReadonlyMap<string, { legit: number; false_positive: number }> {
+    return new Map(this.modeCoverageFailureCounters);
+  }
+
+  /**
+   * Read-only accessor for tests / dev-bridge: the per-session list of
+   * MISSING_MODE_VALUES failures captured so far. Spec §5.4 — Phase 3 of
+   * the rollout will use this for auto-revert decisions.
+   */
+  public getMissingModeValuesFailures(): ReadonlyArray<{
+    tool_name: string;
+    node_id: string;
+    variable_id: string;
+    missing_modes: string[];
+    iteration: number;
+    likely_legitimate: boolean;
+    ts: number;
+  }> {
+    return this.missingModeValuesFailures.slice();
   }
 
   // ═══════════════════════════════════════════════════════════════

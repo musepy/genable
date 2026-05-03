@@ -178,6 +178,10 @@ interface MockVariable {
   valuesByMode: Record<string, unknown>;
   setValueForMode: (modeId: string, value: unknown) => void;
   remove: () => void;
+  /** Plugin data store — keyed exactly like Figma's per-variable getPluginData/setPluginData. */
+  __pluginData?: Record<string, string>;
+  getPluginData: (key: string) => string;
+  setPluginData: (key: string, value: string) => void;
 }
 
 let mockCollections: MockCollection[] = [];
@@ -219,10 +223,18 @@ function setupFigmaMock() {
           variableCollectionId: collection.id,
           resolvedType: type,
           valuesByMode: {},
+          __pluginData: {},
           setValueForMode(modeId, value) { this.valuesByMode[modeId] = value; },
           remove() {
             const idx = mockVariables.findIndex(v => v.id === id);
             if (idx >= 0) mockVariables.splice(idx, 1);
+          },
+          getPluginData(key: string): string {
+            return this.__pluginData?.[key] ?? '';
+          },
+          setPluginData(key: string, value: string): void {
+            if (!this.__pluginData) this.__pluginData = {};
+            this.__pluginData[key] = value;
           },
         };
         mockVariables.push(variable);
@@ -551,6 +563,139 @@ describe('handleEnsureCollection — mode order is part of identity (Finding 5, 
     expect(second.data?.reused).toBeUndefined();
     // First mode of the second collection is Dark — confirms ordering matters.
     expect((second.data!.modes as MockMode[])[0].name).toBe('Dark');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// handleEnsureVariable — mode_coverage_required + fallback_reason
+//
+// Spec §6.2 — strict default ('all'), opt-in-fallback requires structured
+// reason, persisted via setPluginData. Tests cover: default, missing reason
+// rejection, unstructured reason rejection, valid acceptance, persistence.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('handleEnsureVariable — mode_coverage_required (Phase 2 step 4)', () => {
+  let collectionId: string;
+
+  function varKey(name: string, type: any, values: Record<string, unknown>): string {
+    return computeVariableIdempotencyKey({
+      collection_id: collectionId,
+      name,
+      type,
+      values_by_mode: values,
+    });
+  }
+
+  beforeEach(async () => {
+    const c = await handleEnsureCollection({
+      name: 'Theme',
+      modes: ['Light', 'Dark'],
+      idempotency_key: computeVariableIdempotencyKey({
+        collection_id: '',
+        name: 'Theme',
+        type: 'STRING',
+        values_by_mode: { modes: ['Light', 'Dark'] },
+      }),
+    });
+    collectionId = c.data!.collection_id as string;
+  });
+
+  it('defaults mode_coverage_required to "all" when not specified', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Surface/Bg',
+      type: 'COLOR',
+      values_by_mode: { Light: '#FFFFFF', Dark: '#000000' },
+      idempotency_key: varKey('Surface/Bg', 'COLOR', { Light: '#FFFFFF', Dark: '#000000' }),
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.data?.mode_coverage_required).toBe('all');
+  });
+
+  it('rejects opt-in-fallback without fallback_reason', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Spacing/desktop',
+      type: 'FLOAT',
+      values_by_mode: { Light: 24 },
+      idempotency_key: varKey('Spacing/desktop', 'FLOAT', { Light: 24 }),
+      mode_coverage_required: 'opt-in-fallback',
+      // fallback_reason missing
+    });
+    expect(r.error).toBeTruthy();
+    expect(r.error).toContain('fallback_reason');
+  });
+
+  it('rejects opt-in-fallback when fallback_reason lacks the structured "fallback to <mode>" phrase', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Spacing/desktop',
+      type: 'FLOAT',
+      values_by_mode: { Light: 24 },
+      idempotency_key: varKey('Spacing/desktop', 'FLOAT', { Light: 24 }),
+      mode_coverage_required: 'opt-in-fallback',
+      fallback_reason: 'we just want a default',  // unstructured prose
+    });
+    expect(r.error).toBeTruthy();
+    expect(r.error).toContain('fallback to');
+  });
+
+  it('accepts opt-in-fallback with a valid "fallback to <mode>" reason', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Spacing/desktop',
+      type: 'FLOAT',
+      values_by_mode: { Light: 24 },
+      idempotency_key: varKey('Spacing/desktop', 'FLOAT', { Light: 24 }),
+      mode_coverage_required: 'opt-in-fallback',
+      fallback_reason: 'Desktop-only metric; fallback to Light in Dark mode.',
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.data?.mode_coverage_required).toBe('opt-in-fallback');
+  });
+
+  it('rejects fallback_reason when mode_coverage_required is "all" (mismatch)', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Surface/Bg',
+      type: 'COLOR',
+      values_by_mode: { Light: '#FFFFFF', Dark: '#000000' },
+      idempotency_key: varKey('Surface/Bg', 'COLOR', { Light: '#FFFFFF', Dark: '#000000' }),
+      mode_coverage_required: 'all',
+      fallback_reason: 'fallback to Light in Dark mode',
+    });
+    expect(r.error).toBeTruthy();
+    expect(r.error).toContain('fallback_reason');
+  });
+
+  it('persists mode_coverage_required and fallback_reason via setPluginData (read back)', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Spacing/desktop',
+      type: 'FLOAT',
+      values_by_mode: { Light: 24 },
+      idempotency_key: varKey('Spacing/desktop', 'FLOAT', { Light: 24 }),
+      mode_coverage_required: 'opt-in-fallback',
+      fallback_reason: 'Desktop-only metric; fallback to Light in Dark mode.',
+    });
+    expect(r.error).toBeUndefined();
+    const created = mockVariables.find(v => v.id === r.data!.variable_id);
+    expect(created).toBeDefined();
+    expect(created!.getPluginData('mode_coverage_required')).toBe('opt-in-fallback');
+    expect(created!.getPluginData('fallback_reason')).toContain('fallback to Light');
+  });
+
+  it('rejects invalid mode_coverage_required value', async () => {
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'X',
+      type: 'COLOR',
+      values_by_mode: { Light: '#FFFFFF', Dark: '#000000' },
+      idempotency_key: varKey('X', 'COLOR', { Light: '#FFFFFF', Dark: '#000000' }),
+      mode_coverage_required: 'sometimes',  // not in enum
+    });
+    expect(r.error).toBeTruthy();
+    expect(r.error).toContain('mode_coverage_required');
   });
 });
 

@@ -98,11 +98,24 @@ export interface ToolResponse<T = any> {
 
 /**
  * Tool execution context (e.g., current design system ID, session info).
+ *
+ * Threaded sandbox-side → main-thread on every IPC tool call. Main-thread
+ * dispatcher (`src/ipc/handlers/toolCallHandler.ts`) extracts runtime-flag
+ * fields and applies them to module-level state before dispatching.
  */
 export interface ToolContext {
   designSystemId?: string;
   sessionId?: string;
   userId?: string;
+  /**
+   * Active variable-resolver phase. Spec §5.4 / §7.1. Threaded from
+   * `agentBehaviorConfig.variableResolution` so the main-thread mode-coverage
+   * checker can honor the runtime escape valve. 'phase1' bypasses the
+   * write-time mode coverage check; 'phase2-mode-coverage' (default) and
+   * 'phase2-strict' enable it. Optional — handlers default to
+   * 'phase2-mode-coverage' when absent.
+   */
+  variableResolution?: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
 }
 
 export type RuntimeValidationMode = 'EXECUTION';

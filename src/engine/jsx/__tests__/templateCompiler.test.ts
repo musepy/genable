@@ -503,39 +503,64 @@ vi.mock('../../actions/nodeFactory', async () => {
   );
   return {
     ...actual,
-    // Replace createFrame to bypass the real Figma API and inject a known
-    // AMBIGUOUS_NAME_AUTOPICK warning we can assert on.
-    createFrame: vi.fn(async () => ({
-      nodeId: 'mock:1',
-      warnings: [
-        {
-          code: 'AMBIGUOUS_NAME_AUTOPICK',
-          severity: 'warning' as const,
-          message: 'Bare-name lookup found 2 variables.',
-          picked_variable_id: 'V1',
-          candidates: [
+    // Replace createFrame to bypass the real Figma API and inject the
+    // warning(s) the handler would have produced. Different vnode props
+    // map to different warning shapes so a single mock can drive all the
+    // forwarding tests below.
+    createFrame: vi.fn(async (_parent: any, props: Record<string, any>) => {
+      // `$Surface/Bg` → MISSING_MODE_VALUES (Phase 2 step 4)
+      if (props.fills === '$Surface/Bg') {
+        return {
+          nodeId: 'mock:2',
+          warnings: [
             {
-              variable_id: 'V1',
-              name: 'Text/Primary',
-              collection_id: 'C-old',
-              collection_name: 'Old Theme',
-              type: 'COLOR',
-              mode_coverage: ['Light'],
-              source: 'preexisting' as const,
-            },
-            {
-              variable_id: 'V2',
-              name: 'Text/Primary',
-              collection_id: 'C-new',
-              collection_name: 'Finance/Theme',
-              type: 'COLOR',
-              mode_coverage: ['Light', 'Dark'],
-              source: 'preexisting' as const,
+              code: 'MISSING_MODE_VALUES',
+              severity: 'warning' as const,
+              message:
+                "Variable VariableID:1:5 (Text/Primary) lacks values for modes: " +
+                "['Dark']. Node mock:2 will render in one of these modes via " +
+                'mode chain. No binding applied.',
+              variable_id: 'VariableID:1:5',
+              variable_name: 'Text/Primary',
+              collection_id: 'VariableCollectionId:1:1',
+              missing_modes: ['Dark'],
             },
           ],
-        },
-      ],
-    })),
+        };
+      }
+      // Default: AMBIGUOUS_NAME_AUTOPICK (Phase 1 strict resolver)
+      return {
+        nodeId: 'mock:1',
+        warnings: [
+          {
+            code: 'AMBIGUOUS_NAME_AUTOPICK',
+            severity: 'warning' as const,
+            message: 'Bare-name lookup found 2 variables.',
+            picked_variable_id: 'V1',
+            candidates: [
+              {
+                variable_id: 'V1',
+                name: 'Text/Primary',
+                collection_id: 'C-old',
+                collection_name: 'Old Theme',
+                type: 'COLOR',
+                mode_coverage: ['Light'],
+                source: 'preexisting' as const,
+              },
+              {
+                variable_id: 'V2',
+                name: 'Text/Primary',
+                collection_id: 'C-new',
+                collection_name: 'Finance/Theme',
+                type: 'COLOR',
+                mode_coverage: ['Light', 'Dark'],
+                source: 'preexisting' as const,
+              },
+            ],
+          },
+        ],
+      };
+    }),
     tagAsAgentCreated: vi.fn(),
     normalizeSizingInProps: vi.fn(),
   };
@@ -581,5 +606,42 @@ describe('walkTree — preserves full warning payload (Phase 1 propagation)', ()
     });
     // Tagged with the node id created by walkTree.
     expect(w.node_id).toBe('mock:1');
+  });
+
+  // ── Phase 2 step 4 — MISSING_MODE_VALUES propagation ──
+  //
+  // The variableBindingHandler emits this when a $Token resolves to a
+  // variable whose valuesByMode lacks the target node's resolved render mode
+  // (spec §6.1). walkTree must forward the full payload (variable_id,
+  // missing_modes, collection_id) tagged with node_id so jsxHandler can
+  // surface it to the LLM via aggregateBindingWarnings.
+  it('JSX bare-name binding fails MISSING_MODE_VALUES when variable lacks a mode in node\'s resolved chain', async () => {
+    const ctx: WalkContext = {
+      symbolMap: new Map(),
+      rollbackStack: [],
+      warnings: [],
+      counter: 0,
+    };
+    // The createFrame mock above emits MISSING_MODE_VALUES when fills === '$Surface/Bg'.
+    const vnode: VNode = {
+      type: 'FRAME',
+      props: { fills: '$Surface/Bg' },
+      children: [],
+    };
+
+    await walkTree(vnode, null, ctx);
+
+    // The walk forwards the handler's warning verbatim, only adding a node_id
+    // tag — that's the load-bearing contract jsxHandler depends on.
+    expect(ctx.warnings).toHaveLength(1);
+    const w = ctx.warnings[0] as any;
+    expect(w.code).toBe('MISSING_MODE_VALUES');
+    expect(w.variable_id).toBe('VariableID:1:5');
+    expect(w.variable_name).toBe('Text/Primary');
+    expect(w.collection_id).toBe('VariableCollectionId:1:1');
+    expect(w.missing_modes).toEqual(['Dark']);
+    // node_id was added by walkTree (handler doesn't know it yet) — this is
+    // what aggregateBindingWarnings dedups on across multiple binding props.
+    expect(w.node_id).toBe('mock:2');
   });
 });

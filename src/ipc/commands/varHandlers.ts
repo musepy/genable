@@ -11,6 +11,14 @@ import type { ToolResponse, ToolWarning } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
 import { parseHexToRGBA } from '../../utils/colorUtils';
 import { invalidateVariableCache } from '../../engine/actions/handlers/variableBindingHandler';
+import {
+  PLUGIN_DATA_MODE_COVERAGE,
+  PLUGIN_DATA_FALLBACK_REASON,
+  validateFallbackReason,
+  checkModeCoverage,
+  buildFallbackBindingWarning,
+  type ModeCoverageRequired,
+} from '../../engine/actions/handlers/modeCoverageCheck';
 import { figmaVariableCache } from '../../engine/figma-adapter/caches/figmaVariableCache';
 import { traced } from './pipelineTracer';
 import { getPropertyDef } from '../../constants/figma-property-registry-helpers';
@@ -331,6 +339,39 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
     : {};
   const idempotencyKey = typeof params.idempotency_key === 'string' ? params.idempotency_key : '';
 
+  // Phase 2 step 4: mode_coverage_required — defaults to 'all'. Spec §6.2.
+  // Default 'all' enforces strict mode-by-mode coverage at bind time.
+  // 'opt-in-fallback' requires a structured `fallback_reason` (closes codex
+  // Medium 8 — prevents using opt-in as a one-click bypass).
+  const rawCoverage = typeof params.mode_coverage_required === 'string'
+    ? params.mode_coverage_required.trim()
+    : 'all';
+  let modeCoverageRequired: ModeCoverageRequired;
+  if (rawCoverage === 'opt-in-fallback') {
+    modeCoverageRequired = 'opt-in-fallback';
+  } else if (rawCoverage === 'all' || rawCoverage === '') {
+    modeCoverageRequired = 'all';
+  } else {
+    return {
+      error: `ensure_variable: invalid mode_coverage_required="${rawCoverage}" — must be "all" or "opt-in-fallback".`,
+    };
+  }
+
+  let fallbackReason: string | undefined;
+  if (modeCoverageRequired === 'opt-in-fallback') {
+    const validated = validateFallbackReason(params.fallback_reason);
+    if (!validated.ok) {
+      return { error: validated.error };
+    }
+    fallbackReason = validated.reason;
+  } else if (params.fallback_reason !== undefined && params.fallback_reason !== null && params.fallback_reason !== '') {
+    // Caller passed a fallback_reason without opt-in — reject loudly so the
+    // mismatch isn't silently dropped.
+    return {
+      error: 'ensure_variable: fallback_reason provided but mode_coverage_required is "all". Pass mode_coverage_required="opt-in-fallback" to use a fallback reason.',
+    };
+  }
+
   if (!collectionId) return { error: 'ensure_variable requires "collection_id".' };
   if (!name) return { error: 'ensure_variable requires "name".' };
   if (!type) return { error: 'ensure_variable requires "type" — one of COLOR, FLOAT, STRING, BOOLEAN.' };
@@ -493,6 +534,18 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
       };
     }
 
+    // Persist coverage metadata on the reused variable. setPluginData is
+    // idempotent — same value writes are no-ops in Figma.
+    try {
+      existing.setPluginData(PLUGIN_DATA_MODE_COVERAGE, modeCoverageRequired);
+      if (fallbackReason !== undefined) {
+        existing.setPluginData(PLUGIN_DATA_FALLBACK_REASON, fallbackReason);
+      } else {
+        // Clear stale reason when caller switches back to 'all'.
+        existing.setPluginData(PLUGIN_DATA_FALLBACK_REASON, '');
+      }
+    } catch { /* best-effort — older Figma plugin runtime might lack setPluginData */ }
+
     return {
       data: {
         variable_id: existing.id,
@@ -500,6 +553,7 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
         type: existing.resolvedType,
         collection_id: existing.variableCollectionId,
         mode_coverage: existingModeCoverage,
+        mode_coverage_required: modeCoverageRequired,
         reused: true,
       },
     };
@@ -524,6 +578,15 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
       return { error: `setValueForMode failed for mode "${rv.modeName || rv.modeId}": ${e?.message ?? e}` };
     }
   }
+
+  // Persist mode_coverage_required + optional fallback_reason on the freshly
+  // created variable. The data is read back at bind time by `checkModeCoverage`.
+  try {
+    newVar.setPluginData(PLUGIN_DATA_MODE_COVERAGE, modeCoverageRequired);
+    if (fallbackReason !== undefined) {
+      newVar.setPluginData(PLUGIN_DATA_FALLBACK_REASON, fallbackReason);
+    }
+  } catch { /* best-effort */ }
 
   invalidateCaches();
 
@@ -554,6 +617,7 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
       type: newVar.resolvedType,
       collection_id: newVar.variableCollectionId,
       mode_coverage: modeCoverage,
+      mode_coverage_required: modeCoverageRequired,
     },
   };
   if (warnings.length > 0) response.warnings = warnings;
@@ -680,19 +744,82 @@ export const handleBindVariable = traced('handleBindVariable()', 'varHandlers.ts
   }
   const canonicalProp = validation.canonicalProp;
 
+  // ── Phase 2 step 4: mode coverage check ────────────────────────────────
+  // Spec §6.1 — applies to ALL variable types. bind_variable is the
+  // FLOAT/STRING/BOOLEAN binding entry point (COLOR went through set_fill /
+  // jsx → variableBindingHandler), so without this check the spec would
+  // only enforce coverage on the COLOR path.
+  const bindWarnings: ToolWarning[] = [];
+  const coverage = await checkModeCoverage(node as SceneNode, variable);
+  if (coverage.kind === 'fail') {
+    return {
+      error:
+        `MISSING_MODE_VALUES: Variable ${coverage.variable_id} (${coverage.variable_name}) lacks values for modes: ` +
+        `[${coverage.missing_modes.map(m => `'${m}'`).join(', ')}]. ` +
+        `Node ${node.id} will render in one of these modes via mode chain. No binding applied.`,
+      data: {
+        code: 'MISSING_MODE_VALUES',
+        node_id: node.id,
+        variable_id: coverage.variable_id,
+        variable_name: coverage.variable_name,
+        collection_id: coverage.collection_id,
+        missing_modes: coverage.missing_modes,
+        recommended_next_action: {
+          tool: 'ensure_variable',
+          args: {
+            collection_id: coverage.collection_id,
+            name: coverage.variable_name,
+            type: variable.resolvedType,
+            // Caller fills values; we surface the missing mode names.
+            values_by_mode: Object.fromEntries(coverage.missing_modes.map(m => [m, '<value-required>'])),
+          },
+        },
+      },
+    };
+  }
+  if (coverage.kind === 'fallback') {
+    let reason: string | undefined;
+    try { reason = variable.getPluginData(PLUGIN_DATA_FALLBACK_REASON) || undefined; } catch { /* */ }
+    bindWarnings.push(toToolWarningFromHandler(buildFallbackBindingWarning({
+      node_id: node.id,
+      variable_id: variable.id,
+      variable_name: variable.name,
+      collection_id: variable.variableCollectionId,
+      missing_modes: coverage.missing_modes,
+      fallback_reason: reason,
+    })));
+  }
+
   try {
     node.setBoundVariable(canonicalProp as VariableBindableNodeField, variable);
-    return {
+    const response: ToolResponse = {
       data: {
         message: `Bound "${variable.name}" (${variable.resolvedType}) → ${node.name}.${canonicalProp}`,
         nodeId: node.id,
         variableId: variable.id,
       },
     };
+    if (bindWarnings.length > 0) response.warnings = bindWarnings;
+    return response;
   } catch (e: any) {
     return { error: `Failed to bind: ${e?.message ?? e}` };
   }
 });
+
+/**
+ * Convert a handler-side `Warning` into the LLM-facing `ToolWarning` shape.
+ * Local helper so we don't introduce another import; the two interfaces
+ * have a compatible "code + bag" structure.
+ */
+function toToolWarningFromHandler(w: { code: string; message?: string; [k: string]: unknown }): ToolWarning {
+  const out: ToolWarning = { code: w.code };
+  if (w.message) out.message = w.message;
+  for (const [k, v] of Object.entries(w)) {
+    if (k === 'code' || k === 'message' || k === 'severity') continue;
+    out[k] = v;
+  }
+  return out;
+}
 
 // ── set_variable_mode ──
 

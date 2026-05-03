@@ -84,6 +84,13 @@ vi.stubGlobal('figma', {
     getLocalVariablesAsync: vi
       .fn()
       .mockResolvedValue([ORPHAN_VAR, FRESH_VAR]),
+    // Phase 2 step 4 hook — mode-coverage check calls this to look up the
+    // variable's collection and compute resolved-mode coverage. Returning
+    // null here causes findMissingModesAsync to short-circuit (treat as
+    // pass), which preserves the regression-test's focus on resolver
+    // ambiguity rather than coverage. Fixtures define no `modes` field,
+    // so a more elaborate mock would not exercise additional logic here.
+    getVariableCollectionByIdAsync: vi.fn().mockResolvedValue(null),
     setBoundVariableForPaint: vi.fn(
       (basePaint: any, _field: 'color', variable: { id: string; name: string }) => {
         // Capture the variable the resolver picked. The real Figma API returns

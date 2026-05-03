@@ -76,6 +76,13 @@ export interface ToolDispatcherConfig {
   afterToolExec?: (tc: ToolCallBlock, result: any) => Promise<ToolInterceptResult | void>;
   /** Provider-specific tool results formatter. */
   formatToolResults: (results: LLMToolResult[]) => LLMMessage;
+  /**
+   * Snapshot of runtime flags to propagate as IPC `context` on every tool
+   * call. Used to thread `agentBehaviorConfig.variableResolution` through
+   * to the main-thread mode-coverage checker. Returns `undefined` when no
+   * runtime context applies.
+   */
+  getRuntimeContext?: () => import('./tools/types').ToolContext | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -370,7 +377,8 @@ export class ToolDispatcher {
         result = await toolExec(tc.input);
       }
       if (result == null && this.ipcBridge) {
-        result = await this.ipcBridge.callTool(tc.name, tc.input);
+        const runtimeCtx = this.config.getRuntimeContext?.();
+        result = await this.ipcBridge.callTool(tc.name, tc.input, runtimeCtx);
       }
       if (result == null) {
         return { error: `Tool "${tc.name}" not available.` };

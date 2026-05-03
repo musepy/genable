@@ -274,21 +274,36 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 
 /**
  * Filter walk warnings to the variable-resolution subset that the LLM needs
- * to see, dedupe by (code, picked_variable_id, node_id), and strip handler
- * internals (severity) to land on the `ToolWarning` wire shape.
+ * to see, dedupe by (code, picked_variable_id || variable_id, node_id), and
+ * strip handler internals (severity) to land on the `ToolWarning` wire shape.
+ *
+ * Forwarded codes:
+ *  - AMBIGUOUS_NAME_AUTOPICK (Phase 1 strict resolver, spec §5.1)
+ *  - MISSING_MODE_VALUES     (Phase 2 step 4 mode coverage, spec §6 / §4.1.d)
+ *  - FALLBACK_BINDING        (opt-in-fallback variant of mode coverage, §6.2)
  */
 function aggregateBindingWarnings(walkWarnings: WalkWarning[]): ToolWarning[] {
-  const RELEVANT_CODES = new Set(['AMBIGUOUS_NAME_AUTOPICK']);
+  const RELEVANT_CODES = new Set([
+    'AMBIGUOUS_NAME_AUTOPICK',
+    'MISSING_MODE_VALUES',
+    'FALLBACK_BINDING',
+  ]);
   const out: ToolWarning[] = [];
   const seen = new Set<string>();
   for (const w of walkWarnings) {
     if (!RELEVANT_CODES.has(w.code)) continue;
-    const key = `${w.code}|${(w as any).picked_variable_id ?? ''}|${w.node_id ?? ''}`;
+    // Dedup discriminator — picked_variable_id (autopick) or variable_id
+    // (mode coverage) — combined with node_id. The same coverage failure on
+    // the same node across multiple props (fill + stroke both binding the
+    // same incomplete token) is informative once; repeats add noise.
+    const idForDedup = (w as any).picked_variable_id ?? (w as any).variable_id ?? '';
+    const key = `${w.code}|${idForDedup}|${w.node_id ?? ''}`;
     if (seen.has(key)) continue;
     seen.add(key);
     // Drop `severity` (encoded by virtue of warnings[] being non-fatal) but
     // preserve every other extension field — picked_variable_id, candidates,
-    // node_id are all load-bearing for the LLM and the runtime enrichment.
+    // node_id, missing_modes, fallback_reason are all load-bearing for the
+    // LLM and the runtime enrichment.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { severity, ...rest } = w;
     out.push(rest as ToolWarning);

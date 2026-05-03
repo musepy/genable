@@ -20,6 +20,12 @@
  */
 
 import { PropertyHandler, Warning } from './types';
+import {
+  checkModeCoverage,
+  buildMissingModeValuesWarning,
+  buildFallbackBindingWarning,
+  PLUGIN_DATA_FALLBACK_REASON,
+} from './modeCoverageCheck';
 
 // Properties that use paint-based variable binding (color variables)
 const PAINT_PROPS = new Set(['fills', 'strokes']);
@@ -155,6 +161,44 @@ export const variableBindingHandler: PropertyHandler = {
     const warnings: Warning[] = [];
     if (variables.length > 1) {
       warnings.push(await buildAmbiguousAutopickWarning(variable, variables));
+    }
+
+    // ── Phase 2 step 4: mode coverage check ──────────────────────────────
+    // Spec §6: every binding must either (a) have full mode coverage in
+    // the target node's resolved mode chain, or (b) belong to an
+    // explicit `opt-in-fallback` variable. Skipped entirely when the
+    // resolution mode is 'phase1' (escape valve, §7.1).
+    const coverage = await checkModeCoverage(node, variable);
+    if (coverage.kind === 'fail') {
+      warnings.push(buildMissingModeValuesWarning({
+        node_id: node.id,
+        variable_id: coverage.variable_id,
+        variable_name: coverage.variable_name,
+        collection_id: coverage.collection_id,
+        missing_modes: coverage.missing_modes,
+      }));
+      // DO NOT bind — this is a hard fail. Caller (jsxHandler / editHandler)
+      // surfaces the warning in the tool response. Returning here means the
+      // node never receives a bound paint / variable for this property.
+      return warnings;
+    }
+    if (coverage.kind === 'fallback') {
+      // Read the persisted fallback_reason for audit trail.
+      let fallbackReason: string | undefined;
+      try {
+        const raw = variable.getPluginData(PLUGIN_DATA_FALLBACK_REASON);
+        if (raw) fallbackReason = raw;
+      } catch { /* best-effort */ }
+      warnings.push(buildFallbackBindingWarning({
+        node_id: node.id,
+        variable_id: variable.id,
+        variable_name: variable.name,
+        collection_id: variable.variableCollectionId,
+        missing_modes: coverage.missing_modes,
+        fallback_reason: fallbackReason,
+      }));
+      // Fall through to the binding — opt-in-fallback explicitly accepts
+      // partial coverage.
     }
 
     try {

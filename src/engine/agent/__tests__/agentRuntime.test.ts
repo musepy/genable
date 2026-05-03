@@ -93,7 +93,14 @@ describe('AgentRuntime', () => {
 
     expect(result).toBe('Task done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(2);
-    expect(mockIpcBridge.callTool).toHaveBeenCalledWith('get_info', { query: 'test' });
+    // The third arg is the runtime context (variableResolution flag) threaded
+    // sandbox→main per spec §7.1. Older callers ignore it; we assert on the
+    // first two positional args only.
+    expect(mockIpcBridge.callTool).toHaveBeenCalledWith(
+      'get_info',
+      { query: 'test' },
+      expect.objectContaining({ variableResolution: expect.any(String) }),
+    );
 
     const messages = runtime.getMessages();
     expect(messages).toHaveLength(4); // user, model(thought+call), tool(result), model(text)

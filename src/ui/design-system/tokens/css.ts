@@ -224,6 +224,12 @@ const lightModeTokens = `
     --color-background: #fcfcfc;
     --color-surface: #ffffff;
     --color-panel: #ffffff;
+
+    /* Segmented control (Theme switcher etc.) — track + sliding thumb.
+       Light mode: track = light gray, thumb = white (one shade brighter than track).
+       Dark mode: track = gray-3, thumb = gray-5 (one+ shade brighter than track). */
+    --seg-pill-track: var(--gray-2);
+    --seg-pill-thumb: #ffffff;
     --color-overlay: rgba(0, 8, 48, 0.275);
     --color-shadow: rgba(0, 0, 0, 0.08);
     --shadow-sm: var(--color-shadow);
@@ -370,6 +376,11 @@ const darkModeTokens = `
     --color-background: var(--gray-1);
     --color-surface: var(--gray-2);
     --color-panel: var(--gray-2);
+
+    /* Segmented control — track must contrast against surface (gray-2),
+       thumb must contrast against track. */
+    --seg-pill-track: var(--gray-3);
+    --seg-pill-thumb: var(--gray-5);
     --color-overlay: rgba(0, 0, 0, 0.7);
     --color-shadow: rgba(0, 0, 0, 0.5);
     --text-primary: var(--gray-12);

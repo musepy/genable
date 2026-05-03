@@ -392,10 +392,17 @@ export async function walkTree(
       }
     }
   } catch (e: any) {
+    const errMsg = e?.message ?? String(e);
+    // "not a function" usually = passing a string to an array op (e.g.
+    // variable-ref fill reaching lowerPaints). Add a concrete hint so the
+    // LLM picks a recoverable path instead of retrying the same shape.
+    const hint = nodeType === 'ICON' && typeof errMsg === 'string' && errMsg.includes('not a function')
+      ? ' (likely a fill/stroke type mismatch — try a hex fill or bind via set_fill after creation)'
+      : '';
     ctx.warnings.push({
       code: 'CREATE_FAILED',
       severity: 'warning',
-      message: `Failed to create <${nodeType} name="${name}"/>: ${e?.message}`,
+      message: `Failed to create <${nodeType} name="${name}"/>: ${errMsg}${hint}`,
     });
     return null;
   }

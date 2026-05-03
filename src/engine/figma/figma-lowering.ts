@@ -20,6 +20,11 @@ import type { UnitValue } from '../../domain/property-specs';
  *   - {type:'SOLID', …}            → already Figma Paint, pass through
  */
 export function lowerPaints(paints: any[]): any[] {
+  if (!Array.isArray(paints)) {
+    throw new Error(
+      `lowerPaints expected an array, got ${typeof paints}: ${JSON.stringify(paints).slice(0, 80)}`,
+    );
+  }
   return paints.map(item => {
     if (typeof item === 'string') return parsePaintToFigma(item);
     if (typeof item === 'object' && item !== null) {

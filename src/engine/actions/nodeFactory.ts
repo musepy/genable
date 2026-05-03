@@ -403,23 +403,48 @@ export async function createIcon(
     delete propsForFrame.svgData;
 
     const { warnings } = await applyProps(iconNode, propsForFrame);
+    const tintWarnings: Warning[] = [];
 
     // Tint vector children
     if (iconFills || iconStrokes || iconStrokeWeight !== undefined) {
-      const tintColor = iconFills ? lowerPaints(iconFills) : undefined;
-      const explicitStrokes = iconStrokes ? lowerPaints(iconStrokes) : undefined;
+      // expandShorthands intentionally returns variable refs as bare strings
+      // (e.g. "$Text/Primary") for the variable-binding handler. Don't pass
+      // bare strings to lowerPaints — its `.map` will throw "not a function".
+      // Route variable refs through applyProperty (variableBindingHandler);
+      // route arrays through lowerPaints + direct assignment.
+      const fillsIsVarRef = typeof iconFills === 'string';
+      const strokesIsVarRef = typeof iconStrokes === 'string';
+      const tintColor = (iconFills && !fillsIsVarRef && Array.isArray(iconFills))
+        ? lowerPaints(iconFills)
+        : undefined;
+      const explicitStrokes = (iconStrokes && !strokesIsVarRef && Array.isArray(iconStrokes))
+        ? lowerPaints(iconStrokes)
+        : undefined;
+
       for (const child of iconNode.findAll()) {
         if ('fills' in child && 'strokes' in child) {
           const childFills = (child as any).fills as readonly Paint[];
           const childStrokes = (child as any).strokes as readonly Paint[];
 
+          // Strokes: explicit array > variable ref > tint fallback
           if (explicitStrokes) {
             (child as any).strokes = explicitStrokes;
+          } else if (strokesIsVarRef) {
+            const r = await applyProperty(child as SceneNode, 'strokes', iconStrokes);
+            if (r.warnings.length > 0) tintWarnings.push(...r.warnings);
+          } else if (fillsIsVarRef && Array.isArray(childStrokes) && childStrokes.length > 0) {
+            // Variable-ref fill: also bind as stroke if child had a stroke
+            const r = await applyProperty(child as SceneNode, 'strokes', iconFills);
+            if (r.warnings.length > 0) tintWarnings.push(...r.warnings);
           } else if (tintColor && Array.isArray(childStrokes) && childStrokes.length > 0) {
             (child as any).strokes = tintColor;
           }
 
-          if (tintColor && Array.isArray(childFills) && childFills.length > 0) {
+          // Fills: explicit array > variable ref
+          if (fillsIsVarRef && Array.isArray(childFills) && childFills.length > 0) {
+            const r = await applyProperty(child as SceneNode, 'fills', iconFills);
+            if (r.warnings.length > 0) tintWarnings.push(...r.warnings);
+          } else if (tintColor && Array.isArray(childFills) && childFills.length > 0) {
             (child as any).fills = tintColor;
           }
         }
@@ -429,7 +454,7 @@ export async function createIcon(
       }
     }
 
-    return { nodeId: iconNode.id, warnings: [...iconWarnings, ...warnings] };
+    return { nodeId: iconNode.id, warnings: [...iconWarnings, ...warnings, ...tintWarnings] };
   } catch (e) {
     iconNode.remove();
     throw e;

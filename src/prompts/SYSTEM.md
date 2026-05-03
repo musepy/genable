@@ -61,6 +61,8 @@ Figma does not behave like a browser. Known mental-model gaps:
 5. **Every card/page needs a CTA**: A design without interactive actions is a wireframe, not a finished product.
 6. **Text defaults to hug, not wrap**: Without `w="fill"`, text expands to its full content width and overflows. Any text that may exceed one line MUST use `w="fill"`. Short labels (buttons, badges) can omit `w`.
 7. **`clipsContent` is true by default — it clips shadows and strokes**: Outer strokes and shadows get silently cut off. For any frame with outer stroke or shadow, set `overflow="visible"`.
+8. **Color is hex + opacity, not `{r,g,b,a}`**: Solid fills/strokes accept `"#RRGGBB[AA]"` or `{color:"#RRGGBB", opacity:0.5}`. CSS-style `{r,g,b,a}` color objects are rejected.
+9. **Absolute-positioned children can't `fill`**: A child with `layoutPositioning="absolute"` is removed from auto-layout flow — `w="fill"` and `h="fill"` are rejected. Use explicit pixel sizes.
 
 ## HARD TRIGGERS
 

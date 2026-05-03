@@ -41,6 +41,15 @@ interface DependencyRule {
   readonly condition: Condition;
   /** Value (or resolver) to auto-inject when gate is absent from both ops and node. Undefined = warn only. */
   readonly inject?: Injector;
+  /**
+   * Default value the gate has when neither ops nor node specify it. Used for
+   * rules whose Figma-side default already satisfies the condition (e.g.
+   * layoutPositioning defaults to 'AUTO', which satisfies `!= 'ABSOLUTE'`),
+   * so the validator should treat absence as compliant rather than firing a
+   * spurious warning. Without this, an `op:'!='` condition + missing gate
+   * always lands in the warn branch.
+   */
+  readonly assumeDefault?: unknown;
   /** Properties that require this gate */
   readonly dependents: readonly Dependent[];
 }
@@ -136,6 +145,26 @@ export const DEPENDENCY_RULES: readonly DependencyRule[] = [
     condition: { op: '!=', value: 'NONE' },
     dependents: [
       'layoutAlign', 'layoutGrow', 'layoutPositioning',
+      { property: 'layoutSizingHorizontal', whenValue: 'FILL' },
+      { property: 'layoutSizingVertical', whenValue: 'FILL' },
+    ],
+  },
+
+  // ── Absolute-positioned children can't FILL ────────────────────────────
+  // Self-scope: layoutPositioning='ABSOLUTE' takes the node out of auto-layout
+  // flow, so layoutSizingHorizontal/Vertical='FILL' is rejected by Figma.
+  // No `inject` — the agent's choice between absolute and FILL is intentional;
+  // surface a warning so the agent strips FILL (or drops absolute) instead of
+  // burning retries on the same Figma rejection.
+  // assumeDefault='AUTO' — Figma's default already satisfies the condition,
+  // so absent gate is compliant (don't warn on the common path of FILL on a
+  // normal flow child).
+  {
+    gate: 'layoutPositioning',
+    scope: 'self',
+    condition: { op: '!=', value: 'ABSOLUTE' },
+    assumeDefault: 'AUTO',
+    dependents: [
       { property: 'layoutSizingHorizontal', whenValue: 'FILL' },
       { property: 'layoutSizingVertical', whenValue: 'FILL' },
     ],
@@ -345,10 +374,12 @@ export function validateDependencies(
       if (typeof dep !== 'string' && depValue !== dep.whenValue) continue;
 
       if (rule.scope === 'self') {
-        // Check gate: ops (including prior fixes) → node state
+        // Check gate: ops (including prior fixes) → node state → assumed default
         const gateInOps = props[rule.gate] ?? fixes[rule.gate];
         const gateOnNode = nodeState?.[rule.gate];
-        const effective = gateInOps !== undefined ? gateInOps : gateOnNode;
+        const effective = gateInOps !== undefined
+          ? gateInOps
+          : gateOnNode !== undefined ? gateOnNode : rule.assumeDefault;
 
         if (effective === undefined || (!checkCondition(effective, rule.condition) && gateInOps === undefined)) {
           // Gate absent from ops: either entirely missing or only on the node with wrong value.

@@ -115,6 +115,20 @@ export function parsePaintToFigma(input: string | Record<string, any>): any {
     return paint;
   }
 
+  // Tolerant: CSS-style {r,g,b,a?} (0-1 floats) — split alpha into opacity.
+  // The LLM is taught to send hex+opacity, but RGBA objects are a frequent
+  // CSS-prior bug; before this branch the fallback below silently returned
+  // solid black, hiding the LLM's mistake.
+  if (
+    typeof input === 'object' && input !== null
+    && typeof input.r === 'number'
+    && typeof input.g === 'number'
+    && typeof input.b === 'number'
+  ) {
+    const { r, g, b, a } = input as { r: number; g: number; b: number; a?: number };
+    return { type: 'SOLID', color: { r, g, b }, opacity: typeof a === 'number' ? a : 1 };
+  }
+
   // Fallback
   return { type: 'SOLID', color: { r: 0, g: 0, b: 0 }, opacity: 1 };
 }

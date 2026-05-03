@@ -102,18 +102,20 @@ const NODE_METHOD_HINTS: Array<{ pattern: RegExp; fix: string }> = [
 /**
  * Patterns that indicate destructive or out-of-scope operations.
  * Fail-fast: reject before execution, not after damage.
+ * `hint` is shown to the LLM so it picks the right replacement tool.
  */
-const BLOCKED_PATTERNS = [
-  /\.remove\s*\(\s*\)/,                  // bulk deletion (use rm command instead)
-  /figma\.root/,                          // root access — can traverse entire document
-  /figma\.currentPage\.children/,         // page-level bulk access
-  /\.removeChild/,                        // child removal
-  /\.insertChild/,                        // structure mutation (use mv command instead)
-  /figma\.closePlugin/,                   // plugin lifecycle
-  /figma\.notify/,                        // UI injection
-  /\beval\b/,                             // nested eval
-  /\bFunction\b\s*\(/,                    // nested Function constructor
-  /\bimport\b\s*\(/,                      // dynamic import
+const READ_ENUMERATION_HINT = 'Use inspect({node:"/"}) for the page tree, or find_nodes({query:"..."}) to locate nodes by name/type.';
+const BLOCKED_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
+  { pattern: /\.remove\s*\(\s*\)/,         hint: 'Use the delete_node tool to remove nodes (it tracks idMap correctly).' },
+  { pattern: /figma\.root/,                 hint: READ_ENUMERATION_HINT },
+  { pattern: /figma\.currentPage\.children/, hint: READ_ENUMERATION_HINT },
+  { pattern: /\.removeChild/,               hint: 'Use the delete_node tool instead of removing children manually.' },
+  { pattern: /\.insertChild/,               hint: 'Use the move_node tool to reparent nodes (it tracks idMap correctly).' },
+  { pattern: /figma\.closePlugin/,          hint: 'Plugin lifecycle / UI APIs are restricted in tool sandbox.' },
+  { pattern: /figma\.notify/,               hint: 'Plugin lifecycle / UI APIs are restricted in tool sandbox.' },
+  { pattern: /\beval\b/,                    hint: 'Nested code execution is not allowed.' },
+  { pattern: /\bFunction\b\s*\(/,           hint: 'Nested code execution is not allowed.' },
+  { pattern: /\bimport\b\s*\(/,             hint: 'Nested code execution is not allowed.' },
 ];
 
 export const handleJs = traced('handleJs()', 'jsHandler.ts', async function handleJs(parameters: any): Promise<ToolResponse> {
@@ -136,10 +138,10 @@ export const handleJs = traced('handleJs()', 'jsHandler.ts', async function hand
     }
   }
 
-  for (const pattern of BLOCKED_PATTERNS) {
+  for (const { pattern, hint } of BLOCKED_PATTERNS) {
     if (pattern.test(code)) {
       return {
-        error: `Blocked: '${pattern.source}' is not allowed in js command. Use the dedicated tool commands (rm, mv, mk) instead.`,
+        error: `Blocked: '${pattern.source}' is not allowed in js command. ${hint}`,
       };
     }
   }

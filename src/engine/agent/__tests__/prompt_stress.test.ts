@@ -23,7 +23,7 @@ import { agentTools } from '../tools';
 import { ToolExecutor } from '../tools/types';
 import { LLMResponse, ToolCallBlock } from '../../llm-client/providers/types';
 import { serializeTools } from '../../llm-client/context/toolSerializer';
-import catalog from '../../../generated/prompt-catalog.json';
+import { SYSTEM } from '../../prompt/promptRegistry';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -408,7 +408,7 @@ function checkFollowUpCompliance(
   const violations: Violation[] = [];
   const toolNames = turnRecord.toolCalls.map(tc => tc.name);
 
-  if (expectation.shouldUseEdit && !toolNames.includes('design')) {
+  if (expectation.shouldUseEdit && !toolNames.includes('edit')) {
     violations.push({
       turn: turnIndex,
       rule: 'FOLLOW_UP_SHOULD_EDIT',
@@ -418,7 +418,7 @@ function checkFollowUpCompliance(
   }
 
   if (expectation.shouldNotRecreate) {
-    const createCalls = turnRecord.toolCalls.filter(tc => tc.name === 'design');
+    const createCalls = turnRecord.toolCalls.filter(tc => tc.name === 'jsx');
     if (createCalls.length > 0) {
       // Check if create is creating an entirely new root (recreation) vs adding a child
       const totalCreateXmlLength = createCalls.reduce((sum, tc) => sum + (tc.xml?.length || 0), 0);
@@ -435,7 +435,7 @@ function checkFollowUpCompliance(
   }
 
   if (expectation.shouldReferenceExistingIds) {
-    const editCalls = turnRecord.toolCalls.filter(tc => tc.name === 'design');
+    const editCalls = turnRecord.toolCalls.filter(tc => tc.name === 'edit');
     const hasIdReferences = editCalls.some(tc => tc.xml && /id=['"][^'"]+['"]/.test(tc.xml));
     if (editCalls.length > 0 && !hasIdReferences) {
       violations.push({
@@ -455,10 +455,16 @@ function checkFollowUpCompliance(
 /**
  * Build static system prompt directly from catalog JSON + tool serialization.
  * Avoids the require() chain that fails in vitest.
+ *
+ * Mirrors the production assembly in src/engine/llm-client/context/system.ts:
+ * production pulls SYSTEM from promptRegistry and appends serialized tools.
+ * We skip the optional knowledge-library section, subtask hint, provider
+ * tool instructions, and locale block — the stress harness exercises core
+ * prompt compliance, not those add-ons.
  */
 function buildSystemPromptForTest(): string {
   const parts: string[] = [];
-  parts.push((catalog as any).CORE.trim());
+  parts.push(SYSTEM.trim());
   parts.push('## AVAILABLE TOOLS\n' + serializeTools(agentTools));
   return parts.filter(Boolean).join('\n\n');
 }
@@ -662,7 +668,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn.toolCalls.length).toBeGreaterThan(0);
 
         // Should have at least one create call
-        const createCalls = turn.toolCalls.filter(tc => tc.name === 'design');
+        const createCalls = turn.toolCalls.filter(tc => tc.name === 'jsx');
         expect(createCalls.length).toBeGreaterThan(0);
 
         // Count XML violations
@@ -691,7 +697,7 @@ describe('Prompt Engineering Stress Test', () => {
         printStressReport(report);
 
         expect(turn.response).toBeTruthy();
-        expect(turn.toolCalls.filter(tc => tc.name === 'design').length).toBeGreaterThan(0);
+        expect(turn.toolCalls.filter(tc => tc.name === 'jsx').length).toBeGreaterThan(0);
 
         const errors = report.violations.filter(v => v.severity === 'error');
         expect(errors.length).toBeLessThanOrEqual(5);
@@ -717,7 +723,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn.response).toBeTruthy();
 
         // Check that the create XML includes the specified text
-        const createCalls = turn.toolCalls.filter(tc => tc.name === 'design' && tc.xml);
+        const createCalls = turn.toolCalls.filter(tc => tc.name === 'jsx' && tc.xml);
         const allXml = createCalls.map(tc => tc.xml!).join('\n');
 
         // At least some of the key content should appear
@@ -746,7 +752,7 @@ describe('Prompt Engineering Stress Test', () => {
         printStressReport(report);
 
         expect(turn.response).toBeTruthy();
-        expect(turn.toolCalls.filter(tc => tc.name === 'design').length).toBeGreaterThan(0);
+        expect(turn.toolCalls.filter(tc => tc.name === 'jsx').length).toBeGreaterThan(0);
 
         // For a simple form, should have zero error-level violations
         const errors = report.violations.filter(v => v.severity === 'error');
@@ -771,7 +777,7 @@ describe('Prompt Engineering Stress Test', () => {
           'Create a simple card with a title "Original Title", a description paragraph, and a "Learn More" button.'
         );
         expect(turn1.response).toBeTruthy();
-        expect(turn1.toolCalls.filter(tc => tc.name === 'design').length).toBeGreaterThan(0);
+        expect(turn1.toolCalls.filter(tc => tc.name === 'jsx').length).toBeGreaterThan(0);
 
         // Turn 2: Change the title
         const turn2 = await runTurn(
@@ -796,7 +802,7 @@ describe('Prompt Engineering Stress Test', () => {
         }
 
         // Should use edit, not recreate
-        const editUsed = turn2.toolCalls.some(tc => tc.name === 'design');
+        const editUsed = turn2.toolCalls.some(tc => tc.name === 'edit');
         console.log(`  Used edit tool: ${editUsed}`);
         console.log(`  Tools used: [${turn2.toolCalls.map(tc => tc.name).join(', ')}]`);
       },
@@ -824,7 +830,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // Check that edit was used
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
         console.log(`\n  Edit calls: ${editCalls.length}`);
 
         if (editCalls.length > 0) {
@@ -869,7 +875,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // Check edit usage
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
         console.log(`\n  Edit calls for icon change: ${editCalls.length}`);
 
         if (editCalls.length > 0) {
@@ -912,7 +918,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // For a color scheme change, edit should be used (modifying existing nodes)
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
         console.log(`\n  Edit calls for color scheme: ${editCalls.length}`);
 
         // Multiple edits expected for a full color scheme change
@@ -955,8 +961,8 @@ describe('Prompt Engineering Stress Test', () => {
 
         // Adding new elements should use create (with parentId) or a mix of create+edit
         const toolNames = turn2.toolCalls.map(tc => tc.name);
-        const hasCreate = toolNames.includes('create');
-        const hasEdit = toolNames.includes('design');
+        const hasCreate = toolNames.includes('jsx');
+        const hasEdit = toolNames.includes('edit');
         console.log(`\n  Used create: ${hasCreate}, edit: ${hasEdit}`);
         console.log(`  Tools: [${toolNames.join(', ')}]`);
 
@@ -988,7 +994,7 @@ describe('Prompt Engineering Stress Test', () => {
         expect(turn2.response).toBeTruthy();
 
         // Should use edit with delete='true' attribute
-        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'design');
+        const editCalls = turn2.toolCalls.filter(tc => tc.name === 'edit');
         console.log(`\n  Edit calls for deletion: ${editCalls.length}`);
 
         if (editCalls.length > 0) {

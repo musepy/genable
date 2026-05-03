@@ -97,10 +97,6 @@ export function buildChildConfig(
   const childBehavior: AgentBehaviorConfig = {
     ...parentConfig.behaviorConfig,
     ...agentType.behaviorOverrides,
-    promptPolicy: {
-      ...parentConfig.behaviorConfig.promptPolicy,
-      ...agentType.behaviorOverrides?.promptPolicy,
-    },
   };
 
   // 4. Filter executors to match filtered tools (don't leak parent-only executors)

@@ -56,9 +56,7 @@ describe('Agent Architecture Contract Tests', () => {
     });
 
     it('should use toolConfig.mode=ANY in EXECUTION mode', async () => {
-        const behaviorConfig = resolveBehavior({
-            promptPolicy: { useSkillSystem: false } // Use classic composer for simpler assertion
-        });
+        const behaviorConfig = resolveBehavior();
 
         const runtime = new AgentRuntime({
             provider: mockProvider,
@@ -76,9 +74,7 @@ describe('Agent Architecture Contract Tests', () => {
 
 
     it('should include mode-specific guidance in system prompt (Skill System)', async () => {
-        const behaviorConfig = resolveBehavior({
-            promptPolicy: { useSkillSystem: true }
-        });
+        const behaviorConfig = resolveBehavior();
 
         // Build static system prompt (includes ALL mode guidance)
         const systemPrompt = buildStaticSystemPrompt([], mockProvider as any);

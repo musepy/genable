@@ -1106,6 +1106,56 @@
       color: var(--text-muted);
     }
 
+    /* KV Cache panel */
+    .stat-value.cache-hit { color: #22d3ee; }
+    .stat-value.cache-miss { color: #f59e0b; }
+    .kvcache-iter-table {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: 60px 1fr 90px 90px 60px;
+      gap: 4px 12px;
+      font-size: 11px;
+      align-items: center;
+    }
+    .kvcache-iter-table .kv-head {
+      color: var(--text-dimmed);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-size: 10px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-card);
+    }
+    .kvcache-iter-table .kv-cell {
+      color: var(--text-secondary);
+      padding: 2px 0;
+    }
+    .kvcache-iter-table .kv-bar-wrap {
+      position: relative;
+      height: 8px;
+      background: var(--bg-idx);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .kvcache-iter-table .kv-bar-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      background: #22d3ee;
+    }
+    .kvcache-iter-table .kv-cell.pct {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+    .kvcache-empty {
+      margin-top: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--bg-tool-body);
+      border-radius: 4px;
+      text-align: center;
+    }
+
     /* Footer: screenshot + final text */
     .footer-grid {
       display: grid;
@@ -1259,6 +1309,14 @@
     <div class="card" id="llm-ctx-card" style="display:none">
       <div class="card-title">LLM Context (per iteration)</div>
       <div class="llm-ctx-list" id="llm-ctx-container"></div>
+    </div>
+
+    <!-- KV Cache (provider-reported) -->
+    <div class="card" id="kvcache-card" style="display:none">
+      <div class="card-title">KV Cache (provider-reported)</div>
+      <div class="overview-stats" id="kvcache-stats"></div>
+      <div class="kvcache-iter-table" id="kvcache-iter-table"></div>
+      <div class="kvcache-empty" id="kvcache-empty" style="display:none"></div>
     </div>
 
     <!-- Tool call details -->
@@ -1532,6 +1590,7 @@ function renderFull(id, events, meta) {
   renderPipeline(events, meta);
   renderConversation(meta.conversationHistory || [], events);
   renderLLMContext(events);
+  renderKVCache(events);
   renderToolDetails(meta.toolCallDetails || []);
   renderFooter(id, meta);
 }
@@ -2443,15 +2502,6 @@ function renderLLMContext(events) {
       toolsHTML += '</div></div>';
     }
 
-    // Cache info
-    let cacheHTML = '';
-    if (req.cache) {
-      cacheHTML = '<div class="llm-ctx-cache">' +
-        'Cache: ' + req.cache.cacheableMessages + '/' + req.cache.totalMessages + ' msgs cacheable' +
-        ' (~' + req.cache.cacheableTokensEstimate + ' tok)' +
-      '</div>';
-    }
-
     // Response shape
     let respHTML = '';
     if (resp) {
@@ -2467,10 +2517,80 @@ function renderLLMContext(events) {
       respHTML += '</div>';
     }
 
-    body.innerHTML = msgsHTML + toolsHTML + cacheHTML + respHTML;
+    body.innerHTML = msgsHTML + toolsHTML + respHTML;
     details.appendChild(body);
     container.appendChild(details);
   }
+}
+
+// ===== KV Cache (provider-reported truth) =====
+// Aggregates usage.cachedTokens / usage.promptTokens across all llm_response events.
+// Source of truth: provider adapters set usage.cachedTokens —
+//   anthropic: cache_read_input_tokens
+//   openai/openrouter/dashscope: prompt_tokens_details.cached_tokens
+//   gemini: cachedContentTokenCount
+function renderKVCache(events) {
+  const responses = events.filter(e => e.type === 'llm_response' && e.success !== false);
+  if (responses.length === 0) return;
+
+  const card = document.getElementById('kvcache-card');
+  const statsEl = document.getElementById('kvcache-stats');
+  const tableEl = document.getElementById('kvcache-iter-table');
+  const emptyEl = document.getElementById('kvcache-empty');
+  card.style.display = '';
+
+  // Detect whether the provider reported any cache info at all.
+  const reportedAny = responses.some(r => r.usage && typeof r.usage.cachedTokens === 'number');
+  const hasUsage = responses.some(r => r.usage && typeof r.usage.promptTokens === 'number');
+
+  if (!hasUsage || !reportedAny) {
+    statsEl.innerHTML = '';
+    tableEl.innerHTML = '';
+    emptyEl.style.display = '';
+    emptyEl.textContent = hasUsage
+      ? "Provider didn't report cache info (usage.cachedTokens absent across " + responses.length + " calls)"
+      : "Provider didn't report token usage for these calls";
+    return;
+  }
+  emptyEl.style.display = 'none';
+
+  let totalPrompt = 0, totalCached = 0;
+  for (const r of responses) {
+    const u = r.usage || {};
+    totalPrompt += u.promptTokens || 0;
+    totalCached += u.cachedTokens || 0;
+  }
+  const hitRate = totalPrompt > 0 ? (totalCached / totalPrompt) : 0;
+  const hitPct = (hitRate * 100).toFixed(1) + '%';
+  const hitCls = hitRate >= 0.5 ? 'cache-hit' : 'cache-miss';
+
+  statsEl.innerHTML =
+    statHTML('Cache Hit Rate', hitPct, hitCls) +
+    statHTML('Cached Tokens', totalCached.toLocaleString(), 'cache-hit') +
+    statHTML('Prompt Tokens', totalPrompt.toLocaleString(), '') +
+    statHTML('LLM Calls', responses.length + '', '');
+
+  // Per-iteration table: iter | bar | cached | prompt | %
+  let html =
+    '<div class="kv-head">Iter</div>' +
+    '<div class="kv-head">Cache fill</div>' +
+    '<div class="kv-head" style="text-align:right">Cached</div>' +
+    '<div class="kv-head" style="text-align:right">Prompt</div>' +
+    '<div class="kv-head" style="text-align:right">%</div>';
+  for (const r of responses) {
+    const u = r.usage || {};
+    const cached = u.cachedTokens || 0;
+    const prompt = u.promptTokens || 0;
+    const pct = prompt > 0 ? (cached / prompt) : 0;
+    const pctW = (pct * 100).toFixed(0);
+    html +=
+      '<div class="kv-cell">' + (r.iteration || 0) + '</div>' +
+      '<div class="kv-bar-wrap"><div class="kv-bar-fill" style="width:' + pctW + '%"></div></div>' +
+      '<div class="kv-cell pct">' + cached.toLocaleString() + '</div>' +
+      '<div class="kv-cell pct">' + prompt.toLocaleString() + '</div>' +
+      '<div class="kv-cell pct">' + (prompt > 0 ? pctW + '%' : '—') + '</div>';
+  }
+  tableEl.innerHTML = html;
 }
 
 // ===== Tool call details =====

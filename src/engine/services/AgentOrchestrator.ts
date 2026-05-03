@@ -255,7 +255,6 @@ export class AgentOrchestrator {
 
       const behaviorConfig = resolveBehavior({
         thinkingLevel,
-        promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
 
       // Main runtime: skip menu in static prompt — agentRuntime injects it
@@ -297,7 +296,6 @@ export class AgentOrchestrator {
       console.log('Loop Policy:', JSON.stringify(loopPolicy, null, 2));
       const behaviorConfig = resolveBehavior({
         thinkingLevel: this.options.thinkingLevel,
-        promptPolicy: { useSkillSystem: loopPolicy.useSkillSystem }
       });
       console.log('Behavior Config:', JSON.stringify(behaviorConfig, null, 2));
       console.log('='.repeat(80) + '\n');
@@ -341,9 +339,6 @@ export class AgentOrchestrator {
     // Unified behavior resolution (single entry point)
     const behaviorConfig = resolveBehavior({
       thinkingLevel,
-      promptPolicy: {
-        useSkillSystem: resolvedLoopPolicy.useSkillSystem
-      }
     });
 
     console.log(`[AgentOrchestrator] Behavior resolved: thinking=${behaviorConfig.thinkingLevel}`);

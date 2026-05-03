@@ -15,9 +15,9 @@ export const jsToolDefinition: ToolDefinition = {
   description: `Execute JavaScript in the Figma plugin runtime — full figma.* API access. Escape hatch for reads and API patterns the dedicated tools don't cover. For visual properties — fills, text, layout, stroke — the dedicated setters (set_fill, set_text, set_layout, set_stroke) run the same idMap + validation pipeline the rest of the agent relies on; prefer them so changes stay traceable.
 
 Examples:
-  js({code: "return figma.currentPage.children.length"})
-  js({code: "var n = figma.getNodeById('1:5'); n.fills = [{type:'SOLID', color:{r:1,g:0,b:0}}]; return n.id"})
+  js({code: "var n = await figma.getNodeByIdAsync('1:5'); return n.componentPropertyDefinitions"})
   js({code: "var all = await figma.currentPage.findAllAsync(); return all.filter(n => n.type === 'VECTOR').map(n => n.id)"})
+  // For listing the page tree, prefer inspect({node:"/"}) or find_nodes({query:"..."}) — figma.currentPage.children is blocked.
 
 Rules:
   - Full access to figma global (Figma Plugin API)

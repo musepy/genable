@@ -252,14 +252,6 @@ export interface AgentRuntimeLLMRequestEvent extends AgentRuntimeBaseEvent {
     thinkingLevel: string;
     toolMode: string;
   };
-  /** Provider-agnostic KV cache diagnostics based on prefix stability. */
-  cache?: {
-    /** Messages whose content is identical to the previous request (cacheable prefix). */
-    cacheableMessages: number;
-    totalMessages: number;
-    /** Estimated cacheable tokens (~chars/4). */
-    cacheableTokensEstimate: number;
-  };
 }
 
 /** Emitted after a difficult run to collect agent feedback on tools. */
@@ -284,6 +276,89 @@ export interface AgentRuntimeBudgetExhaustedEvent extends AgentRuntimeBaseEvent 
   phase: AgentRuntimePhase;
   iteration: number;
   maxIterations: number;
+}
+
+/**
+ * Structured per-execution log for a single tool call. Mirrors the runtime
+ * `ToolLogEntry` in `toolDispatcher.ts` and is shipped on every `tool_log`
+ * event so dev-bridge / metrics consumers have a stable schema.
+ */
+export interface ToolLogEntry {
+  callId: string;
+  toolName: string;
+  /**
+   * Tool input — shape varies per tool (declared by each ToolDefinition).
+   * Kept as `unknown` here so consumers must narrow before reading.
+   */
+  args: unknown;
+  startedAt: number;
+  durationMs: number;
+  /** True if this exact call (name + args) was seen before in this run. */
+  isDuplicate: boolean;
+  /** True if the tool executed but produced no observable change. */
+  isNoop: boolean;
+  /** Present = failure (ToolResponse convention). Absent = success. */
+  error?: string;
+  /**
+   * Machine-readable discriminator for runtime-synthesized errors (e.g.
+   * "CAP_REJECT" from a hook skip). Absent for genuine tool failures.
+   */
+  code?: string;
+}
+
+/**
+ * Emitted by HookRunner whenever a hook produces a hint (injectMessage) or
+ * terminates tool execution (skip/abort). Lets dev-bridge consumers see
+ * hook activity without parsing message streams.
+ */
+export interface AgentRuntimeTriggerFiredEvent extends AgentRuntimeBaseEvent {
+  type: 'trigger_fired';
+  hookId: string;
+  /** HookEvent name the hook was registered against. */
+  event: string;
+  /** Hook action that fired the event — undefined for pure injectMessage hints. */
+  action?: 'continue' | 'skip' | 'abort';
+  /** Optional discriminator code from the hook result (e.g. "CAP_REJECT"). */
+  code?: string;
+  reason?: string;
+  /** True when the hook produced an injectMessage payload. */
+  injected: boolean;
+}
+
+/**
+ * Emitted by ToolDispatcher for every tool call (success, failure, or
+ * hook-skipped). Carries the structured ToolLogEntry above for downstream
+ * observability — runs alongside the more LLM-shaped `tool_result` event.
+ */
+export interface AgentRuntimeToolLogEvent extends AgentRuntimeBaseEvent {
+  type: 'tool_log';
+  iteration: number;
+  logEntry: ToolLogEntry;
+}
+
+/**
+ * Emitted when a hook callback throws. Hook errors are non-fatal — the
+ * runner logs the error, emits this event, and continues with the next hook.
+ */
+export interface AgentRuntimeHookErrorEvent extends AgentRuntimeBaseEvent {
+  type: 'hook_error';
+  hookId: string;
+  /** HookEvent name the failing hook was registered against. */
+  event: string;
+  /** Stringified error message (Error.message or String(err)). */
+  error: string;
+}
+
+/**
+ * Emitted when total time spent running hooks for a single HookEvent
+ * exceeds the slow-hook threshold (currently 100ms). Diagnostic only.
+ */
+export interface AgentRuntimeHookPerfEvent extends AgentRuntimeBaseEvent {
+  type: 'hook_perf';
+  /** HookEvent name whose aggregate run was slow. */
+  event: string;
+  hookCount: number;
+  totalMs: number;
 }
 
 /** Emitted after an LLM generation call completes or fails. */
@@ -330,7 +405,11 @@ export type AgentRuntimeEvent =
   | AgentRuntimeLLMRequestEvent
   | AgentRuntimeLLMResponseEvent
   | AgentRuntimeDebriefEvent
-  | AgentRuntimeBudgetExhaustedEvent;
+  | AgentRuntimeBudgetExhaustedEvent
+  | AgentRuntimeTriggerFiredEvent
+  | AgentRuntimeToolLogEvent
+  | AgentRuntimeHookErrorEvent
+  | AgentRuntimeHookPerfEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -351,5 +430,9 @@ export type AgentRuntimeEventType =
   | 'llm_request'
   | 'llm_response'
   | 'debrief'
-  | 'budget_exhausted';
+  | 'budget_exhausted'
+  | 'trigger_fired'
+  | 'tool_log'
+  | 'hook_error'
+  | 'hook_perf';
 

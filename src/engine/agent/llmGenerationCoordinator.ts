@@ -66,7 +66,6 @@ export class LLMGenerationCoordinator {
   private lastNotificationTime = 0;
   private lastTextNotificationTime = 0;
   private pendingTextDelta = '';
-  private previousMessageHashes: number[] = [];
 
   constructor(
     private provider: LLMProvider,
@@ -81,9 +80,6 @@ export class LLMGenerationCoordinator {
     this.lastNotificationTime = 0;
     this.lastTextNotificationTime = 0;
     this.pendingTextDelta = '';
-    // NOTE: previousMessageHashes is intentionally NOT reset here.
-    // Messages accumulate across runs (this.messages persists), so the
-    // hash chain must also persist for accurate KV-cache diagnostics.
   }
 
   /**
@@ -100,7 +96,6 @@ export class LLMGenerationCoordinator {
 
     this.config.throwIfCanceled(iteration + 1);
 
-    const cache = this.computeCacheDiagnostics(request.messages);
     const llmCallId = this.config.generateId('llm');
     const llmStartMs = Date.now();
 
@@ -123,7 +118,6 @@ export class LLMGenerationCoordinator {
         thinkingLevel: request.thinkingLevel,
         toolMode: request.toolConfig.mode,
       },
-      cache,
     });
 
     try {
@@ -212,18 +206,26 @@ export class LLMGenerationCoordinator {
           baseDelayMs: LLMGenerationCoordinator.RETRY_BASE_DELAY_MS,
           abortSignal: abortController.signal,
           providerName: this.provider.name,
-          onRetry: (_attempt, _err, _delayMs) => {
-            // Emit a failed llm_response per retry attempt for observability.
-            // The successful attempt (if any) will emit its own success event below.
+          onRetry: (attempt, err, delayMs) => {
+            // Emit a real `retry` event per retry attempt. Previously this site
+            // synthesized a failed `llm_response` as a workaround (no dedicated
+            // retry event existed), which caused duplicate llm_response pairs
+            // per iteration and broke downstream counting. The synthetic event
+            // has been removed — the typed `retry` event now carries the
+            // signal cleanly (attempt/maxAttempts/delayMs/errorCategory/
+            // errorMessage). The successful attempt (if any) emits its own
+            // success llm_response below; an exhausted retry surfaces via the
+            // catch-block failure llm_response + provider_error.
             this.config.emitRuntimeEvent({
-              type: 'llm_response',
+              type: 'retry',
               llmCallId,
               iteration: iteration + 1,
               phase: 'execution',
-              durationMs: Date.now() - llmStartMs,
-              usage: undefined,
-              responseShape: { textLength: 0, thoughtsLength: 0, toolCallCount: 0, toolCallNames: [] },
-              success: false,
+              attempt,
+              maxAttempts: LLMGenerationCoordinator.MAX_RETRIES + 1,
+              delayMs,
+              errorCategory: isProviderError(err) ? err.category : 'unknown',
+              errorMessage: err instanceof Error ? err.message : String(err),
             });
           },
         },
@@ -317,48 +319,5 @@ export class LLMGenerationCoordinator {
 
       throw err;
     }
-  }
-
-  /**
-   * Compare current message sequence with the previous call to find the
-   * longest identical prefix — the portion a provider can serve from KV cache.
-   */
-  private computeCacheDiagnostics(messages: LLMMessage[]): {
-    cacheableMessages: number;
-    totalMessages: number;
-    cacheableTokensEstimate: number;
-  } {
-    const currentHashes = messages.map(m => {
-      const raw = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-      return this.fnv1a(raw);
-    });
-
-    let cacheableMessages = 0;
-    let cacheableChars = 0;
-    for (let i = 0; i < Math.min(currentHashes.length, this.previousMessageHashes.length); i++) {
-      if (currentHashes[i] !== this.previousMessageHashes[i]) break;
-      cacheableMessages++;
-      const c = messages[i].content;
-      cacheableChars += typeof c === 'string' ? c.length : JSON.stringify(c).length;
-    }
-
-    this.previousMessageHashes = currentHashes;
-
-    const cacheableTokensEstimate = Math.round(cacheableChars / 4);
-    console.log(
-      `[KVCache] ${cacheableMessages}/${messages.length} msgs cacheable (~${cacheableTokensEstimate} tokens)`
-    );
-
-    return { cacheableMessages, totalMessages: messages.length, cacheableTokensEstimate };
-  }
-
-  /** FNV-1a 32-bit hash — small and stable for runtime diagnostics. */
-  private fnv1a(value: string): number {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < value.length; i++) {
-      hash ^= value.charCodeAt(i);
-      hash = (hash * 0x01000193) >>> 0;
-    }
-    return hash;
   }
 }

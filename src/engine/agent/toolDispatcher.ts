@@ -13,6 +13,7 @@ import type { ToolExecutor } from './tools/types';
 import type { IpcBridge } from './ipcBridge';
 import { findClosestTool } from './tools/unified';
 import { presentForLLM } from './tools/unified/presentation';
+import type { ToolLogEntry as ProtocolToolLogEntry } from '../../shared/protocol/agentRuntimeEvents';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,27 +25,12 @@ interface RuntimeEventPayload {
 }
 
 // ---------------------------------------------------------------------------
-// ToolLogEntry — structured observability for each tool execution
+// ToolLogEntry — structured observability for each tool execution.
+// Re-exported from the protocol so runtime + protocol stay in sync (single
+// source of truth lives in `shared/protocol/agentRuntimeEvents.ts`).
 // ---------------------------------------------------------------------------
 
-export interface ToolLogEntry {
-  callId: string;
-  toolName: string;
-  args: any;
-  startedAt: number;
-  durationMs: number;
-  /** True if this exact call (name + args) was seen before in this run. */
-  isDuplicate: boolean;
-  /** True if the tool executed but produced no observable change. */
-  isNoop: boolean;
-  /** Present = failure (ToolResponse convention). Absent = success. */
-  error?: string;
-  /**
-   * Machine-readable discriminator for runtime-synthesized errors (e.g.
-   * "CAP_REJECT" from a hook skip). Absent for genuine tool failures.
-   */
-  code?: string;
-}
+export type ToolLogEntry = ProtocolToolLogEntry;
 
 /** Per-tool raw result — unprocessed by presentForLLM. For runtime state tracking. */
 export interface RawToolResult {

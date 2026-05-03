@@ -32,14 +32,6 @@ export interface AgentBehaviorConfig {
   thinkingLevel: ThinkingLevel;
 
   /**
-   * Prompt assembly policies.
-   */
-  promptPolicy: {
-    /** Whether to use the skill-based prompt system (True) or legacy composer (False) */
-    useSkillSystem: boolean;
-  };
-
-  /**
    * Maximum agent loop iterations (overrides AGENT_RUNTIME_CONSTANTS.DEFAULT_MAX_ITERATIONS).
    */
   maxIterations: number;
@@ -51,9 +43,6 @@ export interface AgentBehaviorConfig {
 
 export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   thinkingLevel: 'minimal',
-  promptPolicy: {
-    useSkillSystem: true,
-  },
   maxIterations: 80,
 };
 
@@ -66,9 +55,5 @@ export function resolveBehavior(
   return {
     ...DEFAULT_BEHAVIOR,
     ...overrides,
-    promptPolicy: {
-      ...DEFAULT_BEHAVIOR.promptPolicy,
-      ...overrides?.promptPolicy,
-    },
   };
 }

@@ -114,31 +114,21 @@ export function OnboardingView({
           fontWeight: 400,
           fontFamily: "var(--typography-font-family-emphasis)",
           color: 'var(--gray-12)',
-          lineHeight: 1.25,
-          letterSpacing: '-0.2px',
+          lineHeight: 1.05,
+          letterSpacing: '-0.4px',
         }}>
           {t.buildSomething}<br />{t.great}
         </div>
 
-        {/* Subtitle — changes per state */}
+        {/* Subtitle — Stored as default, state-aware feedback for connecting/error */}
         <div style={{
           paddingLeft: pad,
           fontSize: tokens.fontSize[1],
-          color: 'var(--gray-9)',
-          marginTop: 2,
+          color: 'var(--gray-a11)',
+          marginTop: tokens.space[3],
           lineHeight: tokens.lineHeight[2],
         }}>
-          {step === 'idle' && (
-            <Fragment>
-              {t.pasteApiKeyToConnect}{' '}
-              <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
-              >{t.getOneFree}</a>
-            </Fragment>
-          )}
+          {step === 'idle' && t.storedLocally}
           {step === 'connecting' && (
             <span className="thinking-shimmer">{t.connecting}</span>
           )}
@@ -188,7 +178,7 @@ export function OnboardingView({
 
         {/* Input — shown in idle and error states */}
         {showInput && (
-          <div style={{ marginTop: tokens.space[3] }}>
+          <div style={{ marginTop: tokens.space[4] }}>
             <div style={{
               position: 'relative',
               borderRadius: 'var(--radius-4)',
@@ -232,18 +222,10 @@ export function OnboardingView({
                   borderRadius: 'var(--radius-5)',
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={apiKey.trim() ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 19V5M5 12l7-7 7 7" />
                 </svg>
               </button>
-            </div>
-            <div style={{
-              fontSize: tokens.fontSize[1],
-              color: 'var(--gray-9)',
-              marginTop: tokens.space[2],
-              paddingLeft: pad,
-            }}>
-              {t.storedLocally}
             </div>
           </div>
         )}

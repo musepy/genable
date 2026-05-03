@@ -58,8 +58,8 @@ export function PromptChips({
   if (!visible) return null;
 
   return (
-    <div 
-      role="listbox" 
+    <div
+      role="listbox"
       aria-label="Prompt suggestions"
       style={{
         display: 'flex',
@@ -69,11 +69,12 @@ export function PromptChips({
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
         marginTop: 0, // Removed top margin
-        marginLeft: -tokens.space[3],  // Full-bleed trick (12px)
-        marginRight: -tokens.space[3], // Full-bleed trick (12px)
-        paddingLeft: tokens.space[3],  // Align back to content
-        paddingRight: tokens.space[3], // Scroll targets the edge
-        maxWidth: 'calc(100% + 24px)', // Match -12-12
+        marginLeft: -tokens.space[3],   // Full-bleed trick (-12)
+        marginRight: -tokens.space[3],  // Full-bleed trick (-12)
+        // pad-left 14 (was 12) → first chip border at col 14, icon at col 14+8=22 ✓ aligns with title text ink
+        paddingLeft: 14,
+        paddingRight: tokens.space[3],  // Scroll targets the edge
+        maxWidth: 'calc(100% + 24px)',  // Match -12-12
         boxSizing: 'border-box',
       }}
     >

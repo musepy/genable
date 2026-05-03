@@ -189,7 +189,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue, 
     return (
       <div style={row}>
         <span className="thinking-shimmer">{spinner} {t.statusThinking}</span>
-        <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '⏱ 0s'}</span>
+        <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '0s'}</span>
         <span style={{ flex: 1 }} />
         <span
           onClick={() => { setConfirming(false); onStop(); }}
@@ -214,7 +214,7 @@ function StatusBlock({ runState, startTime, endTime, error, onStop, onContinue, 
       onMouseLeave={(e: MouseEvent) => { const btn = (e.currentTarget as HTMLElement).querySelector('[data-interrupt]') as HTMLElement; if (btn) btn.style.opacity = '0'; }}
     >
       <span className="thinking-shimmer">{spinner} {t.statusThinking}</span>
-      <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '⏱ 0s'}</span>
+      <span style={{ marginLeft: tokens.space[2], flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{elapsed || '0s'}</span>
       <span style={{ flex: 1 }} />
       <span
         data-interrupt
@@ -234,9 +234,10 @@ function formatDuration(ms: number): string {
   return `${m}m ${s % 60}s`;
 }
 
-/** Format elapsed ms as a compact timer label with stopwatch prefix. */
+/** Format elapsed ms as a compact duration label (e.g. "5s", "1m 30s").
+ *  Plain text — no emoji, no icon prefix; the surrounding context is enough. */
 function formatElapsedTimer(ms: number): string {
-  return `⏱ ${formatDuration(ms)}`;
+  return formatDuration(ms);
 }
 
 

@@ -13,7 +13,8 @@ import { useTranslations } from '../i18n';
 
 export interface HeaderProps {
   // Theme
-  theme: 'light' | 'dark' | 'system';
+  /** 'auto' (or legacy 'system') follows OS preference. */
+  theme: 'light' | 'dark' | 'auto' | 'system';
   onToggleTheme: () => void;
   // New Chat
   onNewChat: () => void;

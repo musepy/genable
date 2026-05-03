@@ -58,7 +58,8 @@ function PluginContent() {
   const settings = useModelSettings()
   const {
     locale, localePref, setLocalePref,
-    apiKey, setApiKey, modelName, setModelName,
+    theme, setTheme,
+    apiKey, setApiKey, setApiKeyFor, apiKeys, modelName, setModelName,
     providerName, setProviderName,
     suggestedModels, fetchStatus, settingsError,
     hasConfig, isInitialized, showSettings, setShowSettings,
@@ -81,8 +82,7 @@ function PluginContent() {
     return () => { delete (window as any).__GENABLE_SWITCH_PROVIDER__ }
   }, [setProviderName, setModelName])
 
-  // 3. Theme & UI Animation State
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system')
+  // 3. UI Animation State (theme now persisted in useModelSettings)
   const [isSettingsClosing, setIsSettingsClosing] = useState(false)
 
   // Inject CSS
@@ -93,10 +93,10 @@ function PluginContent() {
     return () => { document.head.removeChild(styleEl) }
   }, [])
 
-  // Theme Sync
+  // Theme Sync — 'auto' follows system preference (no data-theme attr); 'light'/'dark' explicit
   useEffect(() => {
     const root = document.documentElement
-    if (theme === 'system') {
+    if (theme === 'auto') {
       root.removeAttribute('data-theme')
     } else {
       root.setAttribute('data-theme', theme)
@@ -184,10 +184,12 @@ function PluginContent() {
         <SettingsPanel
           apiKey={apiKey}
           setApiKey={setApiKey}
+          apiKeys={apiKeys}
+          setApiKeyFor={setApiKeyFor}
           modelName={modelName}
           setModelName={setModelName}
-          providerName={providerName} // [NEW]
-          setProviderName={setProviderName} // [NEW]
+          providerName={providerName}
+          setProviderName={setProviderName}
           suggestedModels={suggestedModels}
           fetchStatus={fetchStatus}
           settingsError={settingsError}
@@ -196,6 +198,10 @@ function PluginContent() {
           onLogout={logout}
           onRestoreSession={restoreSavedSession}
           localComponents={pluginData.localComponents}
+          localePref={localePref}
+          setLocalePref={setLocalePref}
+          theme={theme}
+          setTheme={setTheme}
         />
       );
     } else if (captureTarget === 'header') {
@@ -243,7 +249,7 @@ function PluginContent() {
   };
 
   const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+    setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
   // L3: Dogfood Tools State
@@ -352,6 +358,8 @@ function PluginContent() {
           <SettingsPanel
             apiKey={apiKey}
             setApiKey={setApiKey}
+            apiKeys={apiKeys}
+            setApiKeyFor={setApiKeyFor}
             modelName={modelName}
             setModelName={setModelName}
             providerName={providerName}
@@ -374,6 +382,8 @@ function PluginContent() {
             localComponents={pluginData.localComponents}
             localePref={localePref}
             setLocalePref={setLocalePref}
+            theme={theme}
+            setTheme={setTheme}
           />
         </div>
       )}

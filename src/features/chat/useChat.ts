@@ -464,6 +464,21 @@ export function useChat({
         const id = `${category}:${name}`
         const content = knowledgeSearch.read(id)
         if (!content) {
+          // Cross-category fallback: same name lives under a different reader.
+          // Common case: agent calls skill({name:"component-workflow"}) but
+          // the entry is under help. Tell it the correct tool to call.
+          const otherCategory = knowledgeSearch
+            .listIds()
+            .find(otherId => otherId !== id && otherId.endsWith(`:${name}`))
+            ?.split(':')[0]
+          if (otherCategory) {
+            return {
+              success: false,
+              error:
+                `"${name}" is a ${otherCategory} entry, not ${category}. ` +
+                `Call ${otherCategory}({ name: "${name}" }) instead.`,
+            }
+          }
           return {
             success: false,
             error: `Unknown ${category} "${name}". Check the KNOWLEDGE LIBRARY menu — names are listed exactly as you must pass them.`,

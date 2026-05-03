@@ -177,12 +177,14 @@ export function PromptInput({
         />
       </div>
 
-      {/* Footer Row: [+] [Model v] [▶] */}
+      {/* Footer Row: [+] [Model v] [▶]
+          Symmetric pad-x = space[2] (8) → concentric: composer outer 12 - pad 8 = inner radius 4.
+          + button icon ink lands ~col 30 (vs title 22) — accept ink miss for visual breathing room. */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: tokens.space[2],
-        padding: `${tokens.space[2]}px ${tokens.grid.blockPad}px`,
+        padding: tokens.space[2],
       }}>
         <ActionPopover
           onSerializeSelection={onPlusClick || (() => {})}
@@ -204,8 +206,7 @@ export function PromptInput({
         >
           <ArrowUp
             size={16}
-            strokeWidth={2}
-            color={canSubmit ? tokens.colors.accentContrast : tokens.colors.surface}
+            strokeWidth={canSubmit ? 2 : 1.5}
           />
         </button>
       </div>

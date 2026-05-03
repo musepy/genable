@@ -28,6 +28,10 @@ export function useModelSettings() {
   const [localePref, setLocalePref] = useState<LocalePreference>('auto')
   const locale: Locale = resolveLocale(localePref)
 
+  // --- Theme state ---
+  type ThemePref = 'auto' | 'light' | 'dark'
+  const [theme, setThemeState] = useState<ThemePref>('auto')
+
   // --- UI state ---
   const [hasConfig, setHasConfig] = useState<boolean>(false)
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
@@ -53,8 +57,22 @@ export function useModelSettings() {
       modelName: name,
       providerName,
       locale: localePref,
+      theme,
     })
-  }, [providerName, apiKeys, localePref])
+  }, [providerName, apiKeys, localePref, theme])
+
+  /** Update theme and persist immediately */
+  const setTheme = useCallback((next: ThemePref) => {
+    setThemeState(next)
+    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
+      apiKey: apiKeys[providerName] || '',
+      apiKeys,
+      modelName: modelNames[providerName] || DEFAULT_MODEL,
+      providerName,
+      locale: localePref,
+      theme: next,
+    })
+  }, [apiKeys, modelNames, providerName, localePref])
 
   /** Get model list synchronously — static fallback if empty */
   const getModels = useCallback((): { name: string, displayName: string }[] => {
@@ -87,8 +105,9 @@ export function useModelSettings() {
       modelName,
       providerName,
       locale: localePref,
+      theme,
     })
-  }, [apiKeys, modelName, providerName, localePref])
+  }, [apiKeys, modelName, providerName, localePref, theme])
 
   // --- Settings load ---
 
@@ -118,6 +137,11 @@ export function useModelSettings() {
       // Locale from storage (only on first load)
       if (!isInitialized && s.locale) {
         setLocalePref(s.locale as LocalePreference)
+      }
+
+      // Theme from storage (only on first load)
+      if (!isInitialized && s.theme) {
+        setThemeState(s.theme as ThemePref)
       }
 
       if (!isInitialized || !hasAnyKey) {
@@ -165,6 +189,21 @@ export function useModelSettings() {
     setApiKeys(prev => ({ ...prev, [providerName]: key }))
   }
 
+  /** Update a specific provider's key (or clear it with empty string) and persist immediately */
+  const setApiKeyFor = useCallback((provider: ProviderName, key: string) => {
+    const nextApiKeys = { ...apiKeys, [provider]: key }
+    setApiKeys(nextApiKeys)
+    setHasConfig(Object.values(nextApiKeys).some(v => Boolean(v)))
+    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
+      apiKey: nextApiKeys[providerName] || '',
+      apiKeys: nextApiKeys,
+      modelName,
+      providerName,
+      locale: localePref,
+      theme,
+    })
+  }, [apiKeys, providerName, modelName, localePref, theme])
+
   const handleSaveSettings = () => {
     persistSettings()
     setHasConfig(Boolean(apiKeys[providerName]))
@@ -181,6 +220,8 @@ export function useModelSettings() {
       apiKeys: nextApiKeys,
       modelName,
       providerName,
+      locale: localePref,
+      theme,
     })
     toast('Connected successfully', 'success')
   }, [apiKeys, modelName, providerName, toast])
@@ -233,8 +274,11 @@ export function useModelSettings() {
     locale,
     localePref,
     setLocalePref,
+    theme,
+    setTheme,
     apiKey,
     setApiKey: updateApiKey,
+    setApiKeyFor,
     apiKeys,
     setApiKeys,
     modelName,

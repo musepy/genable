@@ -12,6 +12,8 @@ export interface Settings {
   providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
   /** User's preferred UI + LLM communication language */
   locale?: 'auto' | 'en' | 'zh' | 'fr';
+  /** UI color theme; 'auto' follows system preference */
+  theme?: 'auto' | 'light' | 'dark';
 }
 
 export interface CreateLayersHandler extends EventHandler {

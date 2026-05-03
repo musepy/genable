@@ -8,6 +8,12 @@
       "port": 5173
     },
     {
+      "name": "ui-preview-static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "tools/ui-preview", "-p", "8766", "--no-dotfiles", "-c-1"],
+      "port": 8766
+    },
+    {
       "name": "watch",
       "runtimeExecutable": "node",
       "runtimeArgs": ["build.js", "--watch"],

@@ -15,7 +15,6 @@ import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
 import type { HookRegistration, HookContext } from './hooks';
-import type { InspectionTracker } from './hooks/inspectionTracker';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
@@ -102,8 +101,11 @@ export class AgentRuntime {
   private chatPanelId: string | null = null;
   private turnCreatedNodes: Array<{ id: string; name?: string; type?: string }> = [];
   private turnCreatedIds: string[] = [];
-  private inspectionTracker: InspectionTracker | null = null;
   private designRootId: string | null = null;  // persists across turns for edit-turn links
+  /** Monotonically increasing turn counter, paired with turn_start/turn_end events for external tooling. */
+  private turnCounter = 0;
+  /** Wall-clock ms when the current run() started — used to compute durationMs in abort events. */
+  private runStartMs = 0;
   private runStats = {
     toolCallCount: 0, toolErrorCount: 0, loopDetected: false,
     tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
@@ -144,9 +146,8 @@ export class AgentRuntime {
     if (options.hooks) {
       this.hookRegistry.registerAll(options.hooks);
     } else {
-      const { hooks, tracker, reset } = createBuiltinHooksWithState();
+      const { hooks, reset } = createBuiltinHooksWithState();
       this.hookRegistry.registerAll(hooks);
-      this.inspectionTracker = tracker;
       this.resetBuiltinState = reset;
     }
     this.hookRunner = new HookRunner(this.hookRegistry, (event) => this.emitRuntimeEvent(event as RuntimeEventPayload));
@@ -464,19 +465,18 @@ export class AgentRuntime {
       }
     }
 
-    // Mark every created node as known (born clean from parent's view).
+    // Collect created node IDs for designRootId resolution and link-text rendering.
     // For subtask, child runtime already processed descendants internally — parent
     // trusts the returned createdIds in lieu of re-inspecting.
+    // Tracker writes are handled centrally by trackerFeedHook (afterToolExec p4).
     if (Array.isArray(data.createdIds)) {
       for (const id of data.createdIds) {
         if (typeof id === 'string') {
           this.turnCreatedIds.push(id);
-          this.inspectionTracker?.markInspected(id);
         }
       }
     } else if (data.id && typeof data.id === 'string') {
       this.turnCreatedIds.push(data.id);
-      this.inspectionTracker?.markInspected(data.id);
     }
   }
 
@@ -492,6 +492,15 @@ export class AgentRuntime {
     this.runAbortController = new AbortController();
     this.canceled = false;
     this.cancelReason = 'Canceled by user';
+    this.turnCounter += 1;
+    this.runStartMs = Date.now();
+
+    this.emitRuntimeEvent({
+      type: 'turn_start',
+      phase: 'execution',
+      turnNumber: this.turnCounter,
+      promptPreview: userPrompt ? userPrompt.slice(0, 200) : undefined,
+    });
 
     // Inject the KNOWLEDGE LIBRARY menu as a user-meta message just before
     // the user prompt — every turn, not just the first.

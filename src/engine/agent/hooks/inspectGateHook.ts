@@ -97,7 +97,7 @@ export function createInspectGateHook(
       return {
         action: 'skip',
         reason:
-          `Node ${unknownIds.join(', ')} unknown — it hasn't appeared in any inspect/describe/jsx result this turn. ` +
+          `Node ${unknownIds.join(', ')} unknown — it hasn't appeared in any inspect/describe/jsx result this session. ` +
           `Inspect it or create it before modifying. Call ${hint}.`,
       };
     },

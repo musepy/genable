@@ -2,7 +2,7 @@
  * @file toolPlanTriggers.ts
  * @description Tool-plan triggers — enforced at beforeToolExec / afterToolExec.
  *
- *  T6 — edit targets unknown node ID       → beforeToolExec, REJECT (skip) priority 12
+ *  T5 — jsx subtree node count cap          → beforeToolExec, REJECT (skip) priority 11
  *  T_delete_rebuild — delete→jsx same parent within 3 steps → afterToolExec, hint  priority 50
  *
  * Each reject carries a concrete hint that teaches the correct alternative,
@@ -10,10 +10,15 @@
  *
  * Cap rejects carry `code: CAP_REJECT` so downstream metrics can distinguish
  * them from genuine tool failures (the LLM-facing `error` text is unchanged).
+ *
+ * Note: the per-turn `editUnknownId` trigger was removed — it was redundant
+ * with the per-session inspectGateHook (which already covers all mutation
+ * tools) and its turn-scoped reset silently nullified the tracker's
+ * cross-turn ID memory. See `hooks/inspectGateHook.ts` for the surviving
+ * gate and `hooks/trackerFeedHook.ts` for tracker writes.
  */
 import { HookRegistration, HookContext, HookResult } from '../hooks/hookTypes';
-import { TurnState, extractKnownIdsFromResult } from './turnState';
-import { InspectionTracker } from '../hooks/inspectionTracker';
+import { TurnState } from './turnState';
 
 // ---------------------------------------------------------------------------
 // Thresholds
@@ -42,19 +47,6 @@ export function countJsxNodes(markup: string): number {
   return matches ? matches.length : 0;
 }
 
-/** Extract edit-target node IDs from args, supporting both single + batch modes. */
-function extractEditTargetIds(args: any): string[] {
-  if (!args) return [];
-  const ids: string[] = [];
-  if (Array.isArray(args.nodes)) {
-    for (const entry of args.nodes) {
-      if (entry && typeof entry.node === 'string') ids.push(entry.node);
-    }
-  }
-  if (typeof args.node === 'string') ids.push(args.node);
-  return ids;
-}
-
 /** Extract the "parent" a jsx call will plant its subtree under. Explicit parent wins. */
 function extractJsxParentHint(args: any): string | undefined {
   if (!args) return undefined;
@@ -69,7 +61,7 @@ function extractDeleteTargetId(args: any): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// T5 — jsx subtree > 60 nodes → reject
+// T5 — jsx subtree > N nodes → reject
 // ---------------------------------------------------------------------------
 
 export function createJsxNodeCountTrigger(): HookRegistration {
@@ -98,39 +90,6 @@ export function createJsxNodeCountTrigger(): HookRegistration {
 }
 
 // ---------------------------------------------------------------------------
-// T6 — edit targets node ID not in session's idMap → reject
-// ---------------------------------------------------------------------------
-
-export function createEditUnknownIdTrigger(state: TurnState): HookRegistration {
-  return {
-    id: 'trigger:editUnknownId',
-    event: 'beforeToolExec',
-    priority: 12, // MUST run before inspectGateHook at 15
-    fn: async (ctx: HookContext): Promise<HookResult | void> => {
-      const tc = ctx.currentToolCall;
-      if (!tc || tc.name !== 'edit') return;
-
-      const ids = extractEditTargetIds(tc.input);
-      if (ids.length === 0) return;
-
-      // Page root "/" is always known — exempt
-      const unknown = ids.filter(id => id !== '/' && !state.knownNodeIds.has(id));
-      if (unknown.length === 0) return;
-
-      // Single-ID message reads more naturally than joined list when count=1
-      const displayId = unknown.length === 1 ? unknown[0] : unknown.join(', ');
-      return {
-        action: 'skip',
-        code: CAP_REJECT_CODE,
-        reason:
-          `Node '${displayId}' not found in this session. ` +
-          `Call find_nodes({query: ...}) or get_selection() to locate it first.`,
-      };
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
 // T_delete_rebuild — delete_node followed by jsx within 3 steps, same parent → soft hint
 // ---------------------------------------------------------------------------
 
@@ -148,10 +107,6 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
         state.recordCall(tc, extractJsxParentHint(tc.input));
         return;
       }
-
-      // Record created IDs as known so follow-up edits pass T6
-      const createdIds = extractKnownIdsFromResult('jsx', ctx.toolResult);
-      state.addKnownIds(createdIds);
 
       // The current jsx's parent hint: explicit parent, or the created root ID
       const currentParentHint =
@@ -199,42 +154,24 @@ export function createDeleteRebuildTrigger(state: TurnState): HookRegistration {
 }
 
 // ---------------------------------------------------------------------------
-// Result observer — track known IDs from successful reads (inspect, find_nodes, etc.)
+// Delete-call observer — record delete_node into recentToolCalls so the
+// delete-rebuild trigger has a look-back window.
 // ---------------------------------------------------------------------------
 
 /**
- * afterToolExec observer (priority 5 — runs before other afterToolExec hooks)
- * for non-jsx tools that reveal node IDs to the LLM. jsx is handled by the
- * delete-rebuild trigger so it can also emit the hint.
- *
- * Also records delete_node for the delete-rebuild window.
+ * afterToolExec observer (priority 5) — records delete_node calls into
+ * the turn's recent-calls window. That's all it does; tracker writes are
+ * handled by trackerFeedHook (priority 4).
  */
-export function createKnownIdObserver(state: TurnState, tracker: InspectionTracker): HookRegistration {
+export function createDeleteCallObserver(state: TurnState): HookRegistration {
   return {
-    id: 'trigger:knownIdObserver',
+    id: 'trigger:deleteCallObserver',
     event: 'afterToolExec',
     priority: 5,
     fn: async (ctx: HookContext): Promise<HookResult | void> => {
       const tc = ctx.currentToolCall;
-      if (!tc) return;
-
-      // Record delete_node into the recent-calls window (parentHint = deleted target)
-      if (tc.name === 'delete_node') {
-        state.recordCall(tc, extractDeleteTargetId(tc.input));
-        return;
-      }
-
-      // Don't re-record jsx here — the delete-rebuild trigger handles it.
-      if (tc.name === 'jsx') return;
-
-      // Harvest IDs from read-oriented tool results
-      if (!ctx.toolResult || ctx.toolResult.error) return;
-      const ids = extractKnownIdsFromResult(tc.name, ctx.toolResult);
-      if (ids.length > 0) {
-        state.addKnownIds(ids);
-        // Also mark in InspectionTracker so inspectGateHook allows mutations
-        for (const id of ids) tracker.markInspected(id);
-      }
+      if (!tc || tc.name !== 'delete_node') return;
+      state.recordCall(tc, extractDeleteTargetId(tc.input));
     },
   };
 }
@@ -253,14 +190,13 @@ export interface ToolPlanTriggersBundle {
  * Create the tool-plan triggers bundle with shared turn state.
  * Caller wires `hooks` into HookRegistry and `reset` into turn-start.
  */
-export function createToolPlanTriggers(state: TurnState, tracker: InspectionTracker): {
+export function createToolPlanTriggers(state: TurnState): {
   hooks: HookRegistration[];
 } {
   return {
     hooks: [
       createJsxNodeCountTrigger(),
-      createEditUnknownIdTrigger(state),
-      createKnownIdObserver(state, tracker),
+      createDeleteCallObserver(state),
       createDeleteRebuildTrigger(state),
     ],
   };

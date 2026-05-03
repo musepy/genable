@@ -359,12 +359,10 @@ describe('InspectGateHook', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('InspectStubHook', () => {
-  let tracker: InspectionTracker;
   let stub: ReturnType<typeof createInspectStubHook>;
 
   beforeEach(() => {
-    tracker = createInspectionTracker();
-    stub = createInspectStubHook(tracker);
+    stub = createInspectStubHook();
   });
 
   const findHook = () => stub.hooks.find(h => h.id === 'builtin:inspectStub')!;
@@ -375,67 +373,9 @@ describe('InspectStubHook', () => {
       toolResult,
     }));
 
-  it('passes through first inspect result and marks root as known', async () => {
+  it('passes through first inspect result', async () => {
     const result = await runStub('inspect', { node: '1:2' }, { data: { id: '1:2', name: 'Card', type: 'frame' } });
     expect(result).toBeUndefined(); // pass through
-    expect(tracker.isInspected('1:2')).toBe(true);
-  });
-
-  it('marks direct children as known after inspect with tree', async () => {
-    const toolResult = {
-      data: {
-        id: '1:2',
-        name: 'Card',
-        type: 'frame',
-        children: [
-          { id: '1:3', name: 'Header', type: 'frame' },
-          { id: '1:4', name: 'Body', type: 'text' },
-        ],
-      },
-    };
-    await runStub('inspect', { node: '1:2' }, toolResult);
-    expect(tracker.isInspected('1:2')).toBe(true);
-    expect(tracker.isInspected('1:3')).toBe(true);
-    expect(tracker.isInspected('1:4')).toBe(true);
-  });
-
-  it('marks nested grandchildren as known recursively', async () => {
-    const toolResult = {
-      data: {
-        id: '1:2',
-        name: 'Card',
-        type: 'frame',
-        children: [
-          {
-            id: '1:3',
-            name: 'Header',
-            type: 'frame',
-            children: [
-              { id: '1:5', name: 'Title', type: 'text' },
-            ],
-          },
-        ],
-      },
-    };
-    await runStub('inspect', { node: '1:2' }, toolResult);
-    expect(tracker.isInspected('1:5')).toBe(true);
-  });
-
-  it('marks page root children as known when inspecting "/"', async () => {
-    const toolResult = {
-      data: {
-        page: 'Page 1',
-        count: 2,
-        children: [
-          { id: '2:1', name: 'Login', type: 'frame' },
-          { id: '2:2', name: 'Dashboard', type: 'frame' },
-        ],
-      },
-    };
-    await runStub('inspect', { node: '/' }, toolResult);
-    expect(tracker.isInspected('/')).toBe(true);
-    expect(tracker.isInspected('2:1')).toBe(true);
-    expect(tracker.isInspected('2:2')).toBe(true);
   });
 
   it('replaces identical second inspect with stub', async () => {
@@ -455,22 +395,19 @@ describe('InspectStubHook', () => {
     expect(result).toBeUndefined(); // different data → pass through
   });
 
-  it('does not stub error results and does not mark inspected on error', async () => {
+  it('does not stub error results', async () => {
     const result = await runStub('inspect', { node: '1:2' }, { error: 'Node not found' });
     expect(result).toBeUndefined();
-    expect(tracker.isInspected('1:2')).toBe(false); // error → not marked
   });
 
   it('works for describe tool too', async () => {
     const result = await runStub('describe', { node: '1:2' }, { data: { roles: ['card'] } });
     expect(result).toBeUndefined();
-    expect(tracker.isInspected('1:2')).toBe(true);
   });
 
   it('ignores non-read tools', async () => {
     const result = await runStub('edit', { node: '1:2' }, { data: {} });
     expect(result).toBeUndefined();
-    expect(tracker.isInspected('1:2')).toBe(false);
   });
 
   it('reset clears the cache', async () => {

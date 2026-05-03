@@ -25,9 +25,10 @@ import { createConsecutiveFailureGuard } from './consecutiveFailureGuard';
 import { createPartialFailureGuard } from './partialFailureGuard';
 import { createBudgetGuard } from './budgetGuard';
 import { createStepWarningHook } from './stepWarningHook';
-import { createInspectionTracker, InspectionTracker } from './inspectionTracker';
+import { createInspectionTracker } from './inspectionTracker';
 import { createInspectGateHook } from './inspectGateHook';
 import { createInspectStubHook } from './inspectStubHook';
+import { createTrackerFeedHook } from './trackerFeedHook';
 import { createTruncationRecovery } from './truncationRecovery';
 import { createTruncationPlaceholderGuard } from './truncationPlaceholderGuard';
 import { unifiedTools } from '../tools/unified';
@@ -93,7 +94,6 @@ function createLoopDetectionHook(state: BuiltinHookState): HookRegistration {
  */
 export function createBuiltinHooksWithState(): {
   hooks: HookRegistration[];
-  tracker: InspectionTracker;
   reset: () => void;
 } {
   const state: BuiltinHookState = {
@@ -106,10 +106,11 @@ export function createBuiltinHooksWithState(): {
   const budgetGuard = createBudgetGuard();
   const stepWarning = createStepWarningHook();
   const tracker = createInspectionTracker();
+  const trackerFeed = createTrackerFeedHook(tracker);
   const inspectGate = createInspectGateHook(tracker, unifiedTools);
-  const inspectStub = createInspectStubHook(tracker);
+  const inspectStub = createInspectStubHook();
   const turnState = createTurnState();
-  const toolPlanTriggers = createToolPlanTriggers(turnState, tracker);
+  const toolPlanTriggers = createToolPlanTriggers(turnState);
   const truncationRecovery = createTruncationRecovery();
   const truncationPlaceholderGuard = createTruncationPlaceholderGuard();
 
@@ -120,6 +121,7 @@ export function createBuiltinHooksWithState(): {
     ...partialFailureGuard.hooks,
     ...budgetGuard.hooks,
     ...stepWarning.hooks,
+    ...trackerFeed.hooks,
     ...inspectGate.hooks,
     ...inspectStub.hooks,
     ...toolPlanTriggers.hooks,
@@ -129,7 +131,6 @@ export function createBuiltinHooksWithState(): {
 
   return {
     hooks,
-    tracker,
     reset: () => {
       state.loopDetector.reset();
       emptyArgsGuard.reset();

@@ -562,6 +562,20 @@ describe('handleEnsureVariable — idempotency + dedup', () => {
     expect(typeof r.data?.existing_fingerprint).toBe('string');
     expect(typeof r.data?.caller_fingerprint).toBe('string');
     expect(r.data?.existing_fingerprint).not.toBe(r.data?.caller_fingerprint);
+
+    // Structured recovery envelope — LLM should be able to pass args straight
+    // back to set_variable_value without further interpretation.
+    expect(r.data?.code).toBe('STALE_VARIABLE_FINGERPRINT');
+    expect(r.data?.recommended_next_action?.tool).toBe('set_variable_value');
+    expect(r.data?.recommended_next_action?.args?.variable).toBe('VariableID:stale');
+    // mode + value populated (single-mode set_variable_value signature)
+    expect(typeof r.data?.recommended_next_action?.args?.mode).toBe('string');
+    expect(r.data?.recommended_next_action?.args?.value).toBeDefined();
+    // Transparency: full caller + existing maps available so the LLM can
+    // iterate over the remaining divergent modes.
+    expect(r.data?.existing_values_by_mode).toBeDefined();
+    expect(r.data?.caller_values_by_mode).toBeDefined();
+    expect(Object.keys(r.data!.caller_values_by_mode as Record<string, unknown>).sort()).toEqual(['Dark', 'Light']);
   });
 
   it('returns mode_coverage on reuse path (Finding 4)', async () => {
@@ -611,6 +625,11 @@ describe('handleEnsureVariable — idempotency + dedup', () => {
     });
     expect(r.error).toContain('STALE_VARIABLE_FINGERPRINT');
     expect(r.data?.existing_variable_id).toBe('VariableID:partial');
+    // Recovery envelope present even when divergence is "mode missing on existing".
+    expect(r.data?.recommended_next_action?.tool).toBe('set_variable_value');
+    expect(r.data?.recommended_next_action?.args?.variable).toBe('VariableID:partial');
+    expect(r.data?.existing_values_by_mode).toBeDefined();
+    expect(r.data?.caller_values_by_mode).toBeDefined();
   });
 });
 

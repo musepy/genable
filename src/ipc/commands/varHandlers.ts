@@ -530,15 +530,58 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
 
     if (existingFingerprint !== callerCanonicalFingerprint) {
       const trunc = (s: string) => s.slice(0, 16) + '…';
+
+      // Pick the first divergent mode for the recommended_next_action.
+      // set_variable_value is single-mode (variable + mode + value), so we
+      // surface the first mode that differs (or is missing on the existing
+      // variable). The LLM can call set_variable_value again for the rest;
+      // data.caller_values_by_mode lets it see the full intended state.
+      //
+      // Resolve mode names → modeIds via the collection so the LLM can pass
+      // the modeId straight back without an extra list_variables call.
+      let recommendedMode: { name: string; modeId: string; value: unknown } | undefined;
+      for (const rv of resolvedValues) {
+        if (!rv.modeName) continue;
+        const existingValue = existingValuesByName[rv.modeName];
+        const callerValue = callerValuesByName[rv.modeName];
+        // Mode missing on existing OR value differs (deep-compare via JSON).
+        if (existingValue === undefined ||
+            JSON.stringify(existingValue) !== JSON.stringify(callerValue)) {
+          recommendedMode = { name: rv.modeName, modeId: rv.modeId, value: rv.value };
+          break;
+        }
+      }
+      // Fallback: if no caller mode is divergent (e.g. caller is a strict
+      // subset), pick the first caller mode anyway so the action is still
+      // structured. This shouldn't happen in practice (would mean
+      // fingerprints match), but keeps the envelope total.
+      if (!recommendedMode && resolvedValues.length > 0) {
+        const rv = resolvedValues[0];
+        recommendedMode = { name: rv.modeName, modeId: rv.modeId, value: rv.value };
+      }
+
       return {
         error:
           `STALE_VARIABLE_FINGERPRINT: existing variable "${existing.name}" in collection "${collection.name}" has fingerprint ${trunc(existingFingerprint)} but caller's intended state hashes to ${trunc(callerCanonicalFingerprint)}. ` +
           `The variable was likely mutated since creation (different values_by_mode, a missing mode, or an extra mode). ` +
-          `Either call set_variable_value to align state with your intended values, or recompute idempotency_key from the existing-state values_by_mode and retry.`,
+          `Pass recommended_next_action.args to set_variable_value to align the existing variable to your intended state (call once per divergent mode — see data.caller_values_by_mode for the full set), or accept the existing values via list_variables if you don't need yours.`,
         data: {
+          code: 'STALE_VARIABLE_FINGERPRINT',
           existing_variable_id: existing.id,
           existing_fingerprint: existingFingerprint,
           caller_fingerprint: callerCanonicalFingerprint,
+          existing_values_by_mode: existingValuesByName,
+          caller_values_by_mode: callerValuesByName,
+          ...(recommendedMode ? {
+            recommended_next_action: {
+              tool: 'set_variable_value',
+              args: {
+                variable: existing.id,
+                mode: recommendedMode.modeId,
+                value: recommendedMode.value,
+              },
+            },
+          } : {}),
         },
       };
     }

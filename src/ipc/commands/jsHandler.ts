@@ -100,6 +100,159 @@ const NODE_METHOD_HINTS: Array<{ pattern: RegExp; fix: string }> = [
 ];
 
 /**
+ * Per-method hints for "X is not a function" errors. The LLM frequently calls
+ * sync/async methods on the wrong receiver type — the V8 error "X is not a
+ * function" alone doesn't say WHY. We catch the failure post-execution and
+ * stitch in receiver type + remediation so the next iteration corrects course
+ * instead of retrying blind.
+ *
+ * Lookup: METHOD_HINTS[methodName][receiverType] || METHOD_HINTS[methodName]['*']
+ * Keep this list small — only methods the LLM has actually mis-called in logs.
+ */
+const METHOD_HINTS: Record<string, Record<string, string>> = {
+  findAllAsync: {
+    FRAME: 'findAllAsync is only available on Page/Document nodes. For Frame children, use frame.children.filter(predicate) or recurse manually.',
+    GROUP: 'findAllAsync is only available on Page/Document nodes. For Group children, use group.children.filter(predicate) or recurse manually.',
+    COMPONENT: 'findAllAsync is only available on Page/Document nodes. For Component children, use node.children.filter(predicate) or recurse manually.',
+    COMPONENT_SET: 'findAllAsync is only available on Page/Document nodes. For ComponentSet children, use node.children.filter(predicate) or recurse manually.',
+    INSTANCE: 'findAllAsync is only available on Page/Document nodes. For Instance children, use node.children.filter(predicate) or recurse manually.',
+    SECTION: 'findAllAsync is only available on Page/Document nodes. For Section children, use node.children.filter(predicate) or recurse manually.',
+  },
+  findOneAsync: {
+    FRAME: 'findOneAsync is only available on Page/Document nodes. For Frame descendants, walk node.children manually.',
+    GROUP: 'findOneAsync is only available on Page/Document nodes. For Group descendants, walk node.children manually.',
+    COMPONENT: 'findOneAsync is only available on Page/Document nodes. For Component descendants, walk node.children manually.',
+    INSTANCE: 'findOneAsync is only available on Page/Document nodes. For Instance descendants, walk node.children manually.',
+    SECTION: 'findOneAsync is only available on Page/Document nodes. For Section descendants, walk node.children manually.',
+  },
+  findChildren: {
+    '*': 'Use findChildrenAsync (with await) — sync findChildren is unavailable in dynamic-page mode.',
+  },
+  findAll: {
+    '*': 'Use findAllAsync (with await) — sync findAll is unavailable in dynamic-page mode.',
+  },
+  findOne: {
+    '*': 'Use findOneAsync (with await) — sync findOne is unavailable in dynamic-page mode.',
+  },
+  getPluginData: {
+    '*': 'getPluginData requires the node to be in scope. Verify the variable holds a node, not a serialized {id,type,name} object.',
+  },
+};
+
+/** Try to extract the receiver expression that precedes `.<methodName>(` in source. */
+function extractReceiverExpr(source: string, methodName: string): string | null {
+  // Escape methodName for regex safety (only word chars expected, but be defensive).
+  const safe = methodName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Match a simple identifier (or chained property access) immediately before the call.
+  // Heuristic — covers the common case `varName.method(...)` and `obj.prop.method(...)`.
+  const re = new RegExp(`([A-Za-z_$][\\w$.]*)\\s*\\.\\s*${safe}\\s*\\(`);
+  const m = source.match(re);
+  return m ? m[1] : null;
+}
+
+/**
+ * Try to infer the Figma node type held by a given variable name based on a
+ * static read of the code. Looks for assignments like:
+ *   var card = await figma.getNodeByIdAsync('1:5');
+ *   const x = await figma.getNodeByIdAsync('...');
+ * If found, resolves the node at runtime and reads `.type`. Returns null if no
+ * pattern matched or the resolved value isn't a node.
+ */
+async function inferReceiverNodeType(source: string, varName: string): Promise<string | null> {
+  if (!varName) return null;
+  // Strip array/property suffix — we want the base identifier.
+  const base = varName.split('.')[0].split('[')[0];
+  const safe = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Match: <decl>? base = (await)? figma.getNodeByIdAsync('id')
+  const re = new RegExp(
+    `(?:var|let|const)?\\s*${safe}\\s*=\\s*await\\s+figma\\.getNodeByIdAsync\\s*\\(\\s*['"]([^'"]+)['"]\\s*\\)`,
+  );
+  const m = source.match(re);
+  if (!m) return null;
+  const id = m[1];
+  try {
+    const node = await (figma as any).getNodeByIdAsync(id);
+    if (node && typeof node === 'object' && typeof node.type === 'string') {
+      return node.type as string;
+    }
+  } catch {
+    /* ignore — node may have been deleted */
+  }
+  return null;
+}
+
+/**
+ * Build a structured "not a function" diagnostic from a caught exception and
+ * the original source. Returns null if the error doesn't match the pattern.
+ */
+export async function buildNotAFunctionDiagnostic(
+  errorMessage: string,
+  source: string,
+): Promise<{ error: string; data: Record<string, unknown> } | null> {
+  // Match V8-style "<expr>.<method> is not a function" — captures the LAST
+  // identifier in a property-access chain. Also handles bare "<method> is not
+  // a function" (no receiver). We deliberately accept a leading dot since V8
+  // emits e.g. "card.findAllAsync is not a function".
+  const m = errorMessage.match(/([A-Za-z_$][\w$]*)\s+is not a function/);
+  // If the bare phrase appears without an identifier capture, we still surface
+  // a generic diagnostic — better than echoing "not a function" alone.
+  const looseMatch = /\bis not a function\b/.test(errorMessage);
+  if (!m && !looseMatch) return null;
+
+  // Filter out method names that are actually generic noise — "undefined is
+  // not a function" carries no useful method. Treat it as the loose case.
+  const rawMethod = m ? m[1] : null;
+  const method = rawMethod && rawMethod !== 'undefined' && rawMethod !== 'null' ? rawMethod : null;
+  let receiverExpr: string | null = null;
+  let receiverType: string | null = null;
+  if (method) {
+    receiverExpr = extractReceiverExpr(source, method);
+    if (receiverExpr) {
+      receiverType = await inferReceiverNodeType(source, receiverExpr);
+    }
+  }
+
+  // Look up a hint by [method][type], falling back to [method]['*'].
+  let suggestion = '';
+  if (method) {
+    const byMethod = METHOD_HINTS[method];
+    if (byMethod) {
+      if (receiverType && byMethod[receiverType]) {
+        suggestion = byMethod[receiverType];
+      } else if (byMethod['*']) {
+        suggestion = byMethod['*'];
+      }
+    }
+  }
+  if (!suggestion) {
+    suggestion = method
+      ? `Method '${method}' does not exist on this receiver. Check the Figma plugin API for the correct method or receiver type.`
+      : 'A called value was not a function. Check that the receiver is the type you expect (e.g. await figma.getNodeByIdAsync returns a node, not a serialized object).';
+  }
+
+  const where = receiverType
+    ? `node of type ${receiverType}`
+    : receiverExpr
+    ? `'${receiverExpr}'`
+    : 'this object';
+
+  const error = method
+    ? `Method '${method}' does not exist on ${where}. ${suggestion}`
+    : `Call failed: 'is not a function' on ${where}. ${suggestion}`;
+
+  return {
+    error,
+    data: {
+      method,
+      receiver_expr: receiverExpr,
+      receiver_type: receiverType,
+      suggestion,
+      original_error: errorMessage,
+    },
+  };
+}
+
+/**
  * Patterns that indicate destructive or out-of-scope operations.
  * Fail-fast: reject before execution, not after damage.
  * `hint` is shown to the LLM so it picks the right replacement tool.
@@ -200,6 +353,19 @@ export const handleJs = traced('handleJs()', 'jsHandler.ts', async function hand
   } catch (e: any) {
     (globalThis as any).onunhandledrejection = prevHandler;
     const errorMsg = e?.message ?? String(e);
+
+    // Enrich "X is not a function" — V8 gives the LLM nothing actionable here
+    // ("not a function" alone repeats blind). Only this pattern is enriched;
+    // TypeError/ReferenceError/syntax errors flow through unchanged.
+    const diag = await buildNotAFunctionDiagnostic(errorMsg, code);
+    if (diag) {
+      // Append any async errors to original_error trail so we don't lose them.
+      if (asyncErrors.length > 0) {
+        diag.data.original_error = `${errorMsg}; ${asyncErrors.join('; ')}`;
+      }
+      return diag;
+    }
+
     const allErrors = [errorMsg, ...asyncErrors];
     return { error: allErrors.join('\n') };
   }

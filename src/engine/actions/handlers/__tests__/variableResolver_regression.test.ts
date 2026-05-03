@@ -252,7 +252,8 @@ describe('strictResolver — Phase 2 cutover (same-name fixture)', () => {
 
   it('phase2-mode-coverage: bare-name "$Text/Primary" still passes through variableBindingHandler (backward compat assertion lives in the FIRST describe block)', () => {
     // This describe block exists to document the mode contract: in
-    // 'phase2-mode-coverage' (the default), the IPC handler does NOT invoke
+    // 'phase2-mode-coverage' (the rollback escape valve, no longer the
+    // default after Phase 2 cutover), the IPC handler does NOT invoke
     // resolveStrictBinding for bare-name strings — it passes them through
     // to handleEdit → variableBindingHandler unchanged. The actual
     // assertion that the silent-pick still happens lives in the first

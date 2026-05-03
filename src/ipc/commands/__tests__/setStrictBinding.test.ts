@@ -6,10 +6,11 @@
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §5.3.
  *
  * What this verifies:
- *   - Default 'phase2-mode-coverage' mode keeps bare-name shorthands working
- *     (set_stroke "1 $Brand" still flows through, no rejection).
- *   - 'phase2-strict' mode rejects bare-name (BARE_NAME_REJECTED_PHASE2)
- *     before reaching handleEdit.
+ *   - 'phase2-mode-coverage' (rollback escape valve) keeps bare-name
+ *     shorthands working (set_stroke "1 $Brand" still flows through, no
+ *     rejection).
+ *   - 'phase2-strict' (current default) rejects bare-name
+ *     (BARE_NAME_REJECTED_PHASE2) before reaching handleEdit.
  *   - Structured object inputs ({variable_id} / {collection_id, name, type}
  *     / {color}) are translated to legacy edit({props}) calls so the
  *     downstream binding pipeline keeps working unchanged.
@@ -78,7 +79,7 @@ beforeEach(() => {
 
 // ─── set_fill ──────────────────────────────────────────────────────────────
 
-describe('handleSetFill — phase2-mode-coverage (default)', () => {
+describe('handleSetFill — phase2-mode-coverage (rollback escape valve)', () => {
   it('passes bare-name string through unchanged (backward compat)', async () => {
     stubFigmaVariables([]);
     await handleSetFill({ node: '1:2', bg: '$Bg/Surface' });
@@ -232,7 +233,7 @@ describe('handleSetFill — phase2-strict', () => {
 
 // ─── set_stroke ────────────────────────────────────────────────────────────
 
-describe('handleSetStroke — phase2-mode-coverage (default)', () => {
+describe('handleSetStroke — phase2-mode-coverage (rollback escape valve)', () => {
   it('passes shorthand string through unchanged (backward compat for hex)', async () => {
     stubFigmaVariables([]);
     await handleSetStroke({ node: '1:2', stroke: '1 #E0E0E0' });

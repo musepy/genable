@@ -61,8 +61,10 @@ export interface AgentBehaviorConfig {
 
   /**
    * Variable-resolver phase. See VariableResolutionMode.
-   * Default: 'phase2-mode-coverage' — step 4 (mode coverage) live; step 5/6
-   * (strict resolver cutover) deferred.
+   * Default: 'phase2-strict' — full Phase 2 cutover (steps 5+6). Bare-name
+   * binding rejected at the tool boundary; structured object form required.
+   * 'phase2-mode-coverage' / 'phase1' remain available as rollback escape
+   * valves via explicit override.
    */
   variableResolution: VariableResolutionMode;
 }
@@ -74,7 +76,7 @@ export interface AgentBehaviorConfig {
 export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   thinkingLevel: 'minimal',
   maxIterations: 80,
-  variableResolution: 'phase2-mode-coverage',
+  variableResolution: 'phase2-strict',
 };
 
 /**

@@ -70,7 +70,7 @@ export type ModeCoverageResult =
 // — the constant is duplicated here intentionally to avoid a circular import
 // on agent → handlers → agent.
 
-let currentResolutionMode: VariableResolutionMode = 'phase2-mode-coverage';
+let currentResolutionMode: VariableResolutionMode = 'phase2-strict';
 
 /**
  * Set the active variable-resolver phase. Called by AgentRuntime at

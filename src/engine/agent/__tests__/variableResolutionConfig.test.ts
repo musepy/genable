@@ -5,7 +5,8 @@
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §7.1.
  *
  * Asserts:
- *   1. The flag's default in `AgentBehaviorConfig` is "phase2-mode-coverage".
+ *   1. The flag's default in `AgentBehaviorConfig` is "phase2-strict"
+ *      (post-cutover).
  *   2. AgentRuntime construction propagates the flag to the main-thread
  *      mode-coverage checker via `setVariableResolutionMode`.
  *   3. Setting the flag to "phase1" causes `checkModeCoverage` to short-circuit
@@ -27,21 +28,21 @@ import type { LLMProvider } from '../../llm-client/providers/types';
 
 beforeEach(() => {
   // Restore default between tests so flag leakage doesn't pollute.
-  setVariableResolutionMode('phase2-mode-coverage');
+  setVariableResolutionMode('phase2-strict');
 });
 
 describe('AgentBehaviorConfig.variableResolution default', () => {
-  it('defaults to "phase2-mode-coverage"', () => {
-    expect(DEFAULT_BEHAVIOR.variableResolution).toBe('phase2-mode-coverage');
+  it('defaults to "phase2-strict"', () => {
+    expect(DEFAULT_BEHAVIOR.variableResolution).toBe('phase2-strict');
   });
 
   it('resolveBehavior() preserves the default when not overridden', () => {
-    expect(resolveBehavior().variableResolution).toBe('phase2-mode-coverage');
+    expect(resolveBehavior().variableResolution).toBe('phase2-strict');
   });
 
   it('resolveBehavior() honors explicit overrides', () => {
     expect(resolveBehavior({ variableResolution: 'phase1' }).variableResolution).toBe('phase1');
-    expect(resolveBehavior({ variableResolution: 'phase2-strict' }).variableResolution).toBe('phase2-strict');
+    expect(resolveBehavior({ variableResolution: 'phase2-mode-coverage' }).variableResolution).toBe('phase2-mode-coverage');
   });
 });
 
@@ -57,13 +58,13 @@ describe('AgentRuntime construction propagates variableResolution to mode-covera
     } as any;
   }
 
-  it('sets the main-thread checker to "phase2-mode-coverage" by default', () => {
+  it('sets the main-thread checker to "phase2-strict" by default', () => {
     new AgentRuntime({
       provider: makeMockProvider(),
       tools: [],
       systemPrompt: 'sys',
     });
-    expect(getVariableResolutionMode()).toBe('phase2-mode-coverage');
+    expect(getVariableResolutionMode()).toBe('phase2-strict');
   });
 
   it('propagates explicit "phase1" override to the main-thread checker', () => {

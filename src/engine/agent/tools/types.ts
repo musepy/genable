@@ -111,9 +111,9 @@ export interface ToolContext {
    * Active variable-resolver phase. Spec §5.4 / §7.1. Threaded from
    * `agentBehaviorConfig.variableResolution` so the main-thread mode-coverage
    * checker can honor the runtime escape valve. 'phase1' bypasses the
-   * write-time mode coverage check; 'phase2-mode-coverage' (default) and
-   * 'phase2-strict' enable it. Optional — handlers default to
-   * 'phase2-mode-coverage' when absent.
+   * write-time mode coverage check; 'phase2-mode-coverage' and 'phase2-strict'
+   * (default) enable it. Optional — handlers default to 'phase2-strict' when
+   * absent.
    */
   variableResolution?: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
 }

@@ -77,6 +77,72 @@ describe('ContextManager', () => {
       await cm.endTurn();
       expect(cm.getMessages()).toHaveLength(1);
     });
+
+    it('strips image blocks from prior turns when a new user turn starts', async () => {
+      const fakeBase64 = 'A'.repeat(20_000);
+      // Turn 1: user → tool result with image
+      cm.addMessage(msg('user', 'screenshot the canvas'));
+      cm.addMessage({
+        id: 'tool_result_1',
+        role: 'tool',
+        content: [
+          { type: 'tool_result', id: 't1', name: 'get_screenshot', data: { ok: true } },
+          { type: 'image', mimeType: 'image/png', data: fakeBase64 },
+        ],
+      });
+      // Sanity: image is counted in budget while in current turn (patch #3 byte counting)
+      const beforeChars = cm.estimateContextChars();
+      expect(beforeChars).toBeGreaterThan(20_000);
+
+      // Adding the next user message marks Turn 1 as "prior" — strip happens here.
+      await cm.endTurn();
+      cm.addMessage(msg('user', 'next turn'));
+
+      const afterChars = cm.estimateContextChars();
+      // Was ~20K with the image; should now be just the placeholder + text.
+      expect(afterChars).toBeLessThan(2_000);
+
+      // Image block was replaced with a placeholder, not deleted.
+      const messages = cm.getMessages();
+      const toolMsg = messages.find(m => m.role === 'tool');
+      expect(toolMsg).toBeDefined();
+      const blocks = toolMsg!.content as any[];
+      expect(blocks.find(b => b.type === 'image')).toBeUndefined();
+      expect(blocks.find(b => b.type === 'text' && /screenshot.*omitted/i.test(b.text))).toBeDefined();
+    });
+
+    it('keeps image blocks intact within the current turn', async () => {
+      const fakeBase64 = 'A'.repeat(15_000);
+      cm.addMessage(msg('user', 'go'));
+      cm.addMessage({
+        id: 'tool_result_1',
+        role: 'tool',
+        content: [
+          { type: 'tool_result', id: 't1', name: 'get_screenshot', data: { ok: true } },
+          { type: 'image', mimeType: 'image/png', data: fakeBase64 },
+        ],
+      });
+      // No new user message yet → image stays. The screenshot was just taken,
+      // the LLM still needs to see it.
+      await cm.endTurn();
+      const blocks = cm.getMessages().find(m => m.role === 'tool')!.content as any[];
+      expect(blocks.find(b => b.type === 'image')).toBeDefined();
+    });
+
+    it('estimateContextChars counts image base64 bytes', () => {
+      const fakeBase64 = 'A'.repeat(50_000);
+      cm.addMessage(msg('user', 'go'));
+      cm.addMessage({
+        id: 't1',
+        role: 'tool',
+        content: [
+          { type: 'tool_result', id: 'x', name: 'get_screenshot', data: {} },
+          { type: 'image', mimeType: 'image/png', data: fakeBase64 },
+        ],
+      });
+      // Total >= image bytes proves the image is counted, not silently zero.
+      expect(cm.estimateContextChars()).toBeGreaterThan(50_000);
+    });
   });
 
   // ─── isFirstTurn ──────────────────────────────────────────

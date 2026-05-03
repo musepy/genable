@@ -100,6 +100,16 @@ export class ContextManager {
   // ─── Message operations ─────────────────────────────────────
 
   addMessage(msg: LLMMessage): void {
+    // A new non-summary user message opens a new turn — anything currently
+    // in the journal becomes "old turn" content, and screenshots from those
+    // turns are no longer worth their base64 weight. Strip them now so we
+    // don't carry them through the next iteration.
+    if (msg.role === 'user' && !isSummaryMessage(msg) && this.messages.length > 0) {
+      const { stripped, bytesRecovered } = this.stripImagesFromAll();
+      if (stripped > 0) {
+        console.log(`[Context] New turn — stripped ${stripped} prior image(s), recovered ${bytesRecovered} chars`);
+      }
+    }
     this.messages.push(msg);
   }
 
@@ -437,8 +447,40 @@ export class ContextManager {
         total += (block.name?.length || 0) + JSON.stringify(block.input || {}).length;
       } else if (block.type === 'tool_result') {
         total += (block.name?.length || 0) + JSON.stringify(block.data || {}).length;
+      } else if (block.type === 'image') {
+        // Conservative byte estimate. Vision models tokenize images at a fixed
+        // cost (~1.6KB equivalent on Claude), but on the wire we still pay the
+        // full base64 length, and that's what blows up dev-bridge logs and
+        // provider rate limits. Without this line the dashboard reads ~29K
+        // while a real request weighs ~800K (mostly screenshots).
+        total += block.data.length;
       }
     }
     return total;
+  }
+
+  /**
+   * Replace image blocks in *all* current journal messages with text placeholders.
+   * Called from addMessage() right before a new user turn lands — at that moment
+   * everything already in the journal is from prior turns, and screenshots there
+   * rarely hold useful signal once the LLM has verbalized what mattered. They
+   * keep eating ~80–180KB each on every subsequent request, so strip them now.
+   */
+  private stripImagesFromAll(): { stripped: number; bytesRecovered: number } {
+    let stripped = 0;
+    let bytesRecovered = 0;
+    for (const msg of this.messages) {
+      if (!Array.isArray(msg.content)) continue;
+      const blocks = msg.content as ContentBlock[];
+      for (let j = 0; j < blocks.length; j++) {
+        const b = blocks[j];
+        if (b.type === 'image') {
+          bytesRecovered += b.data.length;
+          stripped++;
+          blocks[j] = { type: 'text', text: '[screenshot from earlier turn — omitted]' };
+        }
+      }
+    }
+    return { stripped, bytesRecovered };
   }
 }

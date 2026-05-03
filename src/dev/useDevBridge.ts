@@ -254,18 +254,45 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
       const lastModel = [...historySnapshot].reverse().find(m => m.role === 'model')
       const finalText = lastModel?.text || ''
 
+      // Original user prompt for THIS turn (the latest user message). Verbatim;
+      // post-hoc analysis needs the unmodified text, not what's reconstructable
+      // from logs.
+      const lastUser = [...historySnapshot].reverse().find(m => m.role === 'user')
+      const prompt = lastUser?.text || ''
+
+      // Count of agent iterations in this run — derived from runtime events so
+      // we don't have to re-parse history. Drives tool-calls-per-iteration
+      // metrics without ad-hoc parsing.
+      const iterationCount = runtimeEventsSnapshot.filter(e => e.type === 'iteration_start').length
+
       // Collect tool call details (including per-call results for debugging).
       // Cap rejects (code === 'CAP_REJECT') are runtime-synthesized retry
       // instructions, not genuine tool failures — excluded from `errors` and
       // surfaced separately as `capRejects` for accurate quality metrics.
       const allToolCalls = historySnapshot.flatMap(m => m.toolCalls || [])
       const isCapReject = (tc: typeof allToolCalls[number]) => tc.code === 'CAP_REJECT'
-      const toolCallSummary = {
-        total: allToolCalls.length,
-        errors: allToolCalls.filter(tc => tc.status === 'error' && !isCapReject(tc)).length,
-        capRejects: allToolCalls.filter(isCapReject).length,
+
+      // Slice the current turn out of the cumulative session history. The dev
+      // bridge runs many triggers in one session; without this split, the
+      // latest result file would re-report errors from older turns and look
+      // like the new turn regressed.
+      let lastUserIdx = -1
+      for (let i = historySnapshot.length - 1; i >= 0; i--) {
+        if (historySnapshot[i].role === 'user') { lastUserIdx = i; break }
       }
-      const toolCallDetails = allToolCalls.map(tc => {
+      const currentTurnHistory = lastUserIdx >= 0 ? historySnapshot.slice(lastUserIdx) : historySnapshot
+      const currentTurnToolCalls = currentTurnHistory.flatMap(m => m.toolCalls || [])
+
+      const summarize = (calls: typeof allToolCalls) => ({
+        total: calls.length,
+        errors: calls.filter(tc => tc.status === 'error' && !isCapReject(tc)).length,
+        capRejects: calls.filter(isCapReject).length,
+      })
+      const toolCallSummary = {
+        ...summarize(currentTurnToolCalls),
+        cumulative: summarize(allToolCalls),
+      }
+      const detailize = (tc: typeof allToolCalls[number]) => {
         let params: string | undefined
         let result: string | undefined
         try { params = tc.parameters ? JSON.stringify(tc.parameters) : undefined } catch { params = '[unserializable]' }
@@ -279,7 +306,9 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           error: tc.error,
           code: tc.code,
         }
-      })
+      }
+      const toolCallDetails = currentTurnToolCalls.map(detailize)
+      const cumulativeToolCallDetails = allToolCalls.map(detailize)
 
       const logs = generateLogDigest(historySnapshot, { modelName: modelNameSnapshot })
       const rootNodeIds = extractRootNodeIds(historySnapshot)
@@ -302,12 +331,15 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           body = JSON.stringify({
             triggerId,
             status: curr,
+            prompt,
+            iterationCount,
             finalText,
             durationMs,
             modelName: modelNameSnapshot,
             rootNodeIds,
             toolCallSummary,
             toolCallDetails,
+            cumulativeToolCallDetails,
             conversationHistory,
             runtimeEvents: runtimeEventsSnapshot,
             logs,
@@ -320,6 +352,8 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           body = JSON.stringify({
             triggerId,
             status: curr,
+            prompt,
+            iterationCount,
             finalText,
             durationMs,
             modelName: modelNameSnapshot,

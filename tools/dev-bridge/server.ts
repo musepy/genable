@@ -314,9 +314,14 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
     await writeFile(join(resultDir, 'logs.txt'), logText);
   }
 
-  // write tool call details (per-call params + results + warnings)
+  // write tool call details (per-call params + results + warnings).
+  // tool-calls.json holds the *current turn only* — easy to read after a multi-turn run.
+  // tool-calls-cumulative.json holds the full session for reference.
   if (payload.toolCallDetails) {
     await writeFile(join(resultDir, 'tool-calls.json'), JSON.stringify(payload.toolCallDetails, null, 2));
+  }
+  if (payload.cumulativeToolCallDetails) {
+    await writeFile(join(resultDir, 'tool-calls-cumulative.json'), JSON.stringify(payload.cumulativeToolCallDetails, null, 2));
   }
 
   // write runtime events for UI replay

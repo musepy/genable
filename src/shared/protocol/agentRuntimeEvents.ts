@@ -337,6 +337,42 @@ export interface AgentRuntimeToolLogEvent extends AgentRuntimeBaseEvent {
 }
 
 /**
+ * Emitted by AgentRuntime when a variable-binding callsite encountered an
+ * ambiguous bare-name lookup and silently picked the first match. Phase 1
+ * `warn_pick_record` semantics — the binding still happened, but the audit
+ * trail surfaces every candidate (including the one the agent likely
+ * intended via `_ryow`).
+ *
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §5.1.
+ */
+export interface AgentRuntimeAmbiguousAutopickEvent extends AgentRuntimeBaseEvent {
+  type: 'ambiguous_autopick';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  /** ID the resolver actually bound. */
+  picked_variable_id: string;
+  /** Variable ID from RyowStore that the agent likely intended. */
+  suggested_id?: string;
+  /** All matches found by name + type. */
+  candidates: Array<{
+    variable_id: string;
+    name: string;
+    collection_id?: string;
+    collection_name?: string;
+    type?: string;
+    mode_coverage?: string[];
+    /** "created_this_turn" if the variable was added to RyowStore this turn. */
+    source: 'created_this_turn' | 'preexisting';
+  }>;
+  /** Tool that triggered the resolution (e.g. "set_fill"). */
+  tool_name: string;
+  /** Node that the binding was applied to, when known. */
+  node_id?: string;
+  /** The bare-name string the LLM passed (e.g. "Text/Primary"). */
+  name_query: string;
+}
+
+/**
  * Emitted when a hook callback throws. Hook errors are non-fatal — the
  * runner logs the error, emits this event, and continues with the next hook.
  */
@@ -409,7 +445,8 @@ export type AgentRuntimeEvent =
   | AgentRuntimeTriggerFiredEvent
   | AgentRuntimeToolLogEvent
   | AgentRuntimeHookErrorEvent
-  | AgentRuntimeHookPerfEvent;
+  | AgentRuntimeHookPerfEvent
+  | AgentRuntimeAmbiguousAutopickEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -434,5 +471,6 @@ export type AgentRuntimeEventType =
   | 'trigger_fired'
   | 'tool_log'
   | 'hook_error'
-  | 'hook_perf';
+  | 'hook_perf'
+  | 'ambiguous_autopick';
 

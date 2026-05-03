@@ -25,6 +25,7 @@ import {
   normalizeSizingInProps, tagAsAgentCreated,
   type NodeResult,
 } from '../actions/nodeFactory';
+import type { Warning as HandlerWarning } from '../actions/handlers/types';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VNode Types
@@ -252,10 +253,26 @@ export async function compileAndExecute(
 // Walk Context
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * A WalkContext warning preserves the full handler-side payload (e.g.
+ * `picked_variable_id`, `candidates` for AMBIGUOUS_NAME_AUTOPICK) so the
+ * jsxHandler can lift them into `ToolResponse.warnings` without data loss.
+ *
+ * Most warnings produced inside walkTree itself (NORMALIZE, INSTANCE_FAILED,
+ * CREATE_FAILED, etc.) only fill `code` + `message`. Variable binding
+ * warnings produced inside nodeFactory's apply pipeline carry extra fields,
+ * which we now propagate verbatim instead of stripping to `{code, message}`.
+ *
+ * `node_id` is added by walkTree after the node is created so downstream
+ * consumers (jsxHandler aggregation, runtime event emission) can correlate
+ * the warning to the node that triggered it.
+ */
+export type WalkWarning = HandlerWarning & { node_id?: string };
+
 export interface WalkContext {
   symbolMap: Map<string, string>;
   rollbackStack: string[];
-  warnings: Array<{ code: string; message: string }>;
+  warnings: WalkWarning[];
   counter: number;
 }
 
@@ -303,7 +320,7 @@ export async function walkTree(
   const props = { ...vnode.props };
   const name = (props.name as string) || nodeType.toLowerCase();
   const pushWarn = (msg: string) =>
-    ctx.warnings.push({ code: 'NORMALIZE', message: msg });
+    ctx.warnings.push({ code: 'NORMALIZE', severity: 'warning', message: msg });
 
   let result: NodeResult;
 
@@ -336,7 +353,7 @@ export async function walkTree(
 
       if (!result.nodeId) {
         const errMsg = result.warnings[0]?.message || 'Instance creation failed';
-        ctx.warnings.push({ code: 'INSTANCE_FAILED', message: errMsg });
+        ctx.warnings.push({ code: 'INSTANCE_FAILED', severity: 'warning', message: errMsg });
         return null;
       }
 
@@ -377,6 +394,7 @@ export async function walkTree(
   } catch (e: any) {
     ctx.warnings.push({
       code: 'CREATE_FAILED',
+      severity: 'warning',
       message: `Failed to create <${nodeType} name="${name}"/>: ${e?.message}`,
     });
     return null;
@@ -385,11 +403,11 @@ export async function walkTree(
   // Track for rollback + symbol resolution
   ctx.symbolMap.set(sym, result.nodeId);
   ctx.rollbackStack.push(result.nodeId);
+  // Forward handler-side warnings VERBATIM (preserve `picked_variable_id`,
+  // `candidates`, etc. for AMBIGUOUS_NAME_AUTOPICK). Tag with the node id
+  // we just created so jsxHandler can surface this for runtime correlation.
   for (const w of result.warnings) {
-    ctx.warnings.push({
-      code: w.code || 'PROP_WARNING',
-      message: w.message || String(w),
-    });
+    ctx.warnings.push({ ...w, node_id: result.nodeId });
   }
 
   // Tag as agent-created

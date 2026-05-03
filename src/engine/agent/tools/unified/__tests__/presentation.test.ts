@@ -191,3 +191,115 @@ describe('presentForLLM — flat response format', () => {
     expect(presented.data).toBeUndefined();
   });
 });
+
+describe('presentForLLM — top-level ToolResponse fields (warnings, _ryow)', () => {
+  // NOTE: integration coverage gap — these tests assert the presentation pipe
+  // alone preserves these fields. The full agentRuntime → afterToolExec →
+  // formatToolResultsDefault path is not exercised here; the dispatcher
+  // integration is too heavy to mock cleanly in a unit test. Real-API harness
+  // / dev-bridge E2E covers the full path.
+
+  it('presentForLLM preserves warnings field on result', () => {
+    const result = {
+      data: { id: '1:1', changed: true },
+      warnings: [
+        {
+          code: 'AMBIGUOUS_NAME_AUTOPICK',
+          message: 'Picked first match',
+          picked_variable_id: 'V1',
+          candidates: [
+            { id: 'V1', name: 'Surface' },
+            { id: 'V2', name: 'Surface' },
+          ],
+        },
+      ],
+    };
+    const presented = presentForLLM(result, 'set_fill');
+    expect(presented.warnings).toBeDefined();
+    expect(presented.warnings).toHaveLength(1);
+    expect(presented.warnings[0].code).toBe('AMBIGUOUS_NAME_AUTOPICK');
+    expect(presented.warnings[0].picked_variable_id).toBe('V1');
+    expect(presented.warnings[0].candidates).toHaveLength(2);
+  });
+
+  it('presentForLLM preserves _ryow block on result', () => {
+    const result = {
+      data: { id: '1:1', changed: true },
+      _ryow: {
+        collections: [
+          {
+            id: 'C1',
+            name: 'Theme',
+            modes: [{ modeId: '1:0', name: 'Light' }],
+            fingerprint: 'C1',
+          },
+        ],
+        variables: [
+          {
+            id: 'V1',
+            name: 'Surface',
+            collection_id: 'C1',
+            type: 'COLOR' as const,
+            mode_coverage: ['Light'],
+            fingerprint: 'abc123',
+          },
+        ],
+      },
+    };
+    const presented = presentForLLM(result, 'set_fill');
+    expect(presented._ryow).toBeDefined();
+    expect(presented._ryow.collections).toHaveLength(1);
+    expect(presented._ryow.collections[0].id).toBe('C1');
+    expect(presented._ryow.variables).toHaveLength(1);
+    expect(presented._ryow.variables[0].id).toBe('V1');
+  });
+
+  it('presentForLLM preserves both warnings and _ryow when both present', () => {
+    const result = {
+      data: { id: '1:1', changed: true },
+      warnings: [{ code: 'AMBIGUOUS_NAME_AUTOPICK', picked_variable_id: 'V1' }],
+      _ryow: {
+        collections: [],
+        variables: [
+          {
+            id: 'V1',
+            name: 'Surface',
+            collection_id: 'C1',
+            type: 'COLOR' as const,
+            mode_coverage: [],
+            fingerprint: 'fp',
+          },
+        ],
+      },
+    };
+    const presented = presentForLLM(result, 'set_fill');
+    expect(presented.warnings).toBeDefined();
+    expect(presented.warnings).toHaveLength(1);
+    expect(presented._ryow).toBeDefined();
+    expect(presented._ryow.variables).toHaveLength(1);
+  });
+
+  it('presentForLLM omits warnings when array is empty or undefined', () => {
+    const emptyArr = presentForLLM({ data: { id: '1:1' }, warnings: [] }, 'set_fill');
+    expect(emptyArr.warnings).toBeUndefined();
+
+    const undef = presentForLLM({ data: { id: '1:1' } }, 'set_fill');
+    expect(undef.warnings).toBeUndefined();
+
+    const undefExplicit = presentForLLM({ data: { id: '1:1' }, warnings: undefined }, 'set_fill');
+    expect(undefExplicit.warnings).toBeUndefined();
+  });
+
+  it('preserves warnings + _ryow even on error responses', () => {
+    const result = {
+      data: {},
+      error: 'Something failed',
+      warnings: [{ code: 'AMBIGUOUS_NAME_AUTOPICK', picked_variable_id: 'V1' }],
+      _ryow: { collections: [], variables: [] },
+    };
+    const presented = presentForLLM(result, 'set_fill');
+    expect(presented.error).toBe('Something failed');
+    expect(presented.warnings).toHaveLength(1);
+    expect(presented._ryow).toBeDefined();
+  });
+});

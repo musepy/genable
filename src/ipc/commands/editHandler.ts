@@ -8,7 +8,7 @@
  * Calls nodeFactory directly — no IR, no executor.
  */
 
-import type { ToolResponse } from '../../engine/agent/tools/types';
+import type { ToolResponse, ToolWarning } from '../../engine/agent/tools/types';
 import { resolvePathToNode } from './pathResolver';
 import { normalizeProps } from '../../domain/node-normalizers';
 import { coerceValue } from '../../engine/utils/prop-dsl';
@@ -16,6 +16,21 @@ import { updateNode, normalizeSizingInProps, type NodeResult } from '../../engin
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
 import { PipelineTracer } from './pipelineTracer';
+import type { Warning as HandlerWarning } from '../../engine/actions/handlers/types';
+
+/**
+ * Translate a handler-side `Warning` (severity, code, message + extras) to
+ * the LLM-facing `ToolWarning` shape (code + extras, message optional).
+ * AMBIGUOUS_NAME_AUTOPICK and similar binding warnings cross from the
+ * write-pipeline up to the tool response here.
+ */
+function toToolWarning(w: HandlerWarning): ToolWarning {
+  // Severity is dropped from ToolWarning — it's encoded by where the warning
+  // sits (warnings[] is non-fatal by definition; errors live in `error`).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { severity, ...rest } = w;
+  return rest as ToolWarning;
+}
 
 interface EditEntry {
   node: string;
@@ -126,12 +141,16 @@ function applyComponentProps(
   }
 }
 
-/** Apply an edit to a single resolved node. Returns true if any property actually changed. */
+/** Apply an edit to a single resolved node. Returns whether any property
+ * actually changed AND the warnings the property pipeline raised. Warnings
+ * include AMBIGUOUS_NAME_AUTOPICK from variableBindingHandler when a bare-
+ * name token resolved to multiple candidates. */
 async function applyEdit(
   node: SceneNode,
   props: Record<string, any>,
-): Promise<boolean> {
+): Promise<{ changed: boolean; warnings: HandlerWarning[] }> {
   const { regularProps, componentProps } = resolveInstanceProps(node, props);
+  const warnings: HandlerWarning[] = [];
 
   // Apply component property overrides first (instance only)
   if (Object.keys(componentProps).length > 0) {
@@ -144,15 +163,19 @@ async function applyEdit(
     const isText = node.type === 'TEXT';
     normalizeSizingInProps(regularProps, node, parentNode, isText);
     const result: NodeResult = await updateNode(node, regularProps);
+    if (result.warnings && result.warnings.length > 0) warnings.push(...result.warnings);
     // Fail-safe default: if diffs is missing, assume NOT changed. A missing diff
     // array means we have no evidence of a real write; an optimistic `?? true`
     // would mask silent writes (e.g. a truncated `props: "{…}"` string that
     // gets filtered to zero applied properties).
     const anyChanged = result.diffs?.some(d => d.changed) ?? false;
-    return anyChanged || Object.keys(componentProps).length > 0;
+    return {
+      changed: anyChanged || Object.keys(componentProps).length > 0,
+      warnings,
+    };
   }
 
-  return Object.keys(componentProps).length > 0;
+  return { changed: Object.keys(componentProps).length > 0, warnings };
 }
 
 export async function handleEdit(parameters: any): Promise<ToolResponse> {
@@ -168,6 +191,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
     const results: Array<{ nodeId: string; name: string; changed: boolean }> = [];
     const errors: string[] = [];
+    const aggregatedWarnings: ToolWarning[] = [];
 
     for (const entry of entries) {
       const ref = entry.node;
@@ -185,7 +209,16 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       const merged = { ...(normalized || {}), ...componentPropsRaw };
       if (Object.keys(merged).length === 0) { errors.push(`No props or content for "${ref}"`); continue; }
 
-      const changed = await applyEdit(resolved.node, merged);
+      const { changed, warnings: entryWarnings } = await applyEdit(resolved.node, merged);
+      // Forward entry's node id with each AMBIGUOUS_NAME_AUTOPICK warning so
+      // the runtime can correlate to the bound node when emitting the event.
+      for (const w of entryWarnings) {
+        const tw = toToolWarning(w);
+        if (w.code === 'AMBIGUOUS_NAME_AUTOPICK') {
+          (tw as any).node_id = resolved.node.id;
+        }
+        aggregatedWarnings.push(tw);
+      }
       const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
       const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
       results.push({ ...minJson, changed });
@@ -203,7 +236,7 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
     // so the LLM sees which entries failed and can retry only those. Dropping
     // `errors[]` here was the "silent partial success" bug — the LLM would see
     // `count: 3` and believe all 17 entries succeeded.
-    return {
+    const response: ToolResponse = {
       data: {
         count: results.length,
         results,
@@ -211,6 +244,8 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
       },
       _stages: tracer.collect(),
     };
+    if (aggregatedWarnings.length > 0) response.warnings = aggregatedWarnings;
+    return response;
   }
 
   // ── Single mode: node + props/content ──
@@ -242,13 +277,22 @@ export async function handleEdit(parameters: any): Promise<ToolResponse> {
 
   tracer.exit({ count: 1 });
 
-  const changed = await applyEdit(resolved.node, merged);
+  const { changed, warnings } = await applyEdit(resolved.node, merged);
 
   const minimal = NodeSerializer.serializeMinimal(resolved.node, false);
   const minJson = JsonNodeSerializer.serialize(minimal, { minimal: true });
 
-  return {
+  const response: ToolResponse = {
     data: { ...minJson, changed },
     _stages: tracer.collect(),
   };
+  if (warnings.length > 0) {
+    // Tag AMBIGUOUS_NAME_AUTOPICK warnings with the node id we bound on.
+    response.warnings = warnings.map(w => {
+      const tw = toToolWarning(w);
+      if (w.code === 'AMBIGUOUS_NAME_AUTOPICK') (tw as any).node_id = resolved.node.id;
+      return tw;
+    });
+  }
+  return response;
 }

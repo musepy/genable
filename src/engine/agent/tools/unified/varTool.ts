@@ -116,6 +116,95 @@ Examples:
   },
 };
 
+export const ensureCollectionDefinition: ToolDefinition = {
+  name: 'ensure_collection',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Idempotent VariableCollection creation — safe to retry.
+
+Returns existing collection if one with the same name + identical mode list
+already exists, otherwise creates a new one. Spec §3.1.
+
+The "idempotency_key" must be sha256(name + "|" + "STRING" + "|" +
+canonical_json({modes: [<mode_names>]})) — random keys are rejected.
+Compute the key client-side; the helper "computeVariableIdempotencyKey"
+matches this formula when called with collection_id="" and type="STRING".
+
+Returns {data: {collection_id, modes: [{modeId, name}], reused?: true}}.
+
+Examples:
+  ensure_collection({name: "Theme", modes: ["Light", "Dark"], idempotency_key: "<sha256>"})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Collection name' },
+      modes: {
+        type: 'array',
+        description: 'Mode names (first becomes default)',
+        items: { type: 'string', description: 'Mode name' },
+      },
+      idempotency_key: {
+        type: 'string',
+        description: 'Canonical sha256 idempotency key — see spec §3.1',
+      },
+    },
+    required: ['name', 'modes', 'idempotency_key'],
+  },
+};
+
+export const ensureVariableDefinition: ToolDefinition = {
+  name: 'ensure_variable',
+  executionStrategy: 'sequential',
+  mutates: true,
+  description: `Idempotent variable creation — populates values_by_mode in one shot.
+
+Behavior (spec §3.1):
+  - Exactly 1 variable with (collection_id, name, type) in target collection → idempotent reuse.
+  - 0 in target, matches in OTHER collections → create new in target + warning NAME_EXISTS_OUTSIDE_TARGET_COLLECTION.
+  - 0 anywhere → create new.
+  - 2+ in target collection (Figma allows duplicates) → fail SAME_COLLECTION_NAME_DUPLICATE.
+
+values_by_mode keys can be either mode NAMES (e.g. "Light") or modeIds (e.g. "1:0").
+Each value must match the variable type (hex/RGBA for COLOR, number for FLOAT,
+string for STRING, boolean for BOOLEAN).
+
+idempotency_key formula: sha256(collection_id + "|" + name + "|" + type + "|"
++ canonical_json(values_by_mode)). Random keys rejected.
+
+Returns {data: {variable_id, name, type, collection_id, mode_coverage[],
+reused?: true}, warnings?: [...]}.
+
+Examples:
+  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Text/Primary", type: "COLOR", values_by_mode: {Light: "#111", Dark: "#EEE"}, idempotency_key: "<sha256>"})`,
+  parameters: {
+    type: 'object',
+    properties: {
+      collection_id: {
+        type: 'string',
+        description: 'Target VariableCollectionId — strict ID, no name lookup.',
+      },
+      name: {
+        type: 'string',
+        description: 'Variable name (slashes denote hierarchy).',
+      },
+      type: {
+        type: 'string',
+        description: 'Variable type',
+        enum: ['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'],
+      },
+      values_by_mode: {
+        type: 'object',
+        description: 'Map of mode name OR modeId → value. Hex strings allowed for COLOR.',
+      },
+      idempotency_key: {
+        type: 'string',
+        description: 'Canonical sha256 idempotency key — see spec §3.1',
+      },
+    },
+    required: ['collection_id', 'name', 'type', 'values_by_mode', 'idempotency_key'],
+  },
+};
+
 export const setVariableValueDefinition: ToolDefinition = {
   name: 'set_variable_value',
   executionStrategy: 'sequential',

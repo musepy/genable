@@ -24,6 +24,7 @@ import { clearOverflows } from './overflowStore';
 import { OutputTooLongError } from '../llm-client/providers/shared/providerErrors';
 import { ContextManager } from './context/contextManager';
 import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
+import { RyowStore, VARIABLE_RELATED_TOOLS } from './ryowStore';
 
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,13 @@ export class AgentRuntime {
   private chatPanelId: string | null = null;
   private turnCreatedNodes: Array<{ id: string; name?: string; type?: string }> = [];
   private turnCreatedIds: string[] = [];
+  /**
+   * Per-turn read-your-own-writes store (variable + collection state). See
+   * docs/knowledge/variable-resolver-design-2026-05.md §3.3. Cleared at the
+   * start of every `run()` — subtask child runtimes start with their own
+   * empty store (no parent inheritance) per spec §8 #4.
+   */
+  private ryowStore: RyowStore = new RyowStore();
   private designRootId: string | null = null;  // persists across turns for edit-turn links
   /** Monotonically increasing turn counter, paired with turn_start/turn_end events for external tooling. */
   private turnCounter = 0;
@@ -190,8 +198,17 @@ export class AgentRuntime {
             generateId: (prefix) => this.generateId(prefix),
           };
           const result = await this.hookRunner.run('afterToolExec', ctx);
-          if (result.modifiedResult !== undefined) {
-            return { action: 'continue', modifiedResult: result.modifiedResult };
+
+          // Pick the result the hook chose (or the original) so the rest of
+          // the post-processing (RYOW recording + injection) operates on the
+          // value that will actually be returned to the LLM.
+          let activeResult = result.modifiedResult !== undefined
+            ? result.modifiedResult
+            : toolResult;
+          activeResult = this.processVariableToolResult(tc, activeResult);
+
+          if (activeResult !== toolResult) {
+            return { action: 'continue', modifiedResult: activeResult };
           }
           return undefined;
         },
@@ -480,6 +497,136 @@ export class AgentRuntime {
     }
   }
 
+  /**
+   * Post-process a tool result for variable-related side effects:
+   *  1. Record collection / variable creations into RyowStore.
+   *  2. Inject `_ryow` snapshot when the tool is variable-related.
+   *  3. Enrich AMBIGUOUS_NAME_AUTOPICK warnings with `source` /
+   *     `suggested_id` from RyowStore (handler can't see RyowStore — it
+   *     lives in the main thread; this is the sandbox-side enrichment).
+   *  4. Emit `ambiguous_autopick` runtime events for any such warning.
+   *
+   * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.3, §5.1.
+   */
+  private processVariableToolResult(tc: ToolCallBlock, result: any): any {
+    if (!result || typeof result !== 'object') return result;
+
+    const toolName = tc.name;
+
+    // ── 1. Record creations ──
+    if (!result.error && result.data) {
+      const data = result.data;
+      // ensure_collection / create_collection
+      if (toolName === 'ensure_collection' || toolName === 'create_collection') {
+        const id: string | undefined = typeof data.collection_id === 'string'
+          ? data.collection_id
+          : (typeof data.id === 'string' ? data.id : undefined);
+        const name: string | undefined = typeof data.name === 'string'
+          ? data.name
+          : (typeof tc.input?.name === 'string' ? tc.input.name : undefined);
+        const modes: { modeId: string; name: string }[] = Array.isArray(data.modes)
+          ? data.modes.filter((m: any) => m && typeof m.modeId === 'string' && typeof m.name === 'string')
+          : [];
+        if (id && name) {
+          this.ryowStore.recordCollection({ id, name, modes });
+        }
+      }
+      // ensure_variable / create_variable
+      if (toolName === 'ensure_variable' || toolName === 'create_variable') {
+        const id: string | undefined = typeof data.variable_id === 'string'
+          ? data.variable_id
+          : (typeof data.id === 'string' ? data.id : undefined);
+        const name: string | undefined = typeof data.name === 'string'
+          ? data.name
+          : (typeof tc.input?.name === 'string' ? tc.input.name : undefined);
+        const collection_id: string | undefined = typeof data.collection_id === 'string'
+          ? data.collection_id
+          : (typeof tc.input?.collection_id === 'string'
+              ? tc.input.collection_id
+              : (typeof tc.input?.collection === 'string' ? tc.input.collection : undefined));
+        const type: 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN' | undefined =
+          (data.type === 'COLOR' || data.type === 'FLOAT' || data.type === 'STRING' || data.type === 'BOOLEAN')
+            ? data.type
+            : (typeof tc.input?.type === 'string' &&
+                (tc.input.type === 'COLOR' || tc.input.type === 'FLOAT' ||
+                 tc.input.type === 'STRING' || tc.input.type === 'BOOLEAN'))
+              ? tc.input.type
+              : undefined;
+        const modeCoverage: string[] = Array.isArray(data.mode_coverage)
+          ? data.mode_coverage.filter((s: any) => typeof s === 'string')
+          : [];
+        const valuesByMode: Record<string, unknown> | undefined =
+          (tc.input && typeof tc.input.values_by_mode === 'object' && tc.input.values_by_mode !== null)
+            ? tc.input.values_by_mode
+            : undefined;
+        if (id && name && collection_id && type) {
+          this.ryowStore.recordVariable({
+            id, name, collection_id, type, mode_coverage: modeCoverage, values_by_mode: valuesByMode,
+          });
+        }
+      }
+    }
+
+    // ── 2. Enrich AMBIGUOUS_NAME_AUTOPICK warnings + emit events ──
+    if (Array.isArray(result.warnings) && result.warnings.length > 0) {
+      for (const w of result.warnings) {
+        if (!w || w.code !== 'AMBIGUOUS_NAME_AUTOPICK') continue;
+        // Enrich each candidate with source.
+        if (Array.isArray(w.candidates)) {
+          for (const c of w.candidates) {
+            if (!c || typeof c.variable_id !== 'string') continue;
+            c.source = this.ryowStore.isCreatedThisTurn(c.variable_id)
+              ? 'created_this_turn'
+              : 'preexisting';
+          }
+        }
+        // Suggest the RyowStore-tracked variable matching the picked one's name.
+        // The handler doesn't know the bare-name query (it just got "$Foo"),
+        // but the picked variable's name + collection metadata is enough to
+        // probe RyowStore.
+        let nameQuery = '';
+        const pickedCandidate = Array.isArray(w.candidates)
+          ? w.candidates.find((c: any) => c && c.variable_id === w.picked_variable_id)
+          : undefined;
+        if (pickedCandidate) {
+          nameQuery = String(pickedCandidate.name ?? '');
+          const suggestion = this.ryowStore.findVariableByName({
+            name: pickedCandidate.name,
+            type: pickedCandidate.type,
+          });
+          if (suggestion && suggestion.id !== w.picked_variable_id) {
+            w.suggested_id = suggestion.id;
+          }
+        }
+        // Emit runtime event so dev-bridge can audit.
+        this.emitRuntimeEvent({
+          type: 'ambiguous_autopick',
+          phase: 'execution',
+          iteration: this.currentIteration,
+          picked_variable_id: w.picked_variable_id,
+          suggested_id: w.suggested_id,
+          candidates: Array.isArray(w.candidates) ? w.candidates : [],
+          tool_name: toolName,
+          node_id: typeof w.node_id === 'string' ? w.node_id : undefined,
+          name_query: nameQuery,
+        });
+      }
+    }
+
+    // ── 3. Inject _ryow snapshot for variable-related tools ──
+    // The store's snapshot() returns undefined for non-variable tools, so
+    // attaching unconditionally is safe — but we guard for clarity and to
+    // avoid mutating non-variable results.
+    if (VARIABLE_RELATED_TOOLS.has(toolName)) {
+      const snapshot = this.ryowStore.snapshot(toolName);
+      if (snapshot) {
+        result._ryow = snapshot;
+      }
+    }
+
+    return result;
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // MAIN AGENT LOOP
   // ═══════════════════════════════════════════════════════════════
@@ -494,6 +641,10 @@ export class AgentRuntime {
     this.cancelReason = 'Canceled by user';
     this.turnCounter += 1;
     this.runStartMs = Date.now();
+    // Per-turn RYOW store reset (spec §3.3). Subtask child runtimes inherit
+    // an empty store anyway because they construct a fresh AgentRuntime, so
+    // this only clears the parent's store at the start of each turn.
+    this.ryowStore.clear();
 
     this.emitRuntimeEvent({
       type: 'turn_start',

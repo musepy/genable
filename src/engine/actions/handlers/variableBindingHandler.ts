@@ -6,6 +6,17 @@
  *
  * The handler detects string values starting with '$', looks up the variable
  * by name, and calls setBoundVariable() or setBoundVariableForPaint().
+ *
+ * Phase 1 strict-resolver `warn_pick_record` semantics
+ * (spec §5.1): when a bare-name token resolves to multiple candidates, we
+ * STILL bind the first match (backward compat) BUT emit an
+ * `AMBIGUOUS_NAME_AUTOPICK` warning carrying every candidate so the LLM can
+ * self-correct on the next turn. The runtime sees this warning and emits
+ * the corresponding `ambiguous_autopick` event, also enriching candidates
+ * with `source` and `suggested_id` from its RyowStore (Option B plumbing —
+ * resolver-side `source` and `suggested_id` are left undefined here because
+ * RyowStore lives in the sandbox-side AgentRuntime, not in this main-thread
+ * handler; the runtime fills them in afterToolExec).
  */
 
 import { PropertyHandler, Warning } from './types';
@@ -13,12 +24,15 @@ import { PropertyHandler, Warning } from './types';
 // Properties that use paint-based variable binding (color variables)
 const PAINT_PROPS = new Set(['fills', 'strokes']);
 
-// Lazy cache: populated on first use within a session
-let varCache: Map<string, VariableValue> | null = null;
+// Lazy cache: populated on first use within a session.
+// Multi-value-per-key — both the qualified ("Collection/name") and bare
+// ("name") form accumulate ALL matches so the resolver can detect ambiguity
+// (silent first-pick was the bug — see project_stale_variable_reuse.md).
+let varCache: Map<string, Variable[]> | null = null;
 
-async function ensureCache(): Promise<Map<string, VariableValue>> {
+async function ensureCache(): Promise<Map<string, Variable[]>> {
   if (varCache) return varCache;
-  varCache = new Map();
+  const cache = new Map<string, Variable[]>();
   // Build collection id → name lookup
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const collById = new Map<string, string>();
@@ -28,11 +42,19 @@ async function ensureCache(): Promise<Map<string, VariableValue>> {
   for (const v of all) {
     const collName = collById.get(v.variableCollectionId) || '';
     // Primary key: "Collection/name" (disambiguates duplicates across collections)
-    if (collName) varCache.set(`${collName}/${v.name}`, v as unknown as VariableValue);
-    // Fallback key: just "name" (backward compat when unambiguous)
-    if (!varCache.has(v.name)) varCache.set(v.name, v as unknown as VariableValue);
+    if (collName) {
+      const key = `${collName}/${v.name}`;
+      const list = cache.get(key) ?? [];
+      list.push(v);
+      cache.set(key, list);
+    }
+    // Fallback key: just "name" (multi-value — every same-name var lands here)
+    const list = cache.get(v.name) ?? [];
+    list.push(v);
+    cache.set(v.name, list);
   }
-  return varCache;
+  varCache = cache;
+  return cache;
 }
 
 /** Call this to invalidate the cache (e.g., after creating new variables). */
@@ -40,11 +62,65 @@ export function invalidateVariableCache(): void {
   varCache = null;
 }
 
-type VariableValue = Variable;
-
-async function findVariable(name: string): Promise<Variable | null> {
+/**
+ * Look up every variable matching `name` (qualified or bare). Returns an
+ * empty array if none. The CALLER decides ambiguity policy.
+ */
+async function findVariables(name: string): Promise<Variable[]> {
   const cache = await ensureCache();
-  return (cache.get(name) as Variable) ?? null;
+  return cache.get(name) ?? [];
+}
+
+/**
+ * Build an AMBIGUOUS_NAME_AUTOPICK warning from a multi-match list.
+ * `picked` is the one the resolver actually bound (currently first). Fields
+ * `source` and `suggested_id` are filled in by the AgentRuntime from its
+ * RyowStore — see file header note about Option B plumbing.
+ */
+async function buildAmbiguousAutopickWarning(
+  picked: Variable,
+  candidates: Variable[],
+): Promise<Warning> {
+  // Resolve collection metadata for each candidate. Cached lookup is cheap;
+  // we already paid the read in ensureCache(). This re-fetch keeps the
+  // function self-contained without threading the lookup map through.
+  const collections = await figma.variables.getLocalVariableCollectionsAsync();
+  const collById = new Map<string, { name: string; modes: { modeId: string; name: string }[] }>();
+  for (const c of collections) {
+    const modes = Array.isArray((c as any).modes)
+      ? (c as any).modes.map((m: any) => ({ modeId: m.modeId, name: m.name }))
+      : [];
+    collById.set(c.id, { name: c.name, modes });
+  }
+
+  return {
+    code: 'AMBIGUOUS_NAME_AUTOPICK',
+    severity: 'warning',
+    message: `Bare-name lookup found ${candidates.length} variables. Bound the first match (${picked.id}); see candidates for alternatives.`,
+    picked_variable_id: picked.id,
+    // suggested_id: filled by AgentRuntime from RyowStore.findVariableByName.
+    candidates: candidates.map(v => {
+      const coll = collById.get(v.variableCollectionId);
+      const valuesByMode = (v as any).valuesByMode as Record<string, unknown> | undefined;
+      const definedModeIds = valuesByMode ? Object.keys(valuesByMode) : [];
+      const modeCoverage = coll
+        ? definedModeIds
+            .map(mid => coll.modes.find(m => m.modeId === mid)?.name)
+            .filter((n): n is string => Boolean(n))
+        : [];
+      return {
+        variable_id: v.id,
+        name: v.name,
+        collection_id: v.variableCollectionId,
+        collection_name: coll?.name,
+        type: v.resolvedType,
+        mode_coverage: modeCoverage,
+        // source: filled by AgentRuntime — "created_this_turn" if RyowStore
+        // tracks this id, else "preexisting".
+        source: 'preexisting' as const,
+      };
+    }),
+  };
 }
 
 export const variableBindingHandler: PropertyHandler = {
@@ -56,20 +132,29 @@ export const variableBindingHandler: PropertyHandler = {
 
   async apply(node: SceneNode, key: string, value: any): Promise<Warning[]> {
     const varName = (value as string).slice(1); // strip leading $
-    const variable = await findVariable(varName);
+    let variables = await findVariables(varName);
 
-    if (!variable) {
+    if (variables.length === 0) {
       // Invalidate cache and retry once (variable may have been created recently)
       invalidateVariableCache();
-      const retryVar = await findVariable(varName);
-      if (!retryVar) {
+      variables = await findVariables(varName);
+      if (variables.length === 0) {
         return [{
           code: 'VARIABLE_NOT_FOUND',
           severity: 'warning',
           message: `Variable '${varName}' not found. Create it first or check the name.`,
         }];
       }
-      return this.apply(node, key, value);
+    }
+
+    // Phase 1 silent-pick: STILL bind the first match for backward compat.
+    // Phase 2 (later) will reject bare-name and require ID-form or
+    // (collection_id, name, type) triple.
+    const variable = variables[0];
+
+    const warnings: Warning[] = [];
+    if (variables.length > 1) {
+      warnings.push(await buildAmbiguousAutopickWarning(variable, variables));
     }
 
     try {
@@ -85,13 +170,16 @@ export const variableBindingHandler: PropertyHandler = {
         // Numeric / boolean variable → direct binding
         node.setBoundVariable(key as VariableBindableNodeField, variable);
       }
-      return [];
+      return warnings;
     } catch (e: any) {
-      return [{
-        code: 'VARIABLE_BIND_FAILED',
-        severity: 'warning',
-        message: `Failed to bind '${varName}' to '${key}': ${e?.message ?? e}`,
-      }];
+      return [
+        ...warnings,
+        {
+          code: 'VARIABLE_BIND_FAILED',
+          severity: 'warning',
+          message: `Failed to bind '${varName}' to '${key}': ${e?.message ?? e}`,
+        },
+      ];
     }
   },
 };

@@ -12,7 +12,7 @@ import { editDefinition } from './edit';
 import { findNodesDefinition, discoverPropsDefinition, replacePropsDefinition } from './searchTool';
 import { deleteNodeDefinition, moveNodeDefinition, cloneNodeDefinition } from './structureTool';
 import { knowledgeReaders } from './knowledgeReaders';
-import { listVariablesDefinition, createCollectionDefinition, createVariableDefinition, setVariableValueDefinition, bindVariableDefinition, setVariableModeDefinition } from './varTool';
+import { listVariablesDefinition, createCollectionDefinition, createVariableDefinition, ensureCollectionDefinition, ensureVariableDefinition, setVariableValueDefinition, bindVariableDefinition, setVariableModeDefinition } from './varTool';
 import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
 import { jsToolDefinition } from './jsTool';
 import { setTextDefinition, setFillDefinition, setStrokeDefinition, setLayoutDefinition } from './setterTools';
@@ -48,6 +48,8 @@ export const unifiedTools: ToolDefinition[] = [
   listVariablesDefinition,
   createCollectionDefinition,
   createVariableDefinition,
+  ensureCollectionDefinition,
+  ensureVariableDefinition,
   setVariableValueDefinition,
   bindVariableDefinition,
   setVariableModeDefinition,

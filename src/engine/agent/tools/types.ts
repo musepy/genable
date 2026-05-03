@@ -4,6 +4,8 @@
  * Defines the structure for tool registration and execution results.
  */
 
+import type { RyowBlock } from '../ryowStore';
+
 /**
  * Metadata for a tool, used for registration and prompt generation.
  */
@@ -50,6 +52,23 @@ export interface ToolParameter {
 }
 
 /**
+ * Tool-result warning. Carries a stable `code` plus a free-form bag for
+ * code-specific data (e.g. `picked_variable_id`, `candidates`, `suggested_id`
+ * for `AMBIGUOUS_NAME_AUTOPICK`). LLM-visible — surfaced via the presentation
+ * pipe.
+ *
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §4 (warnings ride
+ * in tool results so the LLM can self-correct).
+ */
+export interface ToolWarning {
+  code: string;
+  /** Human-readable detail. Optional — the `code` is the contract. */
+  message?: string;
+  /** Code-specific data — see callsites for shape per code. */
+  [key: string]: unknown;
+}
+
+/**
  * Standardized response format from a tool execution.
  * Error present = failure. Absence of error = success.
  *
@@ -60,6 +79,19 @@ export interface ToolParameter {
 export interface ToolResponse<T = any> {
   data?: T;
   error?: string;
+  /**
+   * Non-fatal warnings emitted during execution. Both success and partial-
+   * failure responses may carry warnings (e.g. AMBIGUOUS_NAME_AUTOPICK on
+   * a successful set_fill).
+   */
+  warnings?: ToolWarning[];
+  /**
+   * Read-your-own-writes block — variable / collection state from the
+   * current turn. Attached only to responses from variable-related tools
+   * (see `VARIABLE_RELATED_TOOLS` in `ryowStore.ts`). The runtime injects
+   * this in afterToolExec.
+   */
+  _ryow?: RyowBlock;
   /** Pipeline stages for dashboard auto-visualization. Stripped by presentForLLM. */
   _stages?: Array<{ label: string; file: string; durationMs?: number; meta?: Record<string, unknown> }>;
 }

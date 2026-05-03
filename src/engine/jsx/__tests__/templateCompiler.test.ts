@@ -6,14 +6,16 @@
  * walkTree is tested via E2E (dev bridge), not unit tests.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   compileJsx,
   compileAndExecute,
   preprocessJsx,
   h,
   collectIconNames,
+  walkTree,
   type VNode,
+  type WalkContext,
 } from '../templateCompiler';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -478,5 +480,106 @@ describe('collectIconNames', () => {
       { type: 'FRAME', props: {}, children: [] },
     ];
     expect(collectIconNames(vnodes)).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// walkTree — warning forwarding (Phase 1 strict resolver propagation)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Bug context: jsx is the dominant write path (whole-design generation in
+// one tool call with N $Token bindings). Before this test, walkTree
+// flattened result.warnings to {code, message}, dropping the
+// AMBIGUOUS_NAME_AUTOPICK payload (picked_variable_id, candidates) so the
+// LLM never received Phase 1 self-correction signals.
+//
+// We mock the nodeFactory's createFrame to return a NodeResult carrying a
+// rich AMBIGUOUS_NAME_AUTOPICK warning, and assert walkTree forwards it
+// VERBATIM into ctx.warnings (plus a node_id tag).
+
+vi.mock('../../actions/nodeFactory', async () => {
+  const actual = await vi.importActual<typeof import('../../actions/nodeFactory')>(
+    '../../actions/nodeFactory',
+  );
+  return {
+    ...actual,
+    // Replace createFrame to bypass the real Figma API and inject a known
+    // AMBIGUOUS_NAME_AUTOPICK warning we can assert on.
+    createFrame: vi.fn(async () => ({
+      nodeId: 'mock:1',
+      warnings: [
+        {
+          code: 'AMBIGUOUS_NAME_AUTOPICK',
+          severity: 'warning' as const,
+          message: 'Bare-name lookup found 2 variables.',
+          picked_variable_id: 'V1',
+          candidates: [
+            {
+              variable_id: 'V1',
+              name: 'Text/Primary',
+              collection_id: 'C-old',
+              collection_name: 'Old Theme',
+              type: 'COLOR',
+              mode_coverage: ['Light'],
+              source: 'preexisting' as const,
+            },
+            {
+              variable_id: 'V2',
+              name: 'Text/Primary',
+              collection_id: 'C-new',
+              collection_name: 'Finance/Theme',
+              type: 'COLOR',
+              mode_coverage: ['Light', 'Dark'],
+              source: 'preexisting' as const,
+            },
+          ],
+        },
+      ],
+    })),
+    tagAsAgentCreated: vi.fn(),
+    normalizeSizingInProps: vi.fn(),
+  };
+});
+
+// Minimal figma global so walkTree's auxiliary calls don't throw.
+vi.stubGlobal('figma', {
+  // Just enough to satisfy the post-create lookup + best-effort tag.
+  getNodeByIdAsync: vi.fn().mockResolvedValue(null),
+});
+
+describe('walkTree — preserves full warning payload (Phase 1 propagation)', () => {
+  it('forwards AMBIGUOUS_NAME_AUTOPICK with picked_variable_id, candidates, and node_id intact', async () => {
+    const ctx: WalkContext = {
+      symbolMap: new Map(),
+      rollbackStack: [],
+      warnings: [],
+      counter: 0,
+    };
+    const vnode: VNode = {
+      type: 'FRAME',
+      props: { fills: '$Text/Primary' },
+      children: [],
+    };
+
+    await walkTree(vnode, null, ctx);
+
+    // The lossy fix would have given us {code, message} only.
+    // The new code must carry the full payload PLUS a node_id we just created.
+    expect(ctx.warnings).toHaveLength(1);
+    const w = ctx.warnings[0] as any;
+    expect(w.code).toBe('AMBIGUOUS_NAME_AUTOPICK');
+    expect(w.picked_variable_id).toBe('V1');
+    expect(w.candidates).toHaveLength(2);
+    expect(w.candidates[0]).toMatchObject({
+      variable_id: 'V1',
+      collection_name: 'Old Theme',
+      type: 'COLOR',
+    });
+    expect(w.candidates[1]).toMatchObject({
+      variable_id: 'V2',
+      collection_name: 'Finance/Theme',
+    });
+    // Tagged with the node id created by walkTree.
+    expect(w.node_id).toBe('mock:1');
   });
 });

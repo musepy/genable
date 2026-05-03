@@ -37,6 +37,18 @@ export function presentForLLM(result: any, commandName: string): any {
     cleaned = { output: result.data };
   }
 
+  // Preserve top-level ToolResponse fields the LLM needs to see for self-correction.
+  // Per-tool transforms (above) can't drop these because we copy them after the transform.
+  // - `warnings`: e.g. AMBIGUOUS_NAME_AUTOPICK on set_fill — LLM uses to choose a different binding.
+  // - `_ryow`: read-your-own-writes block — current-turn variable/collection snapshot.
+  // Both placed before the `error` overlay so an error response can still carry them.
+  if (Array.isArray(result?.warnings) && result.warnings.length > 0) {
+    cleaned.warnings = result.warnings;
+  }
+  if (result?._ryow != null) {
+    cleaned._ryow = result._ryow;
+  }
+
   if (result?.error != null) {
     cleaned.error = result.error;
   }

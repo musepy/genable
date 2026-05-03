@@ -13,13 +13,14 @@
  * string parsing. No intermediate IR — VNode tree walks directly into Figma API.
  */
 
-import type { ToolResponse } from '../../engine/agent/tools/types';
+import type { ToolResponse, ToolWarning } from '../../engine/agent/tools/types';
 import {
   compileAndExecute,
   walkTree,
   collectIconNames,
   type WalkContext,
   type WalkResult,
+  type WalkWarning,
 } from '../../engine/jsx/templateCompiler';
 import { normalizeTree, type NormalizeWarning } from '../../engine/jsx/normalizeTree';
 import {
@@ -125,7 +126,14 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   const ctx: WalkContext = {
     symbolMap: new Map(),
     rollbackStack: [],
-    warnings: normalizeWarnings.map(w => ({ code: w.code, message: w.message })),
+    // NormalizeWarning is the lossy shape (code+message only) — promote to
+    // WalkWarning by tagging severity. Variable-binding warnings produced
+    // inside walkTree itself carry full payload (preserved verbatim).
+    warnings: normalizeWarnings.map(w => ({
+      code: w.code,
+      severity: 'warning' as const,
+      message: w.message,
+    })),
     counter: 0,
   };
 
@@ -152,7 +160,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     }
   } catch (e: any) {
     failed = true;
-    ctx.warnings.push({ code: 'EXECUTION_ERROR', message: e?.message || 'Unexpected error' });
+    ctx.warnings.push({ code: 'EXECUTION_ERROR', severity: 'warning', message: e?.message || 'Unexpected error' });
   }
 
   // Rollback on failure (atomic)
@@ -189,7 +197,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
         (parentNode as any).insertChild(clamped, newNode);
       }
     } catch (e: any) {
-      ctx.warnings.push({ code: 'INSERT_INDEX', message: `Failed to move node to index ${targetIndex}: ${e?.message}` });
+      ctx.warnings.push({ code: 'INSERT_INDEX', severity: 'warning', message: `Failed to move node to index ${targetIndex}: ${e?.message}` });
     }
   }
 
@@ -198,7 +206,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     try {
       oldNode.remove();
     } catch (e: any) {
-      ctx.warnings.push({ code: 'REPLACE_REMOVE', message: `Failed to remove replaced node: ${e?.message}` });
+      ctx.warnings.push({ code: 'REPLACE_REMOVE', severity: 'warning', message: `Failed to remove replaced node: ${e?.message}` });
     }
   }
 
@@ -241,5 +249,49 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   data.created = ctx.rollbackStack.length;
   data.createdIds = ctx.rollbackStack;
 
+  // Aggregate variable-resolution warnings (currently AMBIGUOUS_NAME_AUTOPICK)
+  // from the walk into `response.warnings` so the runtime can enrich them
+  // (RyowStore source / suggested_id), emit `ambiguous_autopick` events, and
+  // surface them to the LLM via `presentForLLM`. Without this, jsx — the
+  // dominant write path for whole-design generation — silently drops the
+  // warnings even though the handler emits them. See E2E #1 finding:
+  // 18 bare-name $Token uses → 0 warnings ever reached the LLM.
+  //
+  // Only AMBIGUOUS_NAME_AUTOPICK is forwarded (variable-resolution category).
+  // NORMALIZE / CREATE_FAILED / etc. stay internal — they're either advisory
+  // for the dev bridge logs or already surfaced via `error`.
+  //
+  // Dedup key: picked_variable_id + node_id. The same auto-pick on the same
+  // node from multiple bindings (e.g. fill + stroke both binding $Brand) is
+  // still informative once; repeats add noise without new signal.
+  const aggregated = aggregateBindingWarnings(ctx.warnings);
+  if (aggregated.length > 0) {
+    return { data, warnings: aggregated, _stages };
+  }
+
   return { data, _stages };
+}
+
+/**
+ * Filter walk warnings to the variable-resolution subset that the LLM needs
+ * to see, dedupe by (code, picked_variable_id, node_id), and strip handler
+ * internals (severity) to land on the `ToolWarning` wire shape.
+ */
+function aggregateBindingWarnings(walkWarnings: WalkWarning[]): ToolWarning[] {
+  const RELEVANT_CODES = new Set(['AMBIGUOUS_NAME_AUTOPICK']);
+  const out: ToolWarning[] = [];
+  const seen = new Set<string>();
+  for (const w of walkWarnings) {
+    if (!RELEVANT_CODES.has(w.code)) continue;
+    const key = `${w.code}|${(w as any).picked_variable_id ?? ''}|${w.node_id ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // Drop `severity` (encoded by virtue of warnings[] being non-fatal) but
+    // preserve every other extension field — picked_variable_id, candidates,
+    // node_id are all load-bearing for the LLM and the runtime enrichment.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { severity, ...rest } = w;
+    out.push(rest as ToolWarning);
+  }
+  return out;
 }

@@ -63,6 +63,7 @@ Figma does not behave like a browser. Known mental-model gaps:
 7. **`clipsContent` is true by default — it clips shadows and strokes**: Outer strokes and shadows get silently cut off. For any frame with outer stroke or shadow, set `overflow="visible"`.
 8. **Color is hex + opacity, not `{r,g,b,a}`**: Solid fills/strokes accept `"#RRGGBB[AA]"` or `{color:"#RRGGBB", opacity:0.5}`. CSS-style `{r,g,b,a}` color objects are rejected.
 9. **Absolute-positioned children can't `fill`**: A child with `layoutPositioning="absolute"` is removed from auto-layout flow — `w="fill"` and `h="fill"` are rejected. Use explicit pixel sizes.
+10. **Variable identity is collection-scoped**: Two variables with the same name in different collections are NOT the same variable. When binding, prefer the `variable_id` from the `_ryow` block on prior tool results. When creating, prefer `ensure_variable` / `ensure_collection` over `create_*` — `ensure_*` is idempotent (re-running with same args returns the existing variable). Omit `idempotency_key`; the handler computes it. Heed `AMBIGUOUS_NAME_AUTOPICK` warnings — if `suggested_id` differs from `picked_variable_id`, rebind via `set_fill({node, fill: {variable_id: suggested_id}})`. On `MISSING_MODE_VALUES`, the error's `recommended_next_action.args` is ready to pass straight back to `ensure_variable`.
 
 ## HARD TRIGGERS
 

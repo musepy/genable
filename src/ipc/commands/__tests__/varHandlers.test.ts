@@ -304,10 +304,43 @@ describe('handleEnsureCollection — idempotency + reuse', () => {
     expect(r.error).toContain('INVALID_IDEMPOTENCY_KEY');
   });
 
-  it('rejects missing required params', async () => {
+  it('rejects missing required params (idempotency_key NOT required)', async () => {
     expect((await handleEnsureCollection({})).error).toContain('name');
     expect((await handleEnsureCollection({ name: 'X' })).error).toContain('modes');
-    expect((await handleEnsureCollection({ name: 'X', modes: ['Light'] })).error).toContain('idempotency_key');
+    // idempotency_key omitted — handler auto-computes, must succeed
+    const r = await handleEnsureCollection({ name: 'X', modes: ['Light'] });
+    expect(r.error).toBeUndefined();
+    expect(r.data?.collection_id).toMatch(/^VariableCollectionId/);
+  });
+
+  it('handleEnsureCollection auto-computes idempotency_key when absent', async () => {
+    // Caller omits idempotency_key entirely — handler should auto-compute and proceed.
+    const first = await handleEnsureCollection({
+      name: 'Theme',
+      modes: ['Light', 'Dark'],
+    });
+    expect(first.error).toBeUndefined();
+    expect(first.data?.collection_id).toMatch(/^VariableCollectionId/);
+
+    // Re-call with same args (still no key) — handler auto-computes and reuses.
+    const second = await handleEnsureCollection({
+      name: 'Theme',
+      modes: ['Light', 'Dark'],
+    });
+    expect(second.error).toBeUndefined();
+    expect(second.data?.collection_id).toBe(first.data?.collection_id);
+    expect(second.data?.reused).toBe(true);
+  });
+
+  it('handleEnsureCollection auto-computes when key is empty string', async () => {
+    // Empty string treated same as absent.
+    const r = await handleEnsureCollection({
+      name: 'Theme',
+      modes: ['Light'],
+      idempotency_key: '',
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.data?.collection_id).toMatch(/^VariableCollectionId/);
   });
 });
 
@@ -376,6 +409,59 @@ describe('handleEnsureVariable — idempotency + dedup', () => {
       values_by_mode: { Light: '#111' }, idempotency_key: 'random',
     });
     expect(r.error).toContain('INVALID_IDEMPOTENCY_KEY');
+  });
+
+  it('handleEnsureVariable auto-computes idempotency_key when absent', async () => {
+    // Caller omits idempotency_key entirely — handler should auto-compute
+    // and create the variable with values populated.
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Text/Primary',
+      type: 'COLOR',
+      values_by_mode: { Light: '#111111', Dark: '#EEEEEE' },
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.data?.variable_id).toMatch(/^VariableID/);
+    expect(r.data?.mode_coverage).toEqual(['Light', 'Dark']);
+
+    // Re-call without key — should reuse the existing variable (auto-computed
+    // key matches the one used for creation).
+    const second = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Text/Primary',
+      type: 'COLOR',
+      values_by_mode: { Light: '#111111', Dark: '#EEEEEE' },
+    });
+    expect(second.error).toBeUndefined();
+    expect(second.data?.variable_id).toBe(r.data?.variable_id);
+    expect(second.data?.reused).toBe(true);
+  });
+
+  it('handleEnsureVariable still rejects INVALID_IDEMPOTENCY_KEY when caller passes a mismatched key', async () => {
+    // Mandatory-key invariant must be preserved when the caller chooses to
+    // supply a key (concurrency-safety semantics for deliberate callers).
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Text/Primary',
+      type: 'COLOR',
+      values_by_mode: { Light: '#111111', Dark: '#EEEEEE' },
+      // Placeholder string — exactly the failure mode observed in glm-5 E2E runs.
+      idempotency_key: 'sha256_placeholder_text_primary',
+    });
+    expect(r.error).toContain('INVALID_IDEMPOTENCY_KEY');
+  });
+
+  it('handleEnsureVariable accepts empty-string idempotency_key as absent', async () => {
+    // Some callers pass "" rather than omitting — should be treated like absent.
+    const r = await handleEnsureVariable({
+      collection_id: collectionId,
+      name: 'Surface/Bg',
+      type: 'COLOR',
+      values_by_mode: { Light: '#FFFFFF', Dark: '#000000' },
+      idempotency_key: '',
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.data?.variable_id).toMatch(/^VariableID/);
   });
 
   it('warns NAME_EXISTS_OUTSIDE_TARGET_COLLECTION when same name lives elsewhere', async () => {

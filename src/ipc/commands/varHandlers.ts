@@ -224,18 +224,21 @@ export const handleCreateVariable = traced('handleCreateVariable()', 'varHandler
 // canonical_json(modes_sorted_by_name)). Differs from §3.1's variable formula
 // because there is no `collection_id` to anchor on yet — the collection IS the
 // thing being keyed.
+//
+// idempotency_key is OPTIONAL. If absent, handler computes canonically from
+// (name, modes) and proceeds with dedup as normal. If present, handler
+// validates against the canonical formula (preserves concurrency-safety
+// semantics for callers who deliberately want a strict validity guard). LLMs
+// typically omit it — they cannot reliably compute SHA-256 inline.
 
 export const handleEnsureCollection = traced('handleEnsureCollection()', 'varHandlers.ts', async function handleEnsureCollection(params: any): Promise<ToolResponse> {
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   const modes: unknown = params.modes;
-  const idempotencyKey = typeof params.idempotency_key === 'string' ? params.idempotency_key : '';
+  const idempotencyKey = typeof params.idempotency_key === 'string' ? params.idempotency_key.trim() : '';
 
   if (!name) return { error: 'ensure_collection requires "name".' };
   if (!Array.isArray(modes) || modes.length === 0) {
     return { error: 'ensure_collection requires "modes" — a non-empty array of {name} entries.' };
-  }
-  if (!idempotencyKey) {
-    return { error: 'ensure_collection requires "idempotency_key" (sha256 of name+modes per spec §3.1).' };
   }
 
   // Normalize modes to {name} array, accept either ["Light","Dark"] or [{name:"Light"},...]
@@ -251,18 +254,21 @@ export const handleEnsureCollection = traced('handleEnsureCollection()', 'varHan
     return { error: 'ensure_collection requires at least one non-empty mode name.' };
   }
 
-  // Validate idempotency_key matches our canonical formula. Random / partial
-  // keys rejected (closes codex finding §3.1 "random keys break dedup on retry").
-  const expectedKey = computeVariableIdempotencyKey({
-    collection_id: '',
-    name,
-    type: 'STRING',  // sentinel — collection key uses placeholder type slot
-    values_by_mode: { modes: cleanedModes },
-  });
-  if (idempotencyKey !== expectedKey) {
-    return {
-      error: 'INVALID_IDEMPOTENCY_KEY: idempotency_key does not match canonical formula sha256(name + "|" + ... + "|" + canonical_json({modes:[...]})). See spec §3.1.',
-    };
+  // If caller supplied a key, validate it matches our canonical formula. If
+  // absent, the handler computes canonically and proceeds — the dedup path
+  // does not depend on the caller's key being present.
+  if (idempotencyKey) {
+    const expectedKey = computeVariableIdempotencyKey({
+      collection_id: '',
+      name,
+      type: 'STRING',  // sentinel — collection key uses placeholder type slot
+      values_by_mode: { modes: cleanedModes },
+    });
+    if (idempotencyKey !== expectedKey) {
+      return {
+        error: 'INVALID_IDEMPOTENCY_KEY: idempotency_key does not match canonical formula sha256(name + "|" + ... + "|" + canonical_json({modes:[...]})). See spec §3.1. Tip: omit idempotency_key entirely — the handler computes it canonically.',
+      };
+    }
   }
 
   // Look up existing collection by name. If found and modes match, idempotent reuse.
@@ -337,7 +343,7 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
   const valuesByMode = (params.values_by_mode && typeof params.values_by_mode === 'object')
     ? params.values_by_mode as Record<string, unknown>
     : {};
-  const idempotencyKey = typeof params.idempotency_key === 'string' ? params.idempotency_key : '';
+  const idempotencyKey = typeof params.idempotency_key === 'string' ? params.idempotency_key.trim() : '';
 
   // Phase 2 step 4: mode_coverage_required — defaults to 'all'. Spec §6.2.
   // Default 'all' enforces strict mode-by-mode coverage at bind time.
@@ -375,21 +381,24 @@ export const handleEnsureVariable = traced('handleEnsureVariable()', 'varHandler
   if (!collectionId) return { error: 'ensure_variable requires "collection_id".' };
   if (!name) return { error: 'ensure_variable requires "name".' };
   if (!type) return { error: 'ensure_variable requires "type" — one of COLOR, FLOAT, STRING, BOOLEAN.' };
-  if (!idempotencyKey) {
-    return { error: 'ensure_variable requires "idempotency_key" (sha256 per spec §3.1).' };
-  }
 
-  // Validate idempotency_key against the canonical formula.
-  const expectedKey = computeVariableIdempotencyKey({
-    collection_id: collectionId,
-    name,
-    type,
-    values_by_mode: valuesByMode,
-  });
-  if (idempotencyKey !== expectedKey) {
-    return {
-      error: 'INVALID_IDEMPOTENCY_KEY: idempotency_key does not match canonical formula sha256(collection_id + "|" + name + "|" + type + "|" + canonical_json(values_by_mode)). See spec §3.1.',
-    };
+  // idempotency_key is OPTIONAL. If absent, handler computes canonically from
+  // (collection_id, name, type, values_by_mode) and proceeds with dedup as
+  // normal. If present, handler validates against the canonical formula
+  // (preserves concurrency-safety semantics). LLMs typically omit it —
+  // they cannot reliably compute SHA-256 inline.
+  if (idempotencyKey) {
+    const expectedKey = computeVariableIdempotencyKey({
+      collection_id: collectionId,
+      name,
+      type,
+      values_by_mode: valuesByMode,
+    });
+    if (idempotencyKey !== expectedKey) {
+      return {
+        error: 'INVALID_IDEMPOTENCY_KEY: idempotency_key does not match canonical formula sha256(collection_id + "|" + name + "|" + type + "|" + canonical_json(values_by_mode)). See spec §3.1. Tip: omit idempotency_key entirely — the handler computes it canonically.',
+      };
+    }
   }
 
   const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);

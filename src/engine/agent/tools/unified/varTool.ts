@@ -125,15 +125,17 @@ export const ensureCollectionDefinition: ToolDefinition = {
 Returns existing collection if one with the same name + identical mode list
 already exists, otherwise creates a new one. Spec §3.1.
 
-The "idempotency_key" must be sha256(name + "|" + "STRING" + "|" +
-canonical_json({modes: [<mode_names>]})) — random keys are rejected.
-Compute the key client-side; the helper "computeVariableIdempotencyKey"
-matches this formula when called with collection_id="" and type="STRING".
+Prefer this over create_collection — re-running with the same name + modes
+returns the existing collection instead of creating a duplicate.
+
+Omit idempotency_key — the handler computes it canonically from (name, modes).
+Pass it only if you need strict concurrency-safety validation (LLMs should
+not try to compute SHA-256 inline; placeholder strings are rejected).
 
 Returns {data: {collection_id, modes: [{modeId, name}], reused?: true}}.
 
 Examples:
-  ensure_collection({name: "Theme", modes: ["Light", "Dark"], idempotency_key: "<sha256>"})`,
+  ensure_collection({name: "Theme", modes: ["Light", "Dark"]})`,
   parameters: {
     type: 'object',
     properties: {
@@ -145,10 +147,10 @@ Examples:
       },
       idempotency_key: {
         type: 'string',
-        description: 'Canonical sha256 idempotency key — see spec §3.1',
+        description: 'Optional. Handler auto-computes canonically if omitted. Pass only if you need strict concurrency-safety validation against the SHA-256 formula in spec §3.1.',
       },
     },
-    required: ['name', 'modes', 'idempotency_key'],
+    required: ['name', 'modes'],
   },
 };
 
@@ -157,6 +159,9 @@ export const ensureVariableDefinition: ToolDefinition = {
   executionStrategy: 'sequential',
   mutates: true,
   description: `Idempotent variable creation — populates values_by_mode in one shot.
+
+Prefer this over create_variable — re-running with the same args returns the
+existing variable instead of creating a duplicate.
 
 Behavior (spec §3.1):
   - Exactly 1 variable with (collection_id, name, type) in target collection → idempotent reuse.
@@ -168,8 +173,10 @@ values_by_mode keys can be either mode NAMES (e.g. "Light") or modeIds (e.g. "1:
 Each value must match the variable type (hex/RGBA for COLOR, number for FLOAT,
 string for STRING, boolean for BOOLEAN).
 
-idempotency_key formula: sha256(collection_id + "|" + name + "|" + type + "|"
-+ canonical_json(values_by_mode)). Random keys rejected.
+Omit idempotency_key — the handler computes it canonically from
+(collection_id, name, type, values_by_mode). Pass it only if you need strict
+concurrency-safety validation (LLMs should not try to compute SHA-256 inline;
+placeholder strings are rejected).
 
 Mode coverage policy (spec §6.2):
   - mode_coverage_required: 'all' (default) — every mode in the collection
@@ -184,8 +191,8 @@ Returns {data: {variable_id, name, type, collection_id, mode_coverage[],
 mode_coverage_required, reused?: true}, warnings?: [...]}.
 
 Examples:
-  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Text/Primary", type: "COLOR", values_by_mode: {Light: "#111", Dark: "#EEE"}, idempotency_key: "<sha256>"})
-  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Spacing/desktop", type: "FLOAT", values_by_mode: {Desktop: 24}, idempotency_key: "<sha256>", mode_coverage_required: "opt-in-fallback", fallback_reason: "Desktop-only metric; fallback to Desktop in Mobile mode."})`,
+  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Text/Primary", type: "COLOR", values_by_mode: {Light: "#111", Dark: "#EEE"}})
+  ensure_variable({collection_id: "VariableCollectionId:1:2", name: "Spacing/desktop", type: "FLOAT", values_by_mode: {Desktop: 24}, mode_coverage_required: "opt-in-fallback", fallback_reason: "Desktop-only metric; fallback to Desktop in Mobile mode."})`,
   parameters: {
     type: 'object',
     properties: {
@@ -208,7 +215,7 @@ Examples:
       },
       idempotency_key: {
         type: 'string',
-        description: 'Canonical sha256 idempotency key — see spec §3.1',
+        description: 'Optional. Handler auto-computes canonically if omitted. Pass only if you need strict concurrency-safety validation against the SHA-256 formula in spec §3.1.',
       },
       mode_coverage_required: {
         type: 'string',
@@ -220,7 +227,7 @@ Examples:
         description: 'REQUIRED iff mode_coverage_required="opt-in-fallback". Must contain the structured phrase "fallback to <mode_name>". Persisted on the variable for audit trail.',
       },
     },
-    required: ['collection_id', 'name', 'type', 'values_by_mode', 'idempotency_key'],
+    required: ['collection_id', 'name', 'type', 'values_by_mode'],
   },
 };
 

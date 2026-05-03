@@ -264,6 +264,16 @@ const EXPANDERS: Record<string, Expander> = {
       const result: Record<string, any> = {};
       for (const p of v.trim().split(/\s+/)) {
         if (p.startsWith('#')) result.strokes = [p];
+        else if (p.startsWith('$')) {
+          // Variable reference inside the shorthand. Previously fell into
+          // the `else` branch below and was silently coerced to strokeAlign
+          // (e.g. "$BRAND/600" → strokeAlign="$BRAND/600" — invalid, dropped).
+          // Pass through as the variable-ref form so variableBindingHandler
+          // can bind it. In phase2-strict the IPC handler rejects this whole
+          // shorthand at the boundary; this branch keeps backward compat for
+          // phase1 / phase2-mode-coverage by at least delivering the binding.
+          result.strokes = p;
+        }
         else if (/^\d/.test(p)) result.strokeWeight = parseFloat(p);
         else result.strokeAlign = p.toUpperCase();
       }

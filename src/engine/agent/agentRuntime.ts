@@ -675,6 +675,13 @@ export class AgentRuntime {
     //      not an error.
     this.processMissingModeValues(tc, result);
 
+    // ── 2.6. Emit Phase 2 strict-mode rejection events ──
+    // The IPC handler returns these as { error, data: { code } } envelopes
+    // (see src/ipc/commands/index.ts handleSetFill / handleSetStroke). We
+    // promote them to typed runtime events so dev-bridge dashboards can audit
+    // strict-mode adoption + regressions.
+    this.processStrictBindingRejection(tc, result);
+
     // ── 3. Inject _ryow snapshot for variable-related tools ──
     // The store's snapshot() returns undefined for non-variable tools, so
     // attaching unconditionally is safe — but we guard for clarity and to
@@ -813,6 +820,134 @@ export class AgentRuntime {
           ts,
         });
       }
+    }
+  }
+
+  /**
+   * Detect Phase 2 strict-resolver rejection envelopes in a tool result and
+   * emit the typed runtime event. Spec §3.2 / §4.1 — the IPC handler
+   * (handleSetFill / handleSetStroke) returns these as
+   * `{ error, data: { code, ... } }` envelopes; we promote them here so
+   * dev-bridge dashboards have a stable per-event schema.
+   *
+   * Codes handled:
+   *   - BARE_NAME_REJECTED_PHASE2     → bare_name_rejected
+   *   - STALE_VARIABLE_ID             → stale_variable_id
+   *   - AMBIGUOUS_VARIABLE_REFERENCE  → ambiguous_variable_reference
+   *   - VARIABLE_NOT_FOUND            → variable_not_found
+   */
+  private processStrictBindingRejection(tc: ToolCallBlock, result: any): void {
+    if (!result || typeof result !== 'object') return;
+    if (!result.error || !result.data || typeof result.data.code !== 'string') return;
+
+    const code: string = result.data.code;
+    const toolName = tc.name;
+    const phase = this.behaviorConfig.variableResolution;
+    const node_id = typeof tc.input?.node === 'string' ? tc.input.node : undefined;
+
+    if (code === 'BARE_NAME_REJECTED_PHASE2') {
+      // The bare-name string is in either tc.input.fill, tc.input.bg, or
+      // tc.input.stroke depending on which slot triggered. We don't know
+      // which deterministically, so prefer fill > bg > stroke.
+      const candidates = [tc.input?.fill, tc.input?.bg, tc.input?.stroke];
+      const bareName = candidates.find(v => typeof v === 'string' && v.startsWith?.('$'))
+        ?? candidates.find(v => typeof v === 'string' && v.includes('$'))
+        ?? '';
+      this.emitRuntimeEvent({
+        type: 'bare_name_rejected',
+        phase: 'execution',
+        iteration: this.currentIteration,
+        tool_name: toolName,
+        node_id,
+        name_query: typeof bareName === 'string' ? bareName : '',
+        resolutionPhase: phase,
+      });
+      return;
+    }
+
+    if (code === 'STALE_VARIABLE_ID') {
+      const variable_id = (typeof tc.input?.fill?.variable_id === 'string' && tc.input.fill.variable_id)
+        || (typeof tc.input?.bg?.variable_id === 'string' && tc.input.bg.variable_id)
+        || (typeof tc.input?.color?.variable_id === 'string' && tc.input.color.variable_id)
+        || '';
+      const expected_name = (typeof tc.input?.fill?.expected_name === 'string' && tc.input.fill.expected_name)
+        || (typeof tc.input?.bg?.expected_name === 'string' && tc.input.bg.expected_name)
+        || (typeof tc.input?.color?.expected_name === 'string' && tc.input.color.expected_name)
+        || undefined;
+      const expected_fingerprint = (typeof tc.input?.fill?.expected_fingerprint === 'string' && tc.input.fill.expected_fingerprint)
+        || (typeof tc.input?.bg?.expected_fingerprint === 'string' && tc.input.bg.expected_fingerprint)
+        || (typeof tc.input?.color?.expected_fingerprint === 'string' && tc.input.color.expected_fingerprint)
+        || undefined;
+      const actual_name: string | undefined = typeof result.data.actual_name === 'string'
+        ? result.data.actual_name : undefined;
+      const actual_fingerprint: string | undefined = typeof result.data.actual_fingerprint === 'string'
+        ? result.data.actual_fingerprint : undefined;
+      // Differentiate the three failure modes via which expected_* matches.
+      let reason: 'variable_missing' | 'name_mismatch' | 'fingerprint_mismatch';
+      if (!actual_name && !actual_fingerprint) reason = 'variable_missing';
+      else if (expected_fingerprint && actual_fingerprint && expected_fingerprint !== actual_fingerprint) reason = 'fingerprint_mismatch';
+      else reason = 'name_mismatch';
+      this.emitRuntimeEvent({
+        type: 'stale_variable_id',
+        phase: 'execution',
+        iteration: this.currentIteration,
+        tool_name: toolName,
+        node_id,
+        variable_id: typeof variable_id === 'string' ? variable_id : '',
+        expected_name,
+        actual_name,
+        expected_fingerprint,
+        actual_fingerprint,
+        reason,
+        resolutionPhase: phase,
+      });
+      return;
+    }
+
+    if (code === 'AMBIGUOUS_VARIABLE_REFERENCE') {
+      const triple = tc.input?.fill ?? tc.input?.bg ?? tc.input?.color ?? {};
+      const candidates = Array.isArray(result.data.candidates) ? result.data.candidates : [];
+      // Enrich source via RyowStore (mirror of the AMBIGUOUS_NAME_AUTOPICK path).
+      for (const c of candidates) {
+        if (c && typeof c.variable_id === 'string') {
+          c.source = this.ryowStore.isCreatedThisTurn(c.variable_id)
+            ? 'created_this_turn'
+            : 'preexisting';
+        }
+      }
+      this.emitRuntimeEvent({
+        type: 'ambiguous_variable_reference',
+        phase: 'execution',
+        iteration: this.currentIteration,
+        tool_name: toolName,
+        node_id,
+        query: {
+          collection_id: typeof triple.collection_id === 'string' ? triple.collection_id : '',
+          name: typeof triple.name === 'string' ? triple.name : '',
+          type: typeof triple.type === 'string' ? triple.type : '',
+        },
+        candidates,
+        resolutionPhase: phase,
+      });
+      return;
+    }
+
+    if (code === 'VARIABLE_NOT_FOUND') {
+      const triple = tc.input?.fill ?? tc.input?.bg ?? tc.input?.color ?? {};
+      this.emitRuntimeEvent({
+        type: 'variable_not_found',
+        phase: 'execution',
+        iteration: this.currentIteration,
+        tool_name: toolName,
+        node_id,
+        query: {
+          collection_id: typeof triple.collection_id === 'string' ? triple.collection_id : '',
+          name: typeof triple.name === 'string' ? triple.name : '',
+          type: typeof triple.type === 'string' ? triple.type : '',
+        },
+        resolutionPhase: phase,
+      });
+      return;
     }
   }
 

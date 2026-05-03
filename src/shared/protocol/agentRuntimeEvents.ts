@@ -404,6 +404,96 @@ export interface AgentRuntimeMissingModeValuesEvent extends AgentRuntimeBaseEven
 }
 
 /**
+ * Emitted when a Phase 2 strict-mode binding rejects a bare-name string
+ * input (e.g. `set_fill({fill: "$Brand/600"})`). Spec §3.2 / §5.3 — strict
+ * mode requires structured input (object form). Non-fatal at the runtime
+ * level (the tool returns an error envelope), but logged so dashboards
+ * can audit how often the LLM still passes bare names after the cutover.
+ */
+export interface AgentRuntimeBareNameRejectedEvent extends AgentRuntimeBaseEvent {
+  type: 'bare_name_rejected';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  /** Tool that triggered (e.g. "set_fill", "set_stroke"). */
+  tool_name: string;
+  /** Node the binding targeted. */
+  node_id?: string;
+  /** The bare-name string the LLM passed (e.g. "$Brand/600"). */
+  name_query: string;
+  /** Active variableResolution at time of failure — always 'phase2-strict' or 'auto'. */
+  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+}
+
+/**
+ * Emitted when a strict-mode binding's `{variable_id}` form fails because
+ * the variable was deleted, renamed, or had its values/collection mutated
+ * since the assertion was captured. Spec §3.2 / §4.1.c. The `expected_*`
+ * fields surface what the agent thought the variable was; `actual_*`
+ * surfaces the live state.
+ */
+export interface AgentRuntimeStaleVariableIdEvent extends AgentRuntimeBaseEvent {
+  type: 'stale_variable_id';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  tool_name: string;
+  node_id?: string;
+  variable_id: string;
+  /** When the failure was a name-mismatch assertion. */
+  expected_name?: string;
+  /** Live name (when assertion failed on name). */
+  actual_name?: string;
+  /** When the failure was a fingerprint-mismatch assertion. */
+  expected_fingerprint?: string;
+  /** Live fingerprint (when assertion failed on fingerprint). */
+  actual_fingerprint?: string;
+  /** Differentiates "variable deleted" from "variable mutated". */
+  reason: 'variable_missing' | 'name_mismatch' | 'fingerprint_mismatch';
+  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+}
+
+/**
+ * Emitted when a strict-mode binding's `{collection_id, name, type}` triple
+ * matches 2+ variables — hard failure in strict mode (vs Phase 1's
+ * AMBIGUOUS_NAME_AUTOPICK soft warning, which still binds the first match).
+ * Spec §3.2 / §4.1.b.
+ */
+export interface AgentRuntimeAmbiguousVariableReferenceEvent extends AgentRuntimeBaseEvent {
+  type: 'ambiguous_variable_reference';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  tool_name: string;
+  node_id?: string;
+  /** The triple the agent passed. */
+  query: { collection_id: string; name: string; type: string };
+  /** All matches with full metadata. */
+  candidates: Array<{
+    variable_id: string;
+    name: string;
+    collection_id: string;
+    collection_name?: string;
+    type?: string;
+    mode_coverage?: string[];
+    source: 'preexisting' | 'created_this_turn';
+  }>;
+  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+}
+
+/**
+ * Emitted when a strict-mode binding's `{collection_id, name, type}` triple
+ * matches no variables. Spec §4.1 (paired with VARIABLE_NOT_FOUND error
+ * code). The recommended recovery is `ensure_variable` with the same triple.
+ */
+export interface AgentRuntimeVariableNotFoundEvent extends AgentRuntimeBaseEvent {
+  type: 'variable_not_found';
+  phase: AgentRuntimePhase;
+  iteration?: number;
+  tool_name: string;
+  node_id?: string;
+  query: { collection_id: string; name: string; type: string };
+  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+}
+
+/**
  * Emitted when MISSING_MODE_VALUES failures attributed as "likely false
  * positives" cross a per-session threshold (currently 3 within one session).
  * Phase 2 step 7 of the variable resolver redesign — surfaces a signal that
@@ -504,7 +594,11 @@ export type AgentRuntimeEvent =
   | AgentRuntimeHookPerfEvent
   | AgentRuntimeAmbiguousAutopickEvent
   | AgentRuntimeMissingModeValuesEvent
-  | AgentRuntimeRollbackSignalEvent;
+  | AgentRuntimeRollbackSignalEvent
+  | AgentRuntimeBareNameRejectedEvent
+  | AgentRuntimeStaleVariableIdEvent
+  | AgentRuntimeAmbiguousVariableReferenceEvent
+  | AgentRuntimeVariableNotFoundEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -532,5 +626,9 @@ export type AgentRuntimeEventType =
   | 'hook_perf'
   | 'ambiguous_autopick'
   | 'missing_mode_values'
-  | 'rollback_signal';
+  | 'rollback_signal'
+  | 'bare_name_rejected'
+  | 'stale_variable_id'
+  | 'ambiguous_variable_reference'
+  | 'variable_not_found';
 

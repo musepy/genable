@@ -18,6 +18,15 @@ import { handleGetScreenshot } from './screenshotHandler';
 import { handleDescribe } from './describeHandler';
 import { handleEdit } from './editHandler';
 import { handleScanTokens } from './tokenScanner';
+import {
+  resolveStrictBinding,
+  isBareNameString,
+  isByIdInput,
+  isByTripleInput,
+  isColorInput,
+  type StrictRejectResult,
+} from '../../engine/actions/handlers/strictResolver';
+import { getVariableResolutionMode } from '../../engine/actions/handlers/modeCoverageCheck';
 // verb_noun tool adapters
 import { handleReplaceProps } from './searchAdapter';
 import { handleGrep } from './searchHandlers';
@@ -69,14 +78,112 @@ export async function handleSetText(parameters: any): Promise<ToolResponse> {
   });
 }
 
+/**
+ * Translate strict-mode binding inputs (object form for `fill` / `bg`) into
+ * a downstream `edit({props: {fill|bg: <legacy-token>}})` call. When the
+ * resolver returns a Variable, we hand the existing variableBindingHandler
+ * a collection-qualified `$Collection/Name` ref — that key is unique in the
+ * cache so the handler binds to the exact resolved variable (never the
+ * orphan or wrong same-name).
+ *
+ * Bare-name strings under 'phase2-strict' are rejected up front (spec §3.2);
+ * raw hex strings stay as-is. Other modes (phase1, phase2-mode-coverage)
+ * pass strings through unchanged for backward compat.
+ *
+ * Side effects: emits Phase 0 rejection envelopes inline. Caller wraps the
+ * envelope into a ToolResponse.
+ */
+async function resolveBindingArgForLegacyEdit(
+  raw: unknown,
+  context: { tool: 'set_fill' | 'set_stroke'; node_id: string; bind_field: 'fill' | 'stroke' },
+): Promise<{ kind: 'pass'; legacyValue: any } | { kind: 'reject'; reject: StrictRejectResult }> {
+  const mode = getVariableResolutionMode();
+  // Spec §5.4: 'auto' is reserved for Phase 3 of the rollout and behaves
+  // as 'phase2-mode-coverage' until the auto-rollback path lands. Only
+  // 'phase2-strict' triggers strict bare-name rejection here.
+  const strict = mode === 'phase2-strict';
+
+  // Object form is ONLY interpreted by the strict resolver. In legacy mode
+  // we still honour it (otherwise the caller has no way to express the new
+  // form pre-cutover), but we go through the same resolver.
+  const isObject = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
+  const looksStructured = isObject && (isByIdInput(raw) || isByTripleInput(raw) || isColorInput(raw));
+
+  if (looksStructured) {
+    const resolved = await resolveStrictBinding(raw, context);
+    if (resolved.kind === 'reject') return { kind: 'reject', reject: resolved };
+    if (resolved.kind === 'color') return { kind: 'pass', legacyValue: resolved.hex };
+    if (resolved.kind === 'variable') {
+      // Build collection-qualified bare-name so the existing
+      // variableBindingHandler binds the EXACT resolved variable (qualified
+      // keys disambiguate same-name entries across collections — see
+      // variableBindingHandler.ts:50-56).
+      const variable = resolved.variable;
+      const collection = await figma.variables.getVariableCollectionByIdAsync(
+        variable.variableCollectionId,
+      );
+      const collName = collection?.name ?? '';
+      const qualified = collName ? `${collName}/${variable.name}` : variable.name;
+      return { kind: 'pass', legacyValue: `$${qualified}` };
+    }
+  }
+
+  if (strict && isBareNameString(raw)) {
+    const resolved = await resolveStrictBinding(raw, context);
+    if (resolved.kind === 'reject') return { kind: 'reject', reject: resolved };
+  }
+
+  // Non-strict modes (phase1 / phase2-mode-coverage) pass strings through
+  // unchanged — bare-name resolution still happens via variableBindingHandler.
+  return { kind: 'pass', legacyValue: raw };
+}
+
+/**
+ * Convert a strict resolver rejection into a ToolResponse.error envelope.
+ * Spec §4.1 — `recommended_next_action` rides in `data` so the LLM can
+ * read it without parsing the error string. The runtime separately emits
+ * the corresponding event in afterToolExec.
+ */
+function rejectionToResponse(reject: StrictRejectResult): ToolResponse {
+  return {
+    error: reject.message,
+    data: {
+      code: reject.code,
+      ...(reject.recommended_next_action !== undefined
+        ? { recommended_next_action: reject.recommended_next_action }
+        : {}),
+      ...(reject.candidates !== undefined ? { candidates: reject.candidates } : {}),
+      ...(reject.actual_name !== undefined ? { actual_name: reject.actual_name } : {}),
+      ...(reject.actual_fingerprint !== undefined ? { actual_fingerprint: reject.actual_fingerprint } : {}),
+    },
+  };
+}
+
 export async function handleSetFill(parameters: any): Promise<ToolResponse> {
   if (!parameters.node) {
     return { error: 'set_fill requires "node" parameter.' };
   }
 
   const props: Record<string, any> = {};
-  if (parameters.fill !== undefined) props.fill = parameters.fill;
-  if (parameters.bg !== undefined) props.bg = parameters.bg;
+
+  if (parameters.fill !== undefined) {
+    const r = await resolveBindingArgForLegacyEdit(parameters.fill, {
+      tool: 'set_fill',
+      node_id: String(parameters.node),
+      bind_field: 'fill',
+    });
+    if (r.kind === 'reject') return rejectionToResponse(r.reject);
+    props.fill = r.legacyValue;
+  }
+  if (parameters.bg !== undefined) {
+    const r = await resolveBindingArgForLegacyEdit(parameters.bg, {
+      tool: 'set_fill',
+      node_id: String(parameters.node),
+      bind_field: 'fill',
+    });
+    if (r.kind === 'reject') return rejectionToResponse(r.reject);
+    props.bg = r.legacyValue;
+  }
 
   if (Object.keys(props).length === 0) {
     return { error: 'set_fill requires at least one of: fill, bg.' };
@@ -89,17 +196,68 @@ export async function handleSetStroke(parameters: any): Promise<ToolResponse> {
   if (!parameters.node) {
     return { error: 'set_stroke requires "node" parameter.' };
   }
+  const nodeId = String(parameters.node);
+  const mode = getVariableResolutionMode();
+  // Spec §5.4: 'auto' is reserved for Phase 3 of the rollout and behaves
+  // as 'phase2-mode-coverage' until the auto-rollback path lands. Only
+  // 'phase2-strict' triggers strict bare-name rejection here.
+  const strict = mode === 'phase2-strict';
 
   const props: Record<string, any> = {};
 
-  // Shorthand mode: "1 #E0E0E0 inside"
+  // ── Shorthand string mode: "1 #E0E0E0 inside" ──
+  // The shorthand parser in expandShorthands.ts splits by whitespace and
+  // assigns each part by prefix (# = color, digit = weight, otherwise =
+  // align). Bare-name "$Token" parts have NO branch — they fall into
+  // `strokeAlign = p.toUpperCase()` and silently drop the binding. We
+  // detect this case at the boundary so strict mode rejects it cleanly,
+  // and (in non-strict mode) we can still pull the variable ref out and
+  // hand it to the resolver path the same way `color` does.
   if (parameters.stroke !== undefined) {
+    if (typeof parameters.stroke !== 'string') {
+      return { error: 'set_stroke "stroke" must be a string shorthand. For variable bindings, use color={variable_id|...} instead.' };
+    }
+    // Detect bare-name token inside the shorthand (the round-2 parser bug).
+    const hasBareName = (parameters.stroke as string).split(/\s+/).some((p: string) => p.startsWith('$'));
+    if (hasBareName && strict) {
+      return rejectionToResponse({
+        kind: 'reject',
+        code: 'BARE_NAME_REJECTED_PHASE2',
+        message:
+          `Stroke shorthand "${parameters.stroke}" contains a bare-name token. ` +
+          `Phase 2 strict mode rejects this — pass {color: {variable_id: "..."}} (or {collection_id, name, type}) ` +
+          `as the structured form instead. The shorthand parser silently drops bare-name tokens.`,
+        recommended_next_action: {
+          tool: 'set_stroke',
+          args: {
+            node: nodeId,
+            color: { variable_id: '<look-up-via-list_variables>' },
+            ...(parameters.stroke.match(/\b(\d+(?:\.\d+)?)\b/) ? { weight: Number(RegExp.$1) } : {}),
+          },
+        },
+      });
+    }
     props.stroke = parameters.stroke;
   } else {
-    // Explicit fields → compose shorthand
+    // ── Explicit fields → compose shorthand ──
+    // Resolve `color` via the strict resolver if it's an object form (or
+    // a bare-name in strict mode). Resolved variables turn into
+    // collection-qualified `$Coll/Name` so the existing variableBindingHandler
+    // can bind the exact resolved variable; raw hex / passthrough is unchanged.
+    let colorPart: string | undefined;
+    if (parameters.color !== undefined) {
+      const r = await resolveBindingArgForLegacyEdit(parameters.color, {
+        tool: 'set_stroke',
+        node_id: nodeId,
+        bind_field: 'stroke',
+      });
+      if (r.kind === 'reject') return rejectionToResponse(r.reject);
+      colorPart = String(r.legacyValue);
+    }
+
     const parts: string[] = [];
     if (parameters.weight !== undefined) parts.push(String(parameters.weight));
-    if (parameters.color !== undefined) parts.push(parameters.color);
+    if (colorPart !== undefined) parts.push(colorPart);
     if (parameters.align !== undefined) parts.push(parameters.align);
 
     if (parts.length === 0) {

@@ -47,13 +47,24 @@ export const setFillDefinition: ToolDefinition = {
   set_fill({node: "1:2", bg: "#1A1A1A", fill: "#FFFFFF"})
 
 fill = text color or shape fill. bg = frame background.
-For stroke color, use set_stroke.`,
+For stroke color, use set_stroke.
+
+Variable bindings (structured form, recommended):
+  set_fill({node: "1:2", bg: {variable_id: "VariableID:1:5"}})
+  set_fill({node: "1:2", bg: {collection_id: "VariableCollectionId:1:1", name: "Bg/Surface", type: "COLOR"}})
+
+Bare-name strings ("$Brand/600") and hex strings still work in the current
+default mode. When the resolver advances to phase2-strict, structured form
+will be required (bare-name → BARE_NAME_REJECTED_PHASE2).`,
   parameters: {
     type: 'object',
     properties: {
       node: { type: 'string', description: 'Node ID' },
-      fill: { type: 'string', description: 'Text color or shape fill (hex)' },
-      bg:   { type: 'string', description: 'Background color (hex, "transparent", or gradient)' },
+      // Schema accepts both string and object forms — JSON Schema unions are
+      // rare in this codebase; we declare type:'string' for back-compat with
+      // existing tooling and document the object form in the description.
+      fill: { type: 'string', description: 'Text color or shape fill — hex ("#FFF"), bare-name ("$Text/Primary"), or object {variable_id} | {collection_id, name, type} | {color}' },
+      bg:   { type: 'string', description: 'Background — hex, "transparent", gradient, or object {variable_id} | {collection_id, name, type} | {color}' },
     },
     required: ['node'],
   },
@@ -71,13 +82,23 @@ export const setStrokeDefinition: ToolDefinition = {
   set_stroke({node: "1:2", stroke: "2 #333 inside"})
   set_stroke({node: "1:2", color: "#E0E0E0", weight: 1, align: "inside"})
 
-Shorthand: "weight color align" (e.g. "1 #E0E0E0 inside").`,
+Shorthand: "weight color align" (e.g. "1 #E0E0E0 inside").
+
+Variable bindings (structured form, recommended — fixes the round-2
+shorthand parser bug where "1 $Brand/600" silently dropped the binding):
+  set_stroke({node: "1:2", color: {variable_id: "VariableID:1:5"}, weight: 1, align: "inside"})
+  set_stroke({node: "1:2", color: {collection_id: "VariableCollectionId:1:1", name: "Border/Default", type: "COLOR"}, weight: 1})
+
+Bare-name shorthand ("1 $Brand/600") still works in the current default
+mode but loses the binding silently. When the resolver advances to
+phase2-strict, the bare-name path is REJECTED — pass the structured form
+above to bind a variable to a stroke color.`,
   parameters: {
     type: 'object',
     properties: {
       node:   { type: 'string', description: 'Node ID' },
-      stroke: { type: 'string', description: 'Shorthand: "1 #E0E0E0 inside"' },
-      color:  { type: 'string', description: 'Stroke color (hex)' },
+      stroke: { type: 'string', description: 'Shorthand: "1 #E0E0E0 inside" — single-string form. Bare-name "$Token" inside the shorthand silently drops the binding; prefer color={...} structured form for variables.' },
+      color:  { type: 'string', description: 'Stroke color — hex ("#E0E0E0"), bare-name ("$Brand/600"), or object {variable_id} | {collection_id, name, type} | {color}' },
       weight: { type: 'number', description: 'Stroke weight in px' },
       align:  { type: 'string', enum: ['inside', 'outside', 'center'], description: 'Stroke alignment relative to the frame edge' },
     },

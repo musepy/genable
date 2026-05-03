@@ -8,7 +8,7 @@
 import { DEFAULT_PROVIDER_CAPABILITIES, LLMProvider, LLMMessage, LLMResponse, ToolCallBlock } from '../llm-client/providers/types';
 import { ToolDefinition } from './tools';
 import { ToolCallMode } from './agentLoopPolicy';
-import { EmptyResponseError } from '../llm-client/providers/shared/providerErrors';
+import { EmptyResponseError, isProviderError, APIError } from '../llm-client/providers/shared/providerErrors';
 import { withRetry } from '../llm-client/providers/shared/withRetry';
 
 
@@ -295,6 +295,26 @@ export class LLMGenerationCoordinator {
         success: false,
         errorMessage,
       });
+
+      // Categorized provider failure event — sibling to llm_response so
+      // dashboards can distinguish transport / api / content issues without
+      // string-matching errorMessage. Only fired for typed ProviderErrors;
+      // generic exceptions (TypeError, etc.) stay covered by llm_response.
+      if (isProviderError(err)) {
+        this.config.emitRuntimeEvent({
+          type: 'provider_error',
+          llmCallId,
+          iteration: iteration + 1,
+          phase: 'execution',
+          providerName: err.providerName,
+          category: err.category,
+          errorClass: err.constructor.name,
+          message: err.message,
+          userActionable: err.userActionable,
+          httpStatus: err instanceof APIError ? err.statusCode : undefined,
+        });
+      }
+
       throw err;
     }
   }

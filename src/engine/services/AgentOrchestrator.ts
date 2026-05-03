@@ -122,10 +122,13 @@ export class AgentOrchestrator {
       this.activeAgent.mergeToolExecutors(pluginData.toolExecutors);
     }
 
+    // Track outside the try so the catch block can include durationMs in the
+    // abort event without re-resolving against an out-of-scope variable.
+    const startTime = Date.now();
+
     try {
       // Selection is now an opt-in tool (get_selection) — no auto-injection here.
       this.options.onStatusChange?.('Agent starting...');
-      const startTime = Date.now();
       const finalResponse = await this.activeAgent.run(prompt);
       const latencyMs = Date.now() - startTime;
 
@@ -169,9 +172,38 @@ export class AgentOrchestrator {
       // Provider errors carry user-actionable flag + Chinese userMessage from
       // the typed-error layer. Surface those directly to the UI banner.
       if (isProviderError(error)) {
-        this.handleProviderError(error);
+        this.handleProviderError(error, startTime);
       } else {
         const reason = error?.message || 'Generation stopped unexpectedly';
+        // Map exitReason to abort category. 'error' has no specific category
+        // signal at this layer (ProviderErrors went down the other branch);
+        // 'unknown' lets dashboards group these as "untyped runtime exception".
+        const abortCategory =
+          exitReason === 'max_iterations' ? 'max_iterations' as const
+          : exitReason === 'abort' ? 'hook_abort' as const
+          : 'unknown' as const;
+        const stats = this.activeAgent?.getRunStats();
+        this.emitFallbackRuntimeEvent({
+          type: 'abort',
+          phase: 'idle',
+          reason,
+          category: abortCategory,
+          iteration: this.activeAgent?.getCurrentIteration(),
+          toolCallsExecuted: stats?.toolCallCount,
+          durationMs: Date.now() - startTime,
+        });
+        // Extended diagnostic event — sibling to the user-facing turn_end.
+        this.emitFallbackRuntimeEvent({
+          type: 'error',
+          phase: 'idle',
+          message: reason,
+          code: 'UNKNOWN_ERROR',
+          category: 'unknown',
+          provider: this.options.providerName,
+          originalMessage: error?.message,
+          userActionable: false,
+          stack: typeof error?.stack === 'string' ? error.stack.slice(0, 2000) : undefined,
+        });
         this.emitFallbackRuntimeEvent({
           type: 'status',
           phase: 'idle',
@@ -514,21 +546,51 @@ Be specific — name exact tools, parameters, and error messages. Keep it under 
    * should show an actionable banner — `userActionable` + `userMessage` are
    * set at the source and propagate unchanged.
    */
-  private handleProviderError(error: ProviderError): void {
+  private handleProviderError(error: ProviderError, startTime?: number): void {
     const code = providerErrorToCode(error);
     const technicalMessage = error.message;
     const userMessage = error.userMessage;
 
     if (error.userActionable) {
+      // Actionable: UI banner + retry CTA. The error event carries diagnostic
+      // detail; the user-facing message stays in `message`.
       this.emitFallbackRuntimeEvent({
         type: 'error',
         phase: 'idle',
         message: userMessage,
         code,
+        category: error.category,
+        provider: error.providerName,
+        originalMessage: technicalMessage,
+        userActionable: true,
       });
       this.options.onError?.(userMessage);
       console.warn(`[AgentOrchestrator] ${code}: ${technicalMessage}`);
     } else {
+      // Non-actionable: previously emitted only status + turn_end, leaving
+      // operators with no telemetry on why the run stopped. Now emits abort
+      // (with category) + error (with provider/category) before the existing
+      // user-facing pair.
+      const abortCategory = error.category === 'transport' ? 'network' as const : 'provider_error' as const;
+      this.emitFallbackRuntimeEvent({
+        type: 'abort',
+        phase: 'idle',
+        reason: userMessage,
+        category: abortCategory,
+        iteration: this.activeAgent?.getCurrentIteration(),
+        toolCallsExecuted: this.activeAgent?.getRunStats().toolCallCount,
+        durationMs: typeof startTime === 'number' ? Date.now() - startTime : undefined,
+      });
+      this.emitFallbackRuntimeEvent({
+        type: 'error',
+        phase: 'idle',
+        message: userMessage,
+        code,
+        category: error.category,
+        provider: error.providerName,
+        originalMessage: technicalMessage,
+        userActionable: false,
+      });
       this.emitFallbackRuntimeEvent({
         type: 'status',
         phase: 'idle',

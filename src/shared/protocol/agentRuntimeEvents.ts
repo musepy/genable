@@ -125,6 +125,64 @@ export interface AgentRuntimeErrorEvent extends AgentRuntimeBaseEvent {
   iteration?: number;
   message: string;
   code?: string;
+  /** ProviderErrorCategory or 'unknown' for non-provider exceptions. */
+  category?: 'transport' | 'protocol' | 'api' | 'content' | 'unknown';
+  provider?: string;
+  /** Raw error.message before friendly translation. */
+  originalMessage?: string;
+  userActionable?: boolean;
+  /** Truncated stack for diagnosis (dev-only). */
+  stack?: string;
+}
+
+/**
+ * Emitted at the start of a new agent run (turn). Pairs with `turn_end` for
+ * external tooling that needs explicit turn boundaries — `iteration_start`
+ * fires per LLM call, not per turn.
+ */
+export interface AgentRuntimeTurnStartEvent extends AgentRuntimeBaseEvent {
+  type: 'turn_start';
+  phase: 'execution';
+  /** 1-based, monotonically increasing per AgentRuntime instance. */
+  turnNumber: number;
+  /** First ~200 chars of the user prompt for this turn. */
+  promptPreview?: string;
+}
+
+/**
+ * Emitted when a run terminates abnormally (error, max iterations, hook abort,
+ * provider exhaustion). Distinct from `canceled` (user-initiated cancel) and
+ * from `error` (lower-level error notification). Carries enough context for
+ * post-hoc diagnosis.
+ */
+export interface AgentRuntimeAbortEvent extends AgentRuntimeBaseEvent {
+  type: 'abort';
+  phase: AgentRuntimePhase;
+  reason: string;
+  category: 'network' | 'provider_error' | 'hook_abort' | 'budget' | 'max_iterations' | 'unknown';
+  iteration?: number;
+  toolCallsExecuted?: number;
+  durationMs?: number;
+}
+
+/**
+ * Emitted at the LLM-generation chokepoint when a provider call fails after
+ * retry exhaustion (or fails non-retryably). Categorizes by ProviderError
+ * subclass so dashboards can distinguish transport / api / content failures.
+ */
+export interface AgentRuntimeProviderErrorEvent extends AgentRuntimeBaseEvent {
+  type: 'provider_error';
+  phase: 'execution';
+  iteration: number;
+  llmCallId: string;
+  providerName: string;
+  category: 'transport' | 'protocol' | 'api' | 'content';
+  /** Constructor name (e.g. ConnectTimeoutError, APIError). */
+  errorClass: string;
+  message: string;
+  userActionable?: boolean;
+  /** Present when err is APIError. */
+  httpStatus?: number;
 }
 
 export interface AgentRuntimeTurnEndEvent extends AgentRuntimeBaseEvent {
@@ -262,7 +320,10 @@ export type AgentRuntimeEvent =
   | AgentRuntimeReasoningDeltaEvent
   | AgentRuntimeTextDeltaEvent
   | AgentRuntimeErrorEvent
+  | AgentRuntimeTurnStartEvent
   | AgentRuntimeTurnEndEvent
+  | AgentRuntimeAbortEvent
+  | AgentRuntimeProviderErrorEvent
   | AgentRuntimeRetryEvent
   | AgentRuntimeAskUserQuestionEvent
   | AgentRuntimeCanceledEvent
@@ -280,7 +341,10 @@ export type AgentRuntimeEventType =
   | 'reasoning_delta'
   | 'text_delta'
   | 'error'
+  | 'turn_start'
   | 'turn_end'
+  | 'abort'
+  | 'provider_error'
   | 'retry'
   | 'ask_user_question'
   | 'canceled'

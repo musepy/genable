@@ -61,10 +61,13 @@ export interface AgentBehaviorConfig {
 
   /**
    * Variable-resolver phase. See VariableResolutionMode.
-   * Default: 'phase2-strict' — full Phase 2 cutover (steps 5+6). Bare-name
-   * binding rejected at the tool boundary; structured object form required.
-   * 'phase2-mode-coverage' / 'phase1' remain available as rollback escape
-   * valves via explicit override.
+   * Default: 'phase2-mode-coverage' — bare-name binding still works (Phase 1
+   * warn_pick_record), with mode-coverage validation enforced at the tool
+   * boundary. 'phase2-strict' remains an opt-in pending a real strict-mode
+   * E2E validation cycle (the May 2026 cutover attempt produced a silent-
+   * black fill regression because string-mode providers stringified the
+   * structured `{variable_id}` object form taught in setter descriptions —
+   * see commits a13ab4a / 05774dc and the May 2026 revert).
    */
   variableResolution: VariableResolutionMode;
 }
@@ -76,7 +79,7 @@ export interface AgentBehaviorConfig {
 export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   thinkingLevel: 'minimal',
   maxIterations: 80,
-  variableResolution: 'phase2-strict',
+  variableResolution: 'phase2-mode-coverage',
 };
 
 /**

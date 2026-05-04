@@ -49,22 +49,14 @@ export const setFillDefinition: ToolDefinition = {
 fill = text color or shape fill. bg = frame background.
 For stroke color, use set_stroke.
 
-Variable bindings (structured form, recommended):
-  set_fill({node: "1:2", bg: {variable_id: "VariableID:1:5"}})
-  set_fill({node: "1:2", bg: {collection_id: "VariableCollectionId:1:1", name: "Bg/Surface", type: "COLOR"}})
-
-Bare-name strings ("$Brand/600") and hex strings still work in the current
-default mode. When the resolver advances to phase2-strict, structured form
-will be required (bare-name → BARE_NAME_REJECTED_PHASE2).`,
+To bind a variable: pass its qualified bare name as a string (e.g. "$Surface/Card").`,
   parameters: {
     type: 'object',
     properties: {
       node: { type: 'string', description: 'Node ID' },
-      // Schema accepts both string and object forms — JSON Schema unions are
-      // rare in this codebase; we declare type:'string' for back-compat with
-      // existing tooling and document the object form in the description.
-      fill: { type: 'string', description: 'Text color or shape fill — hex ("#FFF"), bare-name ("$Text/Primary"), or object {variable_id} | {collection_id, name, type} | {color}' },
-      bg:   { type: 'string', description: 'Background — hex, "transparent", gradient, or object {variable_id} | {collection_id, name, type} | {color}' },
+      // Strings only — see varTool.ts ensure_variable for ID-form workflow
+      fill: { type: 'string', description: 'Text color or shape fill — hex ("#FFF") or qualified bare-name token ("$Text/Primary")' },
+      bg:   { type: 'string', description: 'Background — hex, "transparent", gradient string, or qualified bare-name token ("$Bg/Surface")' },
     },
     required: ['node'],
   },
@@ -84,21 +76,17 @@ export const setStrokeDefinition: ToolDefinition = {
 
 Shorthand: "weight color align" (e.g. "1 #E0E0E0 inside").
 
-Variable bindings (structured form, recommended — fixes the round-2
-shorthand parser bug where "1 $Brand/600" silently dropped the binding):
-  set_stroke({node: "1:2", color: {variable_id: "VariableID:1:5"}, weight: 1, align: "inside"})
-  set_stroke({node: "1:2", color: {collection_id: "VariableCollectionId:1:1", name: "Border/Default", type: "COLOR"}, weight: 1})
-
-Bare-name shorthand ("1 $Brand/600") still works in the current default
-mode but loses the binding silently. When the resolver advances to
-phase2-strict, the bare-name path is REJECTED — pass the structured form
-above to bind a variable to a stroke color.`,
+To bind a variable to the stroke color, pass it via the explicit \`color\`
+field as a qualified bare name (e.g. color: "$Border/Default"). The
+shorthand parser silently drops bare-name tokens, so do not use the
+"1 $Brand/600" shorthand for variable bindings.`,
   parameters: {
     type: 'object',
     properties: {
       node:   { type: 'string', description: 'Node ID' },
-      stroke: { type: 'string', description: 'Shorthand: "1 #E0E0E0 inside" — single-string form. Bare-name "$Token" inside the shorthand silently drops the binding; prefer color={...} structured form for variables.' },
-      color:  { type: 'string', description: 'Stroke color — hex ("#E0E0E0"), bare-name ("$Brand/600"), or object {variable_id} | {collection_id, name, type} | {color}' },
+      stroke: { type: 'string', description: 'Shorthand: "1 #E0E0E0 inside" — single-string form. Hex only; for variable bindings use the explicit color field.' },
+      // Strings only — see varTool.ts ensure_variable for ID-form workflow
+      color:  { type: 'string', description: 'Stroke color — hex ("#E0E0E0") or qualified bare-name token ("$Border/Default")' },
       weight: { type: 'number', description: 'Stroke weight in px' },
       align:  { type: 'string', enum: ['inside', 'outside', 'center'], description: 'Stroke alignment relative to the frame edge' },
     },

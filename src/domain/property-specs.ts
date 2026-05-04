@@ -129,8 +129,11 @@ export function parsePaintToFigma(input: string | Record<string, any>): any {
     return { type: 'SOLID', color: { r, g, b }, opacity: typeof a === 'number' ? a : 1 };
   }
 
-  // Fallback
-  return { type: 'SOLID', color: { r: 0, g: 0, b: 0 }, opacity: 1 };
+  // Unknown shape — THROW. Silent-black fallback was a latent bug (May 2026
+  // cutover analysis) that swallowed upstream param-shape mistakes such as
+  // stringified `{variable_id:"..."}` objects masquerading as paint inputs.
+  // paintHandler.apply() catches and surfaces this as PAINT_INVALID.
+  throw new Error(`parsePaintToFigma: cannot interpret input as paint: ${JSON.stringify(input).slice(0, 120)}`);
 }
 
 /**

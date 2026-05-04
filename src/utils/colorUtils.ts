@@ -18,7 +18,10 @@ export interface RGBA extends RGB {
 
 /**
  * Hex string → RGBA (0-1 range).
- * Accepts #RGB, #RRGGBB, #RRGGBBAA. Invalid input returns black.
+ * Accepts #RGB, #RRGGBB, #RRGGBBAA. Invalid input THROWS — silent-black
+ * fallbacks were a latent bug (May 2026 cutover analysis) that masked
+ * upstream param-shape mistakes (e.g. stringified `{variable_id}` objects
+ * flowing into the paint pipeline).
  */
 export function parseHexToRGBA(hex: string): RGBA {
     const clean = hex.replace('#', '');
@@ -36,11 +39,11 @@ export function parseHexToRGBA(hex: string): RGBA {
         const b = parseInt(clean.slice(4, 6), 16) / 255;
         const a = clean.length === 8 ? parseInt(clean.slice(6, 8), 16) / 255 : 1;
         if (isNaN(r) || isNaN(g) || isNaN(b) || isNaN(a)) {
-            return { r: 0, g: 0, b: 0, a: 1 };
+            throw new Error(`parseHexToRGBA: invalid hex "${hex}"`);
         }
         return { r, g, b, a };
     }
-    return { r: 0, g: 0, b: 0, a: 1 };
+    throw new Error(`parseHexToRGBA: invalid hex "${hex}"`);
 }
 
 /**

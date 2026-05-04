@@ -34,6 +34,7 @@ Instance: <instance ref="Button" variant="Size=Large"/>
 Self-closing: <line w="fill" stroke="#E5E7EB"/> (use line for dividers/separators; rect/ellipse for SMALL pure decoration with no children — page-level backgrounds belong on the parent frame's bg)
 Arc/Ring: <ellipse w={120} h={120} arc="0 270" fill="#4F46E5"/> (arc="start end innerRadius?" — innerRadius 0-1 makes a donut/ring)
 Grid layout: call help({ name: "grid-layout" }) for tracks, gaps, and when row/column is a better fit
+Variable binding: fill/bg/stroke accept qualified bare-name token strings (e.g. bg="$Theme/Bg/Surface"). Object literals (fill={{variable_id:...}}) drop the binding silently — always use the string form.
 
 Swap an existing subtree: jsx({replaceId: "<id>", markup: "..."}) replaces the old node at the same parent and sibling index atomically, preserving position in one call. Markup must have a single root. Use jsx for tree creation; edit for property updates on known nodes.`,
   parameters: {

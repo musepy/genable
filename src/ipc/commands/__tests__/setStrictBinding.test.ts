@@ -1,16 +1,15 @@
 /**
  * @file setStrictBinding.test.ts
- * @description Phase 2 step 5+6 — IPC-level tests for set_fill / set_stroke
- * strict-mode + structured-input behavior.
+ * @description IPC-level tests for set_fill / set_stroke strict-mode +
+ * structured-input behavior.
  *
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §5.3.
  *
  * What this verifies:
- *   - 'phase2-mode-coverage' (rollback escape valve) keeps bare-name
- *     shorthands working (set_stroke "1 $Brand" still flows through, no
- *     rejection).
- *   - 'phase2-strict' (current default) rejects bare-name
- *     (BARE_NAME_REJECTED_PHASE2) before reaching handleEdit.
+ *   - 'mode-coverage' (current default) keeps bare-name shorthands working
+ *     (set_stroke "1 $Brand" still flows through, no rejection).
+ *   - 'strict' (opt-in) rejects bare-name (BARE_NAME_REJECTED_PHASE2)
+ *     before reaching handleEdit.
  *   - Structured object inputs ({variable_id} / {collection_id, name, type}
  *     / {color}) are translated to legacy edit({props}) calls so the
  *     downstream binding pipeline keeps working unchanged.
@@ -74,12 +73,12 @@ function stubFigmaVariables(variables: Variable[], collections = [COLL]) {
 beforeEach(() => {
   mockHandleEdit.mockClear();
   vi.unstubAllGlobals();
-  setVariableResolutionMode('phase2-mode-coverage');
+  setVariableResolutionMode('mode-coverage');
 });
 
 // ─── set_fill ──────────────────────────────────────────────────────────────
 
-describe('handleSetFill — phase2-mode-coverage (rollback escape valve)', () => {
+describe('handleSetFill — mode-coverage (default)', () => {
   it('passes bare-name string through unchanged (backward compat)', async () => {
     stubFigmaVariables([]);
     await handleSetFill({ node: '1:2', bg: '$Bg/Surface' });
@@ -141,8 +140,8 @@ describe('handleSetFill — phase2-mode-coverage (rollback escape valve)', () =>
   });
 });
 
-describe('handleSetFill — phase2-strict', () => {
-  beforeEach(() => setVariableResolutionMode('phase2-strict'));
+describe('handleSetFill — strict', () => {
+  beforeEach(() => setVariableResolutionMode('strict'));
 
   it('rejects bare-name string with BARE_NAME_REJECTED_PHASE2', async () => {
     stubFigmaVariables([]);
@@ -233,7 +232,7 @@ describe('handleSetFill — phase2-strict', () => {
 
 // ─── set_stroke ────────────────────────────────────────────────────────────
 
-describe('handleSetStroke — phase2-mode-coverage (rollback escape valve)', () => {
+describe('handleSetStroke — mode-coverage (default)', () => {
   it('passes shorthand string through unchanged (backward compat for hex)', async () => {
     stubFigmaVariables([]);
     await handleSetStroke({ node: '1:2', stroke: '1 #E0E0E0' });
@@ -292,8 +291,8 @@ describe('handleSetStroke — phase2-mode-coverage (rollback escape valve)', () 
   });
 });
 
-describe('handleSetStroke — phase2-strict', () => {
-  beforeEach(() => setVariableResolutionMode('phase2-strict'));
+describe('handleSetStroke — strict', () => {
+  beforeEach(() => setVariableResolutionMode('strict'));
 
   it('rejects shorthand "1 $Brand/600" with BARE_NAME_REJECTED_PHASE2', async () => {
     stubFigmaVariables([]);

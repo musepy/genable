@@ -398,7 +398,7 @@ export interface AgentRuntimeMissingModeValuesEvent extends AgentRuntimeBaseEven
   /** Modes the variable lacks values for, expressed as mode names. */
   missing_modes: string[];
   /** Current AgentBehaviorConfig.variableResolution at time of failure. */
-  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  resolutionPhase: 'mode-coverage' | 'strict';
   /** Wall-clock ms (Date.now()) at failure point — duplicates `timestamp` for explicit auditing. */
   ts: number;
 }
@@ -420,8 +420,8 @@ export interface AgentRuntimeBareNameRejectedEvent extends AgentRuntimeBaseEvent
   node_id?: string;
   /** The bare-name string the LLM passed (e.g. "$Brand/600"). */
   name_query: string;
-  /** Active variableResolution at time of failure — always 'phase2-strict' or 'auto'. */
-  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  /** Active variableResolution at time of failure — always 'strict' (bare-name reject only fires under strict mode). */
+  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
@@ -448,7 +448,7 @@ export interface AgentRuntimeStaleVariableIdEvent extends AgentRuntimeBaseEvent 
   actual_fingerprint?: string;
   /** Differentiates "variable deleted" from "variable mutated". */
   reason: 'variable_missing' | 'name_mismatch' | 'fingerprint_mismatch';
-  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
@@ -475,7 +475,7 @@ export interface AgentRuntimeAmbiguousVariableReferenceEvent extends AgentRuntim
     mode_coverage?: string[];
     source: 'preexisting' | 'created_this_turn';
   }>;
-  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
@@ -490,19 +490,19 @@ export interface AgentRuntimeVariableNotFoundEvent extends AgentRuntimeBaseEvent
   tool_name: string;
   node_id?: string;
   query: { collection_id: string; name: string; type: string };
-  resolutionPhase: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
  * Emitted when MISSING_MODE_VALUES failures attributed as "likely false
  * positives" cross a per-session threshold (currently 3 within one session).
- * Phase 2 step 7 of the variable resolver redesign — surfaces a signal that
- * `agentBehaviorConfig.variableResolution` may need to be flipped to 'phase1'
- * (the rollback escape valve, §5.4 / §7.2).
+ * Surfaces a signal that the mode-coverage check is firing more often than
+ * expected — historically intended to indicate a need to flip the rollout
+ * setting; today (post-cutover-revert) it's an observability signal that the
+ * caller's variables are missing mode values for the target render mode.
  *
- * This is OBSERVABILITY ONLY — the runtime DOES NOT auto-flip the setting.
- * Auto-rollback lives in Phase 3 of the rollout. The signal lets dev-bridge
- * dashboards / users see the regression before deciding to revert.
+ * This is OBSERVABILITY ONLY — the runtime DOES NOT change behavior in
+ * response.
  *
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §5.4 / §7.2.
  */

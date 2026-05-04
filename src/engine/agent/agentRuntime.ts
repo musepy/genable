@@ -165,7 +165,7 @@ export class AgentRuntime {
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
     // Sync the main-thread mode-coverage checker to the active resolver
-    // phase. Tests + local executors share this realm, so the setter takes
+    // mode. Tests + local executors share this realm, so the setter takes
     // effect immediately. Cross-thread (IPC) sync still happens per-call via
     // `getRuntimeContext` below (toolCallHandler.ts).
     setVariableResolutionMode(this.behaviorConfig.variableResolution);

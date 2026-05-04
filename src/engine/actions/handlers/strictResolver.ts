@@ -1,4 +1,22 @@
 /**
+ * STATUS — opt-in only (post May 2026 cutover revert).
+ * This resolver is invoked exclusively when the runtime is configured with
+ * `agentBehaviorConfig.variableResolution: 'strict'`. The default mode
+ * (`'mode-coverage'`) routes bare-name `"$Token"` strings through the legacy
+ * `variableBindingHandler` (silent-pick first match) and never enters this
+ * file. The May 2026 attempt to flip the default to strict (commits a13ab4a /
+ * 05774dc) was reverted in 56aefe6 because string-mode providers stringified
+ * the structured `{variable_id}` object form taught in setter descriptions,
+ * causing silent-black fills. Strict remains an opt-in pending real E2E
+ * validation.
+ *
+ * Note on naming: the runtime error code `BARE_NAME_REJECTED_PHASE2` keeps
+ * its historical "PHASE2" suffix on purpose — that string is emitted in
+ * tool-response error envelopes and may appear in compressed transcript
+ * history; renaming it could break LLM error-pattern matching. "PHASE2" in
+ * this constant refers to the historical rollout phase (the §3.2 cutover),
+ * not the current `VariableResolutionMode` enum value.
+ *
  * @file strictResolver.ts
  * @description Phase 0 symbol resolution layer for the discriminated-union
  * variable-binding tool inputs (set_fill / set_stroke). Spec
@@ -26,11 +44,11 @@
  * ──────
  * The resolver itself is mode-agnostic — IT ALWAYS RESOLVES the input. The
  * CALLER decides whether to invoke it (strict mode does) or fall back to
- * the legacy bare-name path (phase1 / phase2-mode-coverage do). One
- * exception: the resolver checks bare-name strings ("$Name") and rejects
- * them with BARE_NAME_REJECTED_PHASE2 — the input shape, not the runtime
- * mode, drives that decision. Phase 1 / phase2-mode-coverage callers must
- * not pass strings to this resolver; pass them through the legacy path.
+ * the legacy bare-name path (mode-coverage does). One exception: the
+ * resolver checks bare-name strings ("$Name") and rejects them with
+ * BARE_NAME_REJECTED_PHASE2 — the input shape, not the runtime mode, drives
+ * that decision. Mode-coverage callers must not pass strings to this
+ * resolver; pass them through the legacy path.
  *
  * The fingerprint formula in `computeVariableIdempotencyKey` is used for
  * `expected_fingerprint`. Mismatch = STALE_VARIABLE_ID.
@@ -217,9 +235,8 @@ function computeLiveFingerprint(variable: Variable): string {
 /**
  * Run Phase 0 resolution on a strict-mode binding input. The caller (e.g.
  * handleSetFill) decides whether to invoke this — bare-name rejection is
- * gated on 'phase2-strict' only ('auto' falls back to phase2-mode-coverage
- * until Phase 3 of the rollout lands). Object-form inputs flow through
- * the resolver in any mode (they're additive — the LLM can opt in any time).
+ * gated on 'strict' only. Object-form inputs flow through the resolver in
+ * any mode (they're additive — the LLM can opt in any time).
  *
  * Spec §3.2:
  *   - `{variable_id}` → look up; STALE_VARIABLE_ID if missing or expected_*

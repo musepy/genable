@@ -8,7 +8,6 @@
  *   - Successful bind when mode coverage complete.
  *   - MISSING_MODE_VALUES warning when target mode not covered (default 'all').
  *   - FALLBACK_BINDING warning when variable opts into fallback.
- *   - phase1 escape valve bypasses the check entirely.
  *
  * The regression test variableResolver_regression.test.ts already exercises
  * the multi-match autopick path; here we focus on coverage semantics.
@@ -101,7 +100,7 @@ function setupFixture(opts: FixtureOpts) {
 beforeEach(() => {
   invalidateVariableCache();
   lastBoundVariable = null;
-  setVariableResolutionMode('phase2-mode-coverage');
+  setVariableResolutionMode('mode-coverage');
 });
 
 describe('variableBindingHandler — Phase 2 step 4 mode coverage', () => {
@@ -157,18 +156,8 @@ describe('variableBindingHandler — Phase 2 step 4 mode coverage', () => {
     expect(lastBoundVariable!.id).toBe('VariableID:1:5');
   });
 
-  it('skips coverage check when variableResolution is "phase1"', async () => {
-    setVariableResolutionMode('phase1');
-    const { node } = setupFixture({
-      definedModes: ['Light'],            // Dark missing — would normally fail
-      resolvedModeName: 'Dark',
-    });
-
-    const warnings = await variableBindingHandler.apply(node, 'fills', '$Text/Primary');
-
-    // No MISSING_MODE_VALUES warning under phase1 — escape valve active.
-    expect(warnings.find(w => w.code === 'MISSING_MODE_VALUES')).toBeUndefined();
-    // And the binding DOES happen.
-    expect(lastBoundVariable).not.toBeNull();
-  });
+  // Note: the historical 'phase1' escape valve test was removed when the
+  // phased-rollout enum collapsed to two values post-cutover-revert. Both
+  // 'mode-coverage' and 'strict' now run the coverage check; there is no
+  // setting that bypasses it.
 });

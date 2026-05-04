@@ -77,8 +77,7 @@ function setupFixture(opts: FixtureOpts) {
 }
 
 beforeEach(() => {
-  // Default to step-4-active phase. Each test that exercises phase1 flips it.
-  setVariableResolutionMode('phase2-mode-coverage');
+  setVariableResolutionMode('mode-coverage');
 });
 
 describe('checkModeCoverage — happy path', () => {
@@ -150,19 +149,9 @@ describe('checkModeCoverage — opt-in-fallback', () => {
   });
 });
 
-describe('checkModeCoverage — phase1 escape valve', () => {
-  it('skips the check entirely when resolution mode is "phase1"', async () => {
-    setVariableResolutionMode('phase1');
-    const { node, variable } = setupFixture({
-      // Would normally fail — Dark missing, node renders in Dark.
-      collectionModes: ['Light', 'Dark'],
-      definedModes: ['Light'],
-      resolvedModeName: 'Dark',
-    });
-    const result = await checkModeCoverage(node, variable);
-    expect(result.kind).toBe('pass');
-  });
-});
+// Note: the historical 'phase1' escape valve (which bypassed checkModeCoverage
+// entirely) was removed when the phased-rollout enum collapsed to two values
+// post-cutover-revert. Both 'mode-coverage' and 'strict' now run the check.
 
 describe('validateFallbackReason — structured phrase rule (codex Medium 8)', () => {
   it('rejects non-string', () => {

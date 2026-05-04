@@ -108,14 +108,15 @@ export interface ToolContext {
   sessionId?: string;
   userId?: string;
   /**
-   * Active variable-resolver phase. Spec §5.4 / §7.1. Threaded from
-   * `agentBehaviorConfig.variableResolution` so the main-thread mode-coverage
-   * checker can honor the runtime escape valve. 'phase1' bypasses the
-   * write-time mode coverage check; 'phase2-mode-coverage' and 'phase2-strict'
-   * (default) enable it. Optional — handlers default to 'phase2-strict' when
-   * absent.
+   * Active variable-resolver mode. Spec §5.4 / §7.1. Threaded from
+   * `agentBehaviorConfig.variableResolution` so the main-thread checker
+   * sees the runtime value. Both modes run the write-time mode coverage
+   * check; the modes differ in whether bare-name `"$Token"` strings are
+   * rejected (`'strict'`) or passed through to the legacy binding handler
+   * (`'mode-coverage'`, the default). Optional — handlers default to
+   * `'mode-coverage'` when absent.
    */
-  variableResolution?: 'phase1' | 'phase2-mode-coverage' | 'phase2-strict' | 'auto';
+  variableResolution?: 'mode-coverage' | 'strict';
 }
 
 export type RuntimeValidationMode = 'EXECUTION';

@@ -163,11 +163,11 @@ export const variableBindingHandler: PropertyHandler = {
       warnings.push(await buildAmbiguousAutopickWarning(variable, variables));
     }
 
-    // ── Phase 2 step 4: mode coverage check ──────────────────────────────
+    // ── Mode coverage check ─────────────────────────────────────────────
     // Spec §6: every binding must either (a) have full mode coverage in
     // the target node's resolved mode chain, or (b) belong to an
-    // explicit `opt-in-fallback` variable. Skipped entirely when the
-    // resolution mode is 'phase1' (escape valve, §7.1).
+    // explicit `opt-in-fallback` variable. Both 'mode-coverage' (default)
+    // and 'strict' run this check.
     const coverage = await checkModeCoverage(node, variable);
     if (coverage.kind === 'fail') {
       warnings.push(buildMissingModeValuesWarning({

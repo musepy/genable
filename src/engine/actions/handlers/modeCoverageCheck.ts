@@ -19,14 +19,13 @@
  * via setPluginData — see §6.2).
  *
  * Plumbing — runtime mode flag:
- *   The `agentBehaviorConfig.variableResolution` setting (phase1 /
- *   phase2-mode-coverage / phase2-strict / auto) reaches this main-thread
- *   module via a setter. AgentRuntime calls `setVariableResolutionMode()`
- *   in the sandbox; the IPC dispatcher mirrors the value into the main
- *   thread per-call from `_meta.variableResolution` on tool params (see
- *   `src/ipc/commands/index.ts` `dispatchCommand`).
- *
- * 'phase1' bypasses this check entirely (escape valve, §7.1).
+ *   The `agentBehaviorConfig.variableResolution` setting ('mode-coverage' /
+ *   'strict') reaches this main-thread module via a setter. AgentRuntime
+ *   calls `setVariableResolutionMode()` in the sandbox; the IPC dispatcher
+ *   mirrors the value into the main thread per-call from
+ *   `_meta.variableResolution` on tool params (see `src/ipc/commands/index.ts`
+ *   `dispatchCommand`). Both modes run this check — the modes only differ
+ *   in whether bare-name `"$Token"` strings get rejected at the tool boundary.
  */
 
 import type { Warning } from './types';
@@ -70,10 +69,10 @@ export type ModeCoverageResult =
 // — the constant is duplicated here intentionally to avoid a circular import
 // on agent → handlers → agent.
 
-let currentResolutionMode: VariableResolutionMode = 'phase2-strict';
+let currentResolutionMode: VariableResolutionMode = 'mode-coverage';
 
 /**
- * Set the active variable-resolver phase. Called by AgentRuntime at
+ * Set the active variable-resolver mode. Called by AgentRuntime at
  * construction and by the IPC dispatcher per-call. Tests can call this
  * directly to flip the mode without spinning up an AgentRuntime.
  */
@@ -81,7 +80,7 @@ export function setVariableResolutionMode(mode: VariableResolutionMode): void {
   currentResolutionMode = mode;
 }
 
-/** Read the active variable-resolver phase. */
+/** Read the active variable-resolver mode. */
 export function getVariableResolutionMode(): VariableResolutionMode {
   return currentResolutionMode;
 }
@@ -232,11 +231,8 @@ export async function checkModeCoverage(
   node: SceneNode,
   variable: Variable,
 ): Promise<ModeCoverageResult> {
-  // Phase 1 escape valve: skip the check entirely.
-  if (currentResolutionMode === 'phase1') {
-    return { kind: 'pass' };
-  }
-
+  // Both modes ('mode-coverage', 'strict') run this check — the modes only
+  // differ in bare-name string handling at the tool boundary.
   const result = await findMissingModesAsync(node, variable);
   if (!result) return { kind: 'pass' };
 

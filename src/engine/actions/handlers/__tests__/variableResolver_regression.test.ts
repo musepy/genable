@@ -195,20 +195,20 @@ describe('variableBindingHandler — stale variable silent-pick (REGRESSION)', (
   });
 });
 
-// ── Phase 2 strict mode coverage ─────────────────────────────────────────
+// ── Strict mode coverage ─────────────────────────────────────────────────
 //
 // Same-name fixture, but exercise the strict resolver directly instead of
 // variableBindingHandler. Confirms the §3 strict resolver rejects bare-name
 // with structured envelope (BARE_NAME_REJECTED_PHASE2). The resolver is
 // invoked by handleSetFill / handleSetStroke when
-// `agentBehaviorConfig.variableResolution === 'phase2-strict'`. The legacy
+// `agentBehaviorConfig.variableResolution === 'strict'` (opt-in). The legacy
 // variableBindingHandler path remains untouched in this mode (the IPC
 // boundary catches bare names before they reach the handler).
 
 import { resolveStrictBinding } from '../strictResolver';
 
-describe('strictResolver — Phase 2 cutover (same-name fixture)', () => {
-  it('phase2-strict: rejects bare-name "$Text/Primary" with structured envelope', async () => {
+describe('strictResolver — same-name fixture', () => {
+  it('strict: rejects bare-name "$Text/Primary" with structured envelope', async () => {
     // The IPC handler is what actually invokes resolveStrictBinding; here
     // we exercise the resolver directly to assert the envelope shape that
     // would be relayed to the LLM.
@@ -226,7 +226,7 @@ describe('strictResolver — Phase 2 cutover (same-name fixture)', () => {
     });
   });
 
-  it('phase2-strict: {collection_id, name, type} for the orphan resolves deterministically to the orphan', async () => {
+  it('strict: {collection_id, name, type} for the orphan resolves deterministically to the orphan', async () => {
     const result = await resolveStrictBinding({
       collection_id: ORPHAN_COLLECTION.id,
       name: 'Text/Primary',
@@ -238,7 +238,7 @@ describe('strictResolver — Phase 2 cutover (same-name fixture)', () => {
     expect(result.variable.id).toBe(ORPHAN_VAR.id);
   });
 
-  it('phase2-strict: {collection_id, name, type} for the fresh collection resolves deterministically to the fresh variable', async () => {
+  it('strict: {collection_id, name, type} for the fresh collection resolves deterministically to the fresh variable', async () => {
     const result = await resolveStrictBinding({
       collection_id: FRESH_COLLECTION.id,
       name: 'Text/Primary',
@@ -250,14 +250,13 @@ describe('strictResolver — Phase 2 cutover (same-name fixture)', () => {
     expect(result.variable.id).toBe(FRESH_VAR.id);
   });
 
-  it('phase2-mode-coverage: bare-name "$Text/Primary" still passes through variableBindingHandler (backward compat assertion lives in the FIRST describe block)', () => {
-    // This describe block exists to document the mode contract: in
-    // 'phase2-mode-coverage' (the rollback escape valve, no longer the
-    // default after Phase 2 cutover), the IPC handler does NOT invoke
+  it('mode-coverage: bare-name "$Text/Primary" still passes through variableBindingHandler (backward compat assertion lives in the FIRST describe block)', () => {
+    // This describe block exists to document the mode contract: in the
+    // 'mode-coverage' default, the IPC handler does NOT invoke
     // resolveStrictBinding for bare-name strings — it passes them through
     // to handleEdit → variableBindingHandler unchanged. The actual
     // assertion that the silent-pick still happens lives in the first
-    // describe block above (PHASE 1 warn_pick_record). This placeholder
+    // describe block above (legacy warn_pick_record). This placeholder
     // makes the contract explicit so a future refactor that breaks
     // backward-compat will fail a test that READS like the contract.
     expect(true).toBe(true);

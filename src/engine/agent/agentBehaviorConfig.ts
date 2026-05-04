@@ -25,27 +25,31 @@ import { ThinkingLevel } from '../llm-client/config';
 // ============================================================
 
 /**
- * Variable resolution mode — Phase 2 step 4 + 7 of the variable resolver
- * redesign (docs/knowledge/variable-resolver-design-2026-05.md §5.4 / §9).
+ * Variable resolution mode — two-mode enum for the variable resolver.
  *
- * - 'phase1'                — pre-step-4 behavior. Bare-name binding still
- *   silently picks first match; mode coverage check is SKIPPED. This is the
- *   emergency-rollback escape valve.
- * - 'phase2-mode-coverage'  — step 4 active. Bare-name silent-pick still
- *   occurs (Phase 1 warn_pick_record), but mode coverage validation now
- *   blocks bindings with missing modes and emits MISSING_MODE_VALUES.
- * - 'phase2-strict'         — full Phase 2 (steps 5+6 cutover). Bare-name
- *   bindings rejected at the tool boundary. Not yet wired — gated on §5.2
- *   advance condition.
- * - 'auto'                  — self-managed via rollback metrics. Reserved
- *   for Phase 3 of the rollout; behaves as 'phase2-mode-coverage' until
- *   the auto-rollback path lands.
+ * - 'mode-coverage' (default) — bare-name bindings still resolve via the
+ *   legacy `variableBindingHandler` path (silent-pick first match), AND the
+ *   write-time mode coverage check is enforced (missing modes for the
+ *   target render mode → MISSING_MODE_VALUES error envelope). This is the
+ *   safe everyday default.
+ * - 'strict' (opt-in) — bare-name bindings (`"$Token"`) are rejected at
+ *   the tool boundary with BARE_NAME_REJECTED_PHASE2; only structured
+ *   `{variable_id}` / `{collection_id, name, type}` / `{color}` inputs are
+ *   accepted on set_fill / set_stroke. Mode coverage check still runs.
+ *
+ * Historical context: this used to be a 4-value enum (`phase1` /
+ * `phase2-mode-coverage` / `phase2-strict` / `auto`) tracking the May 2026
+ * rollout of strict mode. The cutover (commits a13ab4a / 05774dc) flipped
+ * the default to `phase2-strict` and broke catastrophically — string-mode
+ * providers stringified the structured `{variable_id}` object form taught
+ * in setter descriptions, causing silent-black fills. The cutover was
+ * reverted (commit 56aefe6) and the dead `phase1` / `auto` values were
+ * removed; what remained collapsed to the two booleans the enum was
+ * always encoding (`bare-name rejection on/off`).
+ *
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §5.4 / §9.
  */
-export type VariableResolutionMode =
-  | 'phase1'
-  | 'phase2-mode-coverage'
-  | 'phase2-strict'
-  | 'auto';
+export type VariableResolutionMode = 'mode-coverage' | 'strict';
 
 export interface AgentBehaviorConfig {
   /**
@@ -60,14 +64,14 @@ export interface AgentBehaviorConfig {
   maxIterations: number;
 
   /**
-   * Variable-resolver phase. See VariableResolutionMode.
-   * Default: 'phase2-mode-coverage' — bare-name binding still works (Phase 1
-   * warn_pick_record), with mode-coverage validation enforced at the tool
-   * boundary. 'phase2-strict' remains an opt-in pending a real strict-mode
-   * E2E validation cycle (the May 2026 cutover attempt produced a silent-
-   * black fill regression because string-mode providers stringified the
-   * structured `{variable_id}` object form taught in setter descriptions —
-   * see commits a13ab4a / 05774dc and the May 2026 revert).
+   * Variable-resolver mode. See VariableResolutionMode.
+   * Default: 'mode-coverage' — bare-name binding still works (legacy
+   * silent-pick path), with mode-coverage validation enforced at the tool
+   * boundary. 'strict' remains an opt-in pending real strict-mode E2E
+   * validation (the May 2026 cutover attempt produced a silent-black fill
+   * regression because string-mode providers stringified the structured
+   * `{variable_id}` object form taught in setter descriptions — see commits
+   * a13ab4a / 05774dc and the May 2026 revert in 56aefe6).
    */
   variableResolution: VariableResolutionMode;
 }
@@ -79,7 +83,7 @@ export interface AgentBehaviorConfig {
 export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
   thinkingLevel: 'minimal',
   maxIterations: 80,
-  variableResolution: 'phase2-mode-coverage',
+  variableResolution: 'mode-coverage',
 };
 
 /**

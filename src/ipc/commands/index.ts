@@ -86,9 +86,9 @@ export async function handleSetText(parameters: any): Promise<ToolResponse> {
  * cache so the handler binds to the exact resolved variable (never the
  * orphan or wrong same-name).
  *
- * Bare-name strings under 'phase2-strict' are rejected up front (spec §3.2);
- * raw hex strings stay as-is. Other modes (phase1, phase2-mode-coverage)
- * pass strings through unchanged for backward compat.
+ * Bare-name strings under 'strict' are rejected up front (spec §3.2);
+ * raw hex strings stay as-is. The 'mode-coverage' default passes strings
+ * through unchanged for backward compat with the legacy binding handler.
  *
  * Side effects: emits Phase 0 rejection envelopes inline. Caller wraps the
  * envelope into a ToolResponse.
@@ -98,14 +98,14 @@ async function resolveBindingArgForLegacyEdit(
   context: { tool: 'set_fill' | 'set_stroke'; node_id: string; bind_field: 'fill' | 'stroke' },
 ): Promise<{ kind: 'pass'; legacyValue: any } | { kind: 'reject'; reject: StrictRejectResult }> {
   const mode = getVariableResolutionMode();
-  // Spec §5.4: 'auto' is reserved for Phase 3 of the rollout and behaves
-  // as 'phase2-mode-coverage' until the auto-rollback path lands. Only
-  // 'phase2-strict' triggers strict bare-name rejection here.
-  const strict = mode === 'phase2-strict';
+  // Only 'strict' triggers strict bare-name rejection here. The default
+  // ('mode-coverage') passes bare-name strings through to the legacy
+  // variableBindingHandler (silent-pick first match).
+  const strict = mode === 'strict';
 
-  // Object form is ONLY interpreted by the strict resolver. In legacy mode
+  // Object form is ONLY interpreted by the strict resolver. In mode-coverage
   // we still honour it (otherwise the caller has no way to express the new
-  // form pre-cutover), but we go through the same resolver.
+  // form), but we go through the same resolver.
   const isObject = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
   const looksStructured = isObject && (isByIdInput(raw) || isByTripleInput(raw) || isColorInput(raw));
 
@@ -133,8 +133,8 @@ async function resolveBindingArgForLegacyEdit(
     if (resolved.kind === 'reject') return { kind: 'reject', reject: resolved };
   }
 
-  // Non-strict modes (phase1 / phase2-mode-coverage) pass strings through
-  // unchanged — bare-name resolution still happens via variableBindingHandler.
+  // Mode-coverage default passes strings through unchanged — bare-name
+  // resolution still happens via variableBindingHandler.
   return { kind: 'pass', legacyValue: raw };
 }
 
@@ -198,10 +198,10 @@ export async function handleSetStroke(parameters: any): Promise<ToolResponse> {
   }
   const nodeId = String(parameters.node);
   const mode = getVariableResolutionMode();
-  // Spec §5.4: 'auto' is reserved for Phase 3 of the rollout and behaves
-  // as 'phase2-mode-coverage' until the auto-rollback path lands. Only
-  // 'phase2-strict' triggers strict bare-name rejection here.
-  const strict = mode === 'phase2-strict';
+  // Only 'strict' triggers strict bare-name rejection here. The default
+  // ('mode-coverage') passes bare-name strings through to the legacy
+  // variableBindingHandler (silent-pick first match).
+  const strict = mode === 'strict';
 
   const props: Record<string, any> = {};
 

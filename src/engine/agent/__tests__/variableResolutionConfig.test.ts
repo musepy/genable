@@ -1,20 +1,20 @@
 /**
  * @file variableResolutionConfig.test.ts
- * @description Phase 2 step 7 tests for the `variableResolution` settings flag.
+ * @description Tests for the `variableResolution` settings flag (post May
+ * 2026 phased-rollout collapse — see agentBehaviorConfig.ts JSDoc for the
+ * historical context).
  *
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §7.1.
  *
  * Asserts:
- *   1. The flag's default in `AgentBehaviorConfig` is
- *      "phase2-mode-coverage" — the May 2026 strict cutover (commits a13ab4a /
- *      05774dc) was reverted because string-mode providers stringified the
- *      structured `{variable_id}` object form taught in setter descriptions,
- *      causing silent-black fills. Strict remains opt-in pending real E2E
- *      validation.
+ *   1. The flag's default in `AgentBehaviorConfig` is "mode-coverage" —
+ *      bare-name binding still works (legacy silent-pick path), with the
+ *      mode-coverage check enforced. Strict remains opt-in pending real E2E
+ *      validation (the May 2026 cutover regressed silent-black fills).
  *   2. AgentRuntime construction propagates the flag to the main-thread
  *      mode-coverage checker via `setVariableResolutionMode`.
- *   3. Setting the flag to "phase1" causes `checkModeCoverage` to short-circuit
- *      with `kind: 'pass'` even on a coverage-failing fixture.
+ *   3. Both modes ('mode-coverage' and 'strict') run the mode-coverage check;
+ *      the modes differ only in bare-name string handling at the tool boundary.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -32,21 +32,21 @@ import type { LLMProvider } from '../../llm-client/providers/types';
 
 beforeEach(() => {
   // Restore default between tests so flag leakage doesn't pollute.
-  setVariableResolutionMode('phase2-mode-coverage');
+  setVariableResolutionMode('mode-coverage');
 });
 
 describe('AgentBehaviorConfig.variableResolution default', () => {
-  it('defaults to "phase2-mode-coverage"', () => {
-    expect(DEFAULT_BEHAVIOR.variableResolution).toBe('phase2-mode-coverage');
+  it('defaults to "mode-coverage"', () => {
+    expect(DEFAULT_BEHAVIOR.variableResolution).toBe('mode-coverage');
   });
 
   it('resolveBehavior() preserves the default when not overridden', () => {
-    expect(resolveBehavior().variableResolution).toBe('phase2-mode-coverage');
+    expect(resolveBehavior().variableResolution).toBe('mode-coverage');
   });
 
   it('resolveBehavior() honors explicit overrides', () => {
-    expect(resolveBehavior({ variableResolution: 'phase1' }).variableResolution).toBe('phase1');
-    expect(resolveBehavior({ variableResolution: 'phase2-strict' }).variableResolution).toBe('phase2-strict');
+    expect(resolveBehavior({ variableResolution: 'mode-coverage' }).variableResolution).toBe('mode-coverage');
+    expect(resolveBehavior({ variableResolution: 'strict' }).variableResolution).toBe('strict');
   });
 });
 
@@ -62,29 +62,29 @@ describe('AgentRuntime construction propagates variableResolution to mode-covera
     } as any;
   }
 
-  it('sets the main-thread checker to "phase2-mode-coverage" by default', () => {
+  it('sets the main-thread checker to "mode-coverage" by default', () => {
     new AgentRuntime({
       provider: makeMockProvider(),
       tools: [],
       systemPrompt: 'sys',
     });
-    expect(getVariableResolutionMode()).toBe('phase2-mode-coverage');
+    expect(getVariableResolutionMode()).toBe('mode-coverage');
   });
 
-  it('propagates explicit "phase1" override to the main-thread checker', () => {
+  it('propagates explicit "strict" override to the main-thread checker', () => {
     new AgentRuntime({
       provider: makeMockProvider(),
       tools: [],
       systemPrompt: 'sys',
-      behaviorConfig: { variableResolution: 'phase1' },
+      behaviorConfig: { variableResolution: 'strict' },
     });
-    expect(getVariableResolutionMode()).toBe('phase1');
+    expect(getVariableResolutionMode()).toBe('strict');
   });
 });
 
-describe('"phase1" setting bypasses mode coverage check', () => {
+describe('mode-coverage check runs in both modes', () => {
   // Minimal collection with Light + Dark; variable defines Light only.
-  // Node renders in Dark → would fail under "phase2-mode-coverage".
+  // Node renders in Dark → fails coverage regardless of mode.
 
   function setupCoverageFailingFixture() {
     const collection = {
@@ -122,17 +122,17 @@ describe('"phase1" setting bypasses mode coverage check', () => {
     return { node, variable };
   }
 
-  it('FAILS under phase2-mode-coverage (control)', async () => {
-    setVariableResolutionMode('phase2-mode-coverage');
+  it('FAILS under mode-coverage', async () => {
+    setVariableResolutionMode('mode-coverage');
     const { node, variable } = setupCoverageFailingFixture();
     const result = await checkModeCoverage(node, variable);
     expect(result.kind).toBe('fail');
   });
 
-  it('PASSES under phase1 (escape valve)', async () => {
-    setVariableResolutionMode('phase1');
+  it('FAILS under strict (same coverage check, no escape valve)', async () => {
+    setVariableResolutionMode('strict');
     const { node, variable } = setupCoverageFailingFixture();
     const result = await checkModeCoverage(node, variable);
-    expect(result.kind).toBe('pass');
+    expect(result.kind).toBe('fail');
   });
 });

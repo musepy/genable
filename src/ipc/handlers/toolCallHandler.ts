@@ -33,8 +33,8 @@ export async function handleToolCall(data: ToolCallData): Promise<void> {
 
   // Apply runtime flags from context BEFORE dispatching. Per-call apply is
   // deliberate: the agent config could in principle change between calls
-  // (e.g. test scenarios that flip 'phase1' mid-session), and we want each
-  // tool call to see the value from its own dispatch.
+  // (e.g. test scenarios that flip the resolver mode mid-session), and we
+  // want each tool call to see the value from its own dispatch.
   if (context && context.variableResolution) {
     setVariableResolutionMode(context.variableResolution);
   }

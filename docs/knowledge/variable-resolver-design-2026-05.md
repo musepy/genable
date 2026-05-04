@@ -1,3 +1,9 @@
+> ⚠️ **STATUS — PARTIALLY SUPERSEDED (2026-05-04, revert commit 56aefe6)**
+>
+> Phase 1 mechanisms — mode coverage, RYOW block, AUTOPICK warning, `ensure_variable` dedup, `find_references`, error envelopes — **shipped and are working** in the current codebase under `mode-coverage` default. Phase 2 cutover (commits a13ab4a + 05774dc) flipped the resolver default to `phase2-strict` and introduced the discriminated-union object form for `set_fill` / `set_stroke`. It was **reverted after the first post-cutover E2E run** (trigger-1777823889111, Notification card) produced 100% silent #000000 fills. Root cause was a 3-layer compounding bug: (1) the tool schema declared `fill` as `string` while the description taught object form; (2) string-mode LLM providers serialised the object as JSON5 (`{variable_id: "..."}`) instead of a plain ID; (3) the malformed string fell through to the silent-black fallback in `parseHexToRGBA` / `parsePaintToFigma`. All three layers were fixed in 56aefe6. **Permanent default is now `mode-coverage`. `strict` remains available as an opt-in flag.**
+>
+> **§5 migration plan is abandoned. Don't cite it as authority for future cutovers without first reading the README at the top of `agentBehaviorConfig.ts`.**
+
 # Variable Resolver Redesign — 2026-05
 
 **Status**: Design proposal. Not yet implemented.
@@ -110,6 +116,8 @@ Properties this gives us:
 `canonical_json` is JSON with sorted keys and no whitespace, so semantically-equal value maps produce identical keys regardless of insertion order.
 
 ### 3.2 Mutation tools — discriminated union for binding target
+
+> **REVISED (2026-05-04, commit 56aefe6)**: The discriminated-union object form (`{variable_id, expected_*}`, `{collection_id, name, type}`, `{color}`) is still implemented in `strictResolver.ts` and `resolveBindingArgForLegacyEdit`, but the `set_fill` / `set_stroke` tool descriptions **no longer teach LLMs to use it**. Commit 56aefe6 deleted the "Variable bindings (structured form, recommended)" section from `setterTools.ts` to prevent string-mode LLM providers from JSON-serialising the object argument and producing a malformed string. LLMs in the default `mode-coverage` path use bare-name `$Token` strings; the AUTOPICK warning + RYOW block handle ambiguity sufficiently in observed E2E runs. The structured object form still works for callers that pass real JS objects (e.g. JSX `fill={{...}}`); it is just no longer the recommended form for natural-language agent calls.
 
 ```ts
 set_fill({
@@ -244,6 +252,8 @@ All errors share this shape:
 
 ## 5. Migration plan (dogfood-scale)
 
+> **ABANDONED (2026-05-04, commit 56aefe6)**: This rollout plan was attempted. The Phase 1 → Phase 2 advance condition (§5.2) was **misapplied at cutover time**: the 5 "clean" E2E runs used to qualify the advance all exercised the pre-cutover bare-name path, none exercised the new strict discriminated-union path. Phase 2 cutover went live in commits a13ab4a + 05774dc and broke on the very first post-cutover E2E run (trigger-1777823889111) with 100% silent #000000 fills. The rollback infrastructure described in §5.4 was used — a single settings-flag flip. The section is kept below as historical record. Do not treat it as a current rollout plan.
+
 The strict resolver breaks every existing `$Name` callsite. Production-scale migration plans (% thresholds, sliding windows, telemetry pipelines) don't fit this codebase — we have ~50–200 binding calls/day across 1–2 dev users, no telemetry, only dev-bridge logs as signal.
 
 ### 5.1 Phase 1 — `warn_pick_record`
@@ -375,13 +385,13 @@ Two new decisions (codex Critical findings absorbed):
 
 Sequenced for minimum blast radius per change:
 
-1. **`ensure_variable` + dedup** (write-time guard) — closes the orphan-creation faucet. No callsite changes; existing `create_variable` callers keep working but get warnings on dup-name.
-2. **`_ryow` block + new event type** — additive, breaks nothing.
-3. **Strict resolver in `set_fill` Phase 1 (`warn_pick_record`)** — silent-pick stays but logs warnings.
-4. **Mode coverage check (default `'all'`)** — new failure path; needs prompt update so LLM knows about `MISSING_MODE_VALUES`.
-5. **`set_fill` discriminated union** — breaks bare-name callsites; gated by Phase 2 cutover.
-6. **`set_stroke` shorthand parser fix** — bundle with (5).
-7. **Rollback infrastructure + settings flag** — ship before (5)/(6) cutover.
+1. **`ensure_variable` + dedup** (write-time guard) — closes the orphan-creation faucet. No callsite changes; existing `create_variable` callers keep working but get warnings on dup-name. ✅ shipped, working in `mode-coverage` default
+2. **`_ryow` block + new event type** — additive, breaks nothing. ✅ shipped, working in `mode-coverage` default
+3. **Strict resolver in `set_fill` Phase 1 (`warn_pick_record`)** — silent-pick stays but logs warnings. ✅ shipped, working in `mode-coverage` default
+4. **Mode coverage check (default `'all'`)** — new failure path; needs prompt update so LLM knows about `MISSING_MODE_VALUES`. ✅ shipped, working in `mode-coverage` default
+5. **`set_fill` discriminated union** — breaks bare-name callsites; gated by Phase 2 cutover. 🟡 code shipped (`strictResolver`, discriminated union in `resolveBindingArgForLegacyEdit`) but description-side reverted in 56aefe6 — no longer documented to or recommended for LLM
+6. **`set_stroke` shorthand parser fix** — bundle with (5). ✅ shipped (shorthand parser fix is independent of the strict gate)
+7. **Rollback infrastructure + settings flag** — ship before (5)/(6) cutover. ✅ shipped (settings flag was used to execute the 56aefe6 revert)
 
 Files affected (rough inventory):
 - `src/engine/agent/tools/unified/varTools.ts` — ensure_variable, ensure_collection
@@ -408,3 +418,5 @@ This design synthesizes:
 - Local fixes: scoped advance condition, RYOW lifecycle, structured `recommended_next_action`, mode-coverage opt-in fallback.
 
 Status: ready to implement per §9 sequencing. Next pending review: post-implementation pass once Phase 1 is in place — verify the originally-observed 32 wrong bindings are caught, plus a regression test for the codex Critical 1 (intra-turn variable mutation) scenario.
+
+- Round 4 — cutover attempt + revert (2026-05-03 → 2026-05-04). Phase 2 cutover commits a13ab4a + 05774dc shipped; immediately produced 100% silent black fill regression on first post-cutover E2E run (trigger-1777823889111, Notification card). Root cause analysis surfaced a 3-layer compounding bug: schema/description mismatch in `setterTools.ts` (schema declared `fill: string`, description taught object form), silent-black fallback in `parseHexToRGBA` and `parsePaintToFigma` when the JSON-serialised object string couldn't be parsed as hex or paint. Reverted and hardened in 56aefe6. The codex-driven additions in §3.2 (discriminated union, fingerprint stability) and §5 (phased rollout infrastructure) were validated as functionally correct but operationally fragile under string-mode LLM providers; future re-attempts should use **string-prefix dispatch** (e.g. `'VariableID:...'`) instead of an object discriminated union to avoid schema-vs-description mismatch at the LLM boundary.

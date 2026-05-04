@@ -83,6 +83,7 @@ Two config layers:
 - **Lint**: `npx eslint "src/**/*.{ts,tsx}"`
 - **LLM providers**: Gemini Flash (primary), Anthropic Claude (OAuth + API key), OpenRouter, DashScope/Kimi K2.5 (via Cloudflare Worker proxy)
 - **UI framework**: Preact with `@create-figma-plugin/ui`
+- **Prompt consistency**: `npm run check:prompts` — catches LLM-facing teaching contradictions before they reach the LLM. Run after editing `src/prompts/`, tool descriptions, or skill files.
 
 ## Local E2E Testing (Dev Bridge)
 

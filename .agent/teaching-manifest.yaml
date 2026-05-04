@@ -1,0 +1,206 @@
+# .agent/teaching-manifest.yaml
+#
+# Discoverable index of which files teach LLM-facing concepts.
+#
+# RULE: When changing the behavior of any concept listed here, update ALL
+# surfaces in the same commit OR justify why others don't need updating in
+# the commit message. Run `npm run check:prompts` after editing to catch
+# known contradictions.
+#
+# ANTI-PATTERN THAT CREATED THIS FILE:
+#   Phase2-strict cutover (commits a13ab4a / 05774dc) added object-form
+#   variable-bind teaching to 3 surfaces simultaneously. Revert 56aefe6
+#   cleaned only one surface, leaving SYSTEM.md teaching the wrong form.
+#   Weather widget E2E: 36 silent black fills. This index prevents that.
+
+concepts:
+
+  # ──────────────────────────────────────────────────────────────────────
+  # variable-binding
+  # How LLM passes variable references to jsx, set_fill, set_stroke, bind_variable
+  # ──────────────────────────────────────────────────────────────────────
+  variable-binding:
+    summary: >
+      How the LLM passes variable references to jsx, set_fill, set_stroke, and
+      bind_variable. Primary form is the qualified bare-name string ($Coll/Name).
+      Object form ({variable_id:...}) is implementation-only — never in LLM-facing text.
+    surfaces:
+      - path: src/prompts/SYSTEM.md
+        section: "Rule #10 (Variable identity is collection-scoped)"
+        scope: >
+          WHAT/WHY only — collection scoping principle, ensure_* preference,
+          _ryow back-reference, warning ladder. Explicitly defers bind-form
+          syntax to the individual tool descriptions.
+      - path: src/engine/agent/tools/unified/setterTools.ts
+        section: "setFillDefinition / setStrokeDefinition descriptions"
+        scope: >
+          HOW canonical — set_fill / set_stroke variable-bind syntax. String
+          "$Coll/Name" is the only accepted form in LLM-facing text. Inline
+          comment "// Strings only — see varTool.ts ensure_variable" clarifies
+          the ID-form workflow for implementors reading the source.
+      - path: src/engine/agent/tools/unified/jsx.ts
+        section: "description line: 'Variable binding:'"
+        scope: >
+          HOW for jsx — explicitly states that string $Coll/Name is the form
+          to use in fill/bg/stroke attrs. Also documents the anti-pattern:
+          "Object literals (fill={{variable_id:...}}) drop the binding
+          silently — always use the string form." This anti-pattern clause
+          MUST stay as a WARNING, not as a positive example.
+      - path: src/engine/agent/tools/unified/varTool.ts
+        section: "bind_variable description + ensure_variable description"
+        scope: >
+          HOW for FLOAT/STRING/BOOLEAN binding via explicit VariableID string.
+          Implicitly redirects COLOR to set_fill/jsx (they have their own
+          variable-bind path). Also documents ensure_variable as the preferred
+          creation path, with idempotency_key behavior.
+      - path: .agent/skills/agent-page/SKILL.md
+        section: "tokens / fills examples"
+        scope: >
+          USAGE PATTERNS — when to bind to which token category (color scales,
+          spacing, etc.). Not raw syntax — assumes LLM knows string form from
+          tool descriptions. Any example tokens must use string form.
+      - path: src/ipc/commands/index.ts
+        section: "handleSetFill / handleSetStroke error envelopes (BARE_NAME_REJECTED_PHASE2)"
+        scope: >
+          ERROR RECOVERY — recommended_next_action shape; emitted only when
+          variableResolution === 'strict' (opt-in). This file intentionally
+          retains the 'PHASE2' suffix in error codes because those code strings
+          are part of the error-pattern-matching contract (see strictResolver.ts
+          lines 13-16). Changing them would break LLM error recovery.
+    invariants:
+      - >
+        SYSTEM.md keeps WHAT/WHY only — it must never copy specific syntax
+        examples from tool descriptions (avoid teaching the same thing twice
+        in different words).
+      - >
+        All LLM-facing surfaces agree on the primary form: qualified bare-name
+        string ($Coll/Name). If this changes, ALL surfaces must be updated in
+        the same commit.
+      - >
+        Object-form examples ({variable_id:...} / {collection_id, name, type})
+        appear ONLY in: (a) strictResolver.ts code comments, (b) error envelopes
+        inside src/ipc/commands/index.ts as recommended_next_action shapes,
+        (c) THIS file's history field. They must never appear as POSITIVE
+        examples in any prompt file (src/prompts/**) or skill file (.agent/skills/**).
+      - >
+        "bare-name rejected" / "Bare-name binding is not allowed" claims must
+        NOT appear in prompt or skill files when DEFAULT_BEHAVIOR.variableResolution
+        is 'mode-coverage'. Bare-name binding WORKS in mode-coverage. The
+        BARE_NAME_REJECTED_PHASE2 error only fires under 'strict' (opt-in).
+    last-coherence-check: 2026-05-04
+    history:
+      - "2026-05-03: phase2-strict cutover added object-form teaching to all surfaces (a13ab4a, 05774dc)"
+      - "2026-05-04: revert (56aefe6) cleaned setterTools.ts but missed SYSTEM.md → weather E2E disaster (36 silent black fills)"
+      - "2026-05-04: SYSTEM.md aligned (a916d95), single-sourced (79478b6); manifest created to prevent recurrence"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # node-addressing
+  # Single-param string node ID — how every tool references a Figma node
+  # ──────────────────────────────────────────────────────────────────────
+  node-addressing:
+    summary: >
+      How tools accept a node reference: a single string parameter `node`
+      containing a plain numeric Figma ID (e.g. "1:2") or "/" for page root.
+      Never name#id compound form, never separate name+id params.
+    surfaces:
+      - path: src/prompts/SYSTEM.md
+        section: "NODE IDENTITY section (lines ~17-20)"
+        scope: >
+          WHAT/WHY — IDs are stable, returned by jsx/inspect, flow through every
+          other tool. find_nodes is for discovery; reuse known IDs directly.
+          One sentence: "edit targets a node ID not in this session's idMap →
+          Tool call rejected".
+      - path: src/engine/agent/tools/unified/inspect.ts
+        section: "description + node parameter description"
+        scope: >
+          HOW canonical — '/' for page root, or node ID from jsx/inspect results
+          (e.g. '100:5'). This is the reference implementation all other tools
+          implicitly match.
+      - path: src/engine/agent/tools/unified/edit.ts
+        section: "node parameter description"
+        scope: >
+          HOW for edits — 'Node ID (e.g. "1:2") from jsx/inspect results'.
+          Paired with the batch form array {node, props?, content?}.
+      - path: src/engine/agent/tools/unified/setterTools.ts
+        section: "node parameter description in all 4 setter definitions"
+        scope: >
+          HOW for setters (set_text / set_fill / set_stroke / set_layout) —
+          'Node ID' short form. All 4 share the same pattern.
+      - path: src/engine/agent/tools/unified/jsx.ts
+        section: "parent / replaceId parameter descriptions"
+        scope: >
+          HOW for creation — parent is a node ID string; replaceId is an existing
+          node ID. jsx outputs idMap of created nodes keyed by name.
+      - path: src/engine/agent/tools/unified/structureTool.ts
+        section: "move_node / clone_node parameter descriptions"
+        scope: >
+          HOW for structural ops — source/target node IDs as plain strings.
+    invariants:
+      - >
+        No tool description may mention "name#id" compound form or dual-parameter
+        (name + id) addressing. Single string only.
+      - >
+        "/" is the only special non-numeric value; it means page root. All tools
+        that accept "/" must document it explicitly.
+      - >
+        IDs from jsx/inspect are the authoritative source. No tool may require
+        the caller to construct IDs by concatenation or name-lookup at call time.
+    last-coherence-check: 2026-05-04
+    history:
+      - "2026-03-xx: Unified single-param node addressing replaces prior name+id dual-param form (see project_idmap_hierarchy.md)"
+      - "2026-04-xx: Registry SSOT refactor; addressing model unchanged"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # mode-coverage
+  # ensure_variable mode completeness — MISSING_MODE_VALUES warning contract
+  # ──────────────────────────────────────────────────────────────────────
+  mode-coverage:
+    summary: >
+      How LLM must supply values for EVERY mode in a collection when creating
+      variables, and how to interpret the MISSING_MODE_VALUES warning envelope.
+      Taught across ensure_variable description, SYSTEM.md warning ladder, and
+      error catalog.
+    surfaces:
+      - path: src/engine/agent/tools/unified/varTool.ts
+        section: "ensureVariableDefinition description — Mode coverage policy (spec §6.2)"
+        scope: >
+          HOW canonical — mode_coverage_required 'all' (default) vs
+          'opt-in-fallback'. Documents MISSING_MODE_VALUES rejection, fallback_reason
+          requirement, and opt-in-fallback structured phrase "fallback to <mode_name>".
+          This is the single authoritative definition of mode coverage semantics.
+      - path: src/prompts/SYSTEM.md
+        section: "Rule #10 warning ladder (AMBIGUOUS_NAME_AUTOPICK / MISSING_MODE_VALUES / STALE_VARIABLE_FINGERPRINT)"
+        scope: >
+          WHAT/WHY — tells LLM that warning codes are self-recoverable and that
+          recommended_next_action.args can be passed back verbatim. Does NOT
+          re-explain mode coverage semantics (delegates to varTool description).
+      - path: src/engine/agent/agentBehaviorConfig.ts
+        section: "VariableResolutionMode JSDoc + DEFAULT_BEHAVIOR"
+        scope: >
+          RUNTIME CONTROL — documents that 'mode-coverage' default enforces
+          write-time mode coverage check. Not LLM-facing, but changes here
+          affect what warnings/errors the LLM actually sees.
+      - path: .agent/error-catalog.md
+        section: "MISSING_MODE_VALUES entry (if present)"
+        scope: >
+          ERROR RECOVERY reference — diagnosis + fix pattern for when
+          MISSING_MODE_VALUES fires. Should agree with varTool description on
+          the fix (add missing mode values, or switch to opt-in-fallback).
+    invariants:
+      - >
+        varTool.ts is the single authoritative definition of mode coverage
+        semantics. SYSTEM.md must NOT re-state the full policy — only the
+        self-recovery pattern.
+      - >
+        Any mode coverage policy change (adding a new policy value, changing
+        the default) must update varTool.ts description first, then SYSTEM.md
+        warning ladder, then agentBehaviorConfig.ts JSDoc. All three in the
+        same commit.
+      - >
+        The fallback_reason structured phrase ("fallback to <mode_name>")
+        is a machine-greppable contract. If it changes, update both varTool.ts
+        description AND any validation code in the handler (ipc/commands/).
+    last-coherence-check: 2026-05-04
+    history:
+      - "2026-04-xx: mode_coverage_required field added to ensure_variable; 'all' made default"
+      - "2026-05-04: manifest created; no mode-coverage drift detected at time of writing"

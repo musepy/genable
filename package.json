@@ -51,7 +51,8 @@
     "test:coverage": "vitest run --coverage",
     "generate:reasoning": "node scripts/generate-reasoning.js",
     "generate:knowledge": "node scripts/generate-knowledge.js",
-    "mcp-server": "npx tsx tools/mcp-server/index.ts"
+    "mcp-server": "npx tsx tools/mcp-server/index.ts",
+    "check:prompts": "bash tools/check-prompt-consistency.sh"
   },
   "figma-plugin": {
     "editorType": [

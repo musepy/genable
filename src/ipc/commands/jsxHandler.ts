@@ -249,21 +249,36 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   data.created = ctx.rollbackStack.length;
   data.createdIds = ctx.rollbackStack;
 
-  // Aggregate variable-resolution warnings (currently AMBIGUOUS_NAME_AUTOPICK)
-  // from the walk into `response.warnings` so the runtime can enrich them
-  // (RyowStore source / suggested_id), emit `ambiguous_autopick` events, and
-  // surface them to the LLM via `presentForLLM`. Without this, jsx — the
-  // dominant write path for whole-design generation — silently drops the
-  // warnings even though the handler emits them. See E2E #1 finding:
-  // 18 bare-name $Token uses → 0 warnings ever reached the LLM.
+  // Aggregate per-node warnings from the walk into `response.warnings` so
+  // the runtime can enrich them (RyowStore source / suggested_id), emit
+  // typed events (e.g. `ambiguous_autopick`), and surface them to the LLM
+  // via `presentForLLM`. Without this, jsx — the dominant write path for
+  // whole-design generation — silently drops the warnings even though
+  // every handler emits them.
   //
-  // Only AMBIGUOUS_NAME_AUTOPICK is forwarded (variable-resolution category).
-  // NORMALIZE / CREATE_FAILED / etc. stay internal — they're either advisory
-  // for the dev bridge logs or already surfaced via `error`.
+  // Two categories forwarded:
+  //   (a) variable-resolution diagnostics (AMBIGUOUS_NAME_AUTOPICK,
+  //       MISSING_MODE_VALUES, FALLBACK_BINDING) — load-bearing for the
+  //       LLM's recovery loop.
+  //   (b) per-property apply failures (PAINT_INVALID, EFFECT_INVALID,
+  //       RESIZE_FAILED, DASH_INVALID, CONSTRAINTS_INVALID, etc.) — these
+  //       fire when an individual prop application throws inside the
+  //       handler (e.g. paintHandler → lowerPaints rejecting an object
+  //       literal). The node was created but the prop didn't apply, so
+  //       the error never reaches `failed`/rollback — without forwarding,
+  //       the LLM sees jsx success while the canvas has black fills /
+  //       missing effects / wrong size. This is exactly the silent-black
+  //       failure mode that produced 36 broken fills in the May 2026
+  //       weather widget run before SYSTEM.md was realigned.
   //
-  // Dedup key: picked_variable_id + node_id. The same auto-pick on the same
-  // node from multiple bindings (e.g. fill + stroke both binding $Brand) is
-  // still informative once; repeats add noise without new signal.
+  // NORMALIZE / CREATE_FAILED / INSTANCE_FAILED stay internal — those are
+  // either advisory dev-bridge noise (NORMALIZE) or already surfaced via
+  // the response `error` (CREATE_FAILED short-circuits the walk).
+  //
+  // Dedup key: code + (picked_variable_id || variable_id) + node_id. The
+  // same warning on the same node from multiple bindings (e.g. fill +
+  // stroke both binding $Brand) is informative once; repeats add noise
+  // without new signal.
   const aggregated = aggregateBindingWarnings(ctx.warnings);
   if (aggregated.length > 0) {
     return { data, warnings: aggregated, _stages };
@@ -273,30 +288,57 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
 }
 
 /**
- * Filter walk warnings to the variable-resolution subset that the LLM needs
- * to see, dedupe by (code, picked_variable_id || variable_id, node_id), and
- * strip handler internals (severity) to land on the `ToolWarning` wire shape.
+ * Filter walk warnings to the subset that the LLM needs to see, dedupe by
+ * (code, picked_variable_id || variable_id, node_id), and strip handler
+ * internals (severity) to land on the `ToolWarning` wire shape.
  *
- * Forwarded codes:
- *  - AMBIGUOUS_NAME_AUTOPICK (Phase 1 strict resolver, spec §5.1)
- *  - MISSING_MODE_VALUES     (Phase 2 step 4 mode coverage, spec §6 / §4.1.d)
- *  - FALLBACK_BINDING        (opt-in-fallback variant of mode coverage, §6.2)
+ * Forwarded codes (see jsxHandler aggregator block above for rationale):
+ *  - Variable-resolution diagnostics:
+ *      AMBIGUOUS_NAME_AUTOPICK (Phase 1 strict resolver, spec §5.1)
+ *      MISSING_MODE_VALUES     (Phase 2 step 4 mode coverage, spec §6 / §4.1.d)
+ *      FALLBACK_BINDING        (opt-in-fallback variant of mode coverage, §6.2)
+ *  - Per-property apply failures (the silent-black story, May 2026):
+ *      PAINT_INVALID           (paintHandler — fills/strokes failed to apply)
+ *      EFFECT_INVALID          (effectHandler — shadows/blurs failed)
+ *      RESIZE_FAILED           (resizeHandler — w/h failed to apply)
+ *      DASH_INVALID / DASH_FAILED       (dashPatternHandler)
+ *      CONSTRAINTS_INVALID / CONSTRAINTS_FAILED (constraintsHandler)
+ *      PROP_NORMALIZE_FAILED   (unitValueHandler — bad unit value)
+ *      VARIABLE_BIND_FAILED    (variableBindingHandler — bind threw post-resolve)
+ *      VARIABLE_NOT_FOUND      (bare-name lookup with no match)
+ *      UNSUPPORTED_PROP        (defaultHandler — unknown prop key)
  */
 function aggregateBindingWarnings(walkWarnings: WalkWarning[]): ToolWarning[] {
   const RELEVANT_CODES = new Set([
+    // Variable-resolution diagnostics
     'AMBIGUOUS_NAME_AUTOPICK',
     'MISSING_MODE_VALUES',
     'FALLBACK_BINDING',
+    // Per-property apply failures
+    'PAINT_INVALID',
+    'EFFECT_INVALID',
+    'RESIZE_FAILED',
+    'DASH_INVALID',
+    'DASH_FAILED',
+    'CONSTRAINTS_INVALID',
+    'CONSTRAINTS_FAILED',
+    'PROP_NORMALIZE_FAILED',
+    'VARIABLE_BIND_FAILED',
+    'VARIABLE_NOT_FOUND',
+    'UNSUPPORTED_PROP',
   ]);
   const out: ToolWarning[] = [];
   const seen = new Set<string>();
   for (const w of walkWarnings) {
     if (!RELEVANT_CODES.has(w.code)) continue;
     // Dedup discriminator — picked_variable_id (autopick) or variable_id
-    // (mode coverage) — combined with node_id. The same coverage failure on
-    // the same node across multiple props (fill + stroke both binding the
-    // same incomplete token) is informative once; repeats add noise.
-    const idForDedup = (w as any).picked_variable_id ?? (w as any).variable_id ?? '';
+    // (mode coverage) — combined with node_id and the warning message
+    // (apply failures use message as the discriminator since they don't
+    // carry a variable_id). The same warning on the same node across
+    // multiple props is informative once; repeats add noise.
+    const idForDedup = (w as any).picked_variable_id
+      ?? (w as any).variable_id
+      ?? w.message;
     const key = `${w.code}|${idForDedup}|${w.node_id ?? ''}`;
     if (seen.has(key)) continue;
     seen.add(key);

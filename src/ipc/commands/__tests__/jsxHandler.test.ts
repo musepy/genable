@@ -154,3 +154,108 @@ describe('handleJsx — AMBIGUOUS_NAME_AUTOPICK propagation', () => {
     expect(nodeIds).toEqual(['mock:1', 'mock:2']);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// PAINT_INVALID + per-property apply failures (the silent-black story)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Pre-fix bug: paintHandler / effectHandler / resizeHandler emitted warnings
+// when a per-property apply threw (e.g. paintHandler → lowerPaints rejecting
+// an object literal), but jsxHandler's allowlist filtered them out. Result:
+// the LLM saw `jsx` success while the canvas had black fills / missing
+// effects. May 2026 weather widget run produced 36 silent black fills via
+// this exact gap before SYSTEM.md was realigned.
+//
+// Test strategy: re-mock walkTree to push a PAINT_INVALID warning carrying
+// the node_id, assert it survives aggregation. We need a fresh module so
+// the previous mock doesn't leak — vi.resetModules() + dynamic import.
+
+describe('handleJsx — per-property apply failures (PAINT_INVALID etc.)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('forwards PAINT_INVALID + EFFECT_INVALID + RESIZE_FAILED as response.warnings', async () => {
+    vi.doMock('../../../engine/jsx/templateCompiler', async () => {
+      const actual = await vi.importActual<
+        typeof import('../../../engine/jsx/templateCompiler')
+      >('../../../engine/jsx/templateCompiler');
+      return {
+        ...actual,
+        compileAndExecute: vi.fn(async () => ({
+          vnodes: [{ type: 'FRAME', props: {}, children: [] }],
+        })),
+        collectIconNames: vi.fn(() => []),
+        walkTree: vi.fn(async (_v: any, _p: any, ctx: any) => {
+          // Per-property apply failures (the silent-black bug).
+          ctx.warnings.push({
+            code: 'PAINT_INVALID',
+            severity: 'warning',
+            message: 'Failed to apply fills: not a function',
+            node_id: 'mock:paint',
+          });
+          ctx.warnings.push({
+            code: 'EFFECT_INVALID',
+            severity: 'warning',
+            message: 'Failed to apply effects: bad shadow shape',
+            node_id: 'mock:fx',
+          });
+          ctx.warnings.push({
+            code: 'RESIZE_FAILED',
+            severity: 'warning',
+            message: 'Failed to resize: width must be > 0',
+            node_id: 'mock:size',
+          });
+          // A walk-internal warning that must NOT bleed through.
+          ctx.warnings.push({
+            code: 'NORMALIZE',
+            severity: 'warning',
+            message: 'normalizer fixup',
+          });
+          ctx.rollbackStack.push('mock:paint');
+          return {
+            nodeId: 'mock:paint',
+            name: 'frame',
+            type: 'FRAME',
+            childRefs: [],
+          };
+        }),
+      };
+    });
+    vi.doMock('../../../engine/actions/nodeFactory', async () => {
+      const actual = await vi.importActual<
+        typeof import('../../../engine/actions/nodeFactory')
+      >('../../../engine/actions/nodeFactory');
+      return {
+        ...actual,
+        centerNodeInViewport: vi.fn((p: any) => p),
+        prefetchIcons: vi.fn(async () => undefined),
+      };
+    });
+    vi.doMock('../../../engine/jsx/normalizeTree', () => ({
+      normalizeTree: vi.fn(),
+    }));
+
+    const { handleJsx: handleJsxFresh } = await import('../jsxHandler');
+    const response = await handleJsxFresh({
+      markup: '<Frame fill="#bogus"/>',
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(Array.isArray(response.warnings)).toBe(true);
+
+    const codes = response.warnings!.map(w => w.code).sort();
+    expect(codes).toEqual(['EFFECT_INVALID', 'PAINT_INVALID', 'RESIZE_FAILED']);
+
+    // node_id correlation preserved so the LLM can target a recovery action.
+    const byCode = new Map(response.warnings!.map(w => [w.code, w as any]));
+    expect(byCode.get('PAINT_INVALID')!.node_id).toBe('mock:paint');
+    expect(byCode.get('EFFECT_INVALID')!.node_id).toBe('mock:fx');
+    expect(byCode.get('RESIZE_FAILED')!.node_id).toBe('mock:size');
+
+    // severity stripped at the wire boundary.
+    for (const w of response.warnings!) {
+      expect((w as any).severity).toBeUndefined();
+    }
+  });
+});

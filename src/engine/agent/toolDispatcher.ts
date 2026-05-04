@@ -78,9 +78,8 @@ export interface ToolDispatcherConfig {
   formatToolResults: (results: LLMToolResult[]) => LLMMessage;
   /**
    * Snapshot of runtime flags to propagate as IPC `context` on every tool
-   * call. Used to thread `agentBehaviorConfig.variableResolution` through
-   * to the main-thread mode-coverage checker. Returns `undefined` when no
-   * runtime context applies.
+   * call. Used to thread per-turn RYOW state to the main-thread variable
+   * binding handler. Returns `undefined` when no runtime context applies.
    */
   getRuntimeContext?: () => import('./tools/types').ToolContext | undefined;
 }

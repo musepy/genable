@@ -269,9 +269,7 @@ const EXPANDERS: Record<string, Expander> = {
           // the `else` branch below and was silently coerced to strokeAlign
           // (e.g. "$BRAND/600" → strokeAlign="$BRAND/600" — invalid, dropped).
           // Pass through as the variable-ref form so variableBindingHandler
-          // can bind it. Under 'strict' mode the IPC handler rejects this
-          // whole shorthand at the boundary; this branch keeps the default
-          // 'mode-coverage' path working by at least delivering the binding.
+          // can bind it.
           result.strokes = p;
         }
         else if (/^\d/.test(p)) result.strokeWeight = parseFloat(p);

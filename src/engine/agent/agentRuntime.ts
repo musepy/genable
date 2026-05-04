@@ -25,7 +25,6 @@ import { OutputTooLongError } from '../llm-client/providers/shared/providerError
 import { ContextManager } from './context/contextManager';
 import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
 import { RyowStore, VARIABLE_RELATED_TOOLS } from './ryowStore';
-import { setVariableResolutionMode } from '../actions/handlers/modeCoverageCheck';
 
 
 // ---------------------------------------------------------------------------
@@ -35,7 +34,7 @@ import { setVariableResolutionMode } from '../actions/handlers/modeCoverageCheck
 /**
  * Per-tool likely-false-positive count that triggers a single
  * `rollback_signal` event for the session. Spec §5.4 / §7.2 — purely
- * observational, not used to auto-flip `variableResolution`.
+ * observational.
  */
 const ROLLBACK_SIGNAL_THRESHOLD = 3;
 
@@ -131,14 +130,12 @@ export class AgentRuntime {
     tokenUsage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalTokens: 0, callCount: 0 },
   };
   /**
-   * Phase 2 step 7: per-session MISSING_MODE_VALUES failure tracking.
+   * Per-session MISSING_MODE_VALUES failure tracking.
    * Spec §5.4 — each entry records a binding rejection so the rollback
    * detector can decide if any of them are regressions (variable's RYOW
    * mode coverage matches the failure's missing modes ⇒ legitimate
-   * protection; mismatch ⇒ likely resolver bug).
-   *
-   * For Phase 1 of step 7 (this commit), we just track. The auto-revert
-   * decision logic lives in Phase 3 of the rollout.
+   * protection; mismatch ⇒ likely resolver bug). Observability only —
+   * the runtime does not auto-revert.
    */
   private missingModeValuesFailures: Array<{
     tool_name: string;
@@ -153,8 +150,7 @@ export class AgentRuntime {
   /**
    * Per-tool likely-false-positive counter. When count >= ROLLBACK_SIGNAL_THRESHOLD
    * we emit a single `rollback_signal` event so dashboards can surface the
-   * regression. We DO NOT auto-flip `variableResolution` — Phase 3 of the
-   * rollout owns auto-rollback. Spec §5.4 / §7.2.
+   * regression. Spec §5.4 / §7.2.
    */
   private modeCoverageFailureCounters = new Map<string, { legit: number; false_positive: number }>();
   /** Tools that already emitted rollback_signal this session — emit-once-per-tool. */
@@ -164,11 +160,6 @@ export class AgentRuntime {
     this.behaviorConfig = resolveBehavior(options.behaviorConfig);
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
-    // Sync the main-thread mode-coverage checker to the active resolver
-    // mode. Tests + local executors share this realm, so the setter takes
-    // effect immediately. Cross-thread (IPC) sync still happens per-call via
-    // `getRuntimeContext` below (toolCallHandler.ts).
-    setVariableResolutionMode(this.behaviorConfig.variableResolution);
     // Context budget: 70% of context window (leave 30% for model output + safety margin)
     // chars ≈ tokens * 4 (rough estimate)
     const contextWindowTokens = options.contextWindow
@@ -218,18 +209,13 @@ export class AgentRuntime {
         throwIfCanceled: (iteration) => this.throwIfCanceled(iteration),
         onToolCall: options.onToolCall,
         onToolResult: options.onToolResult,
-        // Phase 2 step 4 + 7: thread variableResolution from agent config
-        // to main-thread handlers via IPC context so the mode-coverage
-        // check honors the runtime escape valve.
-        //
-        // Also thread the RYOW "created this turn" variable IDs so the
+        // Thread the RYOW "created this turn" variable IDs so the
         // main-thread variableBindingHandler can break bare-name autopick
         // ties in favor of variables created this turn (spec §5.1
         // warn_pick_record). The set changes within a turn as new variables
         // are recorded — pushing it on every dispatch keeps main-thread
         // state in sync.
         getRuntimeContext: () => ({
-          variableResolution: this.behaviorConfig.variableResolution,
           ryowCreatedThisTurnIds: this.ryowStore.getCreatedThisTurnIds(),
         }),
         beforeToolExec: async (tc) => {
@@ -683,11 +669,11 @@ export class AgentRuntime {
     //      not an error.
     this.processMissingModeValues(tc, result);
 
-    // ── 2.6. Emit Phase 2 strict-mode rejection events ──
+    // ── 2.6. Emit object-form resolver rejection events ──
     // The IPC handler returns these as { error, data: { code } } envelopes
     // (see src/ipc/commands/index.ts handleSetFill / handleSetStroke). We
     // promote them to typed runtime events so dev-bridge dashboards can audit
-    // strict-mode adoption + regressions.
+    // structured-input failures.
     this.processStrictBindingRejection(tc, result);
 
     // ── 3. Inject _ryow snapshot for variable-related tools ──
@@ -756,7 +742,6 @@ export class AgentRuntime {
     if (failures.length === 0) return;
 
     const ts = Date.now();
-    const phase = this.behaviorConfig.variableResolution;
 
     // Snapshot RyowStore once per call — used by the rollback heuristic
     // below. The store is per-turn, so the lookup is consistent across all
@@ -796,7 +781,6 @@ export class AgentRuntime {
         node_id: f.node_id,
         variable_id: f.variable_id,
         missing_modes: f.missing_modes,
-        resolutionPhase: phase,
         ts,
       });
 
@@ -832,14 +816,14 @@ export class AgentRuntime {
   }
 
   /**
-   * Detect Phase 2 strict-resolver rejection envelopes in a tool result and
+   * Detect object-form resolver rejection envelopes in a tool result and
    * emit the typed runtime event. Spec §3.2 / §4.1 — the IPC handler
    * (handleSetFill / handleSetStroke) returns these as
-   * `{ error, data: { code, ... } }` envelopes; we promote them here so
-   * dev-bridge dashboards have a stable per-event schema.
+   * `{ error, data: { code, ... } }` envelopes when the caller passes a
+   * structured object input; we promote them here so dev-bridge dashboards
+   * have a stable per-event schema.
    *
    * Codes handled:
-   *   - BARE_NAME_REJECTED_PHASE2     → bare_name_rejected
    *   - STALE_VARIABLE_ID             → stale_variable_id
    *   - AMBIGUOUS_VARIABLE_REFERENCE  → ambiguous_variable_reference
    *   - VARIABLE_NOT_FOUND            → variable_not_found
@@ -850,28 +834,7 @@ export class AgentRuntime {
 
     const code: string = result.data.code;
     const toolName = tc.name;
-    const phase = this.behaviorConfig.variableResolution;
     const node_id = typeof tc.input?.node === 'string' ? tc.input.node : undefined;
-
-    if (code === 'BARE_NAME_REJECTED_PHASE2') {
-      // The bare-name string is in either tc.input.fill, tc.input.bg, or
-      // tc.input.stroke depending on which slot triggered. We don't know
-      // which deterministically, so prefer fill > bg > stroke.
-      const candidates = [tc.input?.fill, tc.input?.bg, tc.input?.stroke];
-      const bareName = candidates.find(v => typeof v === 'string' && v.startsWith?.('$'))
-        ?? candidates.find(v => typeof v === 'string' && v.includes('$'))
-        ?? '';
-      this.emitRuntimeEvent({
-        type: 'bare_name_rejected',
-        phase: 'execution',
-        iteration: this.currentIteration,
-        tool_name: toolName,
-        node_id,
-        name_query: typeof bareName === 'string' ? bareName : '',
-        resolutionPhase: phase,
-      });
-      return;
-    }
 
     if (code === 'STALE_VARIABLE_ID') {
       const variable_id = (typeof tc.input?.fill?.variable_id === 'string' && tc.input.fill.variable_id)
@@ -907,7 +870,6 @@ export class AgentRuntime {
         expected_fingerprint,
         actual_fingerprint,
         reason,
-        resolutionPhase: phase,
       });
       return;
     }
@@ -935,7 +897,6 @@ export class AgentRuntime {
           type: typeof triple.type === 'string' ? triple.type : '',
         },
         candidates,
-        resolutionPhase: phase,
       });
       return;
     }
@@ -953,7 +914,6 @@ export class AgentRuntime {
           name: typeof triple.name === 'string' ? triple.name : '',
           type: typeof triple.type === 'string' ? triple.type : '',
         },
-        resolutionPhase: phase,
       });
       return;
     }

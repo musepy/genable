@@ -18,10 +18,7 @@ import {
   variableBindingHandler,
   invalidateVariableCache,
 } from '../variableBindingHandler';
-import {
-  setVariableResolutionMode,
-  PLUGIN_DATA_MODE_COVERAGE,
-} from '../modeCoverageCheck';
+import { PLUGIN_DATA_MODE_COVERAGE } from '../modeCoverageCheck';
 
 // ── Fixture ────────────────────────────────────────────────────────────────
 //
@@ -100,7 +97,6 @@ function setupFixture(opts: FixtureOpts) {
 beforeEach(() => {
   invalidateVariableCache();
   lastBoundVariable = null;
-  setVariableResolutionMode('mode-coverage');
 });
 
 describe('variableBindingHandler — Phase 2 step 4 mode coverage', () => {
@@ -156,8 +152,6 @@ describe('variableBindingHandler — Phase 2 step 4 mode coverage', () => {
     expect(lastBoundVariable!.id).toBe('VariableID:1:5');
   });
 
-  // Note: the historical 'phase1' escape valve test was removed when the
-  // phased-rollout enum collapsed to two values post-cutover-revert. Both
-  // 'mode-coverage' and 'strict' now run the coverage check; there is no
-  // setting that bypasses it.
+  // Note: historical 'phase1' / 'strict' enum values were removed in the
+  // May 2026 strict-mode cleanup. The coverage check now runs unconditionally.
 });

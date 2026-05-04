@@ -1,23 +1,30 @@
 /**
  * @file setStrictBinding.test.ts
- * @description IPC-level tests for set_fill / set_stroke strict-mode +
- * structured-input behavior.
+ * @description IPC-level tests for set_fill / set_stroke object-form
+ * (structured-input) behavior.
  *
- * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §5.3.
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.2.
  *
  * What this verifies:
- *   - 'mode-coverage' (current default) keeps bare-name shorthands working
- *     (set_stroke "1 $Brand" still flows through, no rejection).
- *   - 'strict' (opt-in) rejects bare-name (BARE_NAME_REJECTED_PHASE2)
- *     before reaching handleEdit.
+ *   - Bare-name string shorthands ($Coll/Name, "1 $Brand/600 inside") pass
+ *     through to the legacy variableBindingHandler unchanged.
  *   - Structured object inputs ({variable_id} / {collection_id, name, type}
- *     / {color}) are translated to legacy edit({props}) calls so the
- *     downstream binding pipeline keeps working unchanged.
+ *     / {color}) translate to legacy edit({props}) calls so the downstream
+ *     binding pipeline keeps working.
+ *   - Object-form failure modes (STALE_VARIABLE_ID,
+ *     AMBIGUOUS_VARIABLE_REFERENCE, VARIABLE_NOT_FOUND) surface as error
+ *     envelopes without invoking handleEdit.
+ *
+ * History: this file used to assert a 'strict' resolver mode that rejected
+ * bare-name strings at the boundary (BARE_NAME_REJECTED_PHASE2). The strict
+ * mode + the rejection envelope were removed in May 2026 — see
+ * agentBehaviorConfig.ts header for context. Object-form parsing is preserved
+ * as a parallel input shape for non-LLM callers.
  *
  * Mocking philosophy:
- *   handleEdit is mocked so the test only exercises the strict-resolver
- *   shim + the schema translation. The figma.variables surface is mocked
- *   for the resolver's lookups only — minimal surface, no node/font logic.
+ *   handleEdit is mocked so the test only exercises the resolver shim + the
+ *   schema translation. The figma.variables surface is mocked for the
+ *   resolver's lookups only — minimal surface, no node/font logic.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -30,7 +37,6 @@ vi.mock('../editHandler', () => ({
 
 import { handleSetFill, handleSetStroke } from '../index';
 import { handleEdit } from '../editHandler';
-import { setVariableResolutionMode } from '../../../engine/actions/handlers/modeCoverageCheck';
 
 const mockHandleEdit = vi.mocked(handleEdit);
 
@@ -73,13 +79,12 @@ function stubFigmaVariables(variables: Variable[], collections = [COLL]) {
 beforeEach(() => {
   mockHandleEdit.mockClear();
   vi.unstubAllGlobals();
-  setVariableResolutionMode('mode-coverage');
 });
 
 // ─── set_fill ──────────────────────────────────────────────────────────────
 
-describe('handleSetFill — mode-coverage (default)', () => {
-  it('passes bare-name string through unchanged (backward compat)', async () => {
+describe('handleSetFill — string passthrough', () => {
+  it('passes bare-name string through unchanged', async () => {
     stubFigmaVariables([]);
     await handleSetFill({ node: '1:2', bg: '$Bg/Surface' });
 
@@ -98,7 +103,9 @@ describe('handleSetFill — mode-coverage (default)', () => {
       props: { fill: '#333333' },
     });
   });
+});
 
+describe('handleSetFill — object form', () => {
   it('translates {variable_id} object form to qualified bare-name', async () => {
     stubFigmaVariables([
       makeVariable({ id: 'VariableID:1:5', name: 'Bg/Surface' }),
@@ -136,42 +143,6 @@ describe('handleSetFill — mode-coverage (default)', () => {
     expect(mockHandleEdit).toHaveBeenCalledWith({
       node: '1:2',
       props: { fill: '#FF0000' },
-    });
-  });
-});
-
-describe('handleSetFill — strict', () => {
-  beforeEach(() => setVariableResolutionMode('strict'));
-
-  it('rejects bare-name string with BARE_NAME_REJECTED_PHASE2', async () => {
-    stubFigmaVariables([]);
-    const result = await handleSetFill({ node: '1:2', bg: '$Bg/Surface' });
-
-    expect(result.error).toContain('strict mode');
-    expect(result.data?.code).toBe('BARE_NAME_REJECTED_PHASE2');
-    expect(mockHandleEdit).not.toHaveBeenCalled();
-  });
-
-  it('still accepts hex strings (no rejection)', async () => {
-    stubFigmaVariables([]);
-    await handleSetFill({ node: '1:2', fill: '#333333' });
-
-    expect(mockHandleEdit).toHaveBeenCalled();
-  });
-
-  it('accepts {variable_id} object form', async () => {
-    stubFigmaVariables([
-      makeVariable({ id: 'VariableID:1:5', name: 'Bg/Surface' }),
-    ]);
-    const result = await handleSetFill({
-      node: '1:2',
-      bg: { variable_id: 'VariableID:1:5' },
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(mockHandleEdit).toHaveBeenCalledWith({
-      node: '1:2',
-      props: { bg: '$Theme/Bg/Surface' },
     });
   });
 
@@ -214,26 +185,12 @@ describe('handleSetFill — strict', () => {
     expect(result.data?.code).toBe('VARIABLE_NOT_FOUND');
     expect(mockHandleEdit).not.toHaveBeenCalled();
   });
-
-  it('accepts {color} form (raw hex passthrough)', async () => {
-    stubFigmaVariables([]);
-    const result = await handleSetFill({
-      node: '1:2',
-      fill: { color: '#00FF00' },
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(mockHandleEdit).toHaveBeenCalledWith({
-      node: '1:2',
-      props: { fill: '#00FF00' },
-    });
-  });
 });
 
 // ─── set_stroke ────────────────────────────────────────────────────────────
 
-describe('handleSetStroke — mode-coverage (default)', () => {
-  it('passes shorthand string through unchanged (backward compat for hex)', async () => {
+describe('handleSetStroke — string passthrough', () => {
+  it('passes shorthand string through unchanged (hex)', async () => {
     stubFigmaVariables([]);
     await handleSetStroke({ node: '1:2', stroke: '1 #E0E0E0' });
 
@@ -243,12 +200,11 @@ describe('handleSetStroke — mode-coverage (default)', () => {
     });
   });
 
-  it('passes shorthand string with bare-name through (backward compat)', async () => {
+  it('passes shorthand string with bare-name through', async () => {
     stubFigmaVariables([]);
-    // The shorthand is allowed in non-strict mode; expandShorthands treats
-    // the $-prefixed part as a variable reference (after the parser fix in
-    // step 6) so the binding actually flows through. The IPC handler does
-    // NOT reject in this mode.
+    // expandShorthands treats the $-prefixed part as a variable reference
+    // (see expandShorthands.ts stroke expander) so the binding flows through
+    // the variableBindingHandler downstream.
     await handleSetStroke({ node: '1:2', stroke: '1 $Brand/600' });
 
     expect(mockHandleEdit).toHaveBeenCalledWith({
@@ -256,7 +212,9 @@ describe('handleSetStroke — mode-coverage (default)', () => {
       props: { stroke: '1 $Brand/600' },
     });
   });
+});
 
+describe('handleSetStroke — object form', () => {
   it('translates color={variable_id} into qualified bare-name shorthand', async () => {
     stubFigmaVariables([
       makeVariable({ id: 'VariableID:1:5', name: 'Border/Default' }),
@@ -288,43 +246,6 @@ describe('handleSetStroke — mode-coverage (default)', () => {
       node: '1:2',
       props: { stroke: '2 $Theme/Border/Default' },
     });
-  });
-});
-
-describe('handleSetStroke — strict', () => {
-  beforeEach(() => setVariableResolutionMode('strict'));
-
-  it('rejects shorthand "1 $Brand/600" with BARE_NAME_REJECTED_PHASE2', async () => {
-    stubFigmaVariables([]);
-    const result = await handleSetStroke({ node: '1:2', stroke: '1 $Brand/600' });
-
-    expect(result.error).toContain('Phase 2 strict mode');
-    expect(result.data?.code).toBe('BARE_NAME_REJECTED_PHASE2');
-    expect(mockHandleEdit).not.toHaveBeenCalled();
-  });
-
-  it('accepts hex-only shorthand "1 #E0E0E0 inside"', async () => {
-    stubFigmaVariables([]);
-    await handleSetStroke({ node: '1:2', stroke: '1 #E0E0E0 inside' });
-
-    expect(mockHandleEdit).toHaveBeenCalledWith({
-      node: '1:2',
-      props: { stroke: '1 #E0E0E0 inside' },
-    });
-  });
-
-  it('accepts color={variable_id} structured form', async () => {
-    stubFigmaVariables([
-      makeVariable({ id: 'VariableID:1:5', name: 'Border/Default' }),
-    ]);
-    const result = await handleSetStroke({
-      node: '1:2',
-      color: { variable_id: 'VariableID:1:5' },
-      weight: 1,
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(mockHandleEdit).toHaveBeenCalled();
   });
 
   it('rejects color={variable_id} with expected_fingerprint mismatch', async () => {

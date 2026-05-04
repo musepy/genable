@@ -20,13 +20,11 @@ import { handleEdit } from './editHandler';
 import { handleScanTokens } from './tokenScanner';
 import {
   resolveStrictBinding,
-  isBareNameString,
   isByIdInput,
   isByTripleInput,
   isColorInput,
   type StrictRejectResult,
 } from '../../engine/actions/handlers/strictResolver';
-import { getVariableResolutionMode } from '../../engine/actions/handlers/modeCoverageCheck';
 // verb_noun tool adapters
 import { handleReplaceProps } from './searchAdapter';
 import { handleGrep } from './searchHandlers';
@@ -79,33 +77,27 @@ export async function handleSetText(parameters: any): Promise<ToolResponse> {
 }
 
 /**
- * Translate strict-mode binding inputs (object form for `fill` / `bg`) into
- * a downstream `edit({props: {fill|bg: <legacy-token>}})` call. When the
- * resolver returns a Variable, we hand the existing variableBindingHandler
- * a collection-qualified `$Collection/Name` ref — that key is unique in the
- * cache so the handler binds to the exact resolved variable (never the
- * orphan or wrong same-name).
+ * Translate object-form binding inputs (`{variable_id}` / `{collection_id,
+ * name, type}` / `{color}`) for `fill` / `bg` into a downstream
+ * `edit({props: {fill|bg: <legacy-token>}})` call. When the resolver returns
+ * a Variable, we hand the existing variableBindingHandler a collection-
+ * qualified `$Collection/Name` ref — that key is unique in the cache so the
+ * handler binds to the exact resolved variable (never the orphan or wrong
+ * same-name).
  *
- * Bare-name strings under 'strict' are rejected up front (spec §3.2);
- * raw hex strings stay as-is. The 'mode-coverage' default passes strings
- * through unchanged for backward compat with the legacy binding handler.
+ * String inputs (bare-name `$Coll/Name` or raw hex `#RRGGBB`) are passed
+ * through unchanged — the legacy `variableBindingHandler` handles bare-name
+ * lookup with the RYOW autopick tie-break (spec §5.1). The LLM is taught
+ * the string form; object form is a parallel input shape supported here for
+ * non-LLM callers (tests, scripts).
  *
- * Side effects: emits Phase 0 rejection envelopes inline. Caller wraps the
+ * Side effects: emits resolver rejection envelopes inline. Caller wraps the
  * envelope into a ToolResponse.
  */
 async function resolveBindingArgForLegacyEdit(
   raw: unknown,
   context: { tool: 'set_fill' | 'set_stroke'; node_id: string; bind_field: 'fill' | 'stroke' },
 ): Promise<{ kind: 'pass'; legacyValue: any } | { kind: 'reject'; reject: StrictRejectResult }> {
-  const mode = getVariableResolutionMode();
-  // Only 'strict' triggers strict bare-name rejection here. The default
-  // ('mode-coverage') passes bare-name strings through to the legacy
-  // variableBindingHandler (silent-pick first match).
-  const strict = mode === 'strict';
-
-  // Object form is ONLY interpreted by the strict resolver. In mode-coverage
-  // we still honour it (otherwise the caller has no way to express the new
-  // form), but we go through the same resolver.
   const isObject = raw !== null && typeof raw === 'object' && !Array.isArray(raw);
   const looksStructured = isObject && (isByIdInput(raw) || isByTripleInput(raw) || isColorInput(raw));
 
@@ -128,13 +120,9 @@ async function resolveBindingArgForLegacyEdit(
     }
   }
 
-  if (strict && isBareNameString(raw)) {
-    const resolved = await resolveStrictBinding(raw, context);
-    if (resolved.kind === 'reject') return { kind: 'reject', reject: resolved };
-  }
-
-  // Mode-coverage default passes strings through unchanged — bare-name
-  // resolution still happens via variableBindingHandler.
+  // String inputs (bare-name `$Coll/Name`, raw hex, etc.) pass through
+  // unchanged — the legacy variableBindingHandler runs bare-name lookup +
+  // RYOW autopick tie-break downstream.
   return { kind: 'pass', legacyValue: raw };
 }
 
@@ -197,53 +185,25 @@ export async function handleSetStroke(parameters: any): Promise<ToolResponse> {
     return { error: 'set_stroke requires "node" parameter.' };
   }
   const nodeId = String(parameters.node);
-  const mode = getVariableResolutionMode();
-  // Only 'strict' triggers strict bare-name rejection here. The default
-  // ('mode-coverage') passes bare-name strings through to the legacy
-  // variableBindingHandler (silent-pick first match).
-  const strict = mode === 'strict';
 
   const props: Record<string, any> = {};
 
-  // ── Shorthand string mode: "1 #E0E0E0 inside" ──
+  // ── Shorthand string mode: "1 #E0E0E0 inside" or "1 $Brand/600 inside" ──
   // The shorthand parser in expandShorthands.ts splits by whitespace and
-  // assigns each part by prefix (# = color, digit = weight, otherwise =
-  // align). Bare-name "$Token" parts have NO branch — they fall into
-  // `strokeAlign = p.toUpperCase()` and silently drop the binding. We
-  // detect this case at the boundary so strict mode rejects it cleanly,
-  // and (in non-strict mode) we can still pull the variable ref out and
-  // hand it to the resolver path the same way `color` does.
+  // assigns each part by prefix (# = color, $ = bare-name variable, digit
+  // = weight, otherwise = align). Bare-name parts flow through the variable
+  // binding handler downstream — see expandShorthands.ts stroke expander.
   if (parameters.stroke !== undefined) {
     if (typeof parameters.stroke !== 'string') {
       return { error: 'set_stroke "stroke" must be a string shorthand. For variable bindings, use color={variable_id|...} instead.' };
     }
-    // Detect bare-name token inside the shorthand (the round-2 parser bug).
-    const hasBareName = (parameters.stroke as string).split(/\s+/).some((p: string) => p.startsWith('$'));
-    if (hasBareName && strict) {
-      return rejectionToResponse({
-        kind: 'reject',
-        code: 'BARE_NAME_REJECTED_PHASE2',
-        message:
-          `Stroke shorthand "${parameters.stroke}" contains a bare-name token. ` +
-          `Phase 2 strict mode rejects this — pass {color: {variable_id: "..."}} (or {collection_id, name, type}) ` +
-          `as the structured form instead. The shorthand parser silently drops bare-name tokens.`,
-        recommended_next_action: {
-          tool: 'set_stroke',
-          args: {
-            node: nodeId,
-            color: { variable_id: '<look-up-via-list_variables>' },
-            ...(parameters.stroke.match(/\b(\d+(?:\.\d+)?)\b/) ? { weight: Number(RegExp.$1) } : {}),
-          },
-        },
-      });
-    }
     props.stroke = parameters.stroke;
   } else {
     // ── Explicit fields → compose shorthand ──
-    // Resolve `color` via the strict resolver if it's an object form (or
-    // a bare-name in strict mode). Resolved variables turn into
-    // collection-qualified `$Coll/Name` so the existing variableBindingHandler
-    // can bind the exact resolved variable; raw hex / passthrough is unchanged.
+    // Resolve `color` via the object-form resolver if it's a structured
+    // object input. Resolved variables turn into collection-qualified
+    // `$Coll/Name` so the existing variableBindingHandler can bind the
+    // exact resolved variable; raw hex / passthrough is unchanged.
     let colorPart: string | undefined;
     if (parameters.color !== undefined) {
       const r = await resolveBindingArgForLegacyEdit(parameters.color, {

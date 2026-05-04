@@ -1,6 +1,6 @@
 /**
  * @file modeCoverageCheck.test.ts
- * @description Phase 2 step 4 tests for write-time mode-coverage validation.
+ * @description Tests for write-time mode-coverage validation.
  *
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §6.
  *
@@ -11,10 +11,9 @@
  * `getPluginData`, `resolvedVariableModes`).
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect } from 'vitest';
 import {
   checkModeCoverage,
-  setVariableResolutionMode,
   validateFallbackReason,
   PLUGIN_DATA_MODE_COVERAGE,
 } from '../modeCoverageCheck';
@@ -75,10 +74,6 @@ function setupFixture(opts: FixtureOpts) {
 
   return { node, variable, collection };
 }
-
-beforeEach(() => {
-  setVariableResolutionMode('mode-coverage');
-});
 
 describe('checkModeCoverage — happy path', () => {
   it('returns ok when variable has all modes', async () => {
@@ -149,9 +144,9 @@ describe('checkModeCoverage — opt-in-fallback', () => {
   });
 });
 
-// Note: the historical 'phase1' escape valve (which bypassed checkModeCoverage
-// entirely) was removed when the phased-rollout enum collapsed to two values
-// post-cutover-revert. Both 'mode-coverage' and 'strict' now run the check.
+// Note: historical 'phase1' / 'strict' enum values were removed in the May
+// 2026 strict-mode cleanup. The check now runs unconditionally on every
+// variable bind call (no runtime gate).
 
 describe('validateFallbackReason — structured phrase rule (codex Medium 8)', () => {
   it('rejects non-string', () => {

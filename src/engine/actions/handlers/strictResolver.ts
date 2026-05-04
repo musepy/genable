@@ -1,33 +1,17 @@
 /**
- * STATUS — opt-in only (post May 2026 cutover revert).
- * This resolver is invoked exclusively when the runtime is configured with
- * `agentBehaviorConfig.variableResolution: 'strict'`. The default mode
- * (`'mode-coverage'`) routes bare-name `"$Token"` strings through the legacy
- * `variableBindingHandler` (silent-pick first match) and never enters this
- * file. The May 2026 attempt to flip the default to strict (commits a13ab4a /
- * 05774dc) was reverted in 56aefe6 because string-mode providers stringified
- * the structured `{variable_id}` object form taught in setter descriptions,
- * causing silent-black fills. Strict remains an opt-in pending real E2E
- * validation.
- *
- * Note on naming: the runtime error code `BARE_NAME_REJECTED_PHASE2` keeps
- * its historical "PHASE2" suffix on purpose — that string is emitted in
- * tool-response error envelopes and may appear in compressed transcript
- * history; renaming it could break LLM error-pattern matching. "PHASE2" in
- * this constant refers to the historical rollout phase (the §3.2 cutover),
- * not the current `VariableResolutionMode` enum value.
- *
  * @file strictResolver.ts
- * @description Phase 0 symbol resolution layer for the discriminated-union
- * variable-binding tool inputs (set_fill / set_stroke). Spec
- * docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §4.1 / §5.3.
+ * @description Object-form variable-binding input resolver. Used by IPC
+ * setter handlers (`handleSetFill` / `handleSetStroke`) when the caller
+ * passes a structured object (`{variable_id, ...}` / `{collection_id, name,
+ * type}` / `{color}`) for the `fill` / `bg` / `color` slot. Spec
+ * docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §4.1.
  *
- * Three input forms (strict mode):
+ * Three input forms:
  *   { variable_id, expected_name?, expected_fingerprint? } — ID + optional stability assertion
  *   { collection_id, name, type }                          — structured-name → resolved by triple
  *   { color: hex }                                          — raw hex passthrough
  *
- * Phase 0 runs PER tool call (not batched) — see §8 #1: a batch resolved
+ * Resolution runs PER tool call (not batched) — see §8 #1: a batch resolved
  * upfront would either fail subsequent calls (ensure_variable not yet
  * applied) or resolve to stale state.
  *
@@ -40,18 +24,15 @@
  * `variable` outcome into a downstream binding, the `color` outcome into a
  * raw fill, and the `reject` outcome into an error envelope.
  *
- * Gating
- * ──────
- * The resolver itself is mode-agnostic — IT ALWAYS RESOLVES the input. The
- * CALLER decides whether to invoke it (strict mode does) or fall back to
- * the legacy bare-name path (mode-coverage does). One exception: the
- * resolver checks bare-name strings ("$Name") and rejects them with
- * BARE_NAME_REJECTED_PHASE2 — the input shape, not the runtime mode, drives
- * that decision. Mode-coverage callers must not pass strings to this
- * resolver; pass them through the legacy path.
- *
  * The fingerprint formula in `computeVariableIdempotencyKey` is used for
  * `expected_fingerprint`. Mismatch = STALE_VARIABLE_ID.
+ *
+ * HISTORY — file name kept ("strictResolver") even though strict mode is
+ * gone. The name is referenced in 5+ files and renaming would ripple
+ * unnecessarily; the file's purpose is now object-form parsing, but the
+ * implementation is identical to what strict mode invoked. See
+ * agentBehaviorConfig.ts header for the full strict-mode removal context
+ * (May 2026 cutover → revert → cleanup).
  */
 
 import { computeVariableIdempotencyKey } from '../../agent/tools/idempotency';
@@ -90,7 +71,6 @@ export interface StrictRejectResult {
   kind: 'reject';
   /** Tool-response error code. See spec §4.1. */
   code:
-    | 'BARE_NAME_REJECTED_PHASE2'
     | 'STALE_VARIABLE_ID'
     | 'AMBIGUOUS_VARIABLE_REFERENCE'
     | 'VARIABLE_NOT_FOUND'
@@ -135,16 +115,7 @@ export function isColorInput(v: unknown): v is StrictColorInput {
     && (v as any).color.length > 0;
 }
 
-/**
- * Detect a bare-name string of form "$Name" or "$Collection/Name". Strict
- * mode rejects this at the tool boundary (spec §3.2). Caller may also
- * pass a plain hex string ("#FFF") which is still allowed via StrictColorInput.
- */
-export function isBareNameString(v: unknown): v is string {
-  return typeof v === 'string' && v.startsWith('$');
-}
-
-// ── Phase 0 resolution ───────────────────────────────────────────────────
+// ── Object-form resolution ───────────────────────────────────────────────
 
 /**
  * Find every variable matching (collection_id, name, type) in the LIVE
@@ -233,10 +204,10 @@ function computeLiveFingerprint(variable: Variable): string {
 }
 
 /**
- * Run Phase 0 resolution on a strict-mode binding input. The caller (e.g.
- * handleSetFill) decides whether to invoke this — bare-name rejection is
- * gated on 'strict' only. Object-form inputs flow through the resolver in
- * any mode (they're additive — the LLM can opt in any time).
+ * Resolve an object-form binding input. Caller (e.g. `handleSetFill`)
+ * invokes this only when the input is a structured object (the LLM-facing
+ * teaching is to pass bare-name strings; object form is the parallel
+ * implementor-facing path).
  *
  * Spec §3.2:
  *   - `{variable_id}` → look up; STALE_VARIABLE_ID if missing or expected_*
@@ -248,24 +219,6 @@ export async function resolveStrictBinding(
   input: unknown,
   context?: { tool: string; node_id?: string; bind_field?: 'fill' | 'stroke' },
 ): Promise<StrictResolveResult> {
-  // ── Bare-name string ──
-  if (isBareNameString(input)) {
-    const bareName = input.slice(1);
-    return {
-      kind: 'reject',
-      code: 'BARE_NAME_REJECTED_PHASE2',
-      message:
-        `Bare-name binding "${input}" is not allowed in Phase 2 strict mode. ` +
-        `Pass either {variable_id: "VariableID:..."} or ` +
-        `{collection_id: "VariableCollectionId:...", name: "${bareName}", type: "<COLOR|FLOAT|STRING|BOOLEAN>"} ` +
-        `as the structured fill argument. See variable-resolver-design §3.2.`,
-      recommended_next_action: {
-        tool: 'list_variables',
-        args: { filter: bareName },
-      },
-    };
-  }
-
   // ── Color input ──
   if (isColorInput(input)) {
     return { kind: 'color', hex: input.color };

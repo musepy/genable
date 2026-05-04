@@ -375,13 +375,8 @@ export interface AgentRuntimeAmbiguousAutopickEvent extends AgentRuntimeBaseEven
 /**
  * Emitted when a variable binding fails MISSING_MODE_VALUES — the variable's
  * `values_by_mode` is missing one or more modes in the target node's
- * resolved-mode chain. Phase 2 step 4 of the variable resolver redesign:
- * the binding is REJECTED at write time (no Figma mutation occurs) unless
- * the variable is opt-in-fallback.
- *
- * Carries the data needed for rollback metric tracking (§5.4): `phase`
- * indicates which AgentBehaviorConfig.variableResolution setting was active,
- * `tool_name` lets the rollback tracker scope per-tool reverts.
+ * resolved-mode chain. The binding is REJECTED at write time (no Figma
+ * mutation occurs) unless the variable is opt-in-fallback.
  *
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §6, §4.1.d.
  */
@@ -397,35 +392,12 @@ export interface AgentRuntimeMissingModeValuesEvent extends AgentRuntimeBaseEven
   variable_id: string;
   /** Modes the variable lacks values for, expressed as mode names. */
   missing_modes: string[];
-  /** Current AgentBehaviorConfig.variableResolution at time of failure. */
-  resolutionPhase: 'mode-coverage' | 'strict';
   /** Wall-clock ms (Date.now()) at failure point — duplicates `timestamp` for explicit auditing. */
   ts: number;
 }
 
 /**
- * Emitted when a Phase 2 strict-mode binding rejects a bare-name string
- * input (e.g. `set_fill({fill: "$Brand/600"})`). Spec §3.2 / §5.3 — strict
- * mode requires structured input (object form). Non-fatal at the runtime
- * level (the tool returns an error envelope), but logged so dashboards
- * can audit how often the LLM still passes bare names after the cutover.
- */
-export interface AgentRuntimeBareNameRejectedEvent extends AgentRuntimeBaseEvent {
-  type: 'bare_name_rejected';
-  phase: AgentRuntimePhase;
-  iteration?: number;
-  /** Tool that triggered (e.g. "set_fill", "set_stroke"). */
-  tool_name: string;
-  /** Node the binding targeted. */
-  node_id?: string;
-  /** The bare-name string the LLM passed (e.g. "$Brand/600"). */
-  name_query: string;
-  /** Active variableResolution at time of failure — always 'strict' (bare-name reject only fires under strict mode). */
-  resolutionPhase: 'mode-coverage' | 'strict';
-}
-
-/**
- * Emitted when a strict-mode binding's `{variable_id}` form fails because
+ * Emitted when an object-form binding's `{variable_id}` input fails because
  * the variable was deleted, renamed, or had its values/collection mutated
  * since the assertion was captured. Spec §3.2 / §4.1.c. The `expected_*`
  * fields surface what the agent thought the variable was; `actual_*`
@@ -448,14 +420,12 @@ export interface AgentRuntimeStaleVariableIdEvent extends AgentRuntimeBaseEvent 
   actual_fingerprint?: string;
   /** Differentiates "variable deleted" from "variable mutated". */
   reason: 'variable_missing' | 'name_mismatch' | 'fingerprint_mismatch';
-  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
- * Emitted when a strict-mode binding's `{collection_id, name, type}` triple
- * matches 2+ variables — hard failure in strict mode (vs Phase 1's
- * AMBIGUOUS_NAME_AUTOPICK soft warning, which still binds the first match).
- * Spec §3.2 / §4.1.b.
+ * Emitted when an object-form binding's `{collection_id, name, type}` triple
+ * matches 2+ variables — hard failure (the resolver cannot disambiguate
+ * structurally identical inputs). Spec §3.2 / §4.1.b.
  */
 export interface AgentRuntimeAmbiguousVariableReferenceEvent extends AgentRuntimeBaseEvent {
   type: 'ambiguous_variable_reference';
@@ -475,11 +445,10 @@ export interface AgentRuntimeAmbiguousVariableReferenceEvent extends AgentRuntim
     mode_coverage?: string[];
     source: 'preexisting' | 'created_this_turn';
   }>;
-  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
- * Emitted when a strict-mode binding's `{collection_id, name, type}` triple
+ * Emitted when an object-form binding's `{collection_id, name, type}` triple
  * matches no variables. Spec §4.1 (paired with VARIABLE_NOT_FOUND error
  * code). The recommended recovery is `ensure_variable` with the same triple.
  */
@@ -490,7 +459,6 @@ export interface AgentRuntimeVariableNotFoundEvent extends AgentRuntimeBaseEvent
   tool_name: string;
   node_id?: string;
   query: { collection_id: string; name: string; type: string };
-  resolutionPhase: 'mode-coverage' | 'strict';
 }
 
 /**
@@ -595,7 +563,6 @@ export type AgentRuntimeEvent =
   | AgentRuntimeAmbiguousAutopickEvent
   | AgentRuntimeMissingModeValuesEvent
   | AgentRuntimeRollbackSignalEvent
-  | AgentRuntimeBareNameRejectedEvent
   | AgentRuntimeStaleVariableIdEvent
   | AgentRuntimeAmbiguousVariableReferenceEvent
   | AgentRuntimeVariableNotFoundEvent;
@@ -627,7 +594,6 @@ export type AgentRuntimeEventType =
   | 'ambiguous_autopick'
   | 'missing_mode_values'
   | 'rollback_signal'
-  | 'bare_name_rejected'
   | 'stale_variable_id'
   | 'ambiguous_variable_reference'
   | 'variable_not_found';

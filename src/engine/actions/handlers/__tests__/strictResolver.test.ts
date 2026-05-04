@@ -1,19 +1,21 @@
 /**
  * @file strictResolver.test.ts
- * @description Phase 2 step 5+6 — Phase 0 strict resolver tests.
+ * @description Object-form variable-binding resolver tests.
  *
- * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §4.1 / §5.3.
+ * Spec: docs/knowledge/variable-resolver-design-2026-05.md §3.2 / §4.1.
  *
- * Resolver itself is mode-agnostic (it always resolves the input shape), but
- * the bare-name reject is intrinsic to the input form. Tests exercise:
- *
- *   - Bare-name strings → BARE_NAME_REJECTED_PHASE2 (always — caller
- *     decides not to invoke this resolver in non-strict modes).
+ * Tests exercise:
  *   - {variable_id} → 'variable' result; assertion failures map to
  *     STALE_VARIABLE_ID with the right reason discriminator.
  *   - {collection_id, name, type} → 'variable' on unique match;
  *     AMBIGUOUS_VARIABLE_REFERENCE on 2+; VARIABLE_NOT_FOUND on 0.
  *   - {color: hex} → 'color' passthrough.
+ *   - Unrecognized object shapes → INVALID_INPUT.
+ *
+ * History: this file used to assert a `BARE_NAME_REJECTED_PHASE2` envelope
+ * for bare-name string inputs (the strict-mode boundary check). That
+ * envelope + the strict mode it gated were removed in May 2026 — see
+ * agentBehaviorConfig.ts header for context.
  *
  * Mocking philosophy (per docs/TESTING.md): only the figma.variables surface
  * the resolver consults. Node creation, fonts, layout — not touched.
@@ -72,20 +74,17 @@ beforeEach(() => {
   vi.unstubAllGlobals();
 });
 
-// ── Bare-name reject ─────────────────────────────────────────────────────
+// ── String inputs are no longer accepted by this resolver ───────────────
+// (strict-mode bare-name reject path was removed in May 2026; bare-name
+// strings now flow through the legacy variableBindingHandler unchanged.)
 
-describe('resolveStrictBinding — bare-name reject', () => {
-  it('rejects "$Brand/600" with BARE_NAME_REJECTED_PHASE2', async () => {
+describe('resolveStrictBinding — string input', () => {
+  it('rejects bare-name string with INVALID_INPUT (caller should not pass strings)', async () => {
     stubFigmaVariables([]);
-    const r = await resolveStrictBinding('$Brand/600', { tool: 'set_fill', node_id: 'n:1' });
+    const r = await resolveStrictBinding('$Brand/600');
     expect(r.kind).toBe('reject');
     if (r.kind !== 'reject') return;
-    expect(r.code).toBe('BARE_NAME_REJECTED_PHASE2');
-    expect(r.message).toContain('strict mode');
-    expect(r.recommended_next_action).toEqual({
-      tool: 'list_variables',
-      args: { filter: 'Brand/600' },
-    });
+    expect(r.code).toBe('INVALID_INPUT');
   });
 });
 

@@ -69,55 +69,47 @@ if [ ${#ALL_PROMPT_TARGETS[@]} -gt 0 ]; then
 fi
 
 # ── Check 2 ───────────────────────────────────────────────────────────────────
-# No "bare-name rejected" claims when default isn't strict.
-# Rationale: when DEFAULT_BEHAVIOR.variableResolution is 'mode-coverage', bare-name
-# binding WORKS. Claiming it's rejected in a prompt is a lie that confuses the LLM
-# and causes it to use (broken) object form instead.
-# Exception: error envelope strings inside src/ipc/commands/ — those only fire under strict.
+# No "bare-name rejected" claims anywhere in prompts/skills.
+# Rationale: after the May 2026 strict-mode removal, bare-name binding is
+# the ONLY supported LLM-facing form. Claims that bare names get rejected
+# are stale and would steer the LLM toward the (broken) object form.
 CHECKS=$((CHECKS + 1))
-echo "[ 2/5 ] Checking: no 'bare-name rejected' claims in prompts when default is mode-coverage ..."
+echo "[ 2/5 ] Checking: no 'bare-name rejected' claims in prompts ..."
 
-# Detect current default
-CURRENT_DEFAULT=$(grep -E "variableResolution:\s*'[^']+'" src/engine/agent/agentBehaviorConfig.ts \
-  | grep -v '//' \
-  | sed "s/.*variableResolution:\s*'\([^']*\)'.*/\1/" \
-  | head -1 || true)
+BARE_REJECTED_PATTERNS=("bare-name strings are rejected" "Bare-name binding is not allowed" "bare-name.*rejected" "Bare-name.*rejected")
+PROMPT_SKILL_DIRS=("src/prompts" ".agent/skills")
 
-if [ "$CURRENT_DEFAULT" != "strict" ]; then
-  BARE_REJECTED_PATTERNS=("bare-name strings are rejected" "Bare-name binding is not allowed" "bare-name.*rejected" "Bare-name.*rejected")
-  PROMPT_SKILL_DIRS=("src/prompts" ".agent/skills")
-
-  for pattern in "${BARE_REJECTED_PATTERNS[@]}"; do
-    while IFS= read -r hit; do
-      file_part="${hit%%:*}"
-      line_rest="${hit#*:}"
-      lineno="${line_rest%%:*}"
-      content="${line_rest#*:}"
-      fail "No bare-name-rejected claims when default is mode-coverage" \
-        "$file_part:$lineno" \
-        "$(echo "$content" | head -c 120)" \
-        "Default variableResolution is '$CURRENT_DEFAULT' — bare-name binding still works. This claim is false." \
-        "Remove or condition this claim on the strict mode being active (it's only true under opt-in 'strict')."
-    done < <(grep -rn -E "$pattern" "${PROMPT_SKILL_DIRS[@]}" 2>/dev/null || true)
-  done
-else
-  echo "        (skipped — default IS strict, bare-name-rejected claims would be correct)"
-fi
+for pattern in "${BARE_REJECTED_PATTERNS[@]}"; do
+  while IFS= read -r hit; do
+    file_part="${hit%%:*}"
+    line_rest="${hit#*:}"
+    lineno="${line_rest%%:*}"
+    content="${line_rest#*:}"
+    fail "No bare-name-rejected claims in prompts" \
+      "$file_part:$lineno" \
+      "$(echo "$content" | head -c 120)" \
+      "Bare-name binding is the only supported LLM-facing form post May-2026 cleanup; rejection is impossible at the resolver." \
+      "Remove the claim entirely — there is no opt-in mode that makes it true."
+  done < <(grep -rn -E "$pattern" "${PROMPT_SKILL_DIRS[@]}" 2>/dev/null || true)
+done
 
 # ── Check 3 ───────────────────────────────────────────────────────────────────
-# No stale phase nomenclature in src/.
+# No stale phase / strict-mode nomenclature in src/.
 # Rationale: the old 4-value enum (phase1 / phase2-mode-coverage / phase2-strict / auto)
-# was collapsed to 2 values ('mode-coverage' / 'strict') after the May 2026 revert.
+# was collapsed to 2 values in May 2026, and then the 2-value enum itself
+# ('mode-coverage' / 'strict') was deleted in the May-2026 strict-mode cleanup.
 # Any remaining references to the old names are dead code or misleading comments.
 # Exceptions:
 #   - agentBehaviorConfig.ts JSDoc (explains the rename history — explicitly allowed)
-#   - __tests__/ directories
-#   - strictResolver.ts (retains BARE_NAME_REJECTED_PHASE2 intentionally — see its comment)
+#   - __tests__/ directories (tests reference old names in headers/comments for clarity)
+#   - strictResolver.ts (file name retained; see its header for context)
+#   - modeCoverageCheck.ts (variable name; describes the check, not a runtime mode)
+#   - teaching-manifest.yaml history entries
 #   - Lines with "// historical:" or "// legacy naming:" comment markers
 CHECKS=$((CHECKS + 1))
-echo "[ 3/5 ] Checking: no stale phase nomenclature (phase1 / phase2-mode-coverage / phase2-strict) ..."
+echo "[ 3/5 ] Checking: no stale phase / strict-mode nomenclature (phase1 / phase2-* / VariableResolutionMode) ..."
 
-STALE_NAMES=("phase2-mode-coverage" "phase2-strict" "'phase1'" '"phase1"')
+STALE_NAMES=("phase2-mode-coverage" "phase2-strict" "'phase1'" '"phase1"' "VariableResolutionMode" "setVariableResolutionMode" "getVariableResolutionMode")
 
 for name in "${STALE_NAMES[@]}"; do
   while IFS= read -r hit; do

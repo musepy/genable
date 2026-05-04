@@ -5,16 +5,15 @@
  * Delegates to command handlers in src/ipc/commands/.
  * Only responsibilities: route, catch, emit result.
  *
- * Runtime-flag plumbing: the sandbox-side ToolDispatcher passes
- * `agentBehaviorConfig.variableResolution` via the IPC `context` field. We
- * mirror it into a main-thread module-level state so handlers (mode-coverage
- * check etc.) can read it without per-call threading. See spec §7.1.
+ * Runtime-flag plumbing: the sandbox-side ToolDispatcher passes runtime
+ * context via the IPC `context` field. We mirror it into main-thread
+ * module-level state so handlers (variableBindingHandler RYOW tie-break)
+ * can read it without per-call threading.
  */
 
 import { emit } from '@create-figma-plugin/utilities';
 import { logger } from '../../utils/logger';
 import { dispatchCommand } from '../commands';
-import { setVariableResolutionMode } from '../../engine/actions/handlers/modeCoverageCheck';
 import {
   setRyowCreatedThisTurn,
   clearRyowCreatedThisTurn,
@@ -27,21 +26,13 @@ export interface ToolCallData {
   requestId: string;
   /**
    * Optional runtime flags from the sandbox-side AgentRuntime. Currently
-   * threads `variableResolution` to the mode-coverage checker.
+   * threads the RYOW "created this turn" variable IDs.
    */
   context?: ToolContext;
 }
 
 export async function handleToolCall(data: ToolCallData): Promise<void> {
   const { toolName, parameters, requestId, context } = data;
-
-  // Apply runtime flags from context BEFORE dispatching. Per-call apply is
-  // deliberate: the agent config could in principle change between calls
-  // (e.g. test scenarios that flip the resolver mode mid-session), and we
-  // want each tool call to see the value from its own dispatch.
-  if (context && context.variableResolution) {
-    setVariableResolutionMode(context.variableResolution);
-  }
 
   // RYOW snapshot — used by variableBindingHandler to break bare-name
   // autopick ties in favor of variables created this turn (spec §5.1).

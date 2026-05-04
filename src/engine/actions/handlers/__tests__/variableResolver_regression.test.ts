@@ -274,38 +274,18 @@ describe('variableBindingHandler — stale variable silent-pick (REGRESSION)', (
   });
 });
 
-// ── Strict mode coverage ─────────────────────────────────────────────────
+// ── Object-form resolver coverage ────────────────────────────────────────
 //
-// Same-name fixture, but exercise the strict resolver directly instead of
-// variableBindingHandler. Confirms the §3 strict resolver rejects bare-name
-// with structured envelope (BARE_NAME_REJECTED_PHASE2). The resolver is
-// invoked by handleSetFill / handleSetStroke when
-// `agentBehaviorConfig.variableResolution === 'strict'` (opt-in). The legacy
-// variableBindingHandler path remains untouched in this mode (the IPC
-// boundary catches bare names before they reach the handler).
+// Same-name fixture, exercising the object-form resolver directly instead of
+// variableBindingHandler. Object form is the parallel input shape (structured
+// objects via {variable_id} or {collection_id, name, type}). The May 2026
+// strict-mode cleanup removed the bare-name boundary check from this
+// resolver — strings now flow through variableBindingHandler unchanged.
 
 import { resolveStrictBinding } from '../strictResolver';
 
 describe('strictResolver — same-name fixture', () => {
-  it('strict: rejects bare-name "$Text/Primary" with structured envelope', async () => {
-    // The IPC handler is what actually invokes resolveStrictBinding; here
-    // we exercise the resolver directly to assert the envelope shape that
-    // would be relayed to the LLM.
-    const result = await resolveStrictBinding('$Text/Primary', {
-      tool: 'set_fill',
-      node_id: 'test:1',
-    });
-
-    expect(result.kind).toBe('reject');
-    if (result.kind !== 'reject') return;
-    expect(result.code).toBe('BARE_NAME_REJECTED_PHASE2');
-    expect(result.recommended_next_action).toEqual({
-      tool: 'list_variables',
-      args: { filter: 'Text/Primary' },
-    });
-  });
-
-  it('strict: {collection_id, name, type} for the orphan resolves deterministically to the orphan', async () => {
+  it('object form: {collection_id, name, type} for the orphan resolves deterministically to the orphan', async () => {
     const result = await resolveStrictBinding({
       collection_id: ORPHAN_COLLECTION.id,
       name: 'Text/Primary',
@@ -317,7 +297,7 @@ describe('strictResolver — same-name fixture', () => {
     expect(result.variable.id).toBe(ORPHAN_VAR.id);
   });
 
-  it('strict: {collection_id, name, type} for the fresh collection resolves deterministically to the fresh variable', async () => {
+  it('object form: {collection_id, name, type} for the fresh collection resolves deterministically to the fresh variable', async () => {
     const result = await resolveStrictBinding({
       collection_id: FRESH_COLLECTION.id,
       name: 'Text/Primary',
@@ -327,17 +307,5 @@ describe('strictResolver — same-name fixture', () => {
     expect(result.kind).toBe('variable');
     if (result.kind !== 'variable') return;
     expect(result.variable.id).toBe(FRESH_VAR.id);
-  });
-
-  it('mode-coverage: bare-name "$Text/Primary" still passes through variableBindingHandler (backward compat assertion lives in the FIRST describe block)', () => {
-    // This describe block exists to document the mode contract: in the
-    // 'mode-coverage' default, the IPC handler does NOT invoke
-    // resolveStrictBinding for bare-name strings — it passes them through
-    // to handleEdit → variableBindingHandler unchanged. The actual
-    // assertion that the silent-pick still happens lives in the first
-    // describe block above (legacy warn_pick_record). This placeholder
-    // makes the contract explicit so a future refactor that breaks
-    // backward-compat will fail a test that READS like the contract.
-    expect(true).toBe(true);
   });
 });

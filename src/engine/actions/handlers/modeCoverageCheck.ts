@@ -1,7 +1,6 @@
 /**
  * @file modeCoverageCheck.ts
- * @description Phase 2 step 4 — write-time mode coverage validation for
- * variable bindings.
+ * @description Write-time mode coverage validation for variable bindings.
  *
  * Spec: docs/knowledge/variable-resolver-design-2026-05.md §6.
  *
@@ -18,18 +17,13 @@
  * via `mode_coverage_required: 'opt-in-fallback'` (persisted on the variable
  * via setPluginData — see §6.2).
  *
- * Plumbing — runtime mode flag:
- *   The `agentBehaviorConfig.variableResolution` setting ('mode-coverage' /
- *   'strict') reaches this main-thread module via a setter. AgentRuntime
- *   calls `setVariableResolutionMode()` in the sandbox; the IPC dispatcher
- *   mirrors the value into the main thread per-call from
- *   `_meta.variableResolution` on tool params (see `src/ipc/commands/index.ts`
- *   `dispatchCommand`). Both modes run this check — the modes only differ
- *   in whether bare-name `"$Token"` strings get rejected at the tool boundary.
+ * The check runs unconditionally on every variable bind call. Historically
+ * a runtime flag (`AgentBehaviorConfig.variableResolution`) gated this and
+ * a separate strict bare-name rejection; the flag was removed in May 2026
+ * once strict mode had zero callers (see agentBehaviorConfig.ts header).
  */
 
 import type { Warning } from './types';
-import type { VariableResolutionMode } from '../../agent/agentBehaviorConfig';
 
 // Plugin data keys — see spec §6.2.
 export const PLUGIN_DATA_MODE_COVERAGE = 'mode_coverage_required';
@@ -60,30 +54,6 @@ export type ModeCoverageResult =
       variable_id: string;
       variable_name: string;
     };
-
-// ── Module-level resolution-mode state ─────────────────────────────────────
-//
-// The agent runtime sets this once at construction; the IPC dispatcher also
-// updates it per-call from `_meta.variableResolution` (so cross-thread sync
-// works without a dedicated init IPC). Default mirrors AgentBehaviorConfig
-// — the constant is duplicated here intentionally to avoid a circular import
-// on agent → handlers → agent.
-
-let currentResolutionMode: VariableResolutionMode = 'mode-coverage';
-
-/**
- * Set the active variable-resolver mode. Called by AgentRuntime at
- * construction and by the IPC dispatcher per-call. Tests can call this
- * directly to flip the mode without spinning up an AgentRuntime.
- */
-export function setVariableResolutionMode(mode: VariableResolutionMode): void {
-  currentResolutionMode = mode;
-}
-
-/** Read the active variable-resolver mode. */
-export function getVariableResolutionMode(): VariableResolutionMode {
-  return currentResolutionMode;
-}
 
 /**
  * Read the persisted `mode_coverage_required` flag for a variable. Returns
@@ -220,8 +190,8 @@ export async function findMissingModesAsync(
 }
 
 /**
- * Glue: compute coverage result honoring `agentBehaviorConfig.variableResolution`
- * and the variable's `mode_coverage_required` plugin data.
+ * Glue: compute coverage result honoring the variable's `mode_coverage_required`
+ * plugin data.
  *
  * Returns a discriminated `ModeCoverageResult` that callers translate into
  * either a successful bind, a fallback-warning bind, or a hard-fail error
@@ -231,8 +201,6 @@ export async function checkModeCoverage(
   node: SceneNode,
   variable: Variable,
 ): Promise<ModeCoverageResult> {
-  // Both modes ('mode-coverage', 'strict') run this check — the modes only
-  // differ in bare-name string handling at the tool boundary.
   const result = await findMissingModesAsync(node, variable);
   if (!result) return { kind: 'pass' };
 

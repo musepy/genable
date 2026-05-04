@@ -60,13 +60,13 @@ concepts:
           spacing, etc.). Not raw syntax — assumes LLM knows string form from
           tool descriptions. Any example tokens must use string form.
       - path: src/ipc/commands/index.ts
-        section: "handleSetFill / handleSetStroke error envelopes (BARE_NAME_REJECTED_PHASE2)"
+        section: "handleSetFill / handleSetStroke object-form rejection envelopes"
         scope: >
-          ERROR RECOVERY — recommended_next_action shape; emitted only when
-          variableResolution === 'strict' (opt-in). This file intentionally
-          retains the 'PHASE2' suffix in error codes because those code strings
-          are part of the error-pattern-matching contract (see strictResolver.ts
-          lines 13-16). Changing them would break LLM error recovery.
+          ERROR RECOVERY — recommended_next_action shape for STALE_VARIABLE_ID
+          / AMBIGUOUS_VARIABLE_REFERENCE / VARIABLE_NOT_FOUND. These envelopes
+          fire only when the caller passes structured object input; bare-name
+          string inputs flow through the legacy variableBindingHandler and
+          never reach this rejection path.
     invariants:
       - >
         SYSTEM.md keeps WHAT/WHY only — it must never copy specific syntax
@@ -84,14 +84,15 @@ concepts:
         examples in any prompt file (src/prompts/**) or skill file (.agent/skills/**).
       - >
         "bare-name rejected" / "Bare-name binding is not allowed" claims must
-        NOT appear in prompt or skill files when DEFAULT_BEHAVIOR.variableResolution
-        is 'mode-coverage'. Bare-name binding WORKS in mode-coverage. The
-        BARE_NAME_REJECTED_PHASE2 error only fires under 'strict' (opt-in).
+        NOT appear in prompt or skill files. After the May 2026 strict-mode
+        removal, bare-name binding is the ONLY supported LLM-facing form;
+        rejection is no longer possible at the resolver boundary.
     last-coherence-check: 2026-05-04
     history:
       - "2026-05-03: phase2-strict cutover added object-form teaching to all surfaces (a13ab4a, 05774dc)"
       - "2026-05-04: revert (56aefe6) cleaned setterTools.ts but missed SYSTEM.md → weather E2E disaster (36 silent black fills)"
       - "2026-05-04: SYSTEM.md aligned (a916d95), single-sourced (79478b6); manifest created to prevent recurrence"
+      - "2026-05-04: 'strict' mode removed (was zero-caller dead code post-revert + RYOW fix); object-form parsing kept as parallel input shape but unadvertised to LLMs"
 
   # ──────────────────────────────────────────────────────────────────────
   # node-addressing
@@ -174,12 +175,13 @@ concepts:
           WHAT/WHY — tells LLM that warning codes are self-recoverable and that
           recommended_next_action.args can be passed back verbatim. Does NOT
           re-explain mode coverage semantics (delegates to varTool description).
-      - path: src/engine/agent/agentBehaviorConfig.ts
-        section: "VariableResolutionMode JSDoc + DEFAULT_BEHAVIOR"
+      - path: src/engine/actions/handlers/modeCoverageCheck.ts
+        section: "checkModeCoverage + buildMissingModeValuesWarning"
         scope: >
-          RUNTIME CONTROL — documents that 'mode-coverage' default enforces
-          write-time mode coverage check. Not LLM-facing, but changes here
-          affect what warnings/errors the LLM actually sees.
+          RUNTIME CONTROL — write-time mode-coverage check is unconditional
+          (no longer gated on a behavior flag after the May 2026 strict-mode
+          removal). Not LLM-facing, but changes here affect what
+          warnings/errors the LLM actually sees.
       - path: .agent/error-catalog.md
         section: "MISSING_MODE_VALUES entry (if present)"
         scope: >

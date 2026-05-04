@@ -70,12 +70,11 @@ export function invalidateVariableCache(): void {
 
 // ── Module-level RYOW snapshot ───────────────────────────────────────────────
 //
-// Mirrors the `setVariableResolutionMode` pattern in modeCoverageCheck.ts:
-// the IPC dispatcher (`toolCallHandler.ts`) calls `setRyowCreatedThisTurn`
-// from the per-tool-call `context.ryowCreatedThisTurnIds` BEFORE dispatching,
-// so apply() can read it without per-call threading. Default is empty —
-// callers without RyowStore (manual unit tests, internal calls) get legacy
-// behavior (first-match wins, the original Phase 1 silent-pick).
+// Cross-thread state push: the IPC dispatcher (`toolCallHandler.ts`) calls
+// `setRyowCreatedThisTurn` from the per-tool-call `context.ryowCreatedThisTurnIds`
+// BEFORE dispatching, so apply() can read it without per-call threading.
+// Default is empty — callers without RyowStore (manual unit tests, internal
+// calls) get legacy behavior (first-match wins, the original Phase 1 silent-pick).
 
 let currentRyowCreatedThisTurn: Set<string> = new Set();
 
@@ -200,8 +199,7 @@ export const variableBindingHandler: PropertyHandler = {
     // ── Mode coverage check ─────────────────────────────────────────────
     // Spec §6: every binding must either (a) have full mode coverage in
     // the target node's resolved mode chain, or (b) belong to an
-    // explicit `opt-in-fallback` variable. Both 'mode-coverage' (default)
-    // and 'strict' run this check.
+    // explicit `opt-in-fallback` variable.
     const coverage = await checkModeCoverage(node, variable);
     if (coverage.kind === 'fail') {
       warnings.push(buildMissingModeValuesWarning({

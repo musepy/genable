@@ -93,13 +93,13 @@ describe('AgentRuntime', () => {
 
     expect(result).toBe('Task done');
     expect(mockProvider.generate).toHaveBeenCalledTimes(2);
-    // The third arg is the runtime context (variableResolution flag) threaded
-    // sandbox→main per spec §7.1. Older callers ignore it; we assert on the
-    // first two positional args only.
+    // The third arg is the runtime context (RYOW snapshot) threaded
+    // sandbox→main. Older callers ignore it; we assert on the first two
+    // positional args only.
     expect(mockIpcBridge.callTool).toHaveBeenCalledWith(
       'get_info',
       { query: 'test' },
-      expect.objectContaining({ variableResolution: expect.any(String) }),
+      expect.objectContaining({ ryowCreatedThisTurnIds: expect.any(Array) }),
     );
 
     const messages = runtime.getMessages();

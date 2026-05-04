@@ -152,6 +152,17 @@ export class RyowStore {
   }
 
   /**
+   * Snapshot of all variable IDs created/recorded this turn. Used by
+   * AgentRuntime to push the set into the main-thread variableBindingHandler
+   * via IPC `context`, where it serves as a tie-break signal when a bare-name
+   * lookup matches multiple variables (spec §5.1 — pick the one we know about
+   * this turn rather than the oldest by `getLocalVariablesAsync` order).
+   */
+  getCreatedThisTurnIds(): string[] {
+    return Array.from(this.variableIdsThisTurn);
+  }
+
+  /**
    * Look up a variable by name + type (and optional collection). Returns
    * the most-recently-seen match, used as `suggested_id` in
    * AMBIGUOUS_NAME_AUTOPICK warnings.

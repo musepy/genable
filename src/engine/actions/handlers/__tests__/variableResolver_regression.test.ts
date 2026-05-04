@@ -33,6 +33,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
   variableBindingHandler,
   invalidateVariableCache,
+  setRyowCreatedThisTurn,
+  clearRyowCreatedThisTurn,
 } from '../variableBindingHandler';
 
 // ── Fixture: two variables, same name, two different collections ────────────
@@ -121,28 +123,22 @@ describe('variableBindingHandler — stale variable silent-pick (REGRESSION)', (
   beforeEach(() => {
     invalidateVariableCache();
     lastBoundVariable = null;
+    clearRyowCreatedThisTurn();
   });
 
-  it('PHASE 1 (warn_pick_record): bare-name "$Text/Primary" still silently picks the orphan, BUT now emits AMBIGUOUS_NAME_AUTOPICK with full candidate list', async () => {
-    // The LLM just created FRESH_VAR (id 1894:4930) earlier this turn,
-    // and now passes a bare-name token. Phase 1 keeps backward-compat
-    // silent-pick semantics (still binds first match) BUT surfaces a
-    // warning so the LLM can self-correct on the next turn (spec §5.1).
-    // The runtime emits a corresponding `ambiguous_autopick` event for
-    // dev-bridge auditing.
+  it('LEGACY (no RYOW context): bare-name "$Text/Primary" falls back to first match (orphan wins) and emits AMBIGUOUS_NAME_AUTOPICK', async () => {
+    // When no RYOW snapshot is set (manual unit tests, internal callers
+    // without an AgentRuntime / IPC dispatcher), the handler must preserve
+    // legacy behavior — pick variables[0] (first by getLocalVariablesAsync
+    // order, which is the orphan). The warning still surfaces every
+    // candidate so the audit signal is unchanged.
     const node = mockNode();
 
     const warnings = await variableBindingHandler.apply(node, 'fills', '$Text/Primary');
 
-    // Phase 1: silent-pick still happens — orphan wins, fresh loses.
-    // (Phase 2 will reject bare-name and require ID-form or
-    // (collection_id, name, type) triple.)
     expect(lastBoundVariable).not.toBeNull();
     expect(lastBoundVariable!.id).toBe(ORPHAN_VAR.id);
-    expect(lastBoundVariable!.id).not.toBe(FRESH_VAR.id);
 
-    // NEW (Phase 1 warn_pick_record): warning surfaces every candidate so
-    // the agent / dev-bridge audit catches the silent-pick.
     expect(warnings).toHaveLength(1);
     expect(warnings[0].code).toBe('AMBIGUOUS_NAME_AUTOPICK');
     const w = warnings[0] as any;
@@ -163,6 +159,89 @@ describe('variableBindingHandler — stale variable silent-pick (REGRESSION)', (
     expect(orphanCand.collection_name).toBe('Old Theme');
     expect(freshCand.collection_name).toBe('Finance/Theme');
     expect(orphanCand.type).toBe('COLOR');
+  });
+
+  it('RYOW tie-break: bare-name "$Text/Primary" picks the fresh variable when RYOW says it was created this turn (FIX)', async () => {
+    // The bug: handler was picking variables[0] (orphan) even though the
+    // AMBIGUOUS_NAME_AUTOPICK warning's `suggested_id` (set later by
+    // AgentRuntime from RyowStore) pointed to FRESH_VAR. Resulting LLM
+    // saw "should use X / actually used Y" disagreement and looped.
+    //
+    // Fix: when RYOW snapshot says FRESH_VAR was created this turn, the
+    // handler picks FRESH_VAR over the orphan, so picked_variable_id
+    // and (downstream) suggested_id naturally agree.
+    setRyowCreatedThisTurn(new Set([FRESH_VAR.id]));
+    const node = mockNode();
+
+    const warnings = await variableBindingHandler.apply(node, 'fills', '$Text/Primary');
+
+    expect(lastBoundVariable).not.toBeNull();
+    expect(lastBoundVariable!.id).toBe(FRESH_VAR.id);
+    expect(lastBoundVariable!.id).not.toBe(ORPHAN_VAR.id);
+
+    // Warning still emitted (ambiguity still exists) — but picked_variable_id
+    // now reflects the tie-broken pick, naturally agreeing with the
+    // RyowStore-derived suggested_id downstream.
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].code).toBe('AMBIGUOUS_NAME_AUTOPICK');
+    const w = warnings[0] as any;
+    expect(w.picked_variable_id).toBe(FRESH_VAR.id);
+    expect(w.candidates).toHaveLength(2);
+  });
+
+  it('RYOW tie-break: empty RYOW set behaves identically to legacy (no RYOW context)', async () => {
+    // Defensive: an explicit empty Set must not change behavior — handler
+    // still picks variables[0]. Guards against a regression where the
+    // filter returns [] but the code accidentally picks from the empty
+    // filter result instead of falling back to variables[0].
+    setRyowCreatedThisTurn(new Set());
+    const node = mockNode();
+
+    const warnings = await variableBindingHandler.apply(node, 'fills', '$Text/Primary');
+
+    expect(lastBoundVariable).not.toBeNull();
+    expect(lastBoundVariable!.id).toBe(ORPHAN_VAR.id);
+
+    expect(warnings).toHaveLength(1);
+    const w = warnings[0] as any;
+    expect(w.picked_variable_id).toBe(ORPHAN_VAR.id);
+  });
+
+  it('RYOW tie-break: RYOW set with only an unrelated id falls back to variables[0]', async () => {
+    // RYOW ids that don't match any candidate must NOT change pick — handler
+    // falls back to variables[0]. (Real-world scenario: RYOW carries a
+    // recently-created variable from a different collection, unrelated to
+    // the current bare-name lookup.)
+    setRyowCreatedThisTurn(new Set(['VariableID:9999:9999']));
+    const node = mockNode();
+
+    const warnings = await variableBindingHandler.apply(node, 'fills', '$Text/Primary');
+
+    expect(lastBoundVariable).not.toBeNull();
+    expect(lastBoundVariable!.id).toBe(ORPHAN_VAR.id);
+
+    expect(warnings).toHaveLength(1);
+    const w = warnings[0] as any;
+    expect(w.picked_variable_id).toBe(ORPHAN_VAR.id);
+  });
+
+  it('RYOW tie-break: RYOW set with multiple ids picks the first match in `variables` order', async () => {
+    // When RYOW says BOTH variables were created this turn, the filter
+    // yields both — we then pick the FIRST in `variables` array order
+    // (which mirrors getLocalVariablesAsync order). Documents the policy:
+    // RYOW filters, then standard ordering picks within the filtered set.
+    setRyowCreatedThisTurn(new Set([ORPHAN_VAR.id, FRESH_VAR.id]));
+    const node = mockNode();
+
+    const warnings = await variableBindingHandler.apply(node, 'fills', '$Text/Primary');
+
+    expect(lastBoundVariable).not.toBeNull();
+    // ORPHAN_VAR is first in getLocalVariablesAsync order (see fixture).
+    expect(lastBoundVariable!.id).toBe(ORPHAN_VAR.id);
+
+    expect(warnings).toHaveLength(1);
+    const w = warnings[0] as any;
+    expect(w.picked_variable_id).toBe(ORPHAN_VAR.id);
   });
 
   it('REGRESSION: collection-qualified "$Old Theme/Text/Primary" correctly resolves to the orphan (sanity check that disambiguation key works)', async () => {

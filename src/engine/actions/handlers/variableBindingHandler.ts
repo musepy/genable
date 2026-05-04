@@ -68,6 +68,32 @@ export function invalidateVariableCache(): void {
   varCache = null;
 }
 
+// ── Module-level RYOW snapshot ───────────────────────────────────────────────
+//
+// Mirrors the `setVariableResolutionMode` pattern in modeCoverageCheck.ts:
+// the IPC dispatcher (`toolCallHandler.ts`) calls `setRyowCreatedThisTurn`
+// from the per-tool-call `context.ryowCreatedThisTurnIds` BEFORE dispatching,
+// so apply() can read it without per-call threading. Default is empty —
+// callers without RyowStore (manual unit tests, internal calls) get legacy
+// behavior (first-match wins, the original Phase 1 silent-pick).
+
+let currentRyowCreatedThisTurn: Set<string> = new Set();
+
+/**
+ * Set the active RYOW "created this turn" set. Called by the IPC dispatcher
+ * per tool call from `context.ryowCreatedThisTurnIds`. Pass an empty Set
+ * (or call `clearRyowCreatedThisTurn`) to restore legacy first-match
+ * behavior for callers without an AgentRuntime context.
+ */
+export function setRyowCreatedThisTurn(ids: Set<string>): void {
+  currentRyowCreatedThisTurn = ids;
+}
+
+/** Restore legacy first-match behavior. */
+export function clearRyowCreatedThisTurn(): void {
+  currentRyowCreatedThisTurn = new Set();
+}
+
 /**
  * Look up every variable matching `name` (qualified or bare). Returns an
  * empty array if none. The CALLER decides ambiguity policy.
@@ -153,10 +179,18 @@ export const variableBindingHandler: PropertyHandler = {
       }
     }
 
-    // Phase 1 silent-pick: STILL bind the first match for backward compat.
-    // Phase 2 (later) will reject bare-name and require ID-form or
-    // (collection_id, name, type) triple.
-    const variable = variables[0];
+    // Phase 1 warn_pick_record (spec §5.1): when bare-name resolves to
+    // multiple candidates, prefer one created this turn (per the IPC-pushed
+    // RYOW snapshot) over the oldest by `getLocalVariablesAsync` order. This
+    // makes the picked variable agree with the AMBIGUOUS_NAME_AUTOPICK
+    // warning's `suggested_id` downstream — without the tie-break, the
+    // warning suggested X while the bind used Y, causing the LLM to retry
+    // the bare name and loop. When RYOW is empty (manual / test callers
+    // without AgentRuntime) the legacy first-match behavior is preserved.
+    const matchingThisTurn = currentRyowCreatedThisTurn.size > 0
+      ? variables.filter(v => currentRyowCreatedThisTurn.has(v.id))
+      : [];
+    const variable = matchingThisTurn.length > 0 ? matchingThisTurn[0] : variables[0];
 
     const warnings: Warning[] = [];
     if (variables.length > 1) {

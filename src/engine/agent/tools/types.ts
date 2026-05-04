@@ -117,6 +117,17 @@ export interface ToolContext {
    * `'mode-coverage'` when absent.
    */
   variableResolution?: 'mode-coverage' | 'strict';
+  /**
+   * Snapshot of variable IDs the AgentRuntime's RyowStore considers "created
+   * this turn". Threaded sandbox→main on every tool dispatch so the
+   * variableBindingHandler can break bare-name autopick ties in favor of
+   * variables created this turn (spec §5.1 `warn_pick_record`). Without this,
+   * the handler picks `variables[0]` (oldest by `getLocalVariablesAsync`
+   * order), disagreeing with the AMBIGUOUS_NAME_AUTOPICK warning's
+   * `suggested_id`. Optional — handler falls back to legacy `variables[0]`
+   * when absent (preserves test/manual call behavior).
+   */
+  ryowCreatedThisTurnIds?: string[];
 }
 
 export type RuntimeValidationMode = 'EXECUTION';

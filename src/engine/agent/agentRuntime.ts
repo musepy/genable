@@ -221,8 +221,16 @@ export class AgentRuntime {
         // Phase 2 step 4 + 7: thread variableResolution from agent config
         // to main-thread handlers via IPC context so the mode-coverage
         // check honors the runtime escape valve.
+        //
+        // Also thread the RYOW "created this turn" variable IDs so the
+        // main-thread variableBindingHandler can break bare-name autopick
+        // ties in favor of variables created this turn (spec §5.1
+        // warn_pick_record). The set changes within a turn as new variables
+        // are recorded — pushing it on every dispatch keeps main-thread
+        // state in sync.
         getRuntimeContext: () => ({
           variableResolution: this.behaviorConfig.variableResolution,
+          ryowCreatedThisTurnIds: this.ryowStore.getCreatedThisTurnIds(),
         }),
         beforeToolExec: async (tc) => {
           const ctx: HookContext = {

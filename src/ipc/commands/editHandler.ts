@@ -161,7 +161,8 @@ async function applyEdit(
   if (Object.keys(regularProps).length > 0) {
     const parentNode = node.parent as SceneNode | null;
     const isText = node.type === 'TEXT';
-    normalizeSizingInProps(regularProps, node, parentNode, isText);
+    const sizingWarnings = normalizeSizingInProps(regularProps, node, parentNode, isText);
+    if (sizingWarnings.length > 0) warnings.push(...sizingWarnings);
     const result: NodeResult = await updateNode(node, regularProps);
     if (result.warnings && result.warnings.length > 0) warnings.push(...result.warnings);
     // Fail-safe default: if diffs is missing, assume NOT changed. A missing diff

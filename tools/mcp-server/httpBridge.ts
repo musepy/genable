@@ -149,7 +149,14 @@ async function main() {
             data.screenshot = data.__image;
             delete data.__image;
           }
-          jsonResponse(res, 200, { ok: true, data });
+          // Forward tool warnings (sizing demotes, dependency violations, ambiguous
+          // variable autopicks, etc.) — these mirror what the LLM sees and are
+          // load-bearing for debugging "why didn't my intent take" cases.
+          const out: any = { ok: true, data };
+          if (response.warnings && response.warnings.length > 0) {
+            out.warnings = response.warnings;
+          }
+          jsonResponse(res, 200, out);
         }
       } catch (err: any) {
         const isTimeout = err.message?.includes('timed out');

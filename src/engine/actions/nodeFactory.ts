@@ -825,24 +825,55 @@ export function normalizeSizingInProps(
   if (props.layoutSizingHorizontal !== undefined) props.layoutSizingHorizontal = h;
   if (props.layoutSizingVertical !== undefined) props.layoutSizingVertical = v;
 
-  if (h === 'FIXED' && currentH !== 'FIXED' && props.width === undefined) {
-    const fallbackWidth = Math.max(1, Math.round(
-      (targetNode as any)?.width ??
-        ((parentNode as any)?.type !== 'PAGE' ? (parentNode as any)?.width : undefined) ??
-        (isRoot ? 360 : 200),
-    ));
-    props.width = fallbackWidth;
-    warnings.push({ code: 'SIZING_NORMALIZED', severity: 'warning', message: `layoutSizingHorizontal ${currentH}→FIXED; width defaulted to ${fallbackWidth}px.` });
+  // Emit a SIZING_NORMALIZED warning whenever we rewrote the requested mode.
+  // Previously only the FIXED branch emitted (because it also injects a fallback
+  // dimension); the FILL→HUG demote was completely silent, so the agent had no
+  // signal that its intent didn't land. Without this the runtime appears to
+  // honor `w="fill"` on a top-level frame while quietly serving HUG instead.
+  // Reason explains *why* we demoted so the agent can correct course (set
+  // explicit width, add parent auto-layout, etc.) instead of guessing.
+  const demoteReason = (from: SizingMode, to: SizingMode): string => {
+    if (isRoot && !hasAutoLayout) return "top-level frame without layoutMode must be FIXED";
+    if (from === 'FILL' && !parentHasAutoLayout) return "parent has no layoutMode — FILL requires auto-layout parent (Figma rejects otherwise)";
+    if (from === 'HUG' && !hasAutoLayout) return "this node has no layoutMode — HUG requires layout='row'|'column'|'grid'";
+    if (isGridContainer && from === 'HUG') return "GRID containers can't HUG with FLEX tracks";
+    return "normalization rule";
+  };
+
+  if (h !== currentH && props.layoutSizingHorizontal !== undefined) {
+    let suffix = '';
+    if (h === 'FIXED' && props.width === undefined) {
+      const fallbackWidth = Math.max(1, Math.round(
+        (targetNode as any)?.width ??
+          ((parentNode as any)?.type !== 'PAGE' ? (parentNode as any)?.width : undefined) ??
+          (isRoot ? 360 : 200),
+      ));
+      props.width = fallbackWidth;
+      suffix = `; width defaulted to ${fallbackWidth}px`;
+    }
+    warnings.push({
+      code: 'SIZING_NORMALIZED',
+      severity: 'warning',
+      message: `layoutSizingHorizontal ${currentH}→${h}: ${demoteReason(currentH, h)}${suffix}`,
+    });
   }
 
-  if (v === 'FIXED' && currentV !== 'FIXED' && props.height === undefined) {
-    const fallbackHeight = Math.max(1, Math.round(
-      (targetNode as any)?.height ??
-        ((parentNode as any)?.type !== 'PAGE' ? (parentNode as any)?.height : undefined) ??
-        (isRoot ? 240 : 120),
-    ));
-    props.height = fallbackHeight;
-    warnings.push({ code: 'SIZING_NORMALIZED', severity: 'warning', message: `layoutSizingVertical ${currentV}→FIXED; height defaulted to ${fallbackHeight}px.` });
+  if (v !== currentV && props.layoutSizingVertical !== undefined) {
+    let suffix = '';
+    if (v === 'FIXED' && props.height === undefined) {
+      const fallbackHeight = Math.max(1, Math.round(
+        (targetNode as any)?.height ??
+          ((parentNode as any)?.type !== 'PAGE' ? (parentNode as any)?.height : undefined) ??
+          (isRoot ? 240 : 120),
+      ));
+      props.height = fallbackHeight;
+      suffix = `; height defaulted to ${fallbackHeight}px`;
+    }
+    warnings.push({
+      code: 'SIZING_NORMALIZED',
+      severity: 'warning',
+      message: `layoutSizingVertical ${currentV}→${v}: ${demoteReason(currentV, v)}${suffix}`,
+    });
   }
 
   return warnings;

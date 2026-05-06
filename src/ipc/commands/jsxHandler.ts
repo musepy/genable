@@ -256,7 +256,7 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   // whole-design generation — silently drops the warnings even though
   // every handler emits them.
   //
-  // Two categories forwarded:
+  // Three categories forwarded:
   //   (a) variable-resolution diagnostics (AMBIGUOUS_NAME_AUTOPICK,
   //       MISSING_MODE_VALUES, FALLBACK_BINDING) — load-bearing for the
   //       LLM's recovery loop.
@@ -270,6 +270,16 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
   //       missing effects / wrong size. This is exactly the silent-black
   //       failure mode that produced 36 broken fills in the May 2026
   //       weather widget run before SYSTEM.md was realigned.
+  //   (c) dependency violations (DEPENDENCY_VIOLATION) — fired by
+  //       validateDependencies when a property's required gate is missing
+  //       AND can't be auto-injected (parent-scope rules: e.g. layoutAlign
+  //       needs parent layoutMode != NONE; layoutSizing*=FILL needs parent
+  //       auto-layout) or when self-scope intent conflicts with no auto-fix
+  //       (absolute + FILL). Figma silently reverts these instead of
+  //       erroring (FILL → HUG/FIXED, layoutAlign → ignored), so without
+  //       this channel the agent has no signal that its intent didn't
+  //       land. Dropped by allowlist regression May 2026-05-03 → 2026-05-06
+  //       — restore here and DO NOT prune without re-checking nodeFactory.
   //
   // NORMALIZE / CREATE_FAILED / INSTANCE_FAILED stay internal — those are
   // either advisory dev-bridge noise (NORMALIZE) or already surfaced via
@@ -307,6 +317,14 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
  *      VARIABLE_BIND_FAILED    (variableBindingHandler — bind threw post-resolve)
  *      VARIABLE_NOT_FOUND      (bare-name lookup with no match)
  *      UNSUPPORTED_PROP        (defaultHandler — unknown prop key)
+ *  - Dependency violations (figma constraint diagnostics):
+ *      DEPENDENCY_VIOLATION    (propertyDependencies — gate missing/incompatible,
+ *                               no auto-inject possible)
+ *  - Sizing rewrites (visibility for normalizeSizingInProps demotes):
+ *      SIZING_NORMALIZED       (FILL→HUG/FIXED, HUG→FIXED — runtime had to
+ *                               demote the agent's requested sizing to satisfy
+ *                               Figma constraints; LLM should know the demote
+ *                               happened and why)
  */
 function aggregateBindingWarnings(walkWarnings: WalkWarning[]): ToolWarning[] {
   const RELEVANT_CODES = new Set([
@@ -326,6 +344,16 @@ function aggregateBindingWarnings(walkWarnings: WalkWarning[]): ToolWarning[] {
     'VARIABLE_BIND_FAILED',
     'VARIABLE_NOT_FOUND',
     'UNSUPPORTED_PROP',
+    // Dependency violations — surface figma constraint violations (grid child
+    // without grid parent, absolute+FILL conflict, etc.) so the LLM knows its
+    // intent didn't land.
+    'DEPENDENCY_VIOLATION',
+    // Sizing rewrites — normalizeSizingInProps demotes FILL/HUG to comply with
+    // Figma's API constraints (FILL needs parent auto-layout, HUG needs node
+    // layoutMode). Without surfacing, the agent's `w="fill"` on a top-level
+    // frame silently becomes HUG and the page collapses to its widest natural
+    // child. Message includes the demote reason.
+    'SIZING_NORMALIZED',
   ]);
   const out: ToolWarning[] = [];
   const seen = new Set<string>();

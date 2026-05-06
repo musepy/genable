@@ -323,6 +323,8 @@ export async function walkTree(
     ctx.warnings.push({ code: 'NORMALIZE', severity: 'warning', message: msg });
 
   let result: NodeResult;
+  // Captured before node creation, tagged with node_id and forwarded post-create.
+  let preCreateWarnings: HandlerWarning[] = [];
 
   try {
     // ── Instance ──
@@ -361,7 +363,7 @@ export async function walkTree(
     // Props (incl. characters from string children) already normalized by
     // normalizeTree; walkTree only handles Figma-context sizing + creation.
     } else if (nodeType === 'TEXT') {
-      normalizeSizingInProps(props, null, parentNode, true);
+      preCreateWarnings = normalizeSizingInProps(props, null, parentNode, true);
       result = await createText(parentNode, props);
 
     // ── Icon ──
@@ -373,17 +375,17 @@ export async function walkTree(
     // placeholder→name + default fills + layout defaults already handled
     // by normalizeTree.
     } else if (nodeType === 'IMAGE') {
-      normalizeSizingInProps(props, null, parentNode, false);
+      preCreateWarnings = normalizeSizingInProps(props, null, parentNode, false);
       result = await createFrame(parentNode, props);
 
     // ── Component ──
     } else if (nodeType === 'COMPONENT') {
-      normalizeSizingInProps(props, null, parentNode, false);
+      preCreateWarnings = normalizeSizingInProps(props, null, parentNode, false);
       result = await createComponent(parentNode, props, sym);
 
     // ── Shape or Frame ──
     } else {
-      normalizeSizingInProps(props, null, parentNode, false);
+      preCreateWarnings = normalizeSizingInProps(props, null, parentNode, false);
 
       if (SHAPE_TYPES.has(nodeType)) {
         result = await createShape(nodeType, parentNode, props);
@@ -410,6 +412,12 @@ export async function walkTree(
   // Track for rollback + symbol resolution
   ctx.symbolMap.set(sym, result.nodeId);
   ctx.rollbackStack.push(result.nodeId);
+  // Forward pre-create warnings (sizing demotes from normalizeSizingInProps).
+  // These were generated before the node existed; tag with the now-known id so
+  // jsxHandler can map the warning back to the affected node.
+  for (const w of preCreateWarnings) {
+    ctx.warnings.push({ ...w, node_id: result.nodeId });
+  }
   // Forward handler-side warnings VERBATIM (preserve `picked_variable_id`,
   // `candidates`, etc. for AMBIGUOUS_NAME_AUTOPICK). Tag with the node id
   // we just created so jsxHandler can surface this for runtime correlation.

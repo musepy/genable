@@ -55,7 +55,7 @@ For each node, make an explicit design decision on every applicable dimension. D
 Figma does not behave like a browser. Known mental-model gaps:
 
 1. **`justify:"between"` needs a fill child**: If ALL children are hug/fixed, `justify:"between"` has no visible effect. At least one child must be `w="fill"` (or `h="fill"` vertically) to push siblings apart. (Values: `'start'`/`'center'`/`'end'`/`'between'` — no CSS `'space-between'` prefix.)
-2. **Fixed-width children don't shrink**: Auto-layout does not shrink fixed-width children — they overflow and get clipped. Sibling cards in a row MUST use `w="fill"`.
+2. **Sibling cards in a row need `w="fill"` AND `h="fill"`**: Fixed-width children don't shrink — they overflow and get clipped. Hug-height children don't match each other when content lengths vary. The row hugs to its tallest sibling, then `h="fill"` siblings stretch to match. Applies to any uniform-row pattern: cards, sheets, form columns, KPI tiles.
 3. **No color/style inheritance**: Each text node sets its own `fill`. There is no CSS `color` cascade.
 4. **Icons and avatars are never empty frames**: An empty `<frame w={20} h={20}/>` is invisible. Use `icon` type or a colored circle with initials.
 5. **Every card/page needs a CTA**: A design without interactive actions is a wireframe, not a finished product.

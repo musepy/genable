@@ -1,6 +1,6 @@
 ---
 name: component-set
-description: Use when creating a Figma ComponentSet with a variant matrix — clone cascading for diffs and combine_components to assemble the final set, avoiding known pitfalls.
+description: 'Use when creating a Figma ComponentSet with a variant matrix (multiple variants of one component) — clone cascade + combine_components + add_component_prop. NOT for: a single component with no variant axis — use jsx with `<component>` directly.'
 ---
 
 ## COMPONENT SET — Variant Matrix Creation
@@ -57,10 +57,18 @@ combine_components({nodes: [baseId, hoverId, disabledId, smallId], name: "Button
 
 ### Phase 3: Add Component Properties
 
+**ALWAYS call `add_component_prop` on the SET ID returned by `combine_components`. NEVER on individual variant frame IDs** — Figma rejects with: `"Can only set component property definitions on a product component"`.
+
+If `add_component_prop` fails with `"Component set has existing errors"`, the **set itself is invalid** (variant naming mismatch, missing dimension, or duplicate variant name). Fix variant names and rebuild — do NOT retry on each variant, do NOT fall back to `js({code})` to script around it.
+
+Optional: `list_component_props({node: setId})` first to see the current variant structure and any existing properties.
+
 ```
-// After combining, add text props
-add_component_prop({node: setId, name: "Label", type: "TEXT", default: "Button", bind: labelId})
+// After combining, add text props ON THE SET (not on variants!)
+add_component_prop({node: setId, name: "Label", type: "TEXT", default: "Button", bind: labelTextId})
 ```
+
+The `bind` target must be a TEXT node descendant of the set (any single variant's text node works — Figma mirrors the binding across variants by node name).
 
 ### Phase 4: Verify (1 call)
 
@@ -77,11 +85,26 @@ Button (6 variants): 1 jsx + 5 clone_node + 5 edit + 1 combine_components + prop
 
 | Wrong | Right | Why |
 |-------|-------|-----|
+| `add_component_prop({node: variantId, ...})` after combine | `add_component_prop({node: setId, ...})` | Property defs attach to the SET; variants are children, Figma rejects directly |
+| Retry `add_component_prop` on each variant after first error | Fix variant naming and rebuild the set | "Component set has existing errors" = the SET is invalid; per-variant calls cascade more errors |
+| `js({code: "...findOne(...)..."})` fallback | Use `findOneAsync` + `await`, or stick with tools | Sync `.findOne/.findAll/.findChildren` forbidden in dynamic-page mode |
 | `create_component` inside another component | Create at top level, then `combine_components` | Figma blocks component-inside-component |
 | Use old ID after `create_component` | Use the NEW ID from response | Old ID is invalidated |
 | `js({code: "node.remove()"})` | `delete_node({node: id})` | JS sandbox blocks .remove() |
 | `fill: "transparent"` to clear | `fill: "none"` | `none` clears the fills array |
 | Name frames without variant format | `"Variant=X, State=Y"` before combine | Variant axes come from frame names |
+
+### JS fallback safety (when tools fail)
+
+If you must call `js({code})`, these sync APIs are **forbidden** by the plugin's `dynamic-page` mode:
+- `.findOne()` → `.findOneAsync()` + `await`
+- `.findAll()` → `.findAllAsync()` + `await`
+- `.findChildren()` → `.findChildrenAsync()` + `await`
+- `.findAllWithCriteria()` → `.findAllWithCriteriaAsync()` + `await`
+
+These methods only work on `figma.currentPage` and the document root, not on individual frames. To search inside a component's children, walk `.children` manually with a filter.
+
+**Better than fallback**: if `add_component_prop` or `combine_components` fails, the upstream issue is the set itself (variant naming, missing dimension, duplicate name). Fix and rebuild — don't script around it.
 
 ### Icon Nodes
 

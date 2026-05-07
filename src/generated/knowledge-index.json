@@ -351,7 +351,7 @@
   {
     "id": "skill:component-set",
     "name": "component-set",
-    "description": "Use when creating a Figma ComponentSet with a variant matrix — clone cascading for diffs and combine_components to assemble the final set, avoiding known pitfalls.",
+    "description": "Use when creating a Figma ComponentSet with a variant matrix (multiple variants of one component) — clone cascade + combine_components + add_component_prop. NOT for: a single component with no variant axis — use jsx with `<component>` directly.",
     "category": "skill"
   },
   {

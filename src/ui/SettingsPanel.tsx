@@ -13,7 +13,7 @@
 
 import { h, Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { Github, Heart, BookOpen, Check, X, ChevronDown, RefreshCw, ExternalLink } from 'lucide-preact';
+import { Github, Heart, Check, X, ChevronDown, RefreshCw, ExternalLink } from 'lucide-preact';
 import { LocalComponent } from '../types';
 import { DeveloperPanel } from './components/DeveloperPanel';
 import { useTranslations, LOCALE_PREFS, LOCALE_PREF_LABELS, type LocalePreference } from './i18n';
@@ -544,15 +544,11 @@ export function SettingsPanel(props: SettingsPanelProps) {
       {/* Footer-b: Sponsor / Docs / GitHub + © · v1.0.0 */}
       <div className="footer-b">
         <div className="links">
-          <a href="https://github.com/sponsors/Muse404" target="_blank" rel="noopener noreferrer" title="Sponsor on GitHub">
+          <a href="https://www.patreon.com/c/musec" target="_blank" rel="noopener noreferrer" title="Sponsor on Patreon">
             <Heart size={11} strokeWidth={1.8} className="heart" />
             Sponsor
           </a>
-          <a href="https://github.com/Muse404" target="_blank" rel="noopener noreferrer">
-            <BookOpen size={11} strokeWidth={1.8} />
-            Docs
-          </a>
-          <a href="https://github.com/Muse404" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/musepy/genable" target="_blank" rel="noopener noreferrer">
             <Github size={11} strokeWidth={1.8} />
             GitHub
           </a>

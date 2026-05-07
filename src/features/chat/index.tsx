@@ -422,14 +422,20 @@ function renderAttachmentChips(
 
 // ─── AskUserForm ─────────────────────────────────────────────────────────
 //
-// Wizard-style form for 1-4 questions. CC AskUserQuestion-aligned UX:
-//   - Horizontal tab bar at top showing each question + Submit (with answered ✓)
-//   - One question shown at a time in the body
-//   - Click an option (single-select) → answer recorded, auto-advance to next tab
-//   - Multi-select: tap to toggle, no auto-advance; user clicks next tab manually
-//   - Auto-injected "Other..." option per question — expands inline text input
-//     so users always have free-form per-question fallback (matches CC behavior)
-//   - Single-question single-select: collapses to direct-click-submit (no tabs)
+// Sequential question form. CC AskUserQuestion-aligned UX:
+//   - One question at a time, with progress chip "1 / N" inline with the text
+//   - Click an option to record the answer
+//       single-select: auto-advance to the next question (or auto-submit on last)
+//       multi-select:  toggle entry; user advances via Next
+//   - Per-question Other = bare auto-grow textarea; pressing ⌘↵ or Next commits
+//     the textarea text as the answer (single-select replaces the option;
+//     multi-select appends). Committed Other mirrors the selected-option state
+//     (gray-a3 row + filled badge).
+//   - Stable nav region: Back · Skip · Next (Next is primary; Back hidden on
+//     the first question). ←/→ also nav between questions when not typing.
+//
+// Single-question forms: no nav region; option click submits, Other commits via
+// ⌘↵ or the inline Submit button.
 //
 // Global free-form bypass (typing in the chat input) is handled by ChatFeature,
 // not this component — it routes prompt text to respondToQuestion({ freeText }).
@@ -440,8 +446,6 @@ interface AskUserQuestion {
   options: { label: string; description?: string }[]
   multiSelect?: boolean
 }
-
-const OTHER_SENTINEL = '__OTHER__'
 
 function AskUserForm({
   questions,
@@ -456,67 +460,131 @@ function AskUserForm({
   const [selections, setSelections] = useState<Array<string | string[] | null>>(
     () => questions.map(q => (q.multiSelect ? [] : null)),
   )
-  // Per-question UI state for the inline "Other..." text input
-  const [otherOpen, setOtherOpen] = useState<Record<number, boolean>>({})
-  const [otherText, setOtherText] = useState<Record<number, string>>({})
+  // Per-question Other textarea draft (uncommitted text)
+  const [otherDraft, setOtherDraft] = useState<Record<number, string>>({})
+  // Per-question source of the committed answer — drives "committed Other"
+  // visual state for single-select (option label vs. user-typed text).
+  const [answerSource, setAnswerSource] = useState<Record<number, 'option' | 'freeform'>>({})
   const [activeIdx, setActiveIdx] = useState(0)
+  const formRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
-  const isSingleQuestion = questions.length === 1 && !questions[0].multiSelect
+  const isSingleQuestion = questions.length === 1
+  const cur = questions[activeIdx]
+  const atLast = activeIdx === questions.length - 1
+  const atFirst = activeIdx === 0
 
-  const isQuestionAnswered = (i: number): boolean => {
-    const s = selections[i]
+  const isAnswered = (sel: Array<string | string[] | null>, i: number): boolean => {
+    const s = sel[i]
     if (questions[i].multiSelect) return Array.isArray(s) && s.length > 0
     return typeof s === 'string' && s.length > 0
   }
+  const isQuestionAnswered = (i: number) => isAnswered(selections, i)
+  const allAnswered = (sel: Array<string | string[] | null> = selections) =>
+    questions.every((_, i) => isAnswered(sel, i))
 
-  const allAnswered = questions.every((_, i) => isQuestionAnswered(i))
-
-  const advance = (fromIdx: number) => {
-    // Find next unanswered question; if none, jump to Submit slot (questions.length)
-    for (let j = fromIdx + 1; j < questions.length; j++) {
-      if (!isQuestionAnswered(j)) {
-        setActiveIdx(j)
-        return
-      }
-    }
-    setActiveIdx(questions.length)
-  }
-
-  const finalize = (sel: Array<string | string[] | null>) => {
+  const finalize = (sel: Array<string | string[] | null> = selections) => {
     const answers = sel.map((s, i) =>
-      questions[i].multiSelect ? ((s as string[]) || []) : (s as string),
+      questions[i].multiSelect ? ((s as string[]) || []) : ((s as string) || ''),
     )
     onSubmit(answers)
   }
 
-  const recordAnswer = (qIdx: number, value: string) => {
+  const setSelectionAt = (qIdx: number, value: string | string[] | null, source?: 'option' | 'freeform') => {
     setSelections(prev => {
       const next = [...prev]
-      const q = questions[qIdx]
+      next[qIdx] = value
+      return next
+    })
+    if (source) setAnswerSource(prev => ({ ...prev, [qIdx]: source }))
+  }
+
+  const recordOption = (qIdx: number, label: string) => {
+    const q = questions[qIdx]
+    setSelections(prev => {
+      const next = [...prev]
       if (q.multiSelect) {
         const cur = (next[qIdx] as string[]) || []
-        next[qIdx] = cur.includes(value) ? cur.filter(l => l !== value) : [...cur, value]
+        next[qIdx] = cur.includes(label) ? cur.filter(l => l !== label) : [...cur, label]
       } else {
-        next[qIdx] = next[qIdx] === value ? null : value
+        next[qIdx] = label
       }
-      // Single-question short-circuit: submit immediately
-      if (isSingleQuestion && next[qIdx] !== null) {
-        setTimeout(() => finalize(next), 0)
+
+      // Single-select: auto-advance / auto-submit
+      if (!q.multiSelect) {
+        if (isSingleQuestion) {
+          setTimeout(() => finalize(next), 0)
+        } else if (qIdx < questions.length - 1) {
+          setTimeout(() => setActiveIdx(qIdx + 1), 180)
+        } else if (allAnswered(next)) {
+          setTimeout(() => finalize(next), 180)
+        }
       }
       return next
     })
-    // Auto-advance for single-select multi-question forms
-    if (!questions[qIdx].multiSelect && !isSingleQuestion) {
-      setTimeout(() => advance(qIdx), 80)
-    }
+    setAnswerSource(prev => ({ ...prev, [qIdx]: 'option' }))
+    // Clear any uncommitted Other draft for this Q since user picked an option
+    setOtherDraft(prev => ({ ...prev, [qIdx]: '' }))
   }
 
-  const submitOtherText = (qIdx: number) => {
-    const text = (otherText[qIdx] || '').trim()
-    if (!text) return
-    recordAnswer(qIdx, text)
-    setOtherOpen(prev => ({ ...prev, [qIdx]: false }))
-    setOtherText(prev => ({ ...prev, [qIdx]: '' }))
+  // Returns true if a non-empty draft was committed.
+  const commitOther = (qIdx: number): boolean => {
+    const text = (otherDraft[qIdx] || '').trim()
+    if (!text) return false
+    const q = questions[qIdx]
+    setSelections(prev => {
+      const next = [...prev]
+      if (q.multiSelect) {
+        const cur = (next[qIdx] as string[]) || []
+        if (!cur.includes(text)) next[qIdx] = [...cur, text]
+      } else {
+        next[qIdx] = text
+      }
+      return next
+    })
+    setAnswerSource(prev => ({ ...prev, [qIdx]: 'freeform' }))
+    setOtherDraft(prev => ({ ...prev, [qIdx]: '' }))
+    return true
+  }
+
+  const goNext = () => {
+    // Commit any pending Other draft for the current Q before advancing
+    let committed = false
+    setSelections(prev => {
+      const text = (otherDraft[activeIdx] || '').trim()
+      if (!text) return prev
+      const q = questions[activeIdx]
+      const next = [...prev]
+      if (q.multiSelect) {
+        const cur = (next[activeIdx] as string[]) || []
+        if (!cur.includes(text)) next[activeIdx] = [...cur, text]
+      } else {
+        next[activeIdx] = text
+      }
+      committed = true
+      // Submit / advance with the just-committed selection
+      setTimeout(() => {
+        if (atLast) finalize(next)
+        else setActiveIdx(activeIdx + 1)
+      }, 0)
+      return next
+    })
+    if (committed) {
+      setAnswerSource(prev => ({ ...prev, [activeIdx]: 'freeform' }))
+      setOtherDraft(prev => ({ ...prev, [activeIdx]: '' }))
+      return
+    }
+    if (atLast) finalize()
+    else setActiveIdx(activeIdx + 1)
+  }
+
+  const goSkip = () => {
+    if (atLast) finalize()
+    else setActiveIdx(activeIdx + 1)
+  }
+
+  const goBack = () => {
+    if (!atFirst) setActiveIdx(activeIdx - 1)
   }
 
   const isOptionSelected = (qIdx: number, label: string): boolean => {
@@ -525,258 +593,352 @@ function AskUserForm({
     return s === label
   }
 
-  // ─── Style helpers (kept inline since this file uses inline styles) ──
-  const tabBarStyle: any = {
-    display: 'flex',
-    flexDirection: 'row',
-    gap: tokens.space[1],
-    overflowX: 'auto',
-    paddingBottom: 2,
-  }
+  // Auto-grow textarea on draft change
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+  }, [activeIdx, otherDraft[activeIdx]])
 
-  const tabStyle = (active: boolean, answered: boolean, enabled: boolean = true): any => ({
-    flexShrink: 0,
-    padding: `${tokens.space[1]}px ${tokens.space[2]}px`,
-    border: active ? `1px solid ${tokens.colors.textPrimary}` : 'var(--border-default)',
-    borderRadius: 'var(--radius-2)',
-    background: active ? tokens.colors.alpha[2] : 'transparent',
-    color: enabled ? tokens.colors.textPrimary : tokens.colors.textSecondary,
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    fontFamily: tokens.font.sans,
-    fontSize: tokens.fontSize[1],
-    fontWeight: active ? 600 : 500,
-    whiteSpace: 'nowrap',
-    transition: 'var(--transition-crisp)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-  })
+  // Keyboard: ⌘↵ commit/advance, ←/→ nav (when not typing in textarea)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const inTextarea = (e.target as HTMLElement | null)?.tagName === 'TEXTAREA'
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault()
+        if (isSingleQuestion) {
+          // Single-q: commit Other if there's a draft, else nothing (option-click submits)
+          const text = (otherDraft[0] || '').trim()
+          if (text) commitOther(0) // recordAnswer path will not auto-finalize on freeform; do it ourselves
+          // For single-q, commitOther sets the selection; finalize directly
+          if (text) {
+            const q = questions[0]
+            const sel: Array<string | string[] | null> = q.multiSelect ? [[text]] : [text]
+            finalize(sel)
+          }
+        } else {
+          goNext()
+        }
+        return
+      }
+      if (inTextarea) return
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (!atLast) setActiveIdx(activeIdx + 1)
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        if (!atFirst) setActiveIdx(activeIdx - 1)
+      }
+    }
+    const el = formRef.current
+    if (!el) return
+    el.addEventListener('keydown', onKey)
+    return () => el.removeEventListener('keydown', onKey)
+  }, [activeIdx, atFirst, atLast, otherDraft, isSingleQuestion])
 
-  const optionStyle = (selected: boolean): any => ({
+  // ─── Style helpers ────────────────────────────────────────────────────
+  const optionRowStyle = (selected: boolean): any => ({
     display: 'flex',
-    flexDirection: 'column',
     alignItems: 'flex-start',
-    gap: 2,
-    padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-    border: selected ? `1px solid ${tokens.colors.textPrimary}` : 'var(--border-default)',
-    borderRadius: 'var(--radius-2)',
-    background: selected ? tokens.colors.alpha[2] : 'transparent',
+    gap: 10,
+    padding: '10px 12px',
+    minHeight: 32,
+    border: 'none',
+    borderRadius: 6,
+    background: selected ? tokens.colors.alpha[3] : tokens.colors.alpha[2],
     cursor: 'pointer',
     textAlign: 'left',
     width: '100%',
     fontFamily: tokens.font.sans,
-    transition: 'var(--transition-crisp)',
+    transition: 'background 150ms ease',
   })
 
-  // ─── Render: single-question fast-path (no tabs) ────────────────────
+  const onOptionEnter = (e: MouseEvent, selected: boolean) => {
+    if (selected) return
+    ;(e.currentTarget as HTMLElement).style.background = tokens.colors.alpha[3]
+  }
+  const onOptionLeave = (e: MouseEvent, selected: boolean) => {
+    if (selected) return
+    ;(e.currentTarget as HTMLElement).style.background = tokens.colors.alpha[2]
+  }
+
+  const numBadgeStyle = (filled: boolean): any => ({
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+    marginTop: 1,
+    minWidth: 18,
+    height: 18,
+    padding: '0 4px',
+    boxSizing: 'border-box',
+    borderRadius: 'var(--radius-2)',
+    border: filled ? `1px solid ${tokens.colors.textPrimary}` : `1px solid ${tokens.colors.alpha[4]}`,
+    background: filled ? tokens.colors.textPrimary : tokens.colors.panel,
+    color: filled ? tokens.colors.background : tokens.colors.textSecondary,
+    fontFamily: tokens.font.mono,
+    fontSize: 10,
+    fontVariantNumeric: 'tabular-nums',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 1,
+  })
+
+  const checkboxStyle = (filled: boolean): any => ({
+    flexShrink: 0,
+    marginTop: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    border: filled ? `1px solid ${tokens.colors.textPrimary}` : `1px solid ${tokens.colors.alpha[5]}`,
+    background: filled ? tokens.colors.textPrimary : 'transparent',
+    color: filled ? tokens.colors.panel : 'transparent',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background 150ms ease, border-color 150ms ease, color 150ms ease',
+  })
+
+  const navBtnBase: any = {
+    height: 26,
+    padding: '0 10px',
+    border: `1px solid ${tokens.colors.alpha[4]}`,
+    borderRadius: 'var(--radius-2)',
+    background: 'transparent',
+    color: tokens.colors.textPrimary,
+    fontFamily: tokens.font.sans,
+    fontSize: 11,
+    fontWeight: 500,
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    transition: 'background 150ms ease',
+  }
+  const navBtnPrimary: any = {
+    ...navBtnBase,
+    background: tokens.colors.textPrimary,
+    color: tokens.colors.panel,
+    borderColor: tokens.colors.textPrimary,
+  }
+  const kbdStyle: any = {
+    fontFamily: tokens.font.mono,
+    fontSize: 10,
+    color: tokens.colors.panel,
+    opacity: 0.7,
+    marginLeft: 2,
+    lineHeight: 1,
+  }
+
+  // ─── Header row: question text left, 1/N progress chip right ─────────
+  // Padding-right of 24 aligns the chip's right edge with the option/Other
+  // number badges (which sit at outer 12 + internal 12 = 24 from card edge).
+  const headerNode = (
+    <div style={{ padding: '12px 24px 8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <p style={{
+        margin: 0,
+        flex: 1,
+        minWidth: 0,
+        fontSize: 13,
+        color: tokens.colors.textPrimary,
+        fontWeight: 500,
+        lineHeight: 1.45,
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere' as any,
+      }}>
+        {cur.question}
+      </p>
+      {!isSingleQuestion && (
+        <span style={{
+          flexShrink: 0,
+          fontSize: 11,
+          color: tokens.colors.textSecondary,
+          fontVariantNumeric: 'tabular-nums',
+          fontWeight: 400,
+        }}>
+          {activeIdx + 1}/{questions.length}
+        </span>
+      )}
+    </div>
+  )
+
+  // Optional uppercase header (when AskUserQuestion.header provided) — keep
+  // for parity with the data shape, but treated as small caption above the
+  // question text. The v2 prototype's QUESTIONS_V2 doesn't use this field.
+  const headerCaptionNode = cur.header ? (
+    <div style={{ padding: '0 12px', marginTop: -4, marginBottom: 4 }}>
+      <span style={{ fontSize: 11, color: tokens.colors.textSecondary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        {cur.header}{cur.multiSelect && ' (multi-select)'}
+      </span>
+    </div>
+  ) : null
+
+  // ─── Option list ─────────────────────────────────────────────────────
+  const optionListNode = (
+    <div style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {cur.options.map((opt, oi) => {
+        const selected = isOptionSelected(activeIdx, opt.label)
+        return (
+          <button
+            key={opt.label}
+            type="button"
+            onClick={() => recordOption(activeIdx, opt.label)}
+            onMouseEnter={(e: MouseEvent) => onOptionEnter(e, selected)}
+            onMouseLeave={(e: MouseEvent) => onOptionLeave(e, selected)}
+            style={optionRowStyle(selected)}
+          >
+            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 12, color: tokens.colors.textPrimary, fontWeight: 400, wordBreak: 'break-word', overflowWrap: 'anywhere' as any }}>{opt.label}</span>
+              {opt.description && (
+                <span style={{ fontSize: 11, color: tokens.colors.textSecondary, lineHeight: 1.45, wordBreak: 'break-word', overflowWrap: 'anywhere' as any }}>{opt.description}</span>
+              )}
+            </span>
+            {cur.multiSelect ? (
+              <span style={checkboxStyle(selected)}>
+                {selected && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </span>
+            ) : (
+              <span style={numBadgeStyle(selected)}>{oi + 1}</span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  // ─── Other group: gray-a2 card with head (label + badge) + bordered textarea ───
+  const draft = otherDraft[activeIdx] || ''
+  const otherIsCommitted = !cur.multiSelect && answerSource[activeIdx] === 'freeform' && typeof selections[activeIdx] === 'string' && selections[activeIdx] !== ''
+  const otherDisplayValue = otherIsCommitted ? (selections[activeIdx] as string) : draft
+
+  const otherRowStyle: any = {
+    margin: '6px 12px 0',
+    padding: '10px 12px',
+    background: otherIsCommitted ? tokens.colors.alpha[3] : tokens.colors.alpha[2],
+    borderRadius: 6,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    transition: 'background 150ms ease',
+  }
+  const otherTextareaStyle: any = {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '8px 10px',
+    border: `1px solid ${tokens.colors.alpha[4]}`,
+    borderRadius: 'var(--radius-2)',
+    background: tokens.colors.panel,
+    fontFamily: tokens.font.sans,
+    fontSize: 12,
+    lineHeight: '16px',
+    color: tokens.colors.textPrimary,
+    outline: 'none',
+    minHeight: 36,
+    maxHeight: 120,
+    resize: 'none',
+    overflowY: 'auto',
+    display: 'block',
+    transition: 'border-color 150ms ease',
+  }
+
+  const otherNode = (
+    <div style={otherRowStyle}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 12, color: tokens.colors.textPrimary, fontWeight: 400 }}>Other</span>
+        {!cur.multiSelect && (
+          <span style={numBadgeStyle(otherIsCommitted)}>{cur.options.length + 1}</span>
+        )}
+      </div>
+      <textarea
+        ref={textareaRef}
+        rows={1}
+        value={otherDisplayValue}
+        placeholder="Or write your own answer…"
+        onInput={(e: any) => {
+          // Editing clears the committed-freeform state; revert to draft mode
+          if (otherIsCommitted) {
+            setSelectionAt(activeIdx, cur.multiSelect ? [] : null)
+            setAnswerSource(prev => ({ ...prev, [activeIdx]: undefined as any }))
+          }
+          setOtherDraft(prev => ({ ...prev, [activeIdx]: e.target.value }))
+        }}
+        onFocus={(e: any) => { e.currentTarget.style.borderColor = tokens.colors.alpha[5] }}
+        onBlur={(e: any) => { e.currentTarget.style.borderColor = tokens.colors.alpha[4] }}
+        style={otherTextareaStyle}
+      />
+    </div>
+  )
+
+  // ─── Form-card envelope (panel + border + radius + shadow) ───────────
+  const formCardStyle: any = {
+    flexShrink: 0,
+    margin: '0 10px 10px',
+    background: tokens.colors.panel,
+    border: `1px solid ${tokens.colors.alpha[4]}`,
+    borderRadius: 'var(--radius-5)',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  }
+
+  // ─── Single-question fast-path: card with body, no nav ───────────────
   if (isSingleQuestion) {
-    const q = questions[0]
     return (
       <div
-        style={{
-          flexShrink: 0,
-          padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
-          borderTop: `1px solid ${tokens.colors.alpha[3]}`,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: tokens.space[2],
-          maxHeight: 320,
-          overflowY: 'auto',
-        }}
+        ref={formRef}
+        tabIndex={-1}
+        style={{ ...formCardStyle, outline: 'none', maxHeight: 360 }}
       >
-        {q.header && (
-          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            {q.header}
-          </span>
-        )}
-        <span style={{ fontSize: tokens.fontSize[2], color: tokens.colors.textPrimary, fontWeight: 500, lineHeight: tokens.lineHeight[2] }}>
-          {q.question}
-        </span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-          {q.options.map(opt => (
-            <button key={opt.label} className="card-interactive" onClick={() => recordAnswer(0, opt.label)} style={optionStyle(false)}>
-              <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>{opt.label}</span>
-              {opt.description && (
-                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>{opt.description}</span>
-              )}
-            </button>
-          ))}
-          {/* Auto-injected Other option */}
-          {otherOpen[0] ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-              <input
-                type="text"
-                autoFocus
-                value={otherText[0] || ''}
-                onInput={(e: any) => setOtherText({ ...otherText, 0: e.target.value })}
-                onKeyDown={(e: any) => { if (e.key === 'Enter') submitOtherText(0) }}
-                placeholder="Type your answer…"
-                style={{
-                  padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-                  border: 'var(--border-default)',
-                  borderRadius: 'var(--radius-2)',
-                  background: 'transparent',
-                  color: tokens.colors.textPrimary,
-                  fontFamily: tokens.font.sans,
-                  fontSize: tokens.fontSize[1],
-                  outline: 'none',
-                }}
-              />
-              <button onClick={() => submitOtherText(0)} disabled={!(otherText[0] || '').trim()} style={{ alignSelf: 'flex-end', padding: `${tokens.space[1]}px ${tokens.space[3]}px`, border: 'none', borderRadius: 'var(--radius-2)', background: tokens.colors.textPrimary, color: tokens.colors.background, fontFamily: tokens.font.sans, fontSize: tokens.fontSize[1], fontWeight: 600, cursor: 'pointer' }}>
-                Submit
-              </button>
-            </div>
-          ) : (
-            <button className="card-interactive" onClick={() => setOtherOpen({ ...otherOpen, 0: true })} style={optionStyle(false)}>
-              <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 500 }}>Other…</span>
-            </button>
-          )}
+        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          {headerNode}
+          {headerCaptionNode}
+          {optionListNode}
+          {otherNode}
+          <div style={{ height: 12 }} />
         </div>
       </div>
     )
   }
 
-  // ─── Render: multi-question wizard with tabs ────────────────────────
-  const submitTabActive = activeIdx === questions.length
-  const onSubmitTab = submitTabActive
-  const cur = !onSubmitTab ? questions[activeIdx] : null
-
+  // ─── Multi-question wizard (card with body + stable nav) ─────────────
   return (
     <div
-      style={{
-        flexShrink: 0,
-        padding: `${tokens.space[3]}px ${tokens.grid.outerPad}px`,
-        borderTop: `1px solid ${tokens.colors.alpha[3]}`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: tokens.space[2],
-        maxHeight: 380,
-        overflowY: 'auto',
-      }}
+      ref={formRef}
+      tabIndex={-1}
+      style={{ ...formCardStyle, outline: 'none' }}
     >
-      {/* Tab bar */}
-      <div style={tabBarStyle}>
-        {questions.map((q, i) => {
-          const answered = isQuestionAnswered(i)
-          const active = i === activeIdx
-          return (
-            <button
-              key={i}
-              onClick={() => setActiveIdx(i)}
-              style={tabStyle(active, answered)}
-              title={q.question}
-            >
-              <span>{answered ? '✓' : '○'}</span>
-              <span>{q.header || `Q${i + 1}`}</span>
-            </button>
-          )
-        })}
-        <button
-          onClick={() => allAnswered && finalize(selections)}
-          disabled={!allAnswered}
-          style={tabStyle(submitTabActive, false, allAnswered)}
-        >
-          <span>↵</span>
-          <span>Submit</span>
-        </button>
+      {/* Body (the morph region in the prototype; here we just let it grow) */}
+      <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 360, overflowY: 'auto' }}>
+        {headerNode}
+        {headerCaptionNode}
+        {optionListNode}
+        {otherNode}
       </div>
 
-      {/* Active question body */}
-      {cur && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[2] }}>
-          {cur.header && (
-            <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-              {cur.header}{cur.multiSelect && ' (multi)'}
-            </span>
-          )}
-          <span style={{ fontSize: tokens.fontSize[2], color: tokens.colors.textPrimary, fontWeight: 500, lineHeight: tokens.lineHeight[2] }}>
-            {cur.question}
-          </span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-            {cur.options.map(opt => {
-              const selected = isOptionSelected(activeIdx, opt.label)
-              return (
-                <button key={opt.label} className="card-interactive" onClick={() => recordAnswer(activeIdx, opt.label)} style={optionStyle(selected)}>
-                  <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary, fontWeight: 500 }}>{opt.label}</span>
-                  {opt.description && (
-                    <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>{opt.description}</span>
-                  )}
-                </button>
-              )
-            })}
-            {/* Auto-injected Other */}
-            {otherOpen[activeIdx] ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[1] }}>
-                <input
-                  type="text"
-                  autoFocus
-                  value={otherText[activeIdx] || ''}
-                  onInput={(e: any) => setOtherText({ ...otherText, [activeIdx]: e.target.value })}
-                  onKeyDown={(e: any) => { if (e.key === 'Enter') submitOtherText(activeIdx) }}
-                  placeholder="Type your answer…"
-                  style={{
-                    padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-                    border: 'var(--border-default)',
-                    borderRadius: 'var(--radius-2)',
-                    background: 'transparent',
-                    color: tokens.colors.textPrimary,
-                    fontFamily: tokens.font.sans,
-                    fontSize: tokens.fontSize[1],
-                    outline: 'none',
-                  }}
-                />
-                <button onClick={() => submitOtherText(activeIdx)} disabled={!(otherText[activeIdx] || '').trim()} style={{ alignSelf: 'flex-end', padding: `${tokens.space[1]}px ${tokens.space[3]}px`, border: 'none', borderRadius: 'var(--radius-2)', background: tokens.colors.textPrimary, color: tokens.colors.background, fontFamily: tokens.font.sans, fontSize: tokens.fontSize[1], fontWeight: 600, cursor: 'pointer' }}>
-                  Save
-                </button>
-              </div>
-            ) : (
-              <button className="card-interactive" onClick={() => setOtherOpen({ ...otherOpen, [activeIdx]: true })} style={optionStyle(false)}>
-                <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary, fontWeight: 500 }}>Other…</span>
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Submit pane (when Submit tab is active) */}
-      {onSubmitTab && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.space[2], padding: tokens.space[2] }}>
-          <span style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textSecondary }}>
-            Review your answers and submit, or click any tab to revise.
-          </span>
-          {questions.map((q, i) => {
-            const s = selections[i]
-            const display = q.multiSelect
-              ? Array.isArray(s) && s.length > 0 ? s.join(', ') : '(none)'
-              : (typeof s === 'string' && s ? s : '(unanswered)')
-            return (
-              <div key={i} style={{ fontSize: tokens.fontSize[1], color: tokens.colors.textPrimary }}>
-                <span style={{ color: tokens.colors.textSecondary }}>{q.header || `Q${i + 1}`}: </span>
-                {display}
-              </div>
-            )
-          })}
-          <button
-            onClick={() => allAnswered && finalize(selections)}
-            disabled={!allAnswered}
-            style={{
-              marginTop: tokens.space[1],
-              padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
-              border: 'none',
-              borderRadius: 'var(--radius-2)',
-              background: allAnswered ? tokens.colors.textPrimary : tokens.colors.alpha[3],
-              color: allAnswered ? tokens.colors.background : tokens.colors.textSecondary,
-              cursor: allAnswered ? 'pointer' : 'not-allowed',
-              fontFamily: tokens.font.sans,
-              fontSize: tokens.fontSize[1],
-              fontWeight: 600,
-              transition: 'var(--transition-crisp)',
-            }}
-          >
-            Submit
+      {/* Stable nav: Back left, Skip+Next pinned bottom-right of the card */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '10px 12px 12px', gap: 8 }}>
+        <button
+          type="button"
+          onClick={goBack}
+          style={{ ...navBtnBase, display: atFirst ? 'none' : 'inline-flex' }}
+        >
+          Back
+        </button>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+          <button type="button" onClick={goSkip} style={navBtnBase}>
+            Skip
+          </button>
+          <button type="button" onClick={goNext} style={navBtnPrimary}>
+            <span>{atLast ? 'Submit' : 'Next'}</span>
+            <span style={kbdStyle}>⌘↵</span>
           </button>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -888,29 +1050,45 @@ export function ChatFeature(props: UseChatProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
-      {/* Messages Area */}
-      <div style={messagesContainerStyle} ref={containerRef} className="messages-mask">
-        <MessageList
-          history={history}
-          loading={loading}
-          runtimeState={runtimeState}
-          onStop={stopGeneration}
-          onContinue={continueGeneration}
-          anchorRef={anchorRef}
+      {/* Messages Area — wrapped to host the bottom fade overlay */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={messagesContainerStyle} ref={containerRef} className="messages-mask">
+          <MessageList
+            history={history}
+            loading={loading}
+            runtimeState={runtimeState}
+            onStop={stopGeneration}
+            onContinue={continueGeneration}
+            anchorRef={anchorRef}
+          />
+
+          {isEmpty && chipsState.visible && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: tokens.space[4] }}>
+              <PromptChips
+                suggestions={t.promptSuggestions}
+                onSelect={selectSavedPrompt}
+                visible={chipsState.visible}
+                enabled={chipsState.enabled}
+              />
+            </div>
+          )}
+
+          {/* Scroll anchor for bottom */}
+        </div>
+
+        {/* Bottom fade — soft transition into the StatusBlock instead of a hairline border */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 24,
+            pointerEvents: 'none',
+            background: `linear-gradient(to bottom, transparent, ${tokens.colors.background})`,
+          }}
         />
-
-        {isEmpty && chipsState.visible && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginTop: tokens.space[4] }}>
-            <PromptChips
-              suggestions={t.promptSuggestions}
-              onSelect={selectSavedPrompt}
-              visible={chipsState.visible}
-              enabled={chipsState.enabled}
-            />
-          </div>
-        )}
-
-        {/* Scroll anchor for bottom */}
       </div>
 
       {/* Ask User Form — outside scroll, scrolls internally if 2-4 questions overflow */}
@@ -928,7 +1106,7 @@ export function ChatFeature(props: UseChatProps) {
         const state = runtimeState !== 'idle' ? runtimeState : lastModel.runState;
         if (!state) return null;
         return (
-          <div style={{ flexShrink: 0, borderTop: `1px solid ${tokens.colors.alpha[2]}` }}>
+          <div style={{ flexShrink: 0, background: tokens.colors.background }}>
             <StatusBlock
               runState={state}
               startTime={lastModel.startTime}

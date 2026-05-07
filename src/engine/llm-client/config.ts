@@ -73,7 +73,7 @@ export const DEFAULT_THINKING_LEVEL: ThinkingLevel = activePerformance.thinkingL
 export const OPENROUTER_CONFIG = {
   BASE_URL: 'https://openrouter.ai/api/v1',
   DEFAULT_MODEL: 'anthropic/claude-3.5-sonnet',
-  SITE_URL: 'https://github.com/muse40007-stack/genable-figma-plugin',
+  SITE_URL: 'https://github.com/musepy/genable',
   SITE_NAME: 'Genable Figma Plugin',
 } as const;
 

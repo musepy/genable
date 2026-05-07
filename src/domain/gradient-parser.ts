@@ -136,6 +136,26 @@ function parseAngleOrDirection(token: string): number | null {
   return null;
 }
 
+// ─── Color Parsing ───────────────────────────────────────────────────────────
+
+/** Parse `rgb(r,g,b)` or `rgba(r,g,b,a)`. Channel values may be 0-255 ints or
+ *  0-1 floats (heuristic: any value > 1 ⇒ 0-255 scale). Returns null if not a
+ *  recognized rgb()/rgba() expression so the caller can throw a useful error. */
+function parseRgbFunction(s: string): RGBA | null {
+  const m = s.match(/^rgba?\(\s*([^)]+)\)$/i);
+  if (!m) return null;
+  const parts = m[1].split(/[,\s/]+/).map(p => p.trim()).filter(Boolean);
+  if (parts.length < 3) return null;
+  const nums = parts.slice(0, 4).map(p => p.endsWith('%') ? parseFloat(p) / 100 : parseFloat(p));
+  if (nums.some(n => isNaN(n))) return null;
+  const need255 = nums.slice(0, 3).some(n => n > 1);
+  const r = need255 ? nums[0] / 255 : nums[0];
+  const g = need255 ? nums[1] / 255 : nums[1];
+  const b = need255 ? nums[2] / 255 : nums[2];
+  const a = nums.length >= 4 ? nums[3] : 1;
+  return { r, g, b, a };
+}
+
 // ─── Color Stop Parsing ──────────────────────────────────────────────────────
 
 function parseColorStops(tokens: string[]): {
@@ -179,8 +199,19 @@ function parseColorStops(tokens: string[]): {
     } else if (colorPart === 'transparent') {
       color = { r: 0, g: 0, b: 0, a: 0 };
     } else {
-      // Unknown color — fallback to black
-      color = { r: 0, g: 0, b: 0, a: 1 };
+      const rgba = parseRgbFunction(colorPart);
+      if (rgba) {
+        color = rgba;
+      } else {
+        // Unknown color — throw instead of silently returning black. The old
+        // fallback (`{r:0,g:0,b:0,a:1}`) made `linear-gradient(180deg,
+        // rgba(255,255,255,0.2), rgba(255,255,255,0))` render as opaque black,
+        // which the LLM never noticed because the call appeared to succeed.
+        throw new Error(
+          `Unsupported gradient color "${colorPart}". Use "#RRGGBB[AA]", ` +
+          `rgb(r,g,b), rgba(r,g,b,a), "transparent", or a "$Token/Name" variable ref.`,
+        );
+      }
     }
 
     // Apply opacity override

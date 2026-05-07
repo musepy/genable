@@ -87,6 +87,27 @@ function resolveLayoutMode(all: Record<string, any>): string | undefined {
   return undefined;
 }
 
+/** Whitespace tokenizer that keeps parenthesized expressions whole — so
+ *  `1.5 linear-gradient(90deg, #A 0%, #B 100%)` returns
+ *  ["1.5", "linear-gradient(90deg, #A 0%, #B 100%)"] instead of breaking the
+ *  gradient into 6 garbage tokens. Used by the stroke shorthand. */
+function splitStrokeTokens(s: string): string[] {
+  const tokens: string[] = [];
+  let buf = '';
+  let depth = 0;
+  for (const c of s) {
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    if (depth === 0 && /\s/.test(c)) {
+      if (buf) { tokens.push(buf); buf = ''; }
+    } else {
+      buf += c;
+    }
+  }
+  if (buf) tokens.push(buf);
+  return tokens;
+}
+
 function expandPaddingParts(parts: number[]): Record<string, number> {
   switch (parts.length) {
     case 1:  return { paddingTop: parts[0], paddingRight: parts[0], paddingBottom: parts[0], paddingLeft: parts[0] };
@@ -261,8 +282,17 @@ const EXPANDERS: Record<string, Expander> = {
 
   stroke: (v) => {
     if (typeof v === 'string') {
+      const trimmed = v.trim();
+      // Explicit clear. Without this, "none"/"transparent" used to fall into
+      // the else branch below and set strokeAlign="NONE"/"TRANSPARENT" (invalid
+      // enum) AND inject default black — leaving the node permanently stuck
+      // with a black stroke + invalid align value.
+      if (trimmed === 'none' || trimmed === 'transparent') return { strokes: [] };
+
       const result: Record<string, any> = {};
-      for (const p of v.trim().split(/\s+/)) {
+      // Paren-aware tokenizer — keeps "linear-gradient(135deg, #A 0%, #B 100%)"
+      // as one token instead of splitting it on the spaces inside the parens.
+      for (const p of splitStrokeTokens(trimmed)) {
         if (p.startsWith('#')) result.strokes = [p];
         else if (p.startsWith('$')) {
           // Variable reference inside the shorthand. Previously fell into
@@ -272,6 +302,7 @@ const EXPANDERS: Record<string, Expander> = {
           // can bind it.
           result.strokes = p;
         }
+        else if (/-gradient\s*\(/i.test(p)) result.strokes = [p];
         else if (/^\d/.test(p)) result.strokeWeight = parseFloat(p);
         else result.strokeAlign = p.toUpperCase();
       }

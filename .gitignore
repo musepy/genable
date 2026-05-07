@@ -23,6 +23,7 @@ test_output.txt
 .gstack/
 .env.local
 .opencode/
+opencode.config
 .claude/worktrees/
 test-results/
 tools/ui-preview/

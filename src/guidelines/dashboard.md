@@ -128,8 +128,20 @@ tags: [dashboard, analytics, admin, sidebar, kpi, widget, saas]
       </frame>
     </frame>
   </frame>
-  <frame name='Chart Canvas' layout='row' width='fill' h='240' bg='transparent'>
-    {/* Bar/line chart placeholder content */}
+  <frame name='Chart Canvas' w='fill' h='240' bg='transparent' overflow='visible'>
+    {/* Pick ONE chart type based on user request: */}
+    {/* (a) BAR CHART: stacked <rect h='proportional' bg='#color' rounded='4 4 0 0'/> as columns. See guideline:chart §Bar Chart for full example. */}
+    {/* (b) LINE CHART: ONE <vector vectorPaths='M x0,y0 L x1,y1 ...'/> with computed coords. Compute x_i = i × W/(N-1), y_i = H - (v_i/vmax)*H. Example: */}
+    {/* <frame name='Plot' w='560' h='240' bg='transparent' overflow='visible'> */}
+    {/*   <line layoutPositioning='absolute' x={0} y={0}   w={560} stroke='1 #F1F5F9'/> */}
+    {/*   <line layoutPositioning='absolute' x={0} y={80}  w={560} stroke='1 #F1F5F9'/> */}
+    {/*   <line layoutPositioning='absolute' x={0} y={160} w={560} stroke='1 #F1F5F9'/> */}
+    {/*   <line layoutPositioning='absolute' x={0} y={240} w={560} stroke='1 #F1F5F9'/> */}
+    {/*   <vector layoutPositioning='absolute' x={0} y={0} w={560} h={240} */}
+    {/*           vectorPaths='M 0,144 L 80,96 L 160,120 L 240,64 L 320,80 L 400,40 L 480,72 L 560,56' */}
+    {/*           stroke='2 #3B82F6'/> */}
+    {/* </frame> */}
+    {/* CRITICAL: For line charts, NEVER stack <frame> rectangles as substitutes — that produces a bar chart. Use <vector vectorPaths>. */}
   </frame>
 </frame>
 ```

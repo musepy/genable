@@ -76,9 +76,10 @@ export function renderKnowledgeMenu(): string {
   lines.push('');
   lines.push('**Selection rule (BLOCKING — scan the `skill` section FIRST before any creation/edit tool):**');
   lines.push('1. **Existing canvas, user is changing/adjusting** (phrasing like "换风格 / 改成 / 整成 / 做成 / 调整 / make it / restyle / redesign / give it Y vibe / it now looks too X" — or any reference to "this/it" pointing at prior work) → call **`skill({ name: "restyle" })`** FIRST. Loading a style and rebuilding wastes 60%+ tokens.');
-  lines.push('2. **Fresh design from scratch** ("design a / make a / 做一个 / 设计一个" — empty canvas) → call **`skill({ name: "create-page" })`** FIRST. It detects vague vs specific prompts and decides whether to clarify with the user before building.');
+  lines.push('2. **Fresh PAGE from scratch** — multi-section page (landing/dashboard/login/form/pricing/portfolio/settings/profile/app screen) on empty canvas → call **`skill({ name: "create-page" })`** FIRST. NOT for atomic components (cards, buttons, inputs, badges, widgets) — see rule 5.');
   lines.push('3. Other matching skills (rich-text, design-system, component-set, agent-page) → call when their description matches the task.');
   lines.push('4. **`style`** / **`anatomy`** / **`guideline`** / **`help`** are content references — load when a skill tells you to, or when no skill matches.');
+  lines.push('5. **No skill matches** (atomic component, single shape, simple edit, color/text change, "make a card", "design a button", "做一个输入框") → SKIP skill loading entirely. Go directly to the relevant tool (`jsx`, `edit`, `set_fill`, etc.). Forcing a non-matching skill loads ~2K irrelevant tokens and biases the agent toward the wrong workflow.');
   lines.push('');
 
   for (const section of SECTIONS) {

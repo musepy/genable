@@ -1,11 +1,25 @@
 ---
 name: create-page
-description: Use when creating a new design from scratch on empty canvas — "design a", "make a", "做一个", "设计一个", "搞一个". Detects vague prompts and asks ONE multi-question form before generating; specific prompts proceed directly. Call FIRST before style/jsx.
+description: 'Use when creating a new PAGE from scratch on empty canvas — multi-section page (landing/dashboard/login/form/pricing/portfolio/settings/profile/app screen). Triggers: "design a / make a / 做一个 / 设计一个" + a page-type word. NOT for atomic components (single card/button/input/badge/icon/widget) — those go directly to jsx without loading this skill.'
 ---
 
 # CREATE PAGE
 
 You are starting a NEW design from scratch. Empty canvas, fresh creation. The user prompt is your only spec.
+
+## Phase 0: Is this actually a page? (no tool calls — gate check)
+
+Load this skill ONLY if the prompt asks for a multi-section page or full screen. If it's an atomic component, **stop reading this skill and go straight to `jsx`** — the rest of this skill (Phase 1-3, audience questions, style picking) is page-scale workflow and will waste tokens + bias output.
+
+| Pattern in prompt | Action |
+|---|---|
+| Names a page type (landing, dashboard, login, form, pricing, portfolio, settings page, profile page, app screen, home screen) | ✓ Continue to Phase 1 |
+| Names a single component (card, button, input, badge, icon, toggle, dropdown, avatar, tag, widget) — even with detailed spec like "280x56 input box with gradient stroke" | ✗ Skip this skill, call `jsx` directly with the spec |
+| Boundary cases (panel, dialog, modal, sidebar) — has multiple internal sections? | ✓ if multi-section / ✗ if single-purpose |
+
+**Heuristic**: if you'd describe the deliverable as "a screen" → page (continue). If you'd describe it as "a component" → skip this skill.
+
+If the user named a card/widget but the content list inside is page-sized (hero + 3 sections + footer + CTA), treat as page.
 
 ## Phase 1: Detect specificity (no tool calls — read the prompt)
 

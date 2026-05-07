@@ -357,7 +357,7 @@
   {
     "id": "skill:create-page",
     "name": "create-page",
-    "description": "Use when creating a new design from scratch on empty canvas — \"design a\", \"make a\", \"做一个\", \"设计一个\", \"搞一个\". Detects vague prompts and asks ONE multi-question form before generating; specific prompts proceed directly. Call FIRST before style/jsx.",
+    "description": "Use when creating a new PAGE from scratch on empty canvas — multi-section page (landing/dashboard/login/form/pricing/portfolio/settings/profile/app screen). Triggers: \"design a / make a / 做一个 / 设计一个\" + a page-type word. NOT for atomic components (single card/button/input/badge/icon/widget) — those go directly to jsx without loading this skill.",
     "category": "skill"
   },
   {

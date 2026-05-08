@@ -247,13 +247,14 @@ function formatElapsedTimer(ms: number): string {
 // MessageList
 // ============================================
 
-function MessageList({ history, loading, runtimeState, onStop, onContinue, anchorRef }: {
+function MessageList({ history, loading, runtimeState, onStop, onContinue, anchorRef, onImagePreview }: {
   history: any[];
   loading: boolean;
   runtimeState: 'idle' | 'running' | 'canceled' | 'error' | 'empty_response';
   onStop: () => void;
   onContinue: () => void;
   anchorRef: any;
+  onImagePreview?: (att: ImageAtt) => void;
 }) {
   const isEmpty = history.length === 0 && !loading;
 
@@ -292,7 +293,9 @@ function MessageList({ history, loading, runtimeState, onStop, onContinue, ancho
             <div key={msg.id || `msg-${i}`} style={{ ...userItemStyle, marginTop }}>
               {msg.attachments && msg.attachments.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
-                  {renderAttachmentChips(msg.attachments)}
+                  {renderAttachmentChips(msg.attachments, {
+                    onImageClick: onImagePreview,
+                  })}
                 </div>
               )}
               <span style={{ fontSize: tokens.fontSize[1], wordBreak: 'break-word', lineHeight: 'var(--typography-line-height-2)', color: tokens.colors.textPrimary }}>
@@ -353,13 +356,17 @@ function aggregateLabel(count: number): string {
 
 type NodeRef = { id: string; name: string; type: string }
 
+type ImageAtt = Extract<ContextAttachment, { type: 'image' }>
+
 interface ChipHandlers {
   onNodeClick?: (nodeId: string) => void
   onNodeRemove?: (nodeId: string) => void
   onSkillRemove?: (skillId: string) => void
   onAggregateRemove?: (nodeIds: string[]) => void
   onImageRemove?: (imageId: string) => void
-  onImageClick?: (imageId: string) => void
+  /** Receives the full attachment so callers don't need to look it up by id —
+   *  this lets history-rendered chips share the same handler as composer chips. */
+  onImageClick?: (att: ImageAtt) => void
 }
 
 /** Convert attachments into the flat list of v5-style chips rendered above the textarea. */
@@ -407,7 +414,7 @@ function renderAttachmentChips(
           icon={thumb}
           label={att.name}
           title={`${att.name} · ${att.width}×${att.height} · ${att.sizeKB}KB`}
-          onClick={handlers?.onImageClick ? () => handlers.onImageClick!(att.id) : undefined}
+          onClick={handlers?.onImageClick ? () => handlers.onImageClick!(att) : undefined}
           onRemove={handlers?.onImageRemove ? () => handlers.onImageRemove!(att.id) : undefined}
         />,
       )
@@ -998,7 +1005,10 @@ export function ChatFeature(props: UseChatProps) {
 
   // --- Context Attachments ---
   const [attachments, setAttachments] = useState<ContextAttachment[]>([])
-  const [previewImageId, setPreviewImageId] = useState<string | null>(null)
+  /** Currently lightboxed image attachment. Holds the full data so it works
+   *  for both composer chips and history-rendered chips (whose attachments
+   *  may not exist in the live `attachments` array). */
+  const [previewImage, setPreviewImage] = useState<ImageAtt | null>(null)
 
   const addAttachment = (att: ContextAttachment) => {
     setAttachments(prev => {
@@ -1111,6 +1121,7 @@ export function ChatFeature(props: UseChatProps) {
             onStop={stopGeneration}
             onContinue={continueGeneration}
             anchorRef={anchorRef}
+            onImagePreview={setPreviewImage}
           />
 
           {isEmpty && chipsState.visible && (
@@ -1216,9 +1227,9 @@ export function ChatFeature(props: UseChatProps) {
                 onImageRemove: (imageId) => {
                   setAttachments(prev => prev.filter(a => !(a.type === 'image' && a.id === imageId)))
                   // If the removed image was open in the lightbox, close it.
-                  if (previewImageId === imageId) setPreviewImageId(null)
+                  if (previewImage?.id === imageId) setPreviewImage(null)
                 },
-                onImageClick: (imageId) => setPreviewImageId(imageId),
+                onImageClick: (att) => setPreviewImage(att),
               })}
             </Fragment>
           ) : undefined}
@@ -1244,25 +1255,18 @@ export function ChatFeature(props: UseChatProps) {
         />
       </div>
 
-      {/* Lightbox preview — opens when an image chip is clicked. */}
-      {previewImageId && (() => {
-        const att = attachments.find(
-          (a): a is Extract<ContextAttachment, { type: 'image' }> =>
-            a.type === 'image' && a.id === previewImageId,
-        )
-        if (!att) return null
-        return (
-          <ImagePreviewModal
-            mimeType={att.mimeType}
-            data={att.data}
-            name={att.name}
-            width={att.width}
-            height={att.height}
-            sizeKB={att.sizeKB}
-            onClose={() => setPreviewImageId(null)}
-          />
-        )
-      })()}
+      {/* Lightbox preview — opens when any image chip (composer or history) is clicked. */}
+      {previewImage && (
+        <ImagePreviewModal
+          mimeType={previewImage.mimeType}
+          data={previewImage.data}
+          name={previewImage.name}
+          width={previewImage.width}
+          height={previewImage.height}
+          sizeKB={previewImage.sizeKB}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
     </div>
   )
 }

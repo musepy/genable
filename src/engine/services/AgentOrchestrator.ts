@@ -37,6 +37,8 @@ type RuntimeEventPayload = AgentRuntimeEvent extends infer E
 
 export interface AgentPluginData {
   toolExecutors?: Record<string, ToolExecutor>;
+  /** Image references for the next user turn — appended as ImageBlocks alongside the text prompt. */
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 export interface OrchestratorOptions {
@@ -132,7 +134,7 @@ export class AgentOrchestrator {
     try {
       // Selection is now an opt-in tool (get_selection) — no auto-injection here.
       this.options.onStatusChange?.('Agent starting...');
-      const finalResponse = await this.activeAgent.run(prompt);
+      const finalResponse = await this.activeAgent.run(prompt, pluginData.images);
       const latencyMs = Date.now() - startTime;
 
       const { tokenUsage } = this.activeAgent.getRunStats();

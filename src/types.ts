@@ -196,6 +196,17 @@ export type ContextAttachment =
   | { type: 'skill'; skillId: string; name: string }
   | { type: 'selection'; nodes: { id: string; name: string; type: string }[] }
   | { type: 'page'; pageId: string; pageName: string }
+  | {
+      type: 'image';
+      id: string;
+      mimeType: string;
+      /** base64 payload, no `data:` prefix */
+      data: string;
+      name: string;
+      width: number;
+      height: number;
+      sizeKB: number;
+    }
 
 
 export interface SelectNodeHandler extends EventHandler {

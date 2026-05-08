@@ -33,6 +33,7 @@ import type { PluginState } from '../../ui/index'
 import { useChat, UseChatProps } from './useChat'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { useTranslations } from '../../ui/i18n'
+import { loadImageFile, MAX_IMAGES, ImageAttachmentError } from '../../ui/utils/imageAttachment'
 // ErrorActionType removed — error handling moved to StatusBlock
 import type { ContentBlock } from '../../types/chat'
 
@@ -356,6 +357,7 @@ interface ChipHandlers {
   onNodeRemove?: (nodeId: string) => void
   onSkillRemove?: (skillId: string) => void
   onAggregateRemove?: (nodeIds: string[]) => void
+  onImageRemove?: (imageId: string) => void
 }
 
 /** Convert attachments into the flat list of v5-style chips rendered above the textarea. */
@@ -380,6 +382,31 @@ function renderAttachmentChips(
     if (att.type === 'page') {
       chips.push(
         <ContextTag key={`page-${att.pageId}`} icon={<PageIcon />} label={att.pageName} />,
+      )
+      continue
+    }
+    if (att.type === 'image') {
+      const thumb = (
+        <img
+          src={`data:${att.mimeType};base64,${att.data}`}
+          alt=""
+          style={{
+            width: 14,
+            height: 14,
+            objectFit: 'cover',
+            borderRadius: 2,
+            display: 'block',
+          }}
+        />
+      )
+      chips.push(
+        <ContextTag
+          key={`image-${att.id}`}
+          icon={thumb}
+          label={att.name}
+          title={`${att.name} · ${att.width}×${att.height} · ${att.sizeKB}KB`}
+          onRemove={handlers?.onImageRemove ? () => handlers.onImageRemove!(att.id) : undefined}
+        />,
       )
       continue
     }
@@ -987,6 +1014,26 @@ export function ChatFeature(props: UseChatProps) {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
+  const handleImageAttach = async (files: File[]) => {
+    // Cap total images at MAX_IMAGES; silently drop the overflow.
+    const existingImages = attachments.filter(a => a.type === 'image').length
+    const slots = Math.max(0, MAX_IMAGES - existingImages)
+    if (slots === 0) {
+      console.warn(`[chat] Image attach ignored: already at MAX_IMAGES (${MAX_IMAGES})`)
+      return
+    }
+    const accepted = files.slice(0, slots)
+    for (const file of accepted) {
+      try {
+        const att = await loadImageFile(file)
+        addAttachment(att)
+      } catch (err) {
+        const reason = err instanceof ImageAttachmentError ? err.message : 'Failed to attach image'
+        console.warn('[chat] Image attach failed:', reason, file)
+      }
+    }
+  }
+
   // One-shot selection snapshot: SEND_SELECTION only fires via explicit user
   // action (+ → "Add current selection"). Merges into existing chips; never
   // removes. Only X removes. Canvas operations in between are ignored.
@@ -1162,6 +1209,9 @@ export function ChatFeature(props: UseChatProps) {
                 onSkillRemove: (skillId) => {
                   setAttachments(prev => prev.filter(a => !(a.type === 'skill' && a.skillId === skillId)))
                 },
+                onImageRemove: (imageId) => {
+                  setAttachments(prev => prev.filter(a => !(a.type === 'image' && a.id === imageId)))
+                },
               })}
             </Fragment>
           ) : undefined}
@@ -1183,6 +1233,7 @@ export function ChatFeature(props: UseChatProps) {
           onSkillSelect={(skillId) => {
             addAttachment({ type: 'skill', skillId, name: skillId })
           }}
+          onImageAttach={handleImageAttach}
         />
       </div>
     </div>

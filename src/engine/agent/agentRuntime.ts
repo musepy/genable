@@ -18,6 +18,7 @@ import type { HookRegistration, HookContext } from './hooks';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
 import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
+import { IdleAbortTimer } from './idleAbortTimer';
 import { ToolDispatcher } from './toolDispatcher';
 import { TOOL_NAMES } from './tools/unified';
 import { clearOverflows } from './overflowStore';
@@ -948,7 +949,10 @@ export class AgentRuntime {
   // MAIN AGENT LOOP
   // ═══════════════════════════════════════════════════════════════
 
-  async run(userPrompt: string): Promise<string> {
+  async run(
+    userPrompt: string,
+    images?: Array<{ mimeType: string; data: string }>,
+  ): Promise<string> {
     this.currentRunId = `run_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     this.eventSequence = 0;
     this.canceledEventEmitted = false;
@@ -994,10 +998,19 @@ export class AgentRuntime {
 
     // Append user message — this starts the new turn (turn boundary is
     // inferred by walking back to the last user message).
+    // When the user attached image references (paste/drop), the message becomes
+    // multimodal: [text, image, image, ...]. Provider format adapters
+    // (anthropic/gemini/openai) already serialise ImageBlock natively.
+    const userContent = images && images.length > 0
+      ? [
+          { type: 'text' as const, text: userPrompt },
+          ...images.map(img => ({ type: 'image' as const, mimeType: img.mimeType, data: img.data })),
+        ]
+      : userPrompt;
     this.contextManager.addMessage({
       id: this.generateId('usr'),
       role: 'user',
-      content: userPrompt,
+      content: userContent,
     });
 
     let iteration = 0;
@@ -1136,12 +1149,25 @@ export class AgentRuntime {
       });
 
       // ──── LLM GENERATION ────
+      // Idle-reset abort: every streamed chunk (text/reasoning/tool-call delta)
+      // kicks the timer. If LLM_STREAM_IDLE_TIMEOUT_MS elapses with no chunk,
+      // the stream is treated as hung and aborted. Replaces the old wall-clock
+      // total-budget abort, which killed legitimately-slow thinking streams
+      // (kimi-k2.6 reasoning can run 4-7 min while still producing chunks).
       const abortController = new AbortController();
       this.activeAbortController = abortController;
-      const timeoutId = setTimeout(() => {
-        console.warn(`[AgentRuntime] Total generation budget exceeded — aborting`);
-        abortController.abort();
-      }, AGENT_RUNTIME_CONSTANTS.TOTAL_GENERATION_BUDGET_MS);
+      const idleTimer = new IdleAbortTimer({
+        intervalMs: AGENT_RUNTIME_CONSTANTS.LLM_STREAM_IDLE_TIMEOUT_MS,
+        onIdle: () => {
+          console.warn(
+            `[AgentRuntime] LLM stream idle for ${AGENT_RUNTIME_CONSTANTS.LLM_STREAM_IDLE_TIMEOUT_MS}ms — aborting`,
+          );
+          abortController.abort(
+            new Error(`LLM stream idle for ${AGENT_RUNTIME_CONSTANTS.LLM_STREAM_IDLE_TIMEOUT_MS}ms`),
+          );
+        },
+      });
+      idleTimer.start();
 
       let toolCallsForExecution: ToolCallBlock[] = [];
       let rawToolCallsForLoopDetection: ToolCallBlock[] = [];
@@ -1149,6 +1175,7 @@ export class AgentRuntime {
 
       try {
         this.llmCoordinator.config.notifyIterationStart = notifyIterationStartOnce;
+        this.llmCoordinator.config.kickIdleTimer = () => idleTimer.kick();
         const genResult = await this.llmCoordinator.generate(
           {
             messages: prompt,
@@ -1171,7 +1198,8 @@ export class AgentRuntime {
         }
         throw error;
       } finally {
-        clearTimeout(timeoutId);
+        idleTimer.cancel();
+        this.llmCoordinator.config.kickIdleTimer = undefined;
         this.activeAbortController = null;
       }
 

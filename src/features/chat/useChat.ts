@@ -397,6 +397,11 @@ export function useChat({
         )}\n</selected_nodes>\n`
       : ''
 
+    // Image attachments → multimodal user message, threaded to the runtime.
+    const imageAttachments = (options?.attachments ?? [])
+      .filter((a): a is Extract<ContextAttachment, { type: 'image' }> => a.type === 'image')
+      .map(a => ({ mimeType: a.mimeType, data: a.data }))
+
     const prefix = skillTokens.length > 0 ? `${skillTokens.join(' ')} ` : ''
     const enrichedPrompt = `${selectionBlock}${prefix}${normalizedPrompt}`
 
@@ -500,7 +505,10 @@ export function useChat({
         help: makeReaderExecutor('help'),
       }
 
-      await activeOrchestratorRef.current.generate(enrichedPrompt, { toolExecutors: localExecutors })
+      await activeOrchestratorRef.current.generate(enrichedPrompt, {
+        toolExecutors: localExecutors,
+        ...(imageAttachments.length > 0 ? { images: imageAttachments } : {}),
+      })
     } catch (e: any) {
       console.error('[useChat] Unhandled generation error:', e)
       setRuntimeState('error')

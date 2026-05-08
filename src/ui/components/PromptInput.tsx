@@ -20,6 +20,7 @@ import { ArrowUp } from 'lucide-preact';
 import { ActionPopover } from './ActionPopover';
 import { tokens } from '../design-system/tokens';
 import { t } from '../i18n';
+import { extractImagesFromClipboard, extractImagesFromDrop } from '../utils/imageAttachment';
 
 const inputAreaContainer = {
   position: 'relative' as const,
@@ -67,6 +68,8 @@ export interface PromptInputProps {
   onPlusClick?: () => void;
   /** Callback when a skill is selected from action popover */
   onSkillSelect?: (skillId: string) => void;
+  /** Called for each image File pulled out of paste / drop. */
+  onImageAttach?: (files: File[]) => void;
 }
 
 export function PromptInput({
@@ -81,9 +84,11 @@ export function PromptInput({
   leftElement,
   onPlusClick,
   onSkillSelect,
+  onImageAttach,
 }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const autoResize = (el: HTMLTextAreaElement) => {
     const prev = el.style.height;
@@ -114,6 +119,38 @@ export function PromptInput({
     }
   };
 
+  const handlePaste = (e: ClipboardEvent) => {
+    if (disabled || !onImageAttach) return;
+    const files = extractImagesFromClipboard(e);
+    if (files.length === 0) return;
+    e.preventDefault(); // Prevent the image from being inserted as a data: URL into the textarea
+    onImageAttach(files);
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    if (disabled || !onImageAttach) return;
+    // Only react when dragging files (skip text drags within the textarea, etc.)
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    // Only clear when the drag actually leaves the wrapper, not when crossing
+    // child boundaries (which fires dragleave-then-dragenter on the child).
+    if ((e.currentTarget as HTMLElement)?.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    if (disabled || !onImageAttach) return;
+    setIsDragOver(false);
+    const files = extractImagesFromDrop(e);
+    if (files.length === 0) return;
+    e.preventDefault();
+    onImageAttach(files);
+  };
+
   // Auto-resize when value updates (e.g. from prompt chips or reset)
   useLayoutEffect(() => {
     if (textareaRef.current) {
@@ -129,8 +166,19 @@ export function PromptInput({
     animation: 'spin-border 4s linear infinite',
   } : undefined;
 
+  const dragOverStyle = isDragOver ? {
+    border: '1px dashed var(--accent-9)',
+    boxShadow: '0 0 0 3px var(--accent-a3)',
+  } : undefined;
+
   return (
-    <div style={{ ...inputAreaContainer, ...activeBorder } as h.JSX.CSSProperties}>
+    <div
+      style={{ ...inputAreaContainer, ...activeBorder, ...dragOverStyle } as h.JSX.CSSProperties}
+      onPaste={onImageAttach ? handlePaste : undefined}
+      onDragOver={onImageAttach ? handleDragOver : undefined}
+      onDragLeave={onImageAttach ? handleDragLeave : undefined}
+      onDrop={onImageAttach ? handleDrop : undefined}
+    >
       {/* Context Tags row — grid 0fr↔1fr trick gives a smooth height grow/shrink
           coordinated with the textarea's height transition. */}
       <div style={{

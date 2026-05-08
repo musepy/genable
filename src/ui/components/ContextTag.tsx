@@ -12,7 +12,7 @@
 
 import { h, ComponentChildren } from 'preact';
 import { createPortal } from 'preact/compat';
-import { useState, useRef, useCallback } from 'preact/hooks';
+import { useState, useRef, useCallback, useLayoutEffect } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { CloseIcon, ICON_SIZE } from './NodeTypeIcon';
 
@@ -72,10 +72,14 @@ export function ContextTag({
   // --- Tooltip state ---
   // The chip lives inside an overflow:hidden grow/shrink wrapper; rendering the
   // tooltip via portal with viewport-relative coords avoids it being clipped.
+  // x = chip center; the actual left edge is clamped to viewport bounds in a
+  // post-mount measurement step (see useLayoutEffect below).
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [tooltipLeft, setTooltipLeft] = useState<number | null>(null);
   const chipRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The text to show in the tooltip.
@@ -110,7 +114,22 @@ export function ContextTag({
       timerRef.current = null;
     }
     setTooltipVisible(false);
+    setTooltipLeft(null);
   }, []);
+
+  // After tooltip mounts, measure its width and clamp its left edge so it
+  // never overflows the plugin window. Without this, a long filename + a chip
+  // near the left edge produces "enshot 2026-..." (start chopped off).
+  useLayoutEffect(() => {
+    if (!tooltipVisible || !tooltipPos || !tooltipRef.current) return;
+    const VIEWPORT_MARGIN = 8;
+    const tt = tooltipRef.current;
+    const ttWidth = tt.offsetWidth;
+    const idealLeft = tooltipPos.x - ttWidth / 2;
+    const maxLeft = window.innerWidth - ttWidth - VIEWPORT_MARGIN;
+    const clamped = Math.max(VIEWPORT_MARGIN, Math.min(idealLeft, maxLeft));
+    setTooltipLeft(clamped);
+  }, [tooltipVisible, tooltipPos]);
 
   return (
     <div
@@ -207,14 +226,17 @@ export function ContextTag({
       )}
 
       {/* Tooltip rendered via portal so it can escape the chip container's
-          overflow:hidden (used for the height grow/shrink animation). */}
+          overflow:hidden (used for the height grow/shrink animation).
+          First paint uses an off-screen `left: -9999` so the unclamped tooltip
+          isn't visible; useLayoutEffect measures width and sets the real left. */}
       {tooltipVisible && tooltipPos && createPortal(
         <div
+          ref={tooltipRef}
           style={{
             position: 'fixed',
-            left: tooltipPos.x,
+            left: tooltipLeft ?? -9999,
             top: tooltipPos.y,
-            transform: 'translate(-50%, -100%)',
+            transform: 'translateY(-100%)',
             background: TOOLTIP_BG,
             color: '#fff',
             padding: '5px 9px',
@@ -229,15 +251,18 @@ export function ContextTag({
             zIndex: 9999,
             pointerEvents: 'none',
             lineHeight: '1.4',
+            opacity: tooltipLeft === null ? 0 : 1,
           }}
         >
           {tooltipText}
-          {/* Downward-pointing triangle arrow */}
+          {/* Downward-pointing triangle arrow — anchored to chip center, not
+              tooltip center, since the tooltip body may be horizontally shifted
+              away from the chip when it would otherwise overflow viewport. */}
           <span
             style={{
               position: 'absolute',
               top: '100%',
-              left: '50%',
+              left: tooltipLeft !== null ? tooltipPos.x - tooltipLeft : '50%',
               transform: 'translateX(-50%)',
               width: 0,
               height: 0,

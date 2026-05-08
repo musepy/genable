@@ -34,6 +34,7 @@ import { useChat, UseChatProps } from './useChat'
 import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { useTranslations } from '../../ui/i18n'
 import { loadImageFile, MAX_IMAGES, ImageAttachmentError } from '../../ui/utils/imageAttachment'
+import { ImagePreviewModal } from '../../ui/components/ImagePreviewModal'
 // ErrorActionType removed — error handling moved to StatusBlock
 import type { ContentBlock } from '../../types/chat'
 
@@ -358,6 +359,7 @@ interface ChipHandlers {
   onSkillRemove?: (skillId: string) => void
   onAggregateRemove?: (nodeIds: string[]) => void
   onImageRemove?: (imageId: string) => void
+  onImageClick?: (imageId: string) => void
 }
 
 /** Convert attachments into the flat list of v5-style chips rendered above the textarea. */
@@ -405,6 +407,7 @@ function renderAttachmentChips(
           icon={thumb}
           label={att.name}
           title={`${att.name} · ${att.width}×${att.height} · ${att.sizeKB}KB`}
+          onClick={handlers?.onImageClick ? () => handlers.onImageClick!(att.id) : undefined}
           onRemove={handlers?.onImageRemove ? () => handlers.onImageRemove!(att.id) : undefined}
         />,
       )
@@ -995,6 +998,7 @@ export function ChatFeature(props: UseChatProps) {
 
   // --- Context Attachments ---
   const [attachments, setAttachments] = useState<ContextAttachment[]>([])
+  const [previewImageId, setPreviewImageId] = useState<string | null>(null)
 
   const addAttachment = (att: ContextAttachment) => {
     setAttachments(prev => {
@@ -1211,7 +1215,10 @@ export function ChatFeature(props: UseChatProps) {
                 },
                 onImageRemove: (imageId) => {
                   setAttachments(prev => prev.filter(a => !(a.type === 'image' && a.id === imageId)))
+                  // If the removed image was open in the lightbox, close it.
+                  if (previewImageId === imageId) setPreviewImageId(null)
                 },
+                onImageClick: (imageId) => setPreviewImageId(imageId),
               })}
             </Fragment>
           ) : undefined}
@@ -1236,6 +1243,26 @@ export function ChatFeature(props: UseChatProps) {
           onImageAttach={handleImageAttach}
         />
       </div>
+
+      {/* Lightbox preview — opens when an image chip is clicked. */}
+      {previewImageId && (() => {
+        const att = attachments.find(
+          (a): a is Extract<ContextAttachment, { type: 'image' }> =>
+            a.type === 'image' && a.id === previewImageId,
+        )
+        if (!att) return null
+        return (
+          <ImagePreviewModal
+            mimeType={att.mimeType}
+            data={att.data}
+            name={att.name}
+            width={att.width}
+            height={att.height}
+            sizeKB={att.sizeKB}
+            onClose={() => setPreviewImageId(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

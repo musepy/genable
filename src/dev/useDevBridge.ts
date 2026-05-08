@@ -4,7 +4,7 @@ import { emit, on } from '@create-figma-plugin/utilities'
 import { ChatMessage } from '../types/chat'
 import { AgentRuntimeEvent } from '../shared/protocol/agentRuntimeEvents'
 import { generateLogDigest } from '../features/chat/logDigest'
-import type { DevBridgeExportHandler, DevBridgeExportResultHandler } from '../types'
+import type { DevBridgeExportHandler, DevBridgeExportResultHandler, ContextAttachment } from '../types'
 
 const BRIDGE_URL = 'http://localhost:3456'
 const HEALTH_INTERVAL_MS = 10_000
@@ -17,6 +17,8 @@ type RunState = 'idle' | 'running' | 'canceled' | 'error' | 'empty_response'
 export interface GenerateOptions {
   /** Restrict LLM to only these tools (e.g. ["jsx"]) */
   toolFilter?: string[]
+  /** Image references attached to this turn — composer paste/drop OR dev-bridge images[]. */
+  attachments?: ContextAttachment[]
 }
 
 interface AskUserResponse {
@@ -55,6 +57,15 @@ interface TriggerPayload {
   model?: string
   /** Restrict LLM to only these tools. E.g. ["jsx"] to cut off inspect/edit/run */
   toolFilter?: string[]
+  /** Image references — same multimodal path as composer paste/drop.
+   *  `data` is bare base64 (no `data:` prefix). */
+  images?: Array<{
+    mimeType: string
+    data: string
+    name?: string
+    width?: number
+    height?: number
+  }>
 }
 
 async function fetchBridge(path: string, options?: RequestInit): Promise<Response | null> {
@@ -487,8 +498,32 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           await new Promise(r => setTimeout(r, 100))
         }
 
+        // Optional: dev-bridge image attachments — same multimodal path as
+        // composer paste/drop. Caller passes:
+        //   { images: [{ mimeType, data, name? }] }
+        // where `data` is bare base64 (no data: prefix). We coerce into
+        // ContextAttachment image variants so the chip + lightbox UI also
+        // works in dev-bridge-driven runs.
+        let attachments: ContextAttachment[] | undefined = undefined
+        if (Array.isArray(trigger.images) && trigger.images.length > 0) {
+          const imgAtts: ContextAttachment[] = trigger.images
+            .filter((img: any) => img && typeof img.mimeType === 'string' && typeof img.data === 'string')
+            .map((img: any, idx: number) => ({
+              type: 'image' as const,
+              id: `dev-img-${trigger.id}-${idx}`,
+              mimeType: img.mimeType,
+              data: img.data,
+              name: img.name || `image-${idx + 1}`,
+              width: typeof img.width === 'number' ? img.width : 0,
+              height: typeof img.height === 'number' ? img.height : 0,
+              sizeKB: Math.round((img.data.length * 3 / 4) / 1024),
+            }))
+          if (imgAtts.length > 0) attachments = imgAtts
+        }
+
         callbacksRef.current.generateFromPrompt(trigger.prompt, {
           toolFilter: trigger.toolFilter,
+          ...(attachments ? { attachments } : {}),
         })
         // Don't loop immediately — wait for result to be posted (useEffect on runtimeState)
         // The long-poll will resume after triggerIdRef is cleared

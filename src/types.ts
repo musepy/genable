@@ -1,19 +1,45 @@
 import { EventHandler } from '@create-figma-plugin/utilities'
 import { NodeLayer } from './schema/layerSchema'
+import type { ProviderConfig, ProviderProbeResult } from './types/provider'
 
 export type { NodeLayer };
+export type { ProviderConfig, ProviderProbeResult };
 
 export interface Settings {
+  // ── V2 (protocol-based) ──────────────────────────────────────────────
+  /** All configured providers. Source of truth post-Phase-7. */
+  providers?: ProviderConfig[];
+  /** ID of the currently selected provider (matches one entry in providers). */
+  activeProviderId?: string | null;
+
+  // ── Legacy (transitional; derived from V2 by settingsHandler emit) ──
+  // These will be removed once SettingsPanel + useModelSettings land on V2.
   apiKey: string; // Active/Default key for backward compatibility
   apiKeys?: Record<string, string>; // Map of provider -> key
   modelName: string;
   /** Per-provider model names (loaded from storage, used for provider switch restore) */
   modelNames?: Record<string, string>;
   providerName?: 'gemini' | 'openrouter' | 'dashscope' | 'claude';
+
+  // ── Other prefs (unchanged) ──
   /** User's preferred UI + LLM communication language */
   locale?: 'auto' | 'en' | 'zh' | 'fr';
   /** UI color theme; 'auto' follows system preference */
   theme?: 'auto' | 'light' | 'dark';
+}
+
+/** IPC: probe a provider config; returns ProbeResult via VALIDATE_PROVIDER_RESULT. */
+export interface ValidateProviderHandler extends EventHandler {
+  name: 'VALIDATE_PROVIDER';
+  handler: (data: {
+    requestId: string;
+    config: ProviderConfig;
+  }) => void;
+}
+
+export interface ValidateProviderResultHandler extends EventHandler {
+  name: 'VALIDATE_PROVIDER_RESULT';
+  handler: (data: { requestId: string; result: ProviderProbeResult }) => void;
 }
 
 export interface CreateLayersHandler extends EventHandler {

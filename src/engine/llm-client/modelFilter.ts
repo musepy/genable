@@ -5,7 +5,7 @@
  * Strict model filtering: Only Gemini 3.0 and 2.5 Pro/Flash models
  */
 
-import { MODEL_PATTERNS, DASHSCOPE_CONFIG } from './config';
+import { MODEL_PATTERNS } from './config';
 
 /**
  * Raw model data from Gemini API

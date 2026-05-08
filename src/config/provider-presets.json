@@ -11,9 +11,10 @@
     "id": "opencode-go",
     "name": "OpenCode Go",
     "protocol": "openai",
-    "baseURL": "https://figma-ai-generator.muse40007.workers.dev/api/opencode-go/v1",
+    "baseURL": "https://opencode.ai/zen/go/v1",
     "keyUrl": "https://opencode.ai/keys",
-    "defaultModel": "kimi-k2.6"
+    "defaultModel": "kimi-k2.6",
+    "requiresProxy": true
   },
   {
     "id": "anthropic",
@@ -40,7 +41,8 @@
     "defaultModel": "qwen3.6-plus",
     "headers": {
       "User-Agent": "claude-cli/2.0.57 (external, cli)"
-    }
+    },
+    "requiresProxy": true
   },
   {
     "id": "openrouter",

@@ -203,32 +203,26 @@ export function useModelSettings() {
 
   /** Wraps the VALIDATE_PROVIDER round-trip into a Promise<ProviderProbeResult>.
    *
-   *  When `autoDetectProtocol` is true, the sandbox tries OpenAI/Anthropic/
-   *  Gemini sequentially and the result carries the resolved protocol. The
-   *  Custom-endpoint path uses this so the user never has to pick a wire
-   *  format. Default false for preset-driven flows where the protocol is
-   *  already known. Auto-detect can take up to ~24s worst case (3 × 8s
-   *  probe timeout), so the defensive timeout here is bumped accordingly. */
+   *  Protocol is taken from the preset, so a single probe is always enough. */
   const validateProvider = useCallback(
-    (cfg: ProviderConfig, autoDetectProtocol = false): Promise<ProviderProbeResult> => {
+    (cfg: ProviderConfig): Promise<ProviderProbeResult> => {
       return new Promise(resolve => {
         const requestId = `probe-${newProviderId()}`
         probeWaitersRef.current.set(requestId, resolve)
         emit<ValidateProviderHandler>('VALIDATE_PROVIDER', {
           requestId,
           config: cfg,
-          autoDetectProtocol,
         })
-        // Defensive timeout in case the sandbox never responds.
-        // Single probe = 15s; auto-detect = 45s (covers 3 × 12s + slack).
-        const timeoutMs = autoDetectProtocol ? 45_000 : 15_000
+        // Defensive timeout in case the sandbox never responds. 15s covers
+        // cold-start latency on free-tier model queues plus Figma's network
+        // proxy overhead.
         setTimeout(() => {
           const waiter = probeWaitersRef.current.get(requestId)
           if (waiter) {
             probeWaitersRef.current.delete(requestId)
             waiter({ kind: 'network-error', message: 'Probe timed out' })
           }
-        }, timeoutMs)
+        }, 15_000)
       })
     },
     [],

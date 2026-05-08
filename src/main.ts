@@ -28,6 +28,7 @@ import { serializeCurrentPage } from './dev/nodeTreeSerializer';
 // ==========================================
 import { handleToolCall } from './ipc/handlers/toolCallHandler';
 import { handleLoadSettings, handleSaveSettings, handleResetSettings } from './ipc/handlers/settingsHandler';
+import { handleValidateProvider } from './ipc/handlers/validateProviderHandler';
 
 export default async function () {
   console.log('[Genable] Plugin started');
@@ -131,6 +132,8 @@ export default async function () {
   on<SaveSettingsHandler>('SAVE_SETTINGS', handleSaveSettings);
 
   on<import('./types').ResetSettingsHandler>('RESET_SETTINGS', handleResetSettings);
+
+  on<import('./types').ValidateProviderHandler>('VALIDATE_PROVIDER', handleValidateProvider);
 
   on<CloseHandler>('CLOSE', function () {
     figma.closePlugin()

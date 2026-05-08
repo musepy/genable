@@ -135,7 +135,7 @@ export class OpenAIProtocolProvider implements LLMProvider {
     // gated by the caller, not by name-regex inside this generic handler.
     return {
       supportsTextStreaming: true,
-      supportsReasoningStreaming: false,
+      supportsReasoningStreaming: true,
       supportsVision: true,
       contextWindow: 1_000_000,
     };

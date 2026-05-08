@@ -453,6 +453,117 @@ async function handleOpenCodeGoProxy(request: Request): Promise<Response> {
   });
 }
 
+// ─── Generic CORS Proxy ──────────────────────────────────────────────────────
+
+/**
+ * Hosts allowed to be reached via /api/proxy/<host>/<path...>. Keep this in
+ * lockstep with `provider-presets.json` entries that have `requiresProxy: true`.
+ *
+ * Why a whitelist: without it, this endpoint is an open relay — anyone could
+ * point it at any URL on the internet. Cloudflare rejects accounts that get
+ * abused like that. Adding a host here is intentional and reviewable.
+ */
+const PROXY_HOST_WHITELIST: ReadonlySet<string> = new Set([
+  'opencode.ai',
+  'coding.dashscope.aliyuncs.com',
+  'dashscope.aliyuncs.com',
+  // Add new third-party hosts here when adding a `requiresProxy: true` preset.
+]);
+
+/** Headers we forward upstream. Anything else (Origin, Referer, CF-* etc.) is dropped. */
+const FORWARD_HEADER_ALLOWLIST: ReadonlyArray<string> = [
+  'authorization',
+  'content-type',
+  'x-api-key',
+  'anthropic-version',
+  'anthropic-beta',
+];
+
+/**
+ * Per-host header injections applied AFTER the allowlisted forward. Used for
+ * UA spoofs that a browser-origin client can't set itself (User-Agent is a
+ * forbidden header in browser fetch). Keys are hostnames; values are headers
+ * unconditionally added to the upstream request.
+ */
+const HOST_HEADER_INJECTIONS: Record<string, Record<string, string>> = {
+  'coding.dashscope.aliyuncs.com': {
+    // DashScope's coding endpoint expects a Claude/Codex-like UA.
+    'User-Agent': 'anthropic-python/0.42.0',
+  },
+};
+
+/** 60s covers cold-start latency on free-tier model queues plus streaming first byte. */
+const GENERIC_PROXY_TIMEOUT_MS = 60_000;
+
+/**
+ * POST/GET https://<worker>/api/proxy/<host>/<path...>
+ *   → forwards to https://<host>/<path...>
+ *
+ * Body and method are passed through verbatim. Streaming is detected from
+ * `body.stream === true` (OpenAI convention) so the same route handles
+ * /chat/completions (POST stream) and /models (GET non-stream).
+ */
+async function handleGenericProxy(request: Request, host: string, upstreamPath: string): Promise<Response> {
+  if (!PROXY_HOST_WHITELIST.has(host)) {
+    console.warn(`[Proxy] Rejected host "${host}" — not in whitelist`);
+    return errorResponse(`Host "${host}" is not in the proxy whitelist. To add it, open an issue.`, 403);
+  }
+
+  const upstreamUrl = `https://${host}/${upstreamPath}`;
+
+  // Forward only allowlisted headers. Drops Origin/Referer/CF-* — the upstream
+  // shouldn't see anything pretending to be browser-origin metadata.
+  const fwdHeaders = new Headers();
+  for (const key of FORWARD_HEADER_ALLOWLIST) {
+    const v = request.headers.get(key);
+    if (v) fwdHeaders.set(key, v);
+  }
+  // Per-host header injections (e.g. UA spoof for DashScope).
+  const injections = HOST_HEADER_INJECTIONS[host];
+  if (injections) {
+    for (const [k, v] of Object.entries(injections)) {
+      fwdHeaders.set(k, v);
+    }
+  }
+
+  // Pass body through unchanged. We don't parse it (saves CPU + lets non-JSON
+  // bodies through), so we infer "stream" from the URL path alone:
+  // chat/completions and messages routes can stream; /models is always sync.
+  const isStreamingPath = /\/(chat\/completions|messages|streamGenerateContent)$/.test(upstreamPath);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GENERIC_PROXY_TIMEOUT_MS);
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(upstreamUrl, {
+      method: request.method,
+      headers: fwdHeaders,
+      body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+      signal: controller.signal,
+      // Required when streaming a Request body in Workers
+      ...(request.body ? { duplex: 'half' } as any : {}),
+    });
+  } catch (e: any) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError' || controller.signal.aborted) {
+      console.error(`[Proxy] Upstream timeout: ${upstreamUrl}`);
+      return errorResponse(`Upstream timeout after ${GENERIC_PROXY_TIMEOUT_MS}ms`, 504);
+    }
+    console.error(`[Proxy] Upstream unreachable: ${upstreamUrl} — ${e.message}`);
+    return errorResponse(`Upstream unreachable: ${e.message}`, 502);
+  }
+  clearTimeout(timeoutId);
+
+  // Pass status + content-type through; replace CORS headers with our own.
+  const respHeaders: Record<string, string> = { ...corsHeaders() };
+  const upstreamCT = upstream.headers.get('Content-Type');
+  if (upstreamCT) respHeaders['Content-Type'] = upstreamCT;
+  if (isStreamingPath) respHeaders['Cache-Control'] = 'no-cache';
+
+  return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+}
+
 // ─── Main fetch handler ───────────────────────────────────────────────────────
 
 export default {
@@ -464,6 +575,22 @@ export default {
 
       const url = new URL(request.url);
       const path = url.pathname;
+
+      // Generic CORS proxy: /api/proxy/<host>/<path...>
+      // host must be in PROXY_HOST_WHITELIST. Replaces per-vendor routes —
+      // those stay in the file below for back-compat with already-saved
+      // ProviderConfigs whose baseURL points at /api/opencode-go/v1 etc.
+      if (path.startsWith('/api/proxy/')) {
+        // /api/proxy/<host>/<rest>  →  segments[3] = host, segments[4..] = rest
+        const segments = path.split('/').filter(Boolean); // drop empty leading segment
+        // ['api', 'proxy', '<host>', ...rest]
+        if (segments.length < 4) {
+          return errorResponse('Bad proxy path: expected /api/proxy/<host>/<path>', 400);
+        }
+        const host = segments[2];
+        const upstreamPath = segments.slice(3).join('/');
+        return handleGenericProxy(request, host, upstreamPath);
+      }
 
       // DashScope CORS proxy (client provides own API key)
       if (path === '/api/dashscope/generate' && request.method === 'POST') {

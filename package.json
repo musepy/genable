@@ -78,7 +78,11 @@
         "https://coding.dashscope.aliyuncs.com",
         "https://figma-ai-generator.muse40007.workers.dev",
         "https://api.anthropic.com",
-        "https://dashscope.aliyuncs.com"
+        "https://dashscope.aliyuncs.com",
+        "https://opencode.ai",
+        "https://api.openai.com",
+        "https://api.moonshot.cn",
+        "https://api.deepseek.com"
       ],
       "devAllowedDomains": [
         "http://localhost:3456",

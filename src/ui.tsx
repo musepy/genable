@@ -304,7 +304,12 @@ function PluginContent() {
             providerConfig={activeProvider ?? undefined}
             pluginData={pluginData}
             setModelName={setModelName}
-            suggestedModels={[]}
+            suggestedModels={
+              // Hand the active provider's probed model list to the popover.
+              // ModelPopover falls back to its hardcoded SUPPORTED_MODELS when
+              // this is empty (Anthropic protocol, fresh install before probe).
+              (activeProvider?.availableModels ?? []).map(m => ({ name: m, displayName: m }))
+            }
             onOpenSettings={() => setShowSettings(true)}
           />
         </div>

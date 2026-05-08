@@ -21,6 +21,7 @@ import { GeminiProtocolProvider } from '../llm-client/providers/gemini-protocol'
 import { ProxyProvider } from '../llm-client/providers/proxy';
 import { LLMProvider } from '../llm-client/providers/types';
 import type { ProviderConfig } from '../../types/provider';
+import { wrapBaseURLForProxy } from '../llm-client/proxyWrap';
 
 export interface ProviderFactoryOutput {
   provider: LLMProvider;
@@ -34,27 +35,32 @@ export interface ProviderFactoryOutput {
 
 /**
  * Dispatch a ProviderConfig to the right protocol handler. Pure function.
+ *
+ * If `config.requiresProxy` is set, the baseURL is rewritten to go through the
+ * Worker proxy before instantiation — protocol handlers stay unaware of the
+ * proxy and just see a baseURL they can append paths to.
  */
 export function createProviderFromConfig(config: ProviderConfig): ProviderFactoryOutput {
-  switch (config.protocol) {
+  const cfg = wrapBaseURLForProxy(config);
+  switch (cfg.protocol) {
     case 'openai':
       return {
-        provider: new OpenAIProtocolProvider(config),
-        resolvedDisplayName: config.name,
+        provider: new OpenAIProtocolProvider(cfg),
+        resolvedDisplayName: cfg.name,
       };
     case 'anthropic':
       return {
-        provider: new AnthropicProtocolProvider(config),
-        resolvedDisplayName: config.name,
+        provider: new AnthropicProtocolProvider(cfg),
+        resolvedDisplayName: cfg.name,
       };
     case 'gemini':
       return {
-        provider: new GeminiProtocolProvider(config),
-        resolvedDisplayName: config.name,
+        provider: new GeminiProtocolProvider(cfg),
+        resolvedDisplayName: cfg.name,
       };
     default: {
       // Exhaustiveness check — adding a new Protocol forces a compile error here
-      const _exhaustive: never = config.protocol;
+      const _exhaustive: never = cfg.protocol;
       throw new Error(`[ProviderFactory] Unknown protocol: ${String(_exhaustive)}`);
     }
   }

@@ -654,6 +654,143 @@ describe('postOpValidator structured output', () => {
     });
   });
 
+  describe('SHADOW_CLIPPED', () => {
+    // Helper: card-style child with one drop shadow at the given offset/radius/spread.
+    const cardChild = (over: Partial<any> = {}, shadow: Partial<any> = {}) => ({
+      id: 'card',
+      name: 'Card',
+      type: 'FRAME',
+      width: 360,
+      height: 200,
+      x: 0,
+      y: 0,
+      opacity: 1,
+      effects: [{
+        type: 'DROP_SHADOW',
+        visible: true,
+        offset: { x: 0, y: 4 },
+        radius: 16,
+        spread: 0,
+        ...shadow,
+      }],
+      ...over,
+    });
+
+    it('flags shadow escaping parent with clipsContent=true and zero padding', () => {
+      // Card 360×200 at (0,0) with shadow(0,4,16) inside parent 360×200 with no padding
+      // → bottom shadow extends 4+16=20px past parent.height
+      const child = cardChild();
+      const parent = mockFrame({
+        id: 'p1', name: 'Container',
+        width: 360, height: 200,
+        clipsContent: true,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      const v = violations.find(x => x.code === 'SHADOW_CLIPPED');
+      expect(v).toBeDefined();
+      expect(v!.message).toContain('Card');
+      expect(v!.context.sides).toContain('bottom');
+      expect(v!.hints[0]).toMatch(/visible|clipsContent/);
+    });
+
+    it('does not flag when parent has clipsContent=false', () => {
+      const child = cardChild();
+      const parent = mockFrame({
+        width: 360, height: 200,
+        clipsContent: false,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      expect(violations.find(x => x.code === 'SHADOW_CLIPPED')).toBeUndefined();
+    });
+
+    it('does not flag when parent padding accommodates the shadow', () => {
+      const child = cardChild({ x: 24, y: 24 });
+      const parent = mockFrame({
+        width: 408, height: 248,           // 360+24+24, 200+24+24
+        clipsContent: true,
+        paddingTop: 24, paddingRight: 24,
+        paddingBottom: 24, paddingLeft: 24,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      expect(violations.find(x => x.code === 'SHADOW_CLIPPED')).toBeUndefined();
+    });
+
+    it('does not flag INNER_SHADOW (does not escape the node)', () => {
+      const child = cardChild({}, { type: 'INNER_SHADOW' });
+      const parent = mockFrame({
+        width: 360, height: 200,
+        clipsContent: true,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      expect(violations.find(x => x.code === 'SHADOW_CLIPPED')).toBeUndefined();
+    });
+
+    it('does not flag invisible drop shadows', () => {
+      const child = cardChild({}, { visible: false });
+      const parent = mockFrame({
+        width: 360, height: 200,
+        clipsContent: true,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      expect(violations.find(x => x.code === 'SHADOW_CLIPPED')).toBeUndefined();
+    });
+
+    it('flags top side when shadow has negative y offset on a top-edge child', () => {
+      const child = cardChild({ y: 0 }, { offset: { x: 0, y: -8 }, radius: 16 });
+      const parent = mockFrame({
+        width: 360, height: 240,
+        clipsContent: true,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      const v = violations.find(x => x.code === 'SHADOW_CLIPPED');
+      expect(v).toBeDefined();
+      expect(v!.context.sides).toContain('top');
+    });
+
+    it('takes max extent across multiple drop shadows on the same child', () => {
+      const child = {
+        ...cardChild(),
+        effects: [
+          { type: 'DROP_SHADOW', visible: true, offset: { x: 0, y: 1 }, radius: 2, spread: 0 },
+          { type: 'DROP_SHADOW', visible: true, offset: { x: 0, y: 8 }, radius: 32, spread: 4 },
+        ],
+      };
+      const parent = mockFrame({
+        width: 360, height: 200,
+        clipsContent: true,
+        children: [child],
+      });
+      const violations = validatePostOp(parent);
+      const v = violations.find(x => x.code === 'SHADOW_CLIPPED');
+      expect(v).toBeDefined();
+      // Bottom extent = 8 + 32 + 4 = 44, not 1 + 2 + 0
+      expect(v!.context.shadowExtent.bottom).toBe(44);
+    });
+
+    it('matches the Login Page case from 2026-03-16 E2E logs', () => {
+      // parent=Login Page clips=true padding=0 gap=0, child=Card shadow(0,4,24)
+      const card = cardChild({ x: 0, y: 0, width: 400, height: 480 }, {
+        offset: { x: 0, y: 4 }, radius: 24,
+      });
+      const parent = mockFrame({
+        id: 'login', name: 'Login Page',
+        width: 400, height: 480,
+        clipsContent: true,
+        children: [card],
+      });
+      const violations = validatePostOp(parent);
+      const v = violations.find(x => x.code === 'SHADOW_CLIPPED');
+      expect(v).toBeDefined();
+      expect(v!.context.sides.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('collectTreeViolations', () => {
     it('returns structured objects for tree walk', () => {
       const child = mockFrame({ id: 'c1', name: 'ZeroChild', width: 0, height: 100 });

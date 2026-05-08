@@ -121,6 +121,7 @@ export function validatePostOp(node: SceneNode, intended?: PostOpIntended): Vali
     violations.push(...validateHugFillCycle(node as FrameNode));
     violations.push(...validateEmptyFrame(node as FrameNode));
     violations.push(...validateCornerRadiusMismatch(node as FrameNode));
+    violations.push(...validateShadowClipped(node as FrameNode));
   }
 
   // 5. Banned names — Figma default names indicate LLM forgot to name the node
@@ -763,6 +764,109 @@ function getMaxCornerRadius(node: any): number {
     node.bottomRightRadius || 0,
   ];
   return Math.max(...corners);
+}
+
+// ──────────────────────────────────────────────
+// Shadow clipped by parent (clipsContent + insufficient padding/gap)
+// ──────────────────────────────────────────────
+
+/**
+ * Detect children with DROP_SHADOW whose shadow extent escapes the parent's
+ * content box while the parent has clipsContent=true.
+ *
+ * The dominant case (per E2E logs): card-style child with shadow(0,4,16) lives
+ * inside a frame with clipsContent=true (Figma default) and zero padding/gap.
+ * Shadow gets silently clipped — LLM sees `effects` applied successfully but
+ * the canvas shows no shadow. Detection is purely geometric.
+ *
+ * INNER_SHADOW does not escape the node, so we only check DROP_SHADOW.
+ * Skipped: invisible effects, parents with clipsContent=false (already correct).
+ */
+function validateShadowClipped(frame: FrameNode): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  if (!frame.children || frame.children.length === 0) return violations;
+  if ((frame as any).clipsContent === false) return violations;
+
+  const paddingTop = (frame as any).paddingTop || 0;
+  const paddingRight = (frame as any).paddingRight || 0;
+  const paddingBottom = (frame as any).paddingBottom || 0;
+  const paddingLeft = (frame as any).paddingLeft || 0;
+
+  for (const child of frame.children) {
+    if (!('effects' in child) || !child.effects) continue;
+    const dropShadows = (child.effects as ReadonlyArray<any>).filter(
+      e => e && e.type === 'DROP_SHADOW' && e.visible !== false,
+    );
+    if (dropShadows.length === 0) continue;
+
+    // Compute max shadow extent on each side across all drop shadows on this child.
+    // Figma offset: positive y → shadow below, positive x → shadow right.
+    let extTop = 0, extRight = 0, extBottom = 0, extLeft = 0;
+    for (const eff of dropShadows) {
+      const ox = eff.offset?.x || 0;
+      const oy = eff.offset?.y || 0;
+      const r = eff.radius || 0;
+      const s = eff.spread || 0;
+      extTop = Math.max(extTop, Math.max(0, -oy) + r + s);
+      extBottom = Math.max(extBottom, Math.max(0, oy) + r + s);
+      extLeft = Math.max(extLeft, Math.max(0, -ox) + r + s);
+      extRight = Math.max(extRight, Math.max(0, ox) + r + s);
+    }
+
+    // Child geometry inside parent's local coordinate space.
+    const cx = (child as any).x || 0;
+    const cy = (child as any).y || 0;
+    const cw = (child as any).width || 0;
+    const ch = (child as any).height || 0;
+
+    // Shadow clears parent edges? Each side compares the shadow's outermost
+    // pixel to the parent's inner edge. We require ≥1px of slack to avoid
+    // false-positives from rounding.
+    const overflowTop = extTop - cy;
+    const overflowBottom = (cy + ch + extBottom) - frame.height;
+    const overflowLeft = extLeft - cx;
+    const overflowRight = (cx + cw + extRight) - frame.width;
+
+    const sides: string[] = [];
+    if (overflowTop > 1) sides.push('top');
+    if (overflowBottom > 1) sides.push('bottom');
+    if (overflowLeft > 1) sides.push('left');
+    if (overflowRight > 1) sides.push('right');
+    if (sides.length === 0) continue;
+
+    // Suggest a padding fix scoped to clipped sides — enough to clear the
+    // largest overflow plus a small breathing margin.
+    const suggested = Math.ceil(Math.max(
+      overflowTop > 1 ? overflowTop : 0,
+      overflowBottom > 1 ? overflowBottom : 0,
+      overflowLeft > 1 ? overflowLeft : 0,
+      overflowRight > 1 ? overflowRight : 0,
+    ));
+
+    violations.push({
+      code: 'SHADOW_CLIPPED',
+      message: `'${child.name}' drop shadow extends past parent '${frame.name}' on ${sides.join('/')} but parent clipsContent=true — shadow will be invisible`,
+      nodeId: child.id,
+      nodeName: child.name,
+      context: {
+        sides,
+        shadowExtent: { top: extTop, right: extRight, bottom: extBottom, left: extLeft },
+        parentPadding: { top: paddingTop, right: paddingRight, bottom: paddingBottom, left: paddingLeft },
+        parentClipsContent: true,
+      },
+      hints: [
+        `Set parent '${frame.name}' overflow to "visible" (clipsContent=false) — shadow renders outside`,
+        `Or increase parent padding on ${sides.join('/')} to ≥${suggested}px so the shadow fits inside the clip`,
+        `Or remove the drop shadow on '${child.name}' if it isn't load-bearing`,
+      ],
+    });
+    // One violation per parent frame is enough — siblings usually share the
+    // same fix and repeating adds noise without new signal.
+    break;
+  }
+
+  return violations;
 }
 
 // ──────────────────────────────────────────────

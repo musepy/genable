@@ -1,0 +1,89 @@
+[
+  {
+    "id": "opencode-zen",
+    "name": "OpenCode Zen",
+    "protocol": "anthropic",
+    "baseURL": "https://opencode.ai/zen/v1",
+    "keyUrl": "https://opencode.ai/keys",
+    "defaultModel": "claude-sonnet-4-6"
+  },
+  {
+    "id": "opencode-go",
+    "name": "OpenCode Go",
+    "protocol": "openai",
+    "baseURL": "https://figma-ai-generator.muse40007.workers.dev/api/opencode-go/v1",
+    "keyUrl": "https://opencode.ai/keys",
+    "defaultModel": "kimi-k2.6"
+  },
+  {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "protocol": "anthropic",
+    "baseURL": "https://api.anthropic.com/v1",
+    "keyUrl": "https://console.anthropic.com/settings/keys",
+    "defaultModel": "claude-sonnet-4-20250514"
+  },
+  {
+    "id": "dashscope-anthropic",
+    "name": "DashScope (Anthropic)",
+    "protocol": "anthropic",
+    "baseURL": "https://dashscope.aliyuncs.com/apps/anthropic/v1",
+    "keyUrl": "https://bailian.console.aliyun.com/",
+    "defaultModel": "claude-sonnet-4-20250514"
+  },
+  {
+    "id": "dashscope-openai",
+    "name": "DashScope (OpenAI)",
+    "protocol": "openai",
+    "baseURL": "https://coding.dashscope.aliyuncs.com/v1",
+    "keyUrl": "https://bailian.console.aliyun.com/",
+    "defaultModel": "qwen3.6-plus",
+    "headers": {
+      "User-Agent": "claude-cli/2.0.57 (external, cli)"
+    }
+  },
+  {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "protocol": "openai",
+    "baseURL": "https://openrouter.ai/api/v1",
+    "keyUrl": "https://openrouter.ai/keys",
+    "defaultModel": "anthropic/claude-3.5-sonnet",
+    "headers": {
+      "HTTP-Referer": "https://github.com/musepy/genable",
+      "X-Title": "Genable Figma Plugin"
+    }
+  },
+  {
+    "id": "moonshot",
+    "name": "Moonshot (Kimi)",
+    "protocol": "openai",
+    "baseURL": "https://api.moonshot.cn/v1",
+    "keyUrl": "https://platform.moonshot.cn/console/api-keys",
+    "defaultModel": "kimi-k2-0905-preview"
+  },
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "protocol": "openai",
+    "baseURL": "https://api.deepseek.com/v1",
+    "keyUrl": "https://platform.deepseek.com/api_keys",
+    "defaultModel": "deepseek-chat"
+  },
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "protocol": "openai",
+    "baseURL": "https://api.openai.com/v1",
+    "keyUrl": "https://platform.openai.com/api-keys",
+    "defaultModel": "gpt-4o"
+  },
+  {
+    "id": "gemini-aistudio",
+    "name": "Gemini (AI Studio)",
+    "protocol": "gemini",
+    "baseURL": "https://generativelanguage.googleapis.com/v1beta",
+    "keyUrl": "https://aistudio.google.com/apikey",
+    "defaultModel": "gemini-2.5-flash"
+  }
+]

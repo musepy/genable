@@ -29,6 +29,7 @@ import {
 } from '../../engine/actions/nodeFactory';
 import { NodeSerializer } from '../../engine/figma-adapter/nodeSerializer';
 import { JsonNodeSerializer } from '../../engine/flat/jsonNodeSerializer';
+import { collectTreeViolations } from '../../engine/validation/postOpValidator';
 import { PipelineTracer } from './pipelineTracer';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -210,6 +211,30 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
     }
   }
 
+  // Step 5c: Post-op design-quality validation. After the subtree exists
+  // in Figma with real geometry, walk it and surface design issues
+  // (HUG/FILL cycles, shadow clipping, contrast, tap targets, etc.) as
+  // walk warnings. Same channel as PAINT_INVALID — flows through
+  // aggregateBindingWarnings → presentForLLM so the LLM gets a structured
+  // hint after each jsx call. The validator was orphaned by the IR-removal
+  // refactor (commit 3a440cf, 2026-03-26); this re-anchors it.
+  for (const r of rootResults) {
+    try {
+      const node = await figma.getNodeByIdAsync(r.nodeId) as SceneNode | null;
+      if (!node) continue;
+      const violations = collectTreeViolations(node, /*maxDepth*/ 6, /*maxViolations*/ 12);
+      for (const v of violations) {
+        ctx.warnings.push({
+          code: v.code,
+          severity: 'warning',
+          message: v.message,
+          node_id: v.nodeId,
+          ...(v.hints.length > 0 ? { hints: v.hints } : {}),
+        });
+      }
+    } catch { /* validator is advisory — never fail a successful walk */ }
+  }
+
   // Build structured response via serializeMinimal pipeline
   const rootNodeId = rootResults[0].nodeId;
   const rootNode = await figma.getNodeByIdAsync(rootNodeId) as SceneNode | null;
@@ -354,6 +379,27 @@ function aggregateBindingWarnings(walkWarnings: WalkWarning[]): ToolWarning[] {
     // frame silently becomes HUG and the page collapses to its widest natural
     // child. Message includes the demote reason.
     'SIZING_NORMALIZED',
+    // Post-op design-quality violations — emitted by collectTreeViolations
+    // after the walk completes, surfacing geometry- and layout-derived issues
+    // that can only be detected once the node exists in Figma. Re-anchored
+    // 2026-05 after the IR-removal refactor orphaned postOpValidator.
+    'ZERO_DIM',
+    'LOW_OPACITY',
+    'TEXT_OVERFLOW',
+    'TEXT_WIDTH_COLLAPSED',
+    'CHILDREN_OVERFLOW',
+    'SIBLING_INCONSISTENCY',
+    'MISSING_AUTOLAYOUT',
+    'HUG_FILL_CYCLE',
+    'EMPTY_FRAME',
+    'CORNER_RADIUS_MISMATCH',
+    'SHADOW_CLIPPED',
+    'SMALL_TAP_TARGET',
+    'BANNED_NAME',
+    'WHITE_ON_WHITE',
+    'SIZING_REVERTED',
+    'LOW_CONTRAST',
+    'TEXT_MISSING_STYLE',
   ]);
   const out: ToolWarning[] = [];
   const seen = new Set<string>();

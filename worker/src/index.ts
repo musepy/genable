@@ -351,6 +351,108 @@ async function handleDashScopeProxy(request: Request, stream: boolean): Promise<
   });
 }
 
+// ─── OpenCode Go CORS Proxy ──────────────────────────────────────────────────
+
+const OPENCODE_GO_BASE = 'https://opencode.ai/zen/go/v1';
+/** Subrequest timeout for OpenCode Go (ms). */
+const OPENCODE_GO_TIMEOUT_MS = 60000;
+
+/**
+ * Proxy GET /models to OpenCode Go upstream — adds CORS headers
+ * so the Figma plugin can fetch the model list from the browser.
+ */
+async function handleOpenCodeGoModels(request: Request): Promise<Response> {
+  const apiKey = request.headers.get('Authorization') || '';
+  if (!apiKey) return errorResponse('Missing Authorization header', 401);
+
+  try {
+    const upstream = await fetch(`${OPENCODE_GO_BASE}/models`, {
+      method: 'GET',
+      headers: { Authorization: apiKey },
+    });
+    if (!upstream.ok) {
+      let errText: string;
+      try { errText = await upstream.text(); } catch { errText = '(failed to read error body)'; }
+      console.error(`[OpenCodeGo] Models upstream error ${upstream.status}: ${errText.slice(0, 500)}`);
+      return new Response(errText, {
+        status: upstream.status,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+      });
+    }
+    const body = await upstream.text();
+    return new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300', ...corsHeaders() },
+    });
+  } catch (e: any) {
+    console.error(`[OpenCodeGo] Models upstream unreachable: ${e.message}`);
+    return errorResponse(`OpenCode Go models unreachable: ${e.message}`, 502);
+  }
+}
+
+/**
+ * Generic CORS proxy for OpenCode Go — forwards client's own API key.
+ *
+ * Why this exists: OpenCode Go's endpoint at https://opencode.ai/zen/go/v1
+ * doesn't serve `Access-Control-Allow-Origin`, so a Figma plugin (origin null)
+ * gets blocked by the browser at the CORS preflight step. Routing through this
+ * worker re-attaches CORS headers so the plugin can talk to OpenCode Go.
+ *
+ * Stream vs sync is derived from `body.stream` (openai-protocol convention),
+ * not from the URL path — that's why a single route handles both.
+ */
+async function handleOpenCodeGoProxy(request: Request): Promise<Response> {
+  let body: any;
+  try { body = await request.json(); } catch { return errorResponse('Invalid JSON body', 400); }
+
+  const apiKey = request.headers.get('Authorization') || '';
+  if (!apiKey) return errorResponse('Missing Authorization header', 401);
+
+  const stream = body && body.stream === true;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OPENCODE_GO_TIMEOUT_MS);
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${OPENCODE_GO_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError' || controller.signal.aborted) {
+      console.error(`[OpenCodeGo] Upstream timeout after ${OPENCODE_GO_TIMEOUT_MS}ms`);
+      return errorResponse(`OpenCode Go upstream timeout after ${OPENCODE_GO_TIMEOUT_MS}ms`, 504);
+    }
+    console.error(`[OpenCodeGo] Upstream unreachable: ${e.message}`);
+    return errorResponse(`OpenCode Go upstream unreachable: ${e.message}`, 502);
+  }
+  clearTimeout(timeoutId);
+
+  if (!upstream.ok) {
+    let errText: string;
+    try { errText = await upstream.text(); } catch { errText = '(failed to read error body)'; }
+    console.error(`[OpenCodeGo] Upstream error ${upstream.status}: ${errText.slice(0, 500)}`);
+    return new Response(errText, {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    });
+  }
+
+  console.log(`[OpenCodeGo] Upstream ok, streaming=${stream}`);
+  const contentType = stream ? 'text/event-stream' : 'application/json';
+  return new Response(upstream.body, {
+    status: 200,
+    headers: { 'Content-Type': contentType, 'Cache-Control': 'no-cache', ...corsHeaders() },
+  });
+}
+
 // ─── Main fetch handler ───────────────────────────────────────────────────────
 
 export default {
@@ -369,6 +471,21 @@ export default {
       }
       if (path === '/api/dashscope/generate-sync' && request.method === 'POST') {
         return handleDashScopeProxy(request, false);
+      }
+
+      // OpenCode Go CORS proxy (client provides own API key).
+      // Path mirrors the upstream `/v1/chat/completions` so the plugin can use
+      // baseURL=`<workerOrigin>/api/opencode-go/v1` and the openai-protocol
+      // appender (`${baseURL}/chat/completions`) lands here without rewriting.
+      // Stream vs sync is derived from `body.stream` so a single route covers
+      // both — matches the openai-protocol convention.
+      if (path === '/api/opencode-go/v1/chat/completions' && request.method === 'POST') {
+        return handleOpenCodeGoProxy(request);
+      }
+
+      // OpenCode Go model list CORS proxy — proxies GET /models to upstream.
+      if (path === '/api/opencode-go/v1/models' && request.method === 'GET') {
+        return handleOpenCodeGoModels(request);
       }
 
       if (path === '/api/generate' && request.method === 'POST') {

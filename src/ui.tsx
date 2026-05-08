@@ -53,34 +53,34 @@ const mainContentStyle: h.JSX.CSSProperties = {
 function PluginContent() {
   // 1. Global Plugin Data (Subscriptions)
   const pluginData = usePluginData()
-  
-  // 2. Settings & Auth
+
+  // 2. Settings & Auth (V2 protocol-based)
   const settings = useModelSettings()
   const {
     locale, localePref, setLocalePref,
     theme, setTheme,
-    apiKey, setApiKey, setApiKeyFor, apiKeys, modelName, setModelName,
-    providerName, setProviderName,
-    suggestedModels, fetchStatus, settingsError,
+    // V2
+    providers, activeProviderId, addProvider, updateProvider, removeProvider,
+    setActiveProviderId, validateProvider, activeProvider,
+    // Legacy derived (still needed for AgentOrchestrator + ModelPopover fallback)
+    apiKey, modelName, setModelName, providerName,
+    // Lifecycle
     hasConfig, isInitialized, showSettings, setShowSettings,
-    handleSaveSettings, completeOnboarding, handleFetchModels,
-    logout, restoreSavedSession
+    logout, restoreSavedSession,
   } = settings
 
   // Key for remounting ChatFeature (replaces window.location.reload)
   const [chatKey, setChatKey] = useState(0)
 
-  // Dev bridge model switching — exposed via window global for cross-component access
+  // Dev bridge model switching — exposed via window global for cross-component access.
+  // Updates the active provider's modelId. Provider switching by name is no longer
+  // first-class (V2 routes by config id, not by legacy bucket).
   useEffect(() => {
-    (window as any).__GENABLE_SWITCH_PROVIDER__ = (provider: string, model: string) => {
-      const validProviders = ['gemini', 'openrouter', 'dashscope'] as const
-      if (validProviders.includes(provider as any)) {
-        setProviderName(provider as any)
-        setModelName(model)
-      }
+    (window as any).__GENABLE_SWITCH_PROVIDER__ = (_provider: string, model: string) => {
+      if (model) setModelName(model)
     }
     return () => { delete (window as any).__GENABLE_SWITCH_PROVIDER__ }
-  }, [setProviderName, setModelName])
+  }, [setModelName])
 
   // 3. UI Animation State (theme now persisted in useModelSettings)
   const [isSettingsClosing, setIsSettingsClosing] = useState(false)
@@ -105,11 +105,11 @@ function PluginContent() {
 
   // L2: Capture Orchestrator
   const [captureTarget, setCaptureTarget] = useState<string | null>(null);
-  
+
   useEffect(() => {
     const uncapture = on<CaptureUIHandler>('CAPTURE_UI', async (data) => {
       console.log('[UI] Received CAPTURE_UI for:', data.componentId);
-      
+
       // 1. Check Registry (High Fidelity Build-time Snapshot)
       const cached = (uiRegistry as any)[data.componentId] || (uiRegistry as any)[data.componentId.replace(/-/g, '')];
       if (cached && cached.layers) {
@@ -124,7 +124,7 @@ function PluginContent() {
       // 2. Fallback to Sandbox (Fragile Runtime Capture)
       console.log('[UI] Fallback to Sandbox capture for:', data.componentId);
       setCaptureTarget(data.componentId);
-      
+
       // Wait for mount
       setTimeout(async () => {
         const el = document.getElementById('capture-sandbox-content');
@@ -182,19 +182,13 @@ function PluginContent() {
     if (captureTarget === 'SettingsPanel' || captureTarget === 'settings-panel') {
       content = (
         <SettingsPanel
-          apiKey={apiKey}
-          setApiKey={setApiKey}
-          apiKeys={apiKeys}
-          setApiKeyFor={setApiKeyFor}
-          modelName={modelName}
-          setModelName={setModelName}
-          providerName={providerName}
-          setProviderName={setProviderName}
-          suggestedModels={suggestedModels}
-          fetchStatus={fetchStatus}
-          settingsError={settingsError}
-          onFetchModels={() => handleFetchModels()}
-          onSave={handleSaveSettings}
+          providers={providers}
+          activeProviderId={activeProviderId}
+          addProvider={addProvider}
+          updateProvider={updateProvider}
+          removeProvider={removeProvider}
+          setActiveProviderId={setActiveProviderId}
+          validateProvider={validateProvider}
           onLogout={logout}
           onRestoreSession={restoreSavedSession}
           localComponents={pluginData.localComponents}
@@ -206,13 +200,13 @@ function PluginContent() {
       );
     } else if (captureTarget === 'header') {
       content = (
-        <Header 
-          theme={theme} 
-          onToggleTheme={() => {}} 
-          onNewChat={() => {}} 
-          onSettingsClick={() => {}} 
-          newChatVisible={true} 
-          newChatEnabled={true} 
+        <Header
+          theme={theme}
+          onToggleTheme={() => {}}
+          onNewChat={() => {}}
+          onSettingsClick={() => {}}
+          newChatVisible={true}
+          newChatEnabled={true}
         />
       );
     } else if (captureTarget === 'button') {
@@ -221,25 +215,25 @@ function PluginContent() {
       content = <DeveloperPanel onLogout={() => {}} onRestoreSession={() => {}} />;
     } else if (captureTarget === 'prompt-input') {
       content = (
-        <PromptInput 
-          onSubmit={() => {}} 
-          loading={false} 
-          value="" 
-          onChange={() => {}} 
-          canSubmit={true} 
+        <PromptInput
+          onSubmit={() => {}}
+          loading={false}
+          value=""
+          onChange={() => {}}
+          canSubmit={true}
         />
       );
     }
     // Add more components as needed
 
     return (
-      <div id="capture-sandbox" style={{ 
-        position: 'absolute', 
-        left: -5000, 
-        top: 0, 
-        width: WINDOW_WIDTH, 
+      <div id="capture-sandbox" style={{
+        position: 'absolute',
+        left: -5000,
+        top: 0,
+        width: WINDOW_WIDTH,
         opacity: 0,
-        pointerEvents: 'none' 
+        pointerEvents: 'none'
       }}>
         <div id="capture-sandbox-content">
           {content}
@@ -254,7 +248,7 @@ function PluginContent() {
 
   // L3: Dogfood Tools State
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
-  
+
   useEffect(() => {
     (window as any).toggleDeveloperPanel = () => setShowDeveloperTools(prev => !prev);
   }, []);
@@ -282,22 +276,17 @@ function PluginContent() {
         </Iso>
       );
     }
-    
+
     // A. Settings View moved to main render for overlay/animation
-    
+
     // B. Onboarding View
     if (!hasConfig) {
       return (
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <OnboardingView
-            apiKey={apiKey}
-            setApiKey={setApiKey}
-            providerName={providerName}
-            setProviderName={setProviderName}
-            onComplete={completeOnboarding}
-            onFetchModels={(key) => handleFetchModels(key)}
-            isLoading={fetchStatus === 'fetching'}
-            error={settingsError}
+            addProvider={addProvider}
+            validateProvider={validateProvider}
+            onOpenSettings={() => setShowSettings(true)}
           />
         </Iso>
       )
@@ -311,11 +300,11 @@ function PluginContent() {
             key={chatKey} // Remount on New Chat click
             apiKey={apiKey}
             modelName={modelName}
-            providerName={providerName} // [NEW]
+            providerName={providerName}
+            providerConfig={activeProvider ?? undefined}
             pluginData={pluginData}
             setModelName={setModelName}
-            setApiKey={setApiKey}
-            suggestedModels={suggestedModels}
+            suggestedModels={[]}
             onOpenSettings={() => setShowSettings(true)}
           />
         </div>
@@ -337,7 +326,6 @@ function PluginContent() {
         newChatEnabled={true}
         onSettingsClick={() => {
           if (showSettings) {
-             handleSaveSettings();
              setIsSettingsClosing(true);
              setTimeout(() => {
                setShowSettings(false);
@@ -349,30 +337,23 @@ function PluginContent() {
         }}
         isSettingsOpen={showSettings} // Keep X icon during closing
       />
-      
+
       {renderContent()}
 
       {/* Settings Panel Overlay - Slide-in animation source */}
       {showSettings && (
         <div className={`settings-container ${isSettingsClosing ? 'is-closing' : ''}`}>
           <SettingsPanel
-            apiKey={apiKey}
-            setApiKey={setApiKey}
-            apiKeys={apiKeys}
-            setApiKeyFor={setApiKeyFor}
-            modelName={modelName}
-            setModelName={setModelName}
-            providerName={providerName}
-            setProviderName={setProviderName}
-            suggestedModels={suggestedModels}
-            fetchStatus={fetchStatus}
-            settingsError={settingsError}
-            onFetchModels={() => handleFetchModels()}
-            onSave={handleSaveSettings}
+            providers={providers}
+            activeProviderId={activeProviderId}
+            addProvider={addProvider}
+            updateProvider={updateProvider}
+            removeProvider={removeProvider}
+            setActiveProviderId={setActiveProviderId}
+            validateProvider={validateProvider}
             onLogout={logout}
             onRestoreSession={restoreSavedSession}
             onClose={() => {
-              handleSaveSettings();
               setIsSettingsClosing(true);
               setTimeout(() => {
                 setShowSettings(false);

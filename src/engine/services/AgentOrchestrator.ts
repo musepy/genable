@@ -6,7 +6,8 @@
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
 import { agentTools } from '../agent/tools';
-import { createProvider } from './ProviderFactory';
+import { createProvider, createProviderFromConfig } from './ProviderFactory';
+import type { ProviderConfig } from '../../types/provider';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
 import { resolveBehavior } from '../agent/agentBehaviorConfig';
 import { createSubtaskExecutor, AgentConfig } from '../agent/agentFactory';
@@ -42,6 +43,8 @@ export interface OrchestratorOptions {
   apiKey: string;
   modelName: string;
   providerName?: string; // Optional: 'gemini' | 'openrouter' | 'proxy'
+  /** V2 provider config — when set, used directly via createProviderFromConfig(). */
+  providerConfig?: ProviderConfig;
   /** Required when providerName === 'proxy' */
   workerUrl?: string;
   /** Required when providerName === 'proxy' — user's subscription token */
@@ -314,24 +317,33 @@ export class AgentOrchestrator {
     loopPolicy?: AgentLoopPolicy,
   ): AgentRuntime {
     const {
-      apiKey,
-      modelName,
       thinkingLevel,
-      tools = agentTools
+      tools = agentTools,
     } = this.options;
 
-    // Priority: 1. Explicit providerName, 2. Default to Gemini
-    // [FIX] Removed heuristic auto-detection that overrode explicit user choice (e.g. modelName having '/')
-    const providerName = this.options.providerName || 'gemini';
+    // Priority: 1. V2 providerConfig, 2. Legacy providerName, 3. Default Gemini
+    const { providerConfig } = this.options;
 
-    // Initialize Provider via pure factory (no side-effects inside)
-    const { provider, resolvedDisplayName } = createProvider({
-      providerName,
-      modelName,
-      apiKey,
-      workerUrl: this.options.workerUrl,
-      subscriptionToken: this.options.subscriptionToken,
-    });
+    let provider: LLMProvider;
+    let resolvedDisplayName: string;
+
+    if (providerConfig) {
+      const out = createProviderFromConfig(providerConfig);
+      provider = out.provider;
+      resolvedDisplayName = out.resolvedDisplayName;
+    } else {
+      const providerName = this.options.providerName || 'gemini';
+      const out = createProvider({
+        providerName,
+        modelName: this.options.modelName,
+        apiKey: this.options.apiKey,
+        workerUrl: this.options.workerUrl,
+        subscriptionToken: this.options.subscriptionToken,
+      });
+      provider = out.provider;
+      resolvedDisplayName = out.resolvedDisplayName;
+    }
+    const modelName = providerConfig?.modelId || this.options.modelName;
     emit('SEND_LOG', { message: `Using ${resolvedDisplayName}: ${modelName}`, type: 'ai' });
 
     const resolvedLoopPolicy = loopPolicy || resolveAgentLoopPolicy(this.options.loopPolicy);

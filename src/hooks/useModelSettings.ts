@@ -1,3 +1,14 @@
+/**
+ * @file useModelSettings.ts
+ * @description V2 (protocol-based) settings hook. Source of truth is the
+ * `providers: ProviderConfig[]` array + `activeProviderId`. Legacy fields
+ * (apiKey, modelName, providerName) are derived live from the active provider
+ * for back-compat with AgentOrchestrator and ModelPopover.
+ *
+ * Replaces the per-vendor map model. The settingsHandler emits both shapes
+ * during the transition; we only consume the V2 fields here.
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks'
 import { emit, on } from '@create-figma-plugin/utilities'
 import {
@@ -5,111 +16,236 @@ import {
   SaveSettingsHandler,
   SettingsLoadedHandler,
   ResetSettingsHandler,
+  ValidateProviderHandler,
+  ValidateProviderResultHandler,
 } from '../types'
-import { ModelService } from '../services/ModelService'
-import { DEFAULT_MODEL, SUPPORTED_MODELS } from '../ui/constants/models'
+import type { ProviderConfig, ProviderProbeResult } from '../types/provider'
+import { DEFAULT_MODEL } from '../ui/constants/models'
 import { useToast } from '../ui/components/ui'
 import { resolveLocale, type Locale, type LocalePreference } from '../ui/i18n'
 
-type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude'
-type ApiKeyMap = Record<ProviderName, string>
-type ModelNameMap = Record<string, string>
+type LegacyProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude'
+type ThemePref = 'auto' | 'light' | 'dark'
+
+/** UUID for new ProviderConfig entries. Falls back if crypto.randomUUID is missing. */
+function newProviderId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch { /* fall through */ }
+  return `p-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+/**
+ * Map a ProviderConfig to a legacy provider-name bucket. Used so AgentOrchestrator
+ * (which still keys on 'gemini' | 'openrouter' | 'dashscope' | 'claude') keeps
+ * working unchanged. Heuristics:
+ *  - protocol gemini    → 'gemini'
+ *  - protocol anthropic → 'claude'
+ *  - protocol openai    → 'openrouter' (the only generic-OpenAI legacy bucket)
+ *
+ * For more accurate routing, the dispatch should move to protocol-based, but
+ * that's a separate phase.
+ */
+function deriveLegacyProviderName(config: ProviderConfig | null): LegacyProviderName {
+  if (!config) return 'gemini'
+  if (config.presetId === 'dashscope-openai') return 'dashscope'
+  if (config.protocol === 'gemini') return 'gemini'
+  if (config.protocol === 'anthropic') return 'claude'
+  return 'openrouter'
+}
 
 export function useModelSettings() {
   const { toast } = useToast()
 
-  // --- Core state ---
-  const [apiKeys, setApiKeys] = useState<ApiKeyMap>({ gemini: '', openrouter: '', dashscope: '', claude: '' })
-  const [providerName, setProviderName] = useState<ProviderName>('gemini')
-  const [modelNames, setModelNames] = useState<ModelNameMap>({})  // per-provider model names
-  const [suggestedModels, setSuggestedModels] = useState<{ name: string, displayName: string }[]>([])
+  // --- V2 core state (source of truth) ---
+  const [providers, setProviders] = useState<ProviderConfig[]>([])
+  const [activeProviderId, setActiveProviderIdState] = useState<string | null>(null)
 
   // --- Locale state ---
   const [localePref, setLocalePref] = useState<LocalePreference>('auto')
   const locale: Locale = resolveLocale(localePref)
 
   // --- Theme state ---
-  type ThemePref = 'auto' | 'light' | 'dark'
   const [theme, setThemeState] = useState<ThemePref>('auto')
 
   // --- UI state ---
-  const [hasConfig, setHasConfig] = useState<boolean>(false)
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
   const [showSettings, setShowSettings] = useState<boolean>(false)
-  const [settingsError, setSettingsError] = useState<string | null>(null)
-  const [fetchStatus, setFetchStatus] = useState<'idle' | 'fetching' | 'success' | 'fail'>('idle')
 
-  const isRefreshingRef = useRef(false)
+  // --- Pending probe correlation ---
+  const probeWaitersRef = useRef<Map<string, (r: ProviderProbeResult) => void>>(new Map())
 
   // --- Derived ---
-  const apiKey = apiKeys[providerName] || ''
-  const modelName = modelNames[providerName] || DEFAULT_MODEL
+  const activeProvider: ProviderConfig | null =
+    providers.find(p => p.id === activeProviderId) ?? null
+  const hasConfig = providers.length > 0
+  const apiKey = activeProvider?.apiKey ?? ''
+  const modelName = activeProvider?.modelId || DEFAULT_MODEL
+  const providerName: LegacyProviderName = deriveLegacyProviderName(activeProvider)
 
-  // --- Helpers ---
-
-  /** Update model name for the current provider and persist immediately */
-  const setModelName = useCallback((name: string) => {
-    setModelNames(prev => ({ ...prev, [providerName]: name }))
-    // Persist to figma.clientStorage so the selection survives restart/rebuild
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
-      apiKey: apiKeys[providerName] || '',
-      apiKeys,
-      modelName: name,
-      providerName,
-      locale: localePref,
-      theme,
-    })
-  }, [providerName, apiKeys, localePref, theme])
-
-  /** Update theme and persist immediately */
-  const setTheme = useCallback((next: ThemePref) => {
-    setThemeState(next)
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
-      apiKey: apiKeys[providerName] || '',
-      apiKeys,
-      modelName: modelNames[providerName] || DEFAULT_MODEL,
-      providerName,
-      locale: localePref,
-      theme: next,
-    })
-  }, [apiKeys, modelNames, providerName, localePref])
-
-  /** Get model list synchronously — static fallback if empty */
-  const getModels = useCallback((): { name: string, displayName: string }[] => {
-    return suggestedModels.length > 0 ? suggestedModels : (SUPPORTED_MODELS[providerName] || SUPPORTED_MODELS.gemini)
-  }, [suggestedModels, providerName])
-
-  /** Background SWR refresh */
-  const refreshModelsInBackground = useCallback(async (key: string) => {
-    if (isRefreshingRef.current || !key) return
-    isRefreshingRef.current = true
-    try {
-      await ModelService.warmCache(providerName, key)
-      const result = await ModelService.getModels(providerName, key, false)
-      if (!result.error && result.models.length > 0) {
-        setSuggestedModels(result.models)
+  // --- Persistence helper ---
+  const persistV2 = useCallback(
+    (next: {
+      providers?: ProviderConfig[]
+      activeProviderId?: string | null
+      locale?: LocalePreference
+      theme?: ThemePref
+    }) => {
+      const payload = {
+        providers: next.providers ?? providers,
+        activeProviderId:
+          next.activeProviderId !== undefined ? next.activeProviderId : activeProviderId,
+        locale: next.locale ?? localePref,
+        theme: next.theme ?? theme,
       }
-    } catch (e) {
-      console.warn('[SWR] Background model refresh failed:', e)
-    } finally {
-      isRefreshingRef.current = false
-    }
-  }, [providerName])
+      // Required-but-derived legacy fields. settingsHandler ignores them when
+      // settings.providers is an array, but the Settings interface requires them.
+      const active = (payload.providers || []).find(p => p.id === payload.activeProviderId) || null
+      emit<SaveSettingsHandler>('SAVE_SETTINGS', {
+        providers: payload.providers,
+        activeProviderId: payload.activeProviderId,
+        apiKey: active?.apiKey || '',
+        modelName: active?.modelId || DEFAULT_MODEL,
+        locale: payload.locale,
+        theme: payload.theme,
+      })
+    },
+    [providers, activeProviderId, localePref, theme],
+  )
 
-  // --- Persistence ---
+  // --- V2 mutations ---
 
-  const persistSettings = useCallback(() => {
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
-      apiKey: apiKeys[providerName] || '',
-      apiKeys,
-      modelName,
-      providerName,
-      locale: localePref,
-      theme,
+  const addProvider = useCallback(
+    (cfg: Omit<ProviderConfig, 'id'>): string => {
+      const id = newProviderId()
+      const next: ProviderConfig = { id, ...cfg }
+      const nextProviders = [...providers, next]
+      // First provider added becomes active; otherwise keep current active
+      const nextActive = activeProviderId ?? id
+      setProviders(nextProviders)
+      setActiveProviderIdState(nextActive)
+      persistV2({ providers: nextProviders, activeProviderId: nextActive })
+      return id
+    },
+    [providers, activeProviderId, persistV2],
+  )
+
+  const updateProvider = useCallback(
+    (id: string, patch: Partial<ProviderConfig>): void => {
+      const nextProviders = providers.map(p =>
+        p.id === id ? { ...p, ...patch, id: p.id } : p,
+      )
+      setProviders(nextProviders)
+      persistV2({ providers: nextProviders })
+    },
+    [providers, persistV2],
+  )
+
+  const removeProvider = useCallback(
+    (id: string): void => {
+      const nextProviders = providers.filter(p => p.id !== id)
+      let nextActive = activeProviderId
+      if (activeProviderId === id) {
+        nextActive = nextProviders[0]?.id ?? null
+      }
+      setProviders(nextProviders)
+      setActiveProviderIdState(nextActive)
+      persistV2({ providers: nextProviders, activeProviderId: nextActive })
+    },
+    [providers, activeProviderId, persistV2],
+  )
+
+  const setActiveProviderId = useCallback(
+    (id: string): void => {
+      if (!providers.find(p => p.id === id)) return
+      setActiveProviderIdState(id)
+      persistV2({ activeProviderId: id })
+    },
+    [providers, persistV2],
+  )
+
+  // --- Legacy compatibility setter (used by AgentOrchestrator path / ModelPopover) ---
+
+  /** Update the active provider's modelId. */
+  const setModelName = useCallback(
+    (name: string): void => {
+      if (!activeProviderId) return
+      const nextProviders = providers.map(p =>
+        p.id === activeProviderId ? { ...p, modelId: name } : p,
+      )
+      setProviders(nextProviders)
+      persistV2({ providers: nextProviders })
+    },
+    [providers, activeProviderId, persistV2],
+  )
+
+  // --- Locale ---
+  const handleSetLocalePref = useCallback(
+    (pref: LocalePreference): void => {
+      setLocalePref(pref)
+      persistV2({ locale: pref })
+    },
+    [persistV2],
+  )
+
+  // --- Theme ---
+  const setTheme = useCallback(
+    (next: ThemePref): void => {
+      setThemeState(next)
+      persistV2({ theme: next })
+    },
+    [persistV2],
+  )
+
+  // --- Validation (probe) ---
+
+  /** Wraps the VALIDATE_PROVIDER round-trip into a Promise<ProviderProbeResult>.
+   *
+   *  When `autoDetectProtocol` is true, the sandbox tries OpenAI/Anthropic/
+   *  Gemini sequentially and the result carries the resolved protocol. The
+   *  Custom-endpoint path uses this so the user never has to pick a wire
+   *  format. Default false for preset-driven flows where the protocol is
+   *  already known. Auto-detect can take up to ~24s worst case (3 × 8s
+   *  probe timeout), so the defensive timeout here is bumped accordingly. */
+  const validateProvider = useCallback(
+    (cfg: ProviderConfig, autoDetectProtocol = false): Promise<ProviderProbeResult> => {
+      return new Promise(resolve => {
+        const requestId = `probe-${newProviderId()}`
+        probeWaitersRef.current.set(requestId, resolve)
+        emit<ValidateProviderHandler>('VALIDATE_PROVIDER', {
+          requestId,
+          config: cfg,
+          autoDetectProtocol,
+        })
+        // Defensive timeout in case the sandbox never responds.
+        // Single probe = 15s; auto-detect = 45s (covers 3 × 12s + slack).
+        const timeoutMs = autoDetectProtocol ? 45_000 : 15_000
+        setTimeout(() => {
+          const waiter = probeWaitersRef.current.get(requestId)
+          if (waiter) {
+            probeWaitersRef.current.delete(requestId)
+            waiter({ kind: 'network-error', message: 'Probe timed out' })
+          }
+        }, timeoutMs)
+      })
+    },
+    [],
+  )
+
+  // Listen for validate results
+  useEffect(() => {
+    return on<ValidateProviderResultHandler>('VALIDATE_PROVIDER_RESULT', ({ requestId, result }) => {
+      const waiter = probeWaitersRef.current.get(requestId)
+      if (waiter) {
+        probeWaitersRef.current.delete(requestId)
+        waiter(result)
+      }
     })
-  }, [apiKeys, modelName, providerName, localePref, theme])
+  }, [])
 
-  // --- Settings load ---
+  // --- Settings load / hydration ---
 
   useEffect(() => {
     emit<LoadSettingsHandler>('LOAD_SETTINGS')
@@ -117,145 +253,25 @@ export function useModelSettings() {
 
   useEffect(() => {
     return on<SettingsLoadedHandler>('SETTINGS_LOADED', (s) => {
-      const nextProvider = s.providerName || 'gemini'
-      const nextApiKeys: ApiKeyMap = {
-        gemini: s.apiKeys?.gemini || '',
-        openrouter: s.apiKeys?.openrouter || '',
-        dashscope: s.apiKeys?.dashscope || '',
-        claude: s.apiKeys?.claude || '',
+      const nextProviders: ProviderConfig[] = Array.isArray(s.providers) ? s.providers : []
+      const nextActiveId: string | null =
+        s.activeProviderId !== undefined ? (s.activeProviderId ?? null) :
+        (nextProviders[0]?.id ?? null)
+
+      setProviders(nextProviders)
+      setActiveProviderIdState(nextActiveId)
+
+      // Locale + theme only on first load
+      if (!isInitialized) {
+        if (s.locale) setLocalePref(s.locale as LocalePreference)
+        if (s.theme) setThemeState(s.theme as ThemePref)
       }
-      // Legacy single key support
-      if (!s.apiKeys && s.apiKey) {
-        nextApiKeys[nextProvider] = s.apiKey
-      }
-
-      const activeKey = nextApiKeys[nextProvider] || ''
-      const hasAnyKey = Boolean(nextApiKeys.gemini || nextApiKeys.openrouter || nextApiKeys.dashscope)
-
-      setApiKeys(nextApiKeys)
-
-      // Locale from storage (only on first load)
-      if (!isInitialized && s.locale) {
-        setLocalePref(s.locale as LocalePreference)
-      }
-
-      // Theme from storage (only on first load)
-      if (!isInitialized && s.theme) {
-        setThemeState(s.theme as ThemePref)
-      }
-
-      if (!isInitialized || !hasAnyKey) {
-        setProviderName(nextProvider)
-        setHasConfig(Boolean(activeKey))
-        setShowSettings(false)
-        setSettingsError(null)
-        setFetchStatus('idle')
-      }
-
-      // Per-provider model names from storage
-      if (!isInitialized && s.modelNames) {
-        setModelNames(s.modelNames)
-      } else if (!isInitialized && s.modelName) {
-        // Migration: old single modelName → current provider
-        setModelNames(prev => ({ ...prev, [nextProvider]: s.modelName }))
-      } else if (!hasAnyKey) {
-        setModelNames({})
-      }
-
-      // Model list set by provider switch effect (runs after this state update)
-      // Don't call refreshModelsInBackground here — stale closure over providerName
 
       setIsInitialized(true)
     })
   }, [isInitialized])
 
-  // --- Provider switch: sync model list + trigger SWR ---
-
-  useEffect(() => {
-    if (!isInitialized) return
-    setSuggestedModels(ModelService.getStaticModels(providerName))
-    setFetchStatus('idle')
-    setSettingsError(null)
-
-    const key = apiKeys[providerName] || ''
-    if (key) {
-      refreshModelsInBackground(key)
-    }
-  }, [providerName, isInitialized, apiKeys, refreshModelsInBackground])
-
-  // --- Actions ---
-
-  const updateApiKey = (key: string) => {
-    setApiKeys(prev => ({ ...prev, [providerName]: key }))
-  }
-
-  /** Update a specific provider's key (or clear it with empty string) and persist immediately */
-  const setApiKeyFor = useCallback((provider: ProviderName, key: string) => {
-    const nextApiKeys = { ...apiKeys, [provider]: key }
-    setApiKeys(nextApiKeys)
-    setHasConfig(Object.values(nextApiKeys).some(v => Boolean(v)))
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
-      apiKey: nextApiKeys[providerName] || '',
-      apiKeys: nextApiKeys,
-      modelName,
-      providerName,
-      locale: localePref,
-      theme,
-    })
-  }, [apiKeys, providerName, modelName, localePref, theme])
-
-  const handleSaveSettings = () => {
-    persistSettings()
-    setHasConfig(Boolean(apiKeys[providerName]))
-    setShowSettings(false)
-  }
-
-  const completeOnboarding = useCallback((key: string) => {
-    const nextApiKeys: ApiKeyMap = { ...apiKeys, [providerName]: key }
-    setApiKeys(nextApiKeys)
-    setHasConfig(true)
-    setShowSettings(false)
-    emit<SaveSettingsHandler>('SAVE_SETTINGS', {
-      apiKey: key,
-      apiKeys: nextApiKeys,
-      modelName,
-      providerName,
-      locale: localePref,
-      theme,
-    })
-    toast('Connected successfully', 'success')
-  }, [apiKeys, modelName, providerName, toast])
-
-  /** Explicit model fetch — shows loading state */
-  const handleFetchModels = async (keyOverride?: string) => {
-    const keyToUse = keyOverride || apiKeys[providerName] || ''
-    setFetchStatus('fetching')
-
-    try {
-      const result = await ModelService.getModels(providerName, keyToUse, true)
-
-      if (!result.error) {
-        setSuggestedModels(result.models)
-        setFetchStatus('success')
-
-        // Auto-select if current model not in list
-        if (result.models.length > 0 && !result.models.find(m => m.name === modelName)) {
-          setModelName(result.models[0].name)
-        }
-      } else {
-        setSuggestedModels(result.models)
-        setFetchStatus('fail')
-        setSettingsError(result.error || 'Failed to fetch models')
-        if (keyOverride) {
-          throw new Error(result.error || 'Invalid API key')
-        }
-      }
-    } catch (e: unknown) {
-      setFetchStatus('fail')
-      setSettingsError(e instanceof Error ? e.message : 'Unknown error')
-      throw e
-    }
-  }
+  // --- Lifecycle ---
 
   const logout = useCallback(() => {
     emit<ResetSettingsHandler>('RESET_SETTINGS')
@@ -264,42 +280,39 @@ export function useModelSettings() {
 
   const restoreSavedSession = useCallback(() => {
     setIsInitialized(false)
-    setSettingsError(null)
-    setFetchStatus('idle')
     emit<LoadSettingsHandler>('LOAD_SETTINGS')
     toast('Restored saved session', 'success')
   }, [toast])
 
   return {
-    locale,
-    localePref,
-    setLocalePref,
-    theme,
-    setTheme,
+    // V2 (primary)
+    providers,
+    activeProviderId,
+    activeProvider,
+    addProvider,
+    updateProvider,
+    removeProvider,
+    setActiveProviderId,
+    validateProvider,
+
+    // Legacy derived (for AgentOrchestrator + ModelPopover compatibility)
     apiKey,
-    setApiKey: updateApiKey,
-    setApiKeyFor,
-    apiKeys,
-    setApiKeys,
     modelName,
     setModelName,
     providerName,
-    setProviderName: (name: ProviderName) => setProviderName(name),
-    suggestedModels,
-    setSuggestedModels,
+
+    // Prefs
+    locale,
+    localePref,
+    setLocalePref: handleSetLocalePref,
+    theme,
+    setTheme,
+
+    // Lifecycle
     hasConfig,
-    setHasConfig,
     isInitialized,
     showSettings,
     setShowSettings,
-    settingsError,
-    fetchStatus,
-    handleSaveSettings,
-    completeOnboarding,
-    handleFetchModels,
-    getModels,
-    refreshModelsInBackground,
-    isCacheStale: false, // No longer tracked — SWR always refreshes on load
     logout,
     restoreSavedSession,
   }

@@ -177,9 +177,13 @@ function randomId(prefix: string): string {
 export function formatResponseDefault(response: LLMResponse): LLMMessage {
   if (response.toolCalls && response.toolCalls.length > 0) {
     const content: ContentBlock[] = [];
+    if (response.thoughts) content.push({ type: 'thinking', text: response.thoughts });
     if (response.text) content.push({ type: 'text', text: response.text });
     content.push(...response.toolCalls);
     return { id: randomId('gen'), role: 'model', content };
+  }
+  if (response.thoughts) {
+    return { id: randomId('gen'), role: 'model', content: [{ type: 'thinking', text: response.thoughts }, { type: 'text', text: response.text || '' }] };
   }
   return { id: randomId('gen'), role: 'model', content: response.text || '' };
 }

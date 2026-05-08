@@ -52,8 +52,16 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
     }
 
     let content: any = m.content;
-    if (Array.isArray(m.content)) {
-      content = m.content.map((p: ContentBlock) => {
+    // Extract thinking blocks for assistant messages (reasoning_content field)
+    const thinkingParts: ContentBlock[] = Array.isArray(m.content)
+      ? m.content.filter((p: ContentBlock) => p.type === 'thinking')
+      : [];
+    const nonThinkingContent = Array.isArray(m.content)
+      ? m.content.filter((p: ContentBlock) => p.type !== 'thinking')
+      : m.content;
+
+    if (Array.isArray(nonThinkingContent)) {
+      content = nonThinkingContent.map((p: ContentBlock) => {
         if (p.type === 'text') return { type: 'text', text: p.text };
         if (p.type === 'image') return { type: 'image_url', image_url: { url: `data:${p.mimeType};base64,${p.data}` } };
         return null;
@@ -63,6 +71,22 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
     }
 
     const msg: any = { role, content };
+
+    // Thinking blocks → reasoning_content for assistants.
+    // Kimi K2.x (via OpenCode Go) enables thinking by default and requires
+    // reasoning_content in assistant tool-call messages on subsequent turns.
+    // Even when no reasoning was produced (empty thinking), include the field
+    // as an empty string to prevent "thinking is enabled but reasoning_content
+    // is missing" 400 errors.
+    if (m.role === 'model' && thinkingParts.length > 0) {
+      const reasoningText = thinkingParts.map((p: ContentBlock) => (p as any).text || '').join('');
+      msg.reasoning_content = reasoningText || '';
+    } else if (m.role === 'model' && Array.isArray(m.content)) {
+      const hasToolCalls = m.content.some((p: ContentBlock) => p.type === 'tool_call');
+      if (hasToolCalls) {
+        msg.reasoning_content = '';
+      }
+    }
 
     // Assistant tool calls
     if (m.role === 'model' && Array.isArray(m.content)) {
@@ -98,6 +122,7 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
  */
 export function mapOpenAIToLLMResponse(data: any): {
   text: string;
+  thoughts?: string;
   toolCalls?: ToolCallBlock[];
   finishReason?: FinishReason;
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number };
@@ -112,8 +137,15 @@ export function mapOpenAIToLLMResponse(data: any): {
     input: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments,
   }));
 
+  // Kimi K2.x and some OpenAI-compatible providers emit reasoning_content for
+  // chain-of-thought. Capture it so it can be included in subsequent turns as
+  // assistant reasoning_content — prevents "thinking is enabled but
+  // reasoning_content is missing" 400 errors.
+  const thoughts: string | undefined = message?.reasoning_content || undefined;
+
   return {
     text: message?.content || '',
+    thoughts,
     toolCalls: rawToolCalls && rawToolCalls.length > 0 ? rawToolCalls : undefined,
     finishReason: normalizeFinishReason(choice?.finish_reason),
     usage: data.usage ? {

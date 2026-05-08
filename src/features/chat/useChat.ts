@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'preact/hooks'
 import { AgentOrchestrator } from '../../engine/services/AgentOrchestrator'
 import { ChatMessage, ContentBlock, ToolCallRecord, IterationRecord } from '../../types/chat'
 import type { ContextAttachment } from '../../types'
+import type { ProviderConfig } from '../../types/provider'
 import { PluginData } from '../../hooks/usePluginData'
 import { knowledgeSearch } from '../../engine/agent/tools/knowledgeSearch'
 import { agentTools } from '../../engine/agent/tools'
@@ -21,6 +22,8 @@ interface UseChatProps {
   suggestedModels?: { name: string; displayName: string }[]
   onOpenSettings?: () => void
   providerName: 'gemini' | 'openrouter' | 'dashscope' | 'claude'
+  /** V2 provider config — used directly by AgentOrchestrator when set. */
+  providerConfig?: ProviderConfig
 }
 
 export interface UserQuestionRequest {
@@ -68,6 +71,7 @@ export function useChat({
   suggestedModels,
   onOpenSettings,
   providerName,
+  providerConfig,
 }: UseChatProps) {
   const locale = useLocale()
   const t = useTranslations()
@@ -444,6 +448,7 @@ export function useChat({
         apiKey,
         modelName,
         providerName,
+        providerConfig,
         thinkingLevel,
         locale,
         workerUrl: 'https://figma-ai-generator.muse40007.workers.dev',

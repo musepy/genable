@@ -29,7 +29,10 @@ test-results/
 tools/ui-preview/
 tools/ui-baseline/
 tools/ui-catalog/
+tools/mcp-server/tools-schema.json
+tools/mcp-server/dist/
 tools/community-assets/
+docs/e2e-results/
 tools/flicker-test.html
 tools/status-block-test.html
 tools/transition-*.html

@@ -94,7 +94,7 @@ describe('presentForLLM — flat response format', () => {
         ],
       },
     };
-    const presented = presentForLLM(result, 'js');
+    const presented = presentForLLM(result, 'unknown_cmd');
     const chain = presented.chain;
     expect(chain).toHaveLength(2);
     // inspect sub-result: pass through (no keep-list)
@@ -119,7 +119,7 @@ describe('presentForLLM — flat response format', () => {
         ],
       },
     };
-    const presented = presentForLLM(result, 'js');
+    const presented = presentForLLM(result, 'unknown_cmd');
     expect(presented.chain[0].error).toBe('Node not found');
     expect(presented.chain[0].success).toBeUndefined();
   });

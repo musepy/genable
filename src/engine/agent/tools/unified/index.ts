@@ -14,9 +14,11 @@ import { deleteNodeDefinition, moveNodeDefinition, cloneNodeDefinition } from '.
 import { knowledgeReaders } from './knowledgeReaders';
 import { listVariablesDefinition, createCollectionDefinition, createVariableDefinition, ensureCollectionDefinition, ensureVariableDefinition, setVariableValueDefinition, bindVariableDefinition, setVariableModeDefinition } from './varTool';
 import { createComponentDefinition, combineComponentsDefinition, addComponentPropDefinition, listComponentPropsDefinition, createInstanceDefinition } from './compTool';
-import { jsToolDefinition } from './jsTool';
 import { setTextDefinition, setFillDefinition, setStrokeDefinition, setLayoutDefinition } from './setterTools';
 import { getSelectionDefinition } from './selectionTool';
+import { switchPageDefinition } from './pageTool';
+import { readPluginDataDefinition, writePluginDataDefinition } from './pluginDataTool';
+import { createVectorDefinition } from './vectorTool';
 import { getScreenshotDefinition } from './screenshotTool';
 import { askUserDefinition } from './askUser';
 import { subtaskDefinition } from './subtask';
@@ -66,14 +68,19 @@ export const unifiedTools: ToolDefinition[] = [
   setLayoutDefinition,
   // Selection (opt-in, not auto-injected)
   getSelectionDefinition,
+  // Page navigation
+  switchPageDefinition,
+  // Plugin data (private + shared) — replaces previous js-tool path
+  readPluginDataDefinition,
+  writePluginDataDefinition,
+  // Vector / path creation
+  createVectorDefinition,
   // Visual verification
   getScreenshotDefinition,
   // User interaction
   askUserDefinition,
   // Delegation
   subtaskDefinition,
-  // Escape hatch
-  jsToolDefinition,
 ];
 
 /** All tool names — used for allowedToolNames in dispatcher. */

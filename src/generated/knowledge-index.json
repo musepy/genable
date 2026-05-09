@@ -288,19 +288,6 @@
     ]
   },
   {
-    "id": "help:sandbox-sop",
-    "name": "Sandbox Rules (js tool)",
-    "description": "Use when using the js tool for custom reads, traversals, or API patterns not covered by dedicated tools — covers blocked patterns, the async API rule, and iteration budgeting.",
-    "category": "help",
-    "tags": [
-      "js",
-      "sandbox",
-      "figma-api",
-      "async",
-      "budget"
-    ]
-  },
-  {
     "id": "help:selection-reading",
     "name": "Selection Reading Strategy",
     "description": "Use when the user message contains a <selected_nodes> block — explains how to read the referenced nodes at appropriate depth without exhausting the context window.",
@@ -376,6 +363,12 @@
     "id": "skill:rich-text",
     "name": "rich-text",
     "description": "Use when applying mixed inline styles (bold, color, weight) within a single text node via markdown markup — the runtime parses it and applies per-character ranges.",
+    "category": "skill"
+  },
+  {
+    "id": "skill:vision-reference",
+    "name": "vision-reference",
+    "description": "Use when user attached one or more reference images (mockups, design screenshots, photos, competitor sites) AND wants you to mimic, match, or extract from them. Cross-cuts task type — page creation, component design, restyle, design-system extraction. Triggers: image input + design intent (\"based on this\", \"like this\", \"match this\", \"做成这样\", \"参考这个\").",
     "category": "skill"
   },
   {

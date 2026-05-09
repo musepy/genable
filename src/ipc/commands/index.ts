@@ -11,7 +11,6 @@ import type { ToolResponse } from '../../engine/agent/tools/types';
 // Command handler groups
 import { registerSessionNodes } from './pathResolver';
 import { handleTree } from './readHandlers';
-import { handleJs } from './jsHandler';
 import { handleJsx } from './jsxHandler';
 import { handleInspect } from './inspectHandler';
 import { handleGetScreenshot } from './screenshotHandler';
@@ -48,6 +47,7 @@ import {
   handleCompLs,
   handleCompInstance,
 } from './componentHandlers';
+import { handleReadPluginData, handleWritePluginData } from './pluginDataHandler';
 
 // ── Setter schema wrappers (narrow LLM-facing params → handleEdit) ──────────
 
@@ -148,8 +148,38 @@ function rejectionToResponse(reject: StrictRejectResult): ToolResponse {
 }
 
 export async function handleSetFill(parameters: any): Promise<ToolResponse> {
+  // Batch mode: nodes:[{node, fill?, bg?}]
+  if (Array.isArray(parameters.nodes)) {
+    const editNodes: Array<{ node: string; props: Record<string, any> }> = [];
+    for (const n of parameters.nodes) {
+      if (!n?.node) {
+        return { error: 'set_fill batch: each item requires a "node" id.' };
+      }
+      const props: Record<string, any> = {};
+      if (n.fill !== undefined) {
+        const r = await resolveBindingArgForLegacyEdit(n.fill, {
+          tool: 'set_fill', node_id: String(n.node), bind_field: 'fill',
+        });
+        if (r.kind === 'reject') return rejectionToResponse(r.reject);
+        props.fill = r.legacyValue;
+      }
+      if (n.bg !== undefined) {
+        const r = await resolveBindingArgForLegacyEdit(n.bg, {
+          tool: 'set_fill', node_id: String(n.node), bind_field: 'fill',
+        });
+        if (r.kind === 'reject') return rejectionToResponse(r.reject);
+        props.bg = r.legacyValue;
+      }
+      if (Object.keys(props).length === 0) {
+        return { error: `set_fill batch: item for node "${n.node}" requires at least one of: fill, bg.` };
+      }
+      editNodes.push({ node: String(n.node), props });
+    }
+    return handleEdit({ nodes: editNodes });
+  }
+
   if (!parameters.node) {
-    return { error: 'set_fill requires "node" parameter.' };
+    return { error: 'set_fill requires "node" parameter (or "nodes" array for batch).' };
   }
 
   const props: Record<string, any> = {};
@@ -180,72 +210,103 @@ export async function handleSetFill(parameters: any): Promise<ToolResponse> {
   return handleEdit({ node: parameters.node, props });
 }
 
-export async function handleSetStroke(parameters: any): Promise<ToolResponse> {
-  if (!parameters.node) {
-    return { error: 'set_stroke requires "node" parameter.' };
-  }
-  const nodeId = String(parameters.node);
-
+// Build a stroke shorthand string from explicit fields (color/weight/align)
+// or pass through the literal `stroke:` shorthand. Resolves color binding
+// (e.g. "$Brand/600") via the legacy resolver when needed.
+async function composeStrokeProps(item: any, nodeId: string): Promise<{ ok: true; props: Record<string, any> } | { ok: false; response: ToolResponse }> {
   const props: Record<string, any> = {};
 
-  // ── Shorthand string mode: "1 #E0E0E0 inside" or "1 $Brand/600 inside" ──
-  // The shorthand parser in expandShorthands.ts splits by whitespace and
-  // assigns each part by prefix (# = color, $ = bare-name variable, digit
-  // = weight, otherwise = align). Bare-name parts flow through the variable
-  // binding handler downstream — see expandShorthands.ts stroke expander.
-  if (parameters.stroke !== undefined) {
-    if (typeof parameters.stroke !== 'string') {
-      return { error: 'set_stroke "stroke" must be a string shorthand. For variable bindings, use color={variable_id|...} instead.' };
+  if (item.stroke !== undefined) {
+    if (typeof item.stroke !== 'string') {
+      return { ok: false, response: { error: 'set_stroke "stroke" must be a string shorthand.' } };
     }
-    props.stroke = parameters.stroke;
-  } else {
-    // ── Explicit fields → compose shorthand ──
-    // Resolve `color` via the object-form resolver if it's a structured
-    // object input. Resolved variables turn into collection-qualified
-    // `$Coll/Name` so the existing variableBindingHandler can bind the
-    // exact resolved variable; raw hex / passthrough is unchanged.
-    let colorPart: string | undefined;
-    if (parameters.color !== undefined) {
-      const r = await resolveBindingArgForLegacyEdit(parameters.color, {
-        tool: 'set_stroke',
-        node_id: nodeId,
-        bind_field: 'stroke',
-      });
-      if (r.kind === 'reject') return rejectionToResponse(r.reject);
-      colorPart = String(r.legacyValue);
-    }
-
-    const parts: string[] = [];
-    if (parameters.weight !== undefined) parts.push(String(parameters.weight));
-    if (colorPart !== undefined) parts.push(colorPart);
-    if (parameters.align !== undefined) parts.push(parameters.align);
-
-    if (parts.length === 0) {
-      return { error: 'set_stroke requires "stroke" shorthand or at least one of: color, weight, align.' };
-    }
-    props.stroke = parts.join(' ');
+    props.stroke = item.stroke;
+    return { ok: true, props };
   }
 
-  return handleEdit({ node: parameters.node, props });
+  let colorPart: string | undefined;
+  if (item.color !== undefined) {
+    const r = await resolveBindingArgForLegacyEdit(item.color, {
+      tool: 'set_stroke', node_id: nodeId, bind_field: 'stroke',
+    });
+    if (r.kind === 'reject') return { ok: false, response: rejectionToResponse(r.reject) };
+    colorPart = String(r.legacyValue);
+  }
+
+  const parts: string[] = [];
+  if (item.weight !== undefined) parts.push(String(item.weight));
+  if (colorPart !== undefined) parts.push(colorPart);
+  if (item.align !== undefined) parts.push(item.align);
+
+  if (parts.length === 0) {
+    return { ok: false, response: { error: 'set_stroke requires "stroke" shorthand or at least one of: color, weight, align.' } };
+  }
+  props.stroke = parts.join(' ');
+  return { ok: true, props };
+}
+
+export async function handleSetStroke(parameters: any): Promise<ToolResponse> {
+  // Batch mode: nodes:[{node, color?, weight?, align?, stroke?}]
+  if (Array.isArray(parameters.nodes)) {
+    const editNodes: Array<{ node: string; props: Record<string, any> }> = [];
+    for (const n of parameters.nodes) {
+      if (!n?.node) {
+        return { error: 'set_stroke batch: each item requires a "node" id.' };
+      }
+      const composed = await composeStrokeProps(n, String(n.node));
+      if (!composed.ok) return composed.response;
+      editNodes.push({ node: String(n.node), props: composed.props });
+    }
+    return handleEdit({ nodes: editNodes });
+  }
+
+  if (!parameters.node) {
+    return { error: 'set_stroke requires "node" parameter (or "nodes" array for batch).' };
+  }
+  const nodeId = String(parameters.node);
+  const composed = await composeStrokeProps(parameters, nodeId);
+  if (!composed.ok) return composed.response;
+  return handleEdit({ node: parameters.node, props: composed.props });
+}
+
+// Pure data extraction — no resolver needed; layout fields are primitives.
+function extractLayoutProps(item: any): Record<string, any> {
+  const props: Record<string, any> = {};
+  if (item.layout !== undefined) props.layout = item.layout;
+  if (item.gap !== undefined) props.gap = item.gap;
+  if (item.cols !== undefined) props.cols = item.cols;
+  if (item.rows !== undefined) props.rows = item.rows;
+  if (item.rowGap !== undefined) props.rowGap = item.rowGap;
+  if (item.colGap !== undefined) props.colGap = item.colGap;
+  if (item.p !== undefined) props.p = item.p;
+  if (item.justify !== undefined) props.justify = item.justify;
+  if (item.align !== undefined) props.align = item.align;
+  if (item.wrap !== undefined) props.wrap = item.wrap;
+  return props;
 }
 
 export async function handleSetLayout(parameters: any): Promise<ToolResponse> {
-  if (!parameters.node) {
-    return { error: 'set_layout requires "node" parameter.' };
+  // Batch mode: nodes:[{node, layout?, gap?, p?, ...}]
+  if (Array.isArray(parameters.nodes)) {
+    const editNodes: Array<{ node: string; props: Record<string, any> }> = [];
+    for (const n of parameters.nodes) {
+      if (!n?.node) {
+        return { error: 'set_layout batch: each item requires a "node" id.' };
+      }
+      const props = extractLayoutProps(n);
+      if (Object.keys(props).length === 0) {
+        return { error: `set_layout batch: item for node "${n.node}" requires at least one layout property.` };
+      }
+      editNodes.push({ node: String(n.node), props });
+    }
+    return handleEdit({ nodes: editNodes });
   }
 
-  const props: Record<string, any> = {};
-  if (parameters.layout !== undefined) props.layout = parameters.layout;
-  if (parameters.gap !== undefined) props.gap = parameters.gap;
-  if (parameters.cols !== undefined) props.cols = parameters.cols;
-  if (parameters.rows !== undefined) props.rows = parameters.rows;
-  if (parameters.rowGap !== undefined) props.rowGap = parameters.rowGap;
-  if (parameters.colGap !== undefined) props.colGap = parameters.colGap;
-  if (parameters.p !== undefined) props.p = parameters.p;
-  if (parameters.justify !== undefined) props.justify = parameters.justify;
-  if (parameters.align !== undefined) props.align = parameters.align;
-  if (parameters.wrap !== undefined) props.wrap = parameters.wrap;
+  if (!parameters.node) {
+    return { error: 'set_layout requires "node" parameter (or "nodes" array for batch).' };
+  }
 
+  const props = extractLayoutProps(parameters);
   if (Object.keys(props).length === 0) {
     return { error: 'set_layout requires at least one layout property.' };
   }
@@ -293,7 +354,6 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   inspect: handleInspect,
   describe: handleDescribe,
   edit: handleEdit,
-  js: handleJs,
   // Search tools
   find_nodes: (params) => handleGrep({ query: params.query || '', path: params.scope }),
   discover_props: (params) => handleGrep({ mode: 'properties', path: params.node, properties: params.props }),
@@ -329,6 +389,9 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   set_fill: handleSetFill,
   set_stroke: handleSetStroke,
   set_layout: handleSetLayout,
+  // Plugin data (private + shared) — replaces previous js-tool path
+  read_plugin_data: handleReadPluginData,
+  write_plugin_data: handleWritePluginData,
   // Selection (opt-in, LLM calls when needed) — inlined: trivial figma.currentPage.selection map
   get_selection: async () => {
     const selection = figma.currentPage.selection.map(node => ({
@@ -337,6 +400,149 @@ const COMMAND_HANDLERS: Record<string, CommandHandler> = {
       type: node.type,
     }));
     return { data: { selection, count: selection.length } };
+  },
+  // Vector creation — wraps figma.createVector + path data + stroke/fill via paint pipeline.
+  create_vector: async (params) => {
+    const width = Number(params?.width);
+    const height = Number(params?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return { error: 'create_vector requires positive numeric "width" and "height".' };
+    }
+
+    // Resolve parent (defaults to current page)
+    let parent: BaseNode & ChildrenMixin = figma.currentPage;
+    if (params.parent) {
+      const found = await figma.getNodeByIdAsync(String(params.parent));
+      if (!found || !('appendChild' in found)) {
+        return { error: `create_vector: parent "${params.parent}" not found or cannot have children.` };
+      }
+      parent = found as BaseNode & ChildrenMixin;
+    }
+
+    // Path: prefer `data`, else compile `points`
+    let pathData: string | undefined;
+    if (typeof params.data === 'string' && params.data.trim()) {
+      pathData = params.data.trim();
+    } else if (Array.isArray(params.points) && params.points.length > 0) {
+      const pts = params.points as Array<[number, number] | { x: number; y: number }>;
+      const flat = pts.map((p: any) => Array.isArray(p) ? p : [p?.x, p?.y]);
+      if (flat.some((p: any) => !Number.isFinite(p[0]) || !Number.isFinite(p[1]))) {
+        return { error: 'create_vector: every "points" entry must be [x, y] with numeric coordinates.' };
+      }
+      const [x0, y0] = flat[0];
+      const segments = flat.slice(1).map(([x, y]: any) => `L ${x} ${y}`).join(' ');
+      pathData = `M ${x0} ${y0}${segments ? ' ' + segments : ''}`;
+    } else {
+      return { error: 'create_vector requires either "data" (SVG path string) or "points" ([[x,y], ...]).' };
+    }
+
+    const vector = figma.createVector();
+    parent.appendChild(vector);
+    try {
+      vector.name = String(params.name ?? 'Vector');
+      vector.x = Number(params.x ?? 0);
+      vector.y = Number(params.y ?? 0);
+      vector.resize(width, height);
+
+      const winding = (params.windingRule === 'EVENODD') ? 'EVENODD' : 'NONZERO';
+      vector.vectorPaths = [{ windingRule: winding, data: pathData! }];
+
+      // Build prop bag for the standard apply pipeline (stroke / fill / weight / align).
+      // updateNode handles the same string→Paint lowering as set_fill/set_stroke.
+      const propBag: Record<string, any> = {};
+      if (params.fill !== undefined && params.fill !== 'transparent') {
+        propBag.fill = params.fill;
+      } else {
+        propBag.fill = 'transparent';
+      }
+      if (params.stroke !== undefined) {
+        const strokeParts: string[] = [];
+        if (params.strokeWeight !== undefined) strokeParts.push(String(params.strokeWeight));
+        strokeParts.push(String(params.stroke));
+        if (params.strokeAlign !== undefined) strokeParts.push(String(params.strokeAlign));
+        propBag.stroke = strokeParts.join(' ');
+      } else if (params.strokeWeight !== undefined || params.strokeAlign !== undefined) {
+        // weight/align without explicit color → black default in shorthand
+        const parts: string[] = [];
+        if (params.strokeWeight !== undefined) parts.push(String(params.strokeWeight));
+        parts.push('#000000');
+        if (params.strokeAlign !== undefined) parts.push(String(params.strokeAlign));
+        propBag.stroke = parts.join(' ');
+      }
+
+      // Reuse handleEdit so paint lowering, validation, and registry stay consistent
+      const editRes = await handleEdit({ node: vector.id, props: propBag });
+      if (editRes.error) {
+        // Roll back partial vector if styling failed
+        vector.remove();
+        return { error: `create_vector: failed to apply styling — ${editRes.error}` };
+      }
+
+      return {
+        data: {
+          id: vector.id,
+          name: vector.name,
+          width: vector.width,
+          height: vector.height,
+          x: vector.x,
+          y: vector.y,
+          parent: { id: parent.id, name: 'name' in parent ? (parent as any).name : '(page)' },
+          path: pathData,
+        },
+      };
+    } catch (err: any) {
+      try { vector.remove(); } catch { /* already detached */ }
+      return { error: `create_vector failed: ${err?.message || String(err)}` };
+    }
+  },
+
+  // Page navigation (cross-page workflows) — ID-driven, names not addressable.
+  switch_page: async (params) => {
+    const allPages = figma.root.children.filter(c => c.type === 'PAGE') as PageNode[];
+    const roster = allPages.map(p => ({ id: p.id, name: p.name }));
+
+    const pageId: string | undefined = params?.pageId;
+
+    // No pageId → roster-only mode (discovery on first call)
+    if (!pageId) {
+      return {
+        data: {
+          currentPageId: figma.currentPage.id,
+          currentPageName: figma.currentPage.name,
+          pages: roster,
+        },
+      };
+    }
+
+    const target = allPages.find(p => p.id === pageId);
+    if (!target) {
+      return {
+        error: `Page not found: "${pageId}". Available: ${roster.map(p => `"${p.name}" [${p.id}]`).join(', ')}`,
+      };
+    }
+
+    const prev = figma.currentPage;
+    if (target.id === prev.id) {
+      return {
+        data: {
+          currentPageId: target.id,
+          currentPageName: target.name,
+          unchanged: true,
+          pages: roster,
+        },
+      };
+    }
+
+    await figma.setCurrentPageAsync(target);
+    return {
+      data: {
+        currentPageId: target.id,
+        currentPageName: target.name,
+        previousPageId: prev.id,
+        previousPageName: prev.name,
+        pages: roster,
+      },
+    };
   },
   // Visual verification (screenshot)
   get_screenshot: handleGetScreenshot,

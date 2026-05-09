@@ -216,11 +216,4 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     required: [{ name: 'node', trim: true, check: 'required' }],
     repairHint: 'provide "node" ref of component to instantiate',
   },
-  // Escape hatch
-  {
-    tool: 'js',
-    mode: 'EXECUTION',
-    required: [{ name: 'code', trim: true, check: 'required' }],
-    repairHint: 'provide "code" as a JavaScript expression or statement',
-  },
 ];

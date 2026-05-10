@@ -35,6 +35,7 @@ import { useSmartScroll } from '../../hooks/useSmartScroll'
 import { useTranslations } from '../../ui/i18n'
 import { loadImageFile, MAX_IMAGES, ImageAttachmentError } from '../../ui/utils/imageAttachment'
 import { ImagePreviewModal } from '../../ui/components/ImagePreviewModal'
+import { getModelQuirks } from '../../engine/llm-client/providers/shared/modelQuirks'
 // ErrorActionType removed — error handling moved to StatusBlock
 import type { ContentBlock } from '../../types/chat'
 
@@ -1002,6 +1003,16 @@ export function ChatFeature(props: UseChatProps) {
    *  may not exist in the live `attachments` array). */
   const [previewImage, setPreviewImage] = useState<ImageAtt | null>(null)
 
+  // Capability awareness: when the active model is in MODEL_QUIRKS with
+  // supportsVision:false (e.g. deepseek-v4-*, mimo-v2.5-pro), warn the user
+  // that any image attachments will be stripped at request time. The runtime
+  // (Wave 3a in openaiFormat.ts) replaces them with a text marker so the
+  // model knows an image existed; this banner closes the loop on the user
+  // side so they can decide to switch model or send anyway.
+  const modelSupportsVision = getModelQuirks(modelName).supportsVision !== false
+  const hasImageAttachment = attachments.some(a => a.type === 'image')
+  const showVisionWarning = hasImageAttachment && !modelSupportsVision
+
   const addAttachment = (att: ContextAttachment) => {
     setAttachments(prev => {
       // Deduplicate by type (only one selection, one page at a time)
@@ -1199,6 +1210,34 @@ export function ChatFeature(props: UseChatProps) {
           here paints over the shadow and creates a visible clip line at the
           form's bottom edge. The body bg behind (var(--color-background))
           shows through fine. */}
+      {/* Vision-capability warning — shown when the user has an image attached
+          but the active model can't see images. Image content is stripped at
+          request time (openaiFormat.ts) and replaced with a text marker, so
+          the run won't crash, but the model also can't use the image. */}
+      {showVisionWarning && (
+        <div
+          role="status"
+          style={{
+            flexShrink: 0,
+            margin: `0 ${tokens.space[3]}px ${tokens.space[2]}px`,
+            padding: `${tokens.space[2]}px ${tokens.space[3]}px`,
+            fontSize: tokens.fontSize[1],
+            lineHeight: tokens.lineHeight[2],
+            color: 'var(--color-textSecondary)',
+            background: 'var(--gray-3)',
+            border: '1px solid var(--gray-5)',
+            borderRadius: 'var(--radius-2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.space[2],
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            <strong>{modelName}</strong> can't see images. Attachments will be ignored — switch model to use vision.
+          </span>
+        </div>
+      )}
+
       <div style={{
         flexShrink: 0,
         padding: `${tokens.space[2]}px ${tokens.space[3]}px ${tokens.space[3]}px`,

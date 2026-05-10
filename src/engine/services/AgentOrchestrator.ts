@@ -5,7 +5,7 @@
  */
 
 import { AgentRuntime, AgentRuntimeCanceledError } from '../agent/agentRuntime';
-import { agentTools } from '../agent/tools';
+import { agentTools, filterToolsByCapabilities } from '../agent/tools';
 import { createProvider, createProviderFromConfig } from './ProviderFactory';
 import type { ProviderConfig } from '../../types/provider';
 import { ToolDefinition, ToolExecutor } from '../agent/tools/types';
@@ -358,21 +358,31 @@ export class AgentOrchestrator {
     console.log(`[AgentOrchestrator] Behavior resolved: thinking=${behaviorConfig.thinkingLevel}`);
 
     // Select context profile from provider's declared context window (not regex guessing)
-    const contextWindow = provider.getCapabilities?.().contextWindow ?? DEFAULT_PROVIDER_CAPABILITIES.contextWindow;
+    const capabilities = provider.getCapabilities?.() ?? DEFAULT_PROVIDER_CAPABILITIES;
+    const contextWindow = capabilities.contextWindow;
     const contextProfile = deriveContextProfile(contextWindow);
     setContextProfile(contextProfile);
     console.log(`[AgentOrchestrator] Context profile: ${contextWindow >= 100_000 ? 'RELAXED' : 'TIGHT'} (contextWindow: ${contextWindow}, model: ${modelName})`);
 
+    // Filter tools by model capabilities. When supportsVision=false (deepseek,
+    // mimo-v2.5-pro, etc — see modelQuirks.ts), drop get_screenshot so the LLM
+    // never tries to call a tool whose result it would crash on.
+    const effectiveTools = filterToolsByCapabilities(tools, capabilities);
+    if (effectiveTools.length !== tools.length) {
+      const dropped = tools.filter(t => !effectiveTools.includes(t)).map(t => t.name);
+      console.log(`[AgentOrchestrator] Dropped ${dropped.length} tool(s) due to model capabilities (${modelName}): ${dropped.join(', ')}`);
+    }
+
     // Build static system prompt (set once, never changes — enables KV cache).
     // Menu is injected per-turn by agentRuntime (see run()), keeping this
     // string stable across turns even as new skills/styles are added.
-    const systemPrompt = buildStaticSystemPrompt(tools, provider, undefined, { includeMenu: false });
+    const systemPrompt = buildStaticSystemPrompt(effectiveTools, provider, undefined, { includeMenu: false });
 
     this.currentProvider = provider;
 
     const runtime = new AgentRuntime({
       provider,
-      tools,
+      tools: effectiveTools,
       systemPrompt,
       ipcBridge,
       toolExecutors: pluginData.toolExecutors,
@@ -388,10 +398,10 @@ export class AgentOrchestrator {
 
     // Inject subtask executor externally (not a constructor side-effect).
     // The closure reads LIVE state (iteration, executors, abort signal) at invocation time.
-    if (tools.some(t => t.name === 'subtask')) {
+    if (effectiveTools.some(t => t.name === 'subtask')) {
       const parentConfig: AgentConfig = {
         provider,
-        tools,
+        tools: effectiveTools,
         toolExecutors: {},  // placeholder — overridden at call time with live executors
         systemPrompt,
         behaviorConfig,

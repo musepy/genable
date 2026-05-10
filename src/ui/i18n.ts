@@ -94,7 +94,9 @@ const en = {
   enterApiKey: (provider: string) => `Enter your ${provider} API key`,
   availableModels: 'available models',
   free: 'Free',
-  developerTools: 'Developer Tools',
+  account: 'Account',
+  signOut: 'Sign out',
+  signOutConfirm: 'Sign out and clear all API keys?',
   language: 'Language',
 
   // Chat Status
@@ -120,12 +122,6 @@ const en = {
   copySelectionJson: 'Add current selection',
 
   close: 'Close',
-
-  // Developer Panel
-  developer: 'Developer',
-  clearKeysConfirm: 'Clear all API keys and return to onboarding?',
-  logoutClearKeys: 'Logout (Clear Keys)',
-  restoreSession: 'Restore Saved Session',
 
   // Errors
   errors: {
@@ -198,7 +194,9 @@ const zh: Translations = {
   enterApiKey: (provider: string) => `输入你的 ${provider} API Key`,
   availableModels: '可用模型',
   free: '免费',
-  developerTools: '开发者工具',
+  account: '账户',
+  signOut: '登出',
+  signOutConfirm: '登出并清除所有 API Key？',
   language: '语言',
 
   // Chat Status
@@ -224,12 +222,6 @@ const zh: Translations = {
   copySelectionJson: '添加当前选区',
 
   close: '关闭',
-
-  // Developer Panel
-  developer: '开发者',
-  clearKeysConfirm: '清除所有 API Key 并返回引导页？',
-  logoutClearKeys: '登出（清除 Key）',
-  restoreSession: '恢复已保存的会话',
 
   // Errors
   errors: {
@@ -300,7 +292,9 @@ const fr: Translations = {
   enterApiKey: (provider: string) => `Entrez votre cle API ${provider}`,
   availableModels: 'modeles disponibles',
   free: 'Gratuit',
-  developerTools: 'Outils developpeur',
+  account: 'Compte',
+  signOut: 'Deconnexion',
+  signOutConfirm: 'Se deconnecter et effacer toutes les cles API ?',
   language: 'Langue',
 
   // Chat Status
@@ -326,12 +320,6 @@ const fr: Translations = {
   copySelectionJson: 'Ajouter la selection actuelle',
 
   close: 'Fermer',
-
-  // Developer Panel
-  developer: 'Developpeur',
-  clearKeysConfirm: 'Effacer toutes les cles API et revenir a l\'accueil ?',
-  logoutClearKeys: 'Deconnexion (Effacer)',
-  restoreSession: 'Restaurer la session',
 
   // Errors
   errors: {

@@ -9,18 +9,15 @@
  *   Settings subhead
  *   PROVIDERS section — list (or empty state) + Add Provider button + Add/Edit form
  *   APPEARANCE — Language popover + Theme seg-pill
- *   DEVELOPER (collapsed disclosure)
+ *   ACCOUNT — Sign out (destructive: clears all API keys)
  *   footer (sponsor links + privacy)
- *
- * The Theme + Language + DeveloperPanel + footer match the prior visual.
  */
 
 import { h, Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { Github, Heart, Check, ChevronDown } from 'lucide-preact';
+import { Github, Heart, Check, ChevronDown, Plus } from 'lucide-preact';
 import type { LocalComponent } from '../types';
 import type { ProviderConfig, ProviderProbeResult } from '../types/provider';
-import { DeveloperPanel } from './components/DeveloperPanel';
 import { ProviderRow } from './components/ProviderRow';
 import { AddProviderForm } from './components/AddProviderForm';
 import { useTranslations, LOCALE_PREFS, LOCALE_PREF_LABELS, type LocalePreference } from './i18n';
@@ -45,7 +42,6 @@ export interface SettingsPanelProps {
 
   // Lifecycle
   onLogout?: () => void;
-  onRestoreSession?: () => void;
   onClose?: () => void;
   localComponents?: LocalComponent[];
 
@@ -66,7 +62,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
     setActiveProviderId,
     validateProvider,
     onLogout,
-    onRestoreSession,
     localePref = 'auto',
     setLocalePref,
     theme = 'auto',
@@ -79,8 +74,10 @@ export function SettingsPanel(props: SettingsPanelProps) {
   /** 'closed' | 'add' | { kind: 'edit', id } */
   type FormState = { kind: 'closed' } | { kind: 'add' } | { kind: 'edit'; id: string };
   const [formState, setFormState] = useState<FormState>({ kind: 'closed' });
+  /** Holds form mounted for ANIM_MS while the picker animates out. */
+  const [isFormClosing, setIsFormClosing] = useState(false);
+  const FORM_ANIM_MS = 240;
 
-  const [showDeveloper, setShowDeveloper] = useState(false);
   const [langPopoverOpen, setLangPopoverOpen] = useState(false);
 
   // ── Refs ─────────────────────────────────────────────────────────────────
@@ -136,26 +133,37 @@ export function SettingsPanel(props: SettingsPanelProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (langPopoverOpen) { setLangPopoverOpen(false); return; }
-      if (formState.kind !== 'closed') { setFormState({ kind: 'closed' }); return; }
+      if (formState.kind !== 'closed') { closeFormWithAnimation(); return; }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [langPopoverOpen, formState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [langPopoverOpen, formState, isFormClosing]);
 
   // ── Form handlers ────────────────────────────────────────────────────────
+  /** Close the form via height-grow animation: hold mounted for FORM_ANIM_MS, then unmount. */
+  const closeFormWithAnimation = () => {
+    if (isFormClosing) return;
+    setIsFormClosing(true);
+    setTimeout(() => {
+      setFormState({ kind: 'closed' });
+      setIsFormClosing(false);
+    }, FORM_ANIM_MS);
+  };
+
   const handleAddProvider = (cfg: Omit<ProviderConfig, 'id'>) => {
     addProvider(cfg);
-    setFormState({ kind: 'closed' });
+    closeFormWithAnimation();
   };
 
   const handleUpdateProvider = (id: string, cfg: Omit<ProviderConfig, 'id'>) => {
     updateProvider(id, cfg);
-    setFormState({ kind: 'closed' });
+    closeFormWithAnimation();
   };
 
   const handleRemoveProvider = (id: string) => {
     removeProvider(id);
-    setFormState({ kind: 'closed' });
+    closeFormWithAnimation();
   };
 
   const handleSelectLocale = (l: LocalePreference) => {
@@ -200,57 +208,59 @@ export function SettingsPanel(props: SettingsPanelProps) {
             )}
           </div>
 
-          {providers.length === 0 ? (
-            <div className="provider-list empty">
-              <div className="provider-empty-icon">🔌</div>
-              <div className="provider-empty-title">No providers configured</div>
-              <div className="provider-empty-sub">
-                Add an LLM provider to start generating designs.
+          <div className="provider-list">
+            {providers.map(p => (
+              <ProviderRow
+                key={p.id}
+                config={p}
+                isActive={p.id === activeProviderId}
+                onSelect={() => setActiveProviderId(p.id)}
+                onEdit={() => setFormState({ kind: 'edit', id: p.id })}
+              />
+            ))}
+
+            {/* Add-row collapses while the picker is open; expands back when it closes. */}
+            <div className={`grow-wrap ${formState.kind !== 'closed' && !isFormClosing ? 'is-hidden' : ''}`}>
+              <div className="grow-inner">
+                <button
+                  type="button"
+                  className="add-row"
+                  onClick={() => setFormState({ kind: 'add' })}
+                >
+                  <span className="add-row-plus">
+                    <Plus size={14} strokeWidth={1.5} />
+                  </span>
+                  Add Provider
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="provider-list">
-              {providers.map(p => (
-                <ProviderRow
-                  key={p.id}
-                  config={p}
-                  isActive={p.id === activeProviderId}
-                  onSelect={() => setActiveProviderId(p.id)}
-                  onEdit={() => setFormState({ kind: 'edit', id: p.id })}
-                />
-              ))}
+
+            {/* AddProviderForm expands here when picker is open (kind !== 'closed'). */}
+            <div className={`grow-wrap ${formState.kind === 'closed' || isFormClosing ? 'is-hidden' : ''}`}>
+              <div className="grow-inner">
+                {formState.kind === 'add' && (
+                  <AddProviderForm
+                    key="add"
+                    mode="add"
+                    onSave={handleAddProvider}
+                    onCancel={closeFormWithAnimation}
+                    onValidate={validateProvider}
+                  />
+                )}
+                {formState.kind === 'edit' && editingProvider && (
+                  <AddProviderForm
+                    key={`edit-${editingProvider.id}`}
+                    mode="edit"
+                    initial={editingProvider}
+                    onSave={(cfg) => handleUpdateProvider(editingProvider.id, cfg)}
+                    onRemove={() => handleRemoveProvider(editingProvider.id)}
+                    onCancel={closeFormWithAnimation}
+                    onValidate={validateProvider}
+                  />
+                )}
+              </div>
             </div>
-          )}
-
-          {formState.kind === 'closed' && (
-            <button
-              type="button"
-              className="add-btn"
-              onClick={() => setFormState({ kind: 'add' })}
-            >
-              + Add Provider
-            </button>
-          )}
-
-          {formState.kind === 'add' && (
-            <AddProviderForm
-              mode="add"
-              onSave={handleAddProvider}
-              onCancel={() => setFormState({ kind: 'closed' })}
-              onValidate={validateProvider}
-            />
-          )}
-
-          {formState.kind === 'edit' && editingProvider && (
-            <AddProviderForm
-              mode="edit"
-              initial={editingProvider}
-              onSave={(cfg) => handleUpdateProvider(editingProvider.id, cfg)}
-              onRemove={() => handleRemoveProvider(editingProvider.id)}
-              onCancel={() => setFormState({ kind: 'closed' })}
-              onValidate={validateProvider}
-            />
-          )}
+          </div>
 
           {/* APPEARANCE section: Theme + Language */}
           <div className="row-label" style={{ marginTop: 24 }}>
@@ -297,33 +307,26 @@ export function SettingsPanel(props: SettingsPanelProps) {
             </div>
           </div>
 
-          {/* DEVELOPER (Dogfood) — preserved disclosure */}
-          <div className="dev-disclosure">
-            <button
-              className="dd-toggle"
-              type="button"
-              onClick={() => setShowDeveloper(s => !s)}
-              aria-expanded={showDeveloper}
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  transform: showDeveloper ? 'rotate(90deg)' : 'rotate(0deg)',
-                  transition: 'transform 200ms ease',
+          {/* ACCOUNT section — destructive sign out */}
+          <div className="row-label" style={{ marginTop: 24 }}>
+            <span className="lhs">{t.account}</span>
+          </div>
+          <div className="pref-group">
+            <div className="pref-row">
+              <span className="lhs">{t.apiKey}</span>
+              <button
+                type="button"
+                className="ghost-danger-btn"
+                style={{ marginRight: -2 }}
+                onClick={() => {
+                  if (confirm(t.signOutConfirm)) {
+                    onLogout?.();
+                  }
                 }}
               >
-                <ChevronDown size={12} strokeWidth={1.5} style={{ transform: 'rotate(-90deg)' }} />
-              </span>
-              {t.developerTools}
-            </button>
-            {showDeveloper && (
-              <div style={{ marginTop: 8 }}>
-                <DeveloperPanel
-                  onLogout={onLogout}
-                  onRestoreSession={onRestoreSession}
-                />
-              </div>
-            )}
+                {t.signOut}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -269,13 +269,7 @@ export function useModelSettings() {
 
   const logout = useCallback(() => {
     emit<ResetSettingsHandler>('RESET_SETTINGS')
-    toast('Logged out', 'default')
-  }, [toast])
-
-  const restoreSavedSession = useCallback(() => {
-    setIsInitialized(false)
-    emit<LoadSettingsHandler>('LOAD_SETTINGS')
-    toast('Restored saved session', 'success')
+    toast('Signed out', 'default')
   }, [toast])
 
   return {
@@ -308,6 +302,5 @@ export function useModelSettings() {
     showSettings,
     setShowSettings,
     logout,
-    restoreSavedSession,
   }
 }

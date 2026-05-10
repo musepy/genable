@@ -1,18 +1,18 @@
 import './utils/compatibility'
-import { render, VerticalSpace } from '@create-figma-plugin/ui'
+import { render } from '@create-figma-plugin/ui'
 import { h } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 
 // Hooks
 import { usePluginData } from './hooks/usePluginData'
 import { useModelSettings } from './hooks/useModelSettings'
+import { useMcpBridge } from './dev/useMcpBridge'
 
 // Features
 import { ChatFeature } from './features/chat'
 import { SettingsPanel } from './ui/SettingsPanel'
 import { OnboardingView } from './ui/components/OnboardingView'
 import { PromptInput } from './ui/components/PromptInput'
-import { DeveloperPanel } from './ui/components/DeveloperPanel'
 
 // i18n
 import { LocaleContext } from './ui/i18n'
@@ -66,11 +66,17 @@ function PluginContent() {
     apiKey, modelName, setModelName, providerName,
     // Lifecycle
     hasConfig, isInitialized, showSettings, setShowSettings,
-    logout, restoreSavedSession,
+    logout,
   } = settings
 
   // Key for remounting ChatFeature (replaces window.location.reload)
   const [chatKey, setChatKey] = useState(0)
+
+  // MCP bridge — single connection shared across the plugin. Lifted from
+  // useChat so the WS relay stays connected regardless of which view is
+  // active (Onboarding/Chat/Settings). Status returns are unused for now
+  // (no UI consumer); the hook noops when not inside a Figma plugin iframe.
+  useMcpBridge()
 
   // Dev bridge model switching — exposed via window global for cross-component access.
   // Updates the active provider's modelId. Provider switching by name is no longer
@@ -190,7 +196,6 @@ function PluginContent() {
           setActiveProviderId={setActiveProviderId}
           validateProvider={validateProvider}
           onLogout={logout}
-          onRestoreSession={restoreSavedSession}
           localComponents={pluginData.localComponents}
           localePref={localePref}
           setLocalePref={setLocalePref}
@@ -211,8 +216,6 @@ function PluginContent() {
       );
     } else if (captureTarget === 'button') {
       content = <button className="chip">Capture Candidate</button>;
-    } else if (captureTarget === 'developer-panel') {
-      content = <DeveloperPanel onLogout={() => {}} onRestoreSession={() => {}} />;
     } else if (captureTarget === 'prompt-input') {
       content = (
         <PromptInput
@@ -246,12 +249,21 @@ function PluginContent() {
     setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
-  // L3: Dogfood Tools State
-  const [showDeveloperTools, setShowDeveloperTools] = useState(false);
+  // Dev-only: render OnboardingView without clearing storage. Lets developers
+  // verify empty-state visuals while keeping API keys intact for SSE/E2E runs.
+  // Toggle via window.previewEmptyState() in DevTools console; refresh resets.
+  const [isPreviewingEmptyState, setIsPreviewingEmptyState] = useState(false)
 
   useEffect(() => {
-    (window as any).toggleDeveloperPanel = () => setShowDeveloperTools(prev => !prev);
-  }, []);
+    (window as any).previewEmptyState = () => {
+      setIsPreviewingEmptyState(prev => {
+        const next = !prev
+        console.log('[dev] empty state preview:', next)
+        return next
+      })
+    }
+    return () => { delete (window as any).previewEmptyState }
+  }, [])
 
   // 4. Router / Switcher
   const renderContent = () => {
@@ -260,27 +272,10 @@ function PluginContent() {
       return null // Or <LoadingSpinner /> if desired
     }
 
-    if (showDeveloperTools) {
-      return (
-        <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={mainContentStyle}>
-            <DeveloperPanel
-              onLogout={logout}
-              onRestoreSession={restoreSavedSession}
-            />
-            <VerticalSpace space="large" />
-            <button className="chip" onClick={() => setShowDeveloperTools(false)} style={{ width: '100%', justifyContent: 'center' }}>
-              Back to Chat
-            </button>
-          </div>
-        </Iso>
-      );
-    }
-
     // A. Settings View moved to main render for overlay/animation
 
-    // B. Onboarding View
-    if (!hasConfig) {
+    // B. Onboarding View (real empty state OR dev preview)
+    if (!hasConfig || isPreviewingEmptyState) {
       return (
         <Iso style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <OnboardingView
@@ -357,7 +352,6 @@ function PluginContent() {
             setActiveProviderId={setActiveProviderId}
             validateProvider={validateProvider}
             onLogout={logout}
-            onRestoreSession={restoreSavedSession}
             onClose={() => {
               setIsSettingsClosing(true);
               setTimeout(() => {

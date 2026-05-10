@@ -1,0 +1,54 @@
+{
+  "name": "genable-mcp",
+  "version": "0.1.0",
+  "description": "The write-side complement to Figma's official MCP. Build, edit, and search Figma nodes from any MCP client (Claude Code, Cursor, etc.) via the Genable plugin.",
+  "main": "dist/index.js",
+  "bin": {
+    "genable-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "extract-schema": "tsx extract-schema.ts",
+    "build": "npm run extract-schema && tsc && node -e \"require('fs').copyFileSync('tools-schema.json','dist/tools-schema.json')\"",
+    "dev": "npm run extract-schema && tsx index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "figma",
+    "mcp",
+    "model-context-protocol",
+    "figma-plugin",
+    "ai",
+    "claude-code",
+    "cursor",
+    "genable"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.0.0",
+    "typescript": ">=5"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/muse40007/figma-ai-generator-dogfood#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muse40007/figma-ai-generator-dogfood.git",
+    "directory": "tools/mcp-server"
+  },
+  "license": "MIT"
+}

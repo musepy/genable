@@ -22,9 +22,29 @@
  */
 
 import http from 'http';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3460', 10);
 const WS_PORT = parseInt(process.env.MCP_WS_PORT || '3461', 10);
+
+interface McpToolSchema {
+  name: string;
+  description: string;
+  parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+  mutates?: boolean;
+}
+
+function loadToolsSchema(): McpToolSchema[] {
+  const schemaPath = join(__dirname, 'tools-schema.json');
+  try {
+    return JSON.parse(readFileSync(schemaPath, 'utf-8')) as McpToolSchema[];
+  } catch (err: any) {
+    console.error(`[HTTP Bridge] FATAL: failed to load ${schemaPath}: ${err.message}`);
+    console.error('[HTTP Bridge] Run `npx tsx tools/mcp-server/extract-schema.ts` to regenerate.');
+    process.exit(1);
+  }
+}
 
 // ── Helpers ──
 function jsonResponse(res: http.ServerResponse, status: number, data: any) {
@@ -49,17 +69,17 @@ async function main() {
   // Set WS port BEFORE importing wsRelay — it reads env at module top-level
   process.env.MCP_WS_PORT = String(WS_PORT);
   const { createWsRelay } = await import('./wsRelay.js');
-  const { unifiedTools } = await import('../../src/engine/agent/tools/unified/index.js');
+  const unifiedTools = loadToolsSchema();
 
   const relay = createWsRelay();
 
   // Tool catalog for /tools endpoint
-  const toolCatalog = unifiedTools.map((def: any) => ({
+  const toolCatalog = unifiedTools.map((def) => ({
     name: def.name,
     description: def.description,
     parameters: def.parameters,
   }));
-  const toolSet = new Set(unifiedTools.map((d: any) => d.name));
+  const toolSet = new Set(unifiedTools.map((d) => d.name));
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://localhost:${HTTP_PORT}`);

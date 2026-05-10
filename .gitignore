@@ -31,6 +31,7 @@ tools/ui-baseline/
 tools/ui-catalog/
 tools/mcp-server/tools-schema.json
 tools/mcp-server/dist/
+tools/mcp-server/*.tgz
 tools/community-assets/
 docs/e2e-results/
 all_tool_schemas.json

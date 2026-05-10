@@ -31,6 +31,7 @@ import type { ToolDefinition } from '../../agent/tools/types';
 import { ResponseAccumulator } from './shared/responseAccumulator';
 import { consumeStream, withConnectTimeout } from './shared/streamHandler';
 import { mapMessagesToOpenAI, mapOpenAIToLLMResponse } from './shared/openaiFormat';
+import { getModelQuirks, learnModelQuirk, isImageRejection400 } from './shared/modelQuirks';
 import { normalizeFinishReason } from './types';
 import { withRetry } from './shared/withRetry';
 import {
@@ -130,13 +131,14 @@ export class OpenAIProtocolProvider implements LLMProvider {
   }
 
   getCapabilities(): LLMProviderCapabilities {
-    // Modern OpenAI-compatible models are vision-capable as a class. The rare
-    // text-only exceptions (e.g. tiny embedding-adjacent models) should be
-    // gated by the caller, not by name-regex inside this generic handler.
+    // Most OpenAI-compatible models are vision-capable. Specific exceptions
+    // — DeepSeek's image_url rejection, Xiaomi mimo-v2.5-pro's missing
+    // multimodal route — live in shared/modelQuirks.ts. Default stays open.
+    const q = getModelQuirks(this.config.modelId);
     return {
       supportsTextStreaming: true,
       supportsReasoningStreaming: true,
-      supportsVision: true,
+      supportsVision: q.supportsVision ?? true,
       contextWindow: 1_000_000,
     };
   }
@@ -144,21 +146,44 @@ export class OpenAIProtocolProvider implements LLMProvider {
   // ── LLMProvider surface ────────────────────────────────────────────────────
 
   async generate(options: LLMGenerateOptions): Promise<LLMResponse> {
-    const body = this.buildRequestBody(options);
     const useStream = !!(options.onProgress || options.onThinking);
 
-    return withRetry(
-      () =>
-        useStream
-          ? this.runStreaming(body, options.onProgress, options.onThinking, options.abortSignal)
-          : this.runSync(body, options.abortSignal),
-      {
+    const dispatch = (body: Record<string, any>) =>
+      useStream
+        ? this.runStreaming(body, options.onProgress, options.onThinking, options.abortSignal)
+        : this.runSync(body, options.abortSignal);
+
+    try {
+      return await withRetry(() => dispatch(this.buildRequestBody(options)), {
         maxRetries: RETRY_MAX,
         baseDelayMs: RETRY_BASE_DELAY_MS,
         abortSignal: options.abortSignal,
         providerName: this.name,
-      },
-    );
+      });
+    } catch (err) {
+      // Last-resort safety net: if the vendor returned a stereotyped image-
+      // rejection 400 (DeepSeek's `unknown variant image_url` or Xiaomi's
+      // `No endpoints found that support image input`), the model is
+      // image-incapable but not yet in MODEL_QUIRKS. Learn the quirk for the
+      // rest of the session and retry once with images stripped. Anything
+      // else (network 5xx, auth 401, real model errors) bubbles unchanged.
+      if (
+        err instanceof APIError &&
+        err.statusCode === 400 &&
+        isImageRejection400(err.message) &&
+        this.getCapabilities().supportsVision &&
+        this.config.modelId
+      ) {
+        console.warn(
+          `[openai-protocol] Image-rejection 400 from "${this.config.modelId}". ` +
+          `Learning supportsVision=false for this session and retrying without images.`,
+        );
+        learnModelQuirk(this.config.modelId, { supportsVision: false });
+        // buildRequestBody() now sees supportsVision=false → strips images
+        return await dispatch(this.buildRequestBody(options));
+      }
+      throw err;
+    }
   }
 
   async *generateStream(options: LLMGenerateOptions): AsyncIterable<LLMResponse> {
@@ -191,7 +216,12 @@ export class OpenAIProtocolProvider implements LLMProvider {
     const isKimiModel = /kimi/i.test(this.config.modelId!);
     const defaultTemp = isKimiModel ? 0.7 : 0.4;
 
-    const openAIMessages = mapMessagesToOpenAI(messages);
+    // Strip image content for models that reject image_url at the API/router
+    // layer (deepseek-v4-*, mimo-v2.5-pro). Tool-list filtering (Wave 2) already
+    // prevents image-producing tools from being callable; this catches the
+    // remaining vector — user-pasted images and any future image source.
+    const stripImages = !this.getCapabilities().supportsVision;
+    const openAIMessages = mapMessagesToOpenAI(messages, { stripImages });
     if (options.system) {
       openAIMessages.unshift({ role: 'system', content: options.system });
     }

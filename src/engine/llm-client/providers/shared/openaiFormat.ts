@@ -14,11 +14,34 @@ import { normalizeFinishReason } from '../types';
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Options controlling per-model wire shape.
+ *
+ * - `stripImages: true` is set by the caller when the active model has
+ *   `supportsVision === false` (e.g. DeepSeek, Xiaomi mimo-v2.5-pro). Image
+ *   content blocks are replaced with a short `[image attached — not visible
+ *   to this model]` text marker so the LLM still knows an image existed and
+ *   can ask the user to switch model or describe in words. Silent drop is
+ *   avoided on purpose: the model would otherwise act as if the user sent
+ *   nothing, which is more confusing than the explicit marker.
+ *
+ *   Defense in depth — Wave 2 already filters `get_screenshot` from the tool
+ *   list so the agent never produces an image_url block via tool results.
+ *   This flag handles the remaining vector: user-pasted images from the
+ *   composer (or images injected by future tools).
+ */
+export interface MapMessagesOptions {
+  stripImages?: boolean;
+}
+
+const STRIPPED_IMAGE_TEXT = '[image attached — not visible to this model; ask user for a text description or switch to a vision-capable model]';
+
+/**
  * Convert our LLMMessage[] to OpenAI chat/completions message format.
  * Handles role mapping (model→assistant), tool result flattening, and tool call encoding.
  */
-export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
+export function mapMessagesToOpenAI(messages: LLMMessage[], opts: MapMessagesOptions = {}): any[] {
   const mapped: any[] = [];
+  const { stripImages = false } = opts;
 
   for (const m of messages) {
     let role: string = m.role;
@@ -40,13 +63,17 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
         }
       }
       if (pendingImages.length > 0) {
-        mapped.push({
-          role: 'user',
-          content: pendingImages.map(img => ({
-            type: 'image_url',
-            image_url: { url: `data:${img.mimeType};base64,${img.data}` },
-          })),
-        });
+        if (stripImages) {
+          mapped.push({ role: 'user', content: STRIPPED_IMAGE_TEXT });
+        } else {
+          mapped.push({
+            role: 'user',
+            content: pendingImages.map(img => ({
+              type: 'image_url',
+              image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+            })),
+          });
+        }
       }
       continue;
     }
@@ -63,7 +90,11 @@ export function mapMessagesToOpenAI(messages: LLMMessage[]): any[] {
     if (Array.isArray(nonThinkingContent)) {
       content = nonThinkingContent.map((p: ContentBlock) => {
         if (p.type === 'text') return { type: 'text', text: p.text };
-        if (p.type === 'image') return { type: 'image_url', image_url: { url: `data:${p.mimeType};base64,${p.data}` } };
+        if (p.type === 'image') {
+          return stripImages
+            ? { type: 'text', text: STRIPPED_IMAGE_TEXT }
+            : { type: 'image_url', image_url: { url: `data:${p.mimeType};base64,${p.data}` } };
+        }
         return null;
       }).filter(Boolean);
       if (content.length === 1 && content[0].type === 'text') content = content[0].text;

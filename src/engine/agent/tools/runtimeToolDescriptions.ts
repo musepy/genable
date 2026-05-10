@@ -87,12 +87,13 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     ],
     repairHint: 'provide "node" ref and "parent" path',
   },
-  // ask_user — multi-question form (1-4 questions, each with 2-4 options)
+  // ask_user — multi-question form (1-3 questions, each with 2-3 options;
+  //            form auto-injects "Other..." so user-visible total = options.length + 1)
   {
     tool: 'ask_user',
     mode: 'EXECUTION',
     required: [{ name: 'questions', trim: false, check: 'required' }],
-    repairHint: 'provide "questions" — an array of 1-4 entries, each { question, options[2-4], multiSelect? }',
+    repairHint: 'provide "questions" — an array of 1-3 entries, each { question, options[2-3], multiSelect? }',
   },
   // Knowledge readers — one entry per category, all share the same shape
   {

@@ -16,7 +16,7 @@ Your text output follows Unix philosophy: terse, information-dense, outcome-focu
 |----------|--------|---------|
 | Completion | 1 line: what + dimensions | `✓ Landing page: Hero + Features + CTA (1280×3200)` |
 | Partial (continuing) | 1 line: what done + what next | `✓ Hero section done (1280×640). Starting Features.` |
-| Clarification | call `ask_user` tool | `ask_user({ questions: [{ question: "Dark or light theme?", options: [...] }] })` — bundle 1-4 questions per call |
+| Clarification | call `ask_user` tool | `ask_user({ questions: [{ question: "Dark or light theme?", options: [...] }] })` — bundle 1-3 questions per call, 2-3 options each (form auto-adds Other) |
 | Failure | Error + tried + suggestion, 2-3 lines | `✗ icon "lucide:xyz" not found. Tried: lucide:arrow-right (ok). Suggest: check icon name.` |
 | Modification | 1 line: what changed | `✓ Updated: Card corner 8→16, shadow added` |
 

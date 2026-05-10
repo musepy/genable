@@ -479,7 +479,6 @@ function renderAttachmentChips(
 
 interface AskUserQuestion {
   question: string
-  header?: string
   options: { label: string; description?: string }[]
   multiSelect?: boolean
 }
@@ -564,26 +563,6 @@ function AskUserForm({
     setOtherDraft(prev => ({ ...prev, [qIdx]: '' }))
   }
 
-  // Returns true if a non-empty draft was committed.
-  const commitOther = (qIdx: number): boolean => {
-    const text = (otherDraft[qIdx] || '').trim()
-    if (!text) return false
-    const q = questions[qIdx]
-    setSelections(prev => {
-      const next = [...prev]
-      if (q.multiSelect) {
-        const cur = (next[qIdx] as string[]) || []
-        if (!cur.includes(text)) next[qIdx] = [...cur, text]
-      } else {
-        next[qIdx] = text
-      }
-      return next
-    })
-    setAnswerSource(prev => ({ ...prev, [qIdx]: 'freeform' }))
-    setOtherDraft(prev => ({ ...prev, [qIdx]: '' }))
-    return true
-  }
-
   const goNext = () => {
     // Commit any pending Other draft for the current Q before advancing
     let committed = false
@@ -630,36 +609,30 @@ function AskUserForm({
     return s === label
   }
 
-  // Auto-grow textarea on draft change
+  // Auto-grow Other textarea: starts at minHeight (36px = ~1 row) and grows
+  // with content up to maxHeight (120px). Critical because the plugin window
+  // is fixed-height — a 120px textarea on an empty Other row pushed the
+  // PromptInput off-screen below the form card. Skip/Next shifting down a
+  // few px as user types is acceptable; an invisible input is not.
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-  }, [activeIdx, otherDraft[activeIdx]])
+  }, [activeIdx, otherDraft[activeIdx], selections[activeIdx]])
 
-  // Keyboard: ⌘↵ commit/advance, ←/→ nav (when not typing in textarea)
+  // Keyboard: ⌘↵ commit/advance (uses unified goNext), ←/→ nav (multi-q only,
+  // when not typing in textarea).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const inTextarea = (e.target as HTMLElement | null)?.tagName === 'TEXTAREA'
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault()
-        if (isSingleQuestion) {
-          // Single-q: commit Other if there's a draft, else nothing (option-click submits)
-          const text = (otherDraft[0] || '').trim()
-          if (text) commitOther(0) // recordAnswer path will not auto-finalize on freeform; do it ourselves
-          // For single-q, commitOther sets the selection; finalize directly
-          if (text) {
-            const q = questions[0]
-            const sel: Array<string | string[] | null> = q.multiSelect ? [[text]] : [text]
-            finalize(sel)
-          }
-        } else {
-          goNext()
-        }
+        goNext()
         return
       }
       if (inTextarea) return
+      if (isSingleQuestion) return
       if (e.key === 'ArrowRight') {
         e.preventDefault()
         if (!atLast) setActiveIdx(activeIdx + 1)
@@ -799,17 +772,6 @@ function AskUserForm({
     </div>
   )
 
-  // Optional uppercase header (when AskUserQuestion.header provided) — keep
-  // for parity with the data shape, but treated as small caption above the
-  // question text. The v2 prototype's QUESTIONS_V2 doesn't use this field.
-  const headerCaptionNode = cur.header ? (
-    <div style={{ padding: '0 12px', marginTop: -4, marginBottom: 4 }}>
-      <span style={{ fontSize: 11, color: tokens.colors.textSecondary, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-        {cur.header}{cur.multiSelect && ' (multi-select)'}
-      </span>
-    </div>
-  ) : null
-
   // ─── Option list ─────────────────────────────────────────────────────
   const optionListNode = (
     <div style={{ padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -827,7 +789,19 @@ function AskUserForm({
             <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 12, color: tokens.colors.textPrimary, fontWeight: 400, wordBreak: 'break-word', overflowWrap: 'anywhere' as any }}>{opt.label}</span>
               {opt.description && (
-                <span style={{ fontSize: 11, color: tokens.colors.textSecondary, lineHeight: 1.45, wordBreak: 'break-word', overflowWrap: 'anywhere' as any }}>{opt.description}</span>
+                <span style={{
+                  fontSize: 11,
+                  color: tokens.colors.textSecondary,
+                  lineHeight: 1.45,
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere' as any,
+                  // Cap desc at 2 lines so a single very long description
+                  // (e.g. agent overshoots) can't push the input off-screen.
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}>{opt.description}</span>
               )}
             </span>
             {cur.multiSelect ? (
@@ -853,6 +827,7 @@ function AskUserForm({
   const otherDisplayValue = otherIsCommitted ? (selections[activeIdx] as string) : draft
 
   const otherRowStyle: any = {
+    flexShrink: 0,
     margin: '6px 12px 0',
     padding: '10px 12px',
     background: otherIsCommitted ? tokens.colors.alpha[3] : tokens.colors.alpha[2],
@@ -903,6 +878,16 @@ function AskUserForm({
           }
           setOtherDraft(prev => ({ ...prev, [activeIdx]: e.target.value }))
         }}
+        onKeyDown={(e: KeyboardEvent) => {
+          // Plain Enter commits + advances/finalizes (matches design v19+).
+          // Shift+Enter inserts a newline. Cmd/Ctrl+Enter handled by formRef listener.
+          if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            const text = (otherDraft[activeIdx] || '').trim()
+            if (!text) return
+            e.preventDefault()
+            goNext()
+          }
+        }}
         onFocus={(e: any) => { e.currentTarget.style.borderColor = tokens.colors.alpha[5] }}
         onBlur={(e: any) => { e.currentTarget.style.borderColor = tokens.colors.alpha[4] }}
         style={otherTextareaStyle}
@@ -910,66 +895,73 @@ function AskUserForm({
     </div>
   )
 
-  // ─── Form-card envelope (panel + border + radius + shadow) ───────────
+  // ─── Form card (design C2: separate sibling of PromptInput, NOT inside it).
+  //     Own border + radius + shadow. The plugin window is fixed-height, so
+  //     the form MUST share that budget with StatusBlock + PromptInput.
+  //
+  //     Layout contract (top-to-bottom inside the card):
+  //       - Header           flexShrink:0 — always visible
+  //       - Options scroller flex:1, minHeight:0, overflowY:auto — only this
+  //                          region shrinks; long option lists scroll here
+  //       - Other            flexShrink:0 — always visible (textarea is the
+  //                          only way to type a custom answer; never hide it)
+  //       - Nav (Skip/Next)  flexShrink:0 — always visible
+  //
+  //     The card itself is flexShrink:1 + minHeight:0 inside ChatFeature's
+  //     flex column so PromptInput (flexShrink:0 sibling) stays anchored.
+  //     Horizontal margin matches input wrapper's horizontal padding (12px)
+  //     so card and input share the same width. Bottom margin tightened to
+  //     4px so the visual gap stays compact (4 + 8px input top padding = 12).
   const formCardStyle: any = {
-    flexShrink: 0,
-    margin: '0 10px 10px',
+    flexShrink: 1,
+    minHeight: 0,
+    margin: '0 12px 4px',
     background: tokens.colors.panel,
     border: `1px solid ${tokens.colors.alpha[4]}`,
     borderRadius: 'var(--radius-5)',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+    boxShadow: tokens.colors.shadowFocus,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
   }
 
-  // ─── Single-question fast-path: card with body, no nav ───────────────
-  if (isSingleQuestion) {
-    return (
-      <div
-        ref={formRef}
-        tabIndex={-1}
-        style={{ ...formCardStyle, outline: 'none', maxHeight: 360 }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          {headerNode}
-          {headerCaptionNode}
-          {optionListNode}
-          {otherNode}
-          <div style={{ height: 12 }} />
-        </div>
-      </div>
-    )
-  }
-
-  // ─── Multi-question wizard (card with body + stable nav) ─────────────
   return (
     <div
       ref={formRef}
       tabIndex={-1}
       style={{ ...formCardStyle, outline: 'none' }}
     >
-      {/* Body (the morph region in the prototype; here we just let it grow) */}
-      <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 360, overflowY: 'auto' }}>
-        {headerNode}
-        {headerCaptionNode}
+      {headerNode}
+
+      {/* Options scroller — the ONLY shrinkable region. flex:1 + minHeight:0
+          is the standard flexbox-scrollable recipe; without minHeight:0 the
+          area refuses to shrink below its content size. Other + Nav are
+          siblings (flexShrink:0) so they stay pinned to the bottom even when
+          the option list overflows. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {optionListNode}
-        {otherNode}
       </div>
 
-      {/* Stable nav: Back left, Skip+Next pinned bottom-right of the card */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '10px 12px 12px', gap: 8 }}>
-        <button
-          type="button"
-          onClick={goBack}
-          style={{ ...navBtnBase, display: atFirst ? 'none' : 'inline-flex' }}
-        >
-          Back
-        </button>
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-          <button type="button" onClick={goSkip} style={navBtnBase}>
-            Skip
+      {otherNode}
+
+      {/* Stable nav. Single-q hides Back+Skip — Submit is the only action.
+          Multi-q: Back (hidden on first), Skip, Next/Submit. */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '10px 12px 12px', gap: 8 }}>
+        {!isSingleQuestion && !atFirst && (
+          <button
+            type="button"
+            onClick={goBack}
+            style={navBtnBase}
+          >
+            Back
           </button>
+        )}
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+          {!isSingleQuestion && (
+            <button type="button" onClick={goSkip} style={navBtnBase}>
+              Skip
+            </button>
+          )}
           <button type="button" onClick={goNext} style={navBtnPrimary}>
             <span>{atLast ? 'Submit' : 'Next'}</span>
             <span style={kbdStyle}>⌘↵</span>
@@ -1107,7 +1099,9 @@ export function ChatFeature(props: UseChatProps) {
   const chipsState = getElementState('promptChips', pluginState);
 
   const isEmpty = pluginState === 'EMPTY' || pluginState === 'TYPING';
-  const canSubmit = !!prompt.trim() || !!pendingQuestion;
+  // Send-button enabled only when there's text to send. The form has its own
+  // Submit button — sending freeform here means "bypass the form with this text".
+  const canSubmit = !!prompt.trim();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
@@ -1125,7 +1119,17 @@ export function ChatFeature(props: UseChatProps) {
           />
 
           {isEmpty && chipsState.visible && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: tokens.space[4] }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginTop: tokens.space[4],
+              // PromptInput's shadow (8px y / 32px blur, plus thinking-state
+              // accent glow) bleeds upward into this region. Input-area wrapper
+              // has zIndex:10, so without raising the chips above it the shadow
+              // paints over them. zIndex must beat input-area's 10.
+              position: 'relative',
+              zIndex: 20,
+            }}>
               <PromptChips
                 suggestions={t.promptSuggestions}
                 onSelect={selectSavedPrompt}
@@ -1153,22 +1157,15 @@ export function ChatFeature(props: UseChatProps) {
         />
       </div>
 
-      {/* Ask User Form — outside scroll, scrolls internally if 2-4 questions overflow */}
-      {pendingQuestion && (
-        <AskUserForm
-          questions={pendingQuestion.questions}
-          onSubmit={(answers) => respondToQuestion({ answers })}
-        />
-      )}
-
-      {/* Status bar — fixed between scroll area and input */}
+      {/* Status bar — fixed between scroll area and input. zIndex above the
+          input-area's shadow so "Waiting for answer 20s" isn't dimmed by it. */}
       {(() => {
         const lastModel = [...history].reverse().find((m: any) => m.role === 'model');
         if (!lastModel) return null;
         const state = runtimeState !== 'idle' ? runtimeState : lastModel.runState;
         if (!state) return null;
         return (
-          <div style={{ flexShrink: 0, background: tokens.colors.background }}>
+          <div style={{ flexShrink: 0, background: tokens.colors.background, position: 'relative', zIndex: 20 }}>
             <StatusBlock
               runState={state}
               startTime={lastModel.startTime}
@@ -1183,12 +1180,29 @@ export function ChatFeature(props: UseChatProps) {
         );
       })()}
 
-      {/* Input Area — Flex-anchored at bottom. Top pad gives chip→composer breathing room (4 + 8 = 12) */}
+      {/* Ask User Form — separate sibling card above the input (design C2).
+          Renders between StatusBlock and PromptInput. */}
+      {pendingQuestion && (
+        <AskUserForm
+          questions={pendingQuestion.questions}
+          onSubmit={(answers) => respondToQuestion({ answers })}
+        />
+      )}
+
+      {/* Input Area — Flex-anchored at bottom. Top pad gives chip→composer
+          breathing room (4 + 8 = 12). NO zIndex here: a stacking context
+          would trap the model popover (zIndex:100) below sibling status/chips
+          which are at zIndex:20. position:relative kept for any descendant
+          that positions absolutely against this wrapper.
+          background MUST stay transparent: the form card above casts a 32px
+          downward shadow that needs to render in this region. An opaque bg
+          here paints over the shadow and creates a visible clip line at the
+          form's bottom edge. The body bg behind (var(--color-background))
+          shows through fine. */}
       <div style={{
         flexShrink: 0,
         padding: `${tokens.space[2]}px ${tokens.space[3]}px ${tokens.space[3]}px`,
-        background: tokens.colors.background,
-        zIndex: 10,
+        background: 'transparent',
         position: 'relative',
       }}>
 
@@ -1198,7 +1212,7 @@ export function ChatFeature(props: UseChatProps) {
           onSubmit={handleGenerate}
           loading={loading}
           disabled={false}
-          placeholder={pendingQuestion ? 'Or type your answer…' : t.placeholder}
+          placeholder={pendingQuestion ? 'Or type a free-form answer…' : t.placeholder}
           canSubmit={canSubmit}
           contextTags={attachments.length > 0 ? (
             <Fragment>

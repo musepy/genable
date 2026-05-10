@@ -1345,7 +1345,7 @@ export class AgentRuntime {
             this.contextManager.addMessage({
               id: this.generateId('nudge'),
               role: 'user',
-              content: 'Do not ask questions in plain text — the user cannot reply inline. Use the ask_user tool to present options. Pick the single most important question and call ask_user with 2-4 options.',
+              content: 'Do not ask questions in plain text — the user cannot reply inline. Use the ask_user tool to present options. Pick the single most important question and call ask_user with 2-3 options (the form auto-adds an "Other..." row).',
             });
             iteration++;
             continue;

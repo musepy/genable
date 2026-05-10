@@ -11,7 +11,7 @@ import type {
 } from '../../shared/protocol/agentRuntimeEvents'
 import { useDevBridge, GenerateOptions } from '../../dev/useDevBridge'
 import { useLocale, useTranslations } from '../../ui/i18n'
-import { useMcpBridge } from '../../dev/useMcpBridge'
+// useMcpBridge is now called at the top-level (PluginContent in ui.tsx) — see comment below.
 
 interface UseChatProps {
   apiKey: string
@@ -29,7 +29,6 @@ interface UseChatProps {
 export interface UserQuestionRequest {
   questions: Array<{
     question: string
-    header?: string
     options: { label: string; description?: string }[]
     multiSelect?: boolean
   }>
@@ -871,7 +870,9 @@ export function useChat({
     { loading, runtimeState, history, modelName, eventBufferRef, pendingQuestion },
   )
 
-  const { mcpBridgeStatus } = useMcpBridge()
+  // Note: useMcpBridge() is called at the top-level (PluginContent in ui.tsx) so
+  // the WS relay connection is shared and Header can render its status badge.
+  // Duplicating it here would create a second WS connection.
 
   return {
     prompt,
@@ -901,7 +902,6 @@ export function useChat({
     onOpenSettings,
     providerName,
     devBridgeStatus,
-    mcpBridgeStatus,
   }
 }
 

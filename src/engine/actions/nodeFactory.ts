@@ -296,6 +296,10 @@ export async function createFrame(
 ): Promise<NodeResult> {
   const frame = figma.createFrame();
   frame.fills = [];
+  // Match the fills default — "no clip specified" truly means no clip.
+  // Figma's true default clips invisibly when a transparent container's child
+  // overflows by 1-2px; ~47% of generated frames are transparent containers.
+  frame.clipsContent = false;
   if (parent && 'appendChild' in parent) parent.appendChild(frame);
   try {
     const { warnings } = await applyProps(frame, stripDenied(props));

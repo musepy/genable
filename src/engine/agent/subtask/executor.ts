@@ -52,6 +52,8 @@ export async function executeSubtask(
     onRuntimeEvent: config.onRuntimeEvent,
     contextWindow: config.contextWindow,
     loopPolicy: config.loopPolicy,
+    sessionNoteStore: config.sessionNoteStore,
+    disableMemoryExtractor: config.disableMemoryExtractor,
   });
 
   // ── Register subtask on child (if tool pool includes it AND depth allows) ──

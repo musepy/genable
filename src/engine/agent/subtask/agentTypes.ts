@@ -137,6 +137,46 @@ Report: list all variables created and bindings made, with target node name#ids.
   maxIterations: 10,
 };
 
+/**
+ * Memory extractor — invoked AUTOMATICALLY by the parent runtime at turn end.
+ * Not exposed in the subtask tool menu (intentionally absent from
+ * getAgentTypeDescriptions()) because the parent LLM shouldn't call it
+ * directly; the runtime spawns it post-turn with a tool-call summary.
+ */
+const memorizeType: AgentTypeDefinition = {
+  name: 'memorize',
+  whenToUse: '(runtime-only) Post-turn retrospective writer.',
+  identity: `You are the retrospective writer for a Figma design agent. The parent agent just finished one turn. You receive a compact summary of the tool calls it made (failures, warnings produced). Your only job is to make sure the BACKWARD-LOOKING session notes are filled with substantive content.
+
+You share the SAME scratchpad as the parent via session_note. The parent may have ALREADY written some retrospective notes during its turn. Don't blindly overwrite — augment if you have more to add, leave alone otherwise.
+
+REQUIRED WORKFLOW:
+  1. FIRST call session_note({action:"list"}) to see what's there.
+  2. For each retrospective slot (failures / gotchas / learnings):
+     a. If the slot is missing AND you have content for it → write it.
+     b. If the slot exists, call session_note({action:"read", key:"<slot>"}) and inspect it.
+        - If the existing note ALREADY covers what you'd say → SKIP (don't write).
+        - If you can ADD a meaningful detail (a failure class name, a generalization, a missed warning) → write a value that includes the existing content PLUS your additions. Do NOT shrink or weaken the existing note.
+     c. If you have no real content for a slot → omit it entirely.
+
+Slot definitions:
+  - failures   — tool calls that returned errors + how the parent recovered.
+                 Name the failure CLASS when you can (e.g. "CSS-prior bleed: model used a CSS form the DSL doesn't accept").
+  - gotchas    — validator warnings the parent saw but did not fix (LOW_CONTRAST, WHITE_ON_WHITE, etc.) + the most likely reason.
+                 Also: hand-tuned coordinates / sizes / colors that diverge from the model's natural picks, and the visible motivation.
+  - learnings  — DSL / Figma API surprises worth carrying forward across sessions.
+
+Style guidelines:
+  - Concise (1-3 sentences per slot, total < 800 chars per slot).
+  - Specific (cite tool name, error string, warning code, node name#id when possible).
+  - "No carry-over" is wrong by construction — you were only spawned because there WAS retrospective signal. If a slot truly has nothing more to add beyond what's already written, just SKIP it.
+  - Don't editorialize ("ran well", "looks great") — record observable facts.
+
+Finish in 1-3 LLM turns. Do not call jsx, edit, or any design tool. Only session_note.`,
+  tools: ['session_note'],
+  maxIterations: 5,
+};
+
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
@@ -145,6 +185,7 @@ const AGENT_TYPES: Record<string, AgentTypeDefinition> = {
   create: createType,
   audit: auditType,
   token: tokenType,
+  memorize: memorizeType,
 };
 
 /** Resolve agent type by name. Falls back to 'create' for unknown/missing types. */
@@ -153,9 +194,12 @@ export function resolveAgentType(typeName?: string): AgentTypeDefinition {
   return AGENT_TYPES[typeName] ?? AGENT_TYPES.create;
 }
 
-/** All registered agent types (for injecting into subtask tool description). */
+/** All registered agent types (for injecting into subtask tool description).
+ *  Hides runtime-only types (like `memorize`) from the parent LLM's tool menu. */
 export function getAgentTypeDescriptions(): string {
+  const RUNTIME_ONLY = new Set(['memorize']);
   return Object.values(AGENT_TYPES)
+    .filter(t => !RUNTIME_ONLY.has(t.name))
     .map(t => `- ${t.name}: ${t.whenToUse}`)
     .join('\n');
 }

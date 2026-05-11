@@ -16,6 +16,7 @@ import type { IpcBridge } from './ipcBridge';
 import type { AgentTypeDefinition } from './subtask/agentTypes';
 import { resolveAgentType, buildChildSystemPrompt } from './subtask/agentTypes';
 import { executeSubtask } from './subtask/executor';
+import type { SessionNoteStore } from './session/SessionNoteStore';
 
 // ---------------------------------------------------------------------------
 // AgentConfig — complete, validated config for any agent (parent or child)
@@ -36,6 +37,11 @@ export interface AgentConfig {
   onToolResult?: (tc: ToolCallBlock, result: any) => void;
   onIterationStart?: (iteration: number) => void;
   onIteration?: (iteration: number, response: LLMResponse) => void;
+  /** Optional shared session-note store — passed through when a child should
+   *  write into the parent's scratchpad (post-turn memory extractor). */
+  sessionNoteStore?: SessionNoteStore;
+  /** Suppress nested memory extraction in this child's own turn end. */
+  disableMemoryExtractor?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +131,8 @@ export function buildChildConfig(
     ipcBridge: parentConfig.ipcBridge,
     onRuntimeEvent: parentConfig.onRuntimeEvent,
     contextWindow: parentConfig.contextWindow,
+    sessionNoteStore: parentConfig.sessionNoteStore,
+    disableMemoryExtractor: parentConfig.disableMemoryExtractor,
   };
 }
 

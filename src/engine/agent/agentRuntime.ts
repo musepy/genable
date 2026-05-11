@@ -28,6 +28,9 @@ import { ContextManager } from './context/contextManager';
 import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
 import { RyowStore, VARIABLE_RELATED_TOOLS } from './ryowStore';
 import { SessionNoteStore, WELL_KNOWN_NOTE_KEYS } from './session/SessionNoteStore';
+import { resolveAgentType } from './subtask/agentTypes';
+import { buildChildConfig, type AgentConfig } from './agentFactory';
+import { executeSubtask } from './subtask/executor';
 
 
 // ---------------------------------------------------------------------------
@@ -69,6 +72,18 @@ export interface AgentRuntimeOptions {
   hooks?: HookRegistration[];
   /** Model's context window in tokens. Used for lazy compression budget. */
   contextWindow?: number;
+  /**
+   * Optional pre-existing session-note store (for child runtimes that should
+   * share the parent's scratchpad — e.g. the post-turn memory extractor).
+   * If omitted, a fresh store is created (default behavior for top-level runs).
+   */
+  sessionNoteStore?: SessionNoteStore;
+  /**
+   * Suppress the runtime's own post-turn memory extractor. Set true for any
+   * child runtime spawned via subtask / memorize so they don't recursively
+   * fork another extractor at the end of their own short turn.
+   */
+  disableMemoryExtractor?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,20 +145,13 @@ export class AgentRuntime {
    * top of run() so the turn-end hook can enforce read-or-write before final
    * text.
    */
-  private readonly sessionNoteStore: SessionNoteStore = new SessionNoteStore({
-    sessionId: `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    onUpdate: (update) => {
-      this.emitRuntimeEvent({
-        type: 'session_note_update',
-        phase: 'execution',
-        iteration: this.currentIteration,
-        sessionId: update.sessionId,
-        key: update.key,
-        value: update.value,
-        ts: update.ts,
-      });
-    },
-  });
+  /**
+   * Session-scoped scratchpad. Either freshly constructed (top-level runs)
+   * or inherited from a parent (child runtimes that should write into the
+   * parent's notes, e.g. the post-turn memory extractor). Assigned in the
+   * constructor body, not inline, because the choice depends on options.
+   */
+  private sessionNoteStore!: SessionNoteStore;
   private designRootId: string | null = null;  // persists across turns for edit-turn links
   /** Monotonically increasing turn counter, paired with turn_start/turn_end events for external tooling. */
   private turnCounter = 0;
@@ -184,6 +192,22 @@ export class AgentRuntime {
     this.behaviorConfig = resolveBehavior(options.behaviorConfig);
     this.loopPolicy = resolveAgentLoopPolicy(options.loopPolicy);
     this.maxIterations = options.maxIterations || this.behaviorConfig.maxIterations;
+    // Session-note store: inherit from parent (memorize child) or create fresh.
+    // Inline init was moved here so we can branch on options.
+    this.sessionNoteStore = options.sessionNoteStore ?? new SessionNoteStore({
+      sessionId: `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      onUpdate: (update) => {
+        this.emitRuntimeEvent({
+          type: 'session_note_update',
+          phase: 'execution',
+          iteration: this.currentIteration,
+          sessionId: update.sessionId,
+          key: update.key,
+          value: update.value,
+          ts: update.ts,
+        });
+      },
+    });
     // Context budget: 70% of context window (leave 30% for model output + safety margin)
     // chars ≈ tokens * 4 (rough estimate)
     const contextWindowTokens = options.contextWindow
@@ -335,6 +359,136 @@ export class AgentRuntime {
 
   public mergeToolExecutors(executors: Record<string, import('./tools/types').ToolExecutor>): void {
     this.toolDispatcher.mergeExecutors(executors);
+  }
+
+  // ─── Post-turn memory extractor ─────────────────────────────
+
+  /**
+   * Build a compact summary of the current turn's tool failures and warnings.
+   * Returns null if there's no retrospective signal worth recording (no errors,
+   * no warnings, no surprises) — caller skips extraction in that case.
+   */
+  private buildRetrospectiveSummary(): string | null {
+    const msgs = this.contextManager.getCurrentTurnMessages();
+    // First pass: index tool_call name by id so we can resolve names from
+    // tool_result blocks (which lack the original tool name).
+    const toolCallNameById = new Map<string, string>();
+    for (const m of msgs) {
+      if (!Array.isArray(m.content)) continue;
+      for (const b of m.content as any[]) {
+        if (b?.type === 'tool_call' && typeof b.id === 'string') {
+          toolCallNameById.set(b.id, b.name ?? '?');
+        }
+      }
+    }
+
+    const lines: string[] = [];
+    let errorCount = 0;
+    let warningCount = 0;
+
+    for (const m of msgs) {
+      if (!Array.isArray(m.content)) continue;
+      for (const b of m.content as any[]) {
+        if (b?.type !== 'tool_result') continue;
+        const data = b.data ?? {};
+        const toolName = toolCallNameById.get(b.id) ?? b.name ?? '?';
+        const errStr =
+          (typeof data?.error === 'string' && data.error)
+          || (b.isError ? 'tool error (no message)' : null);
+        const warnings: any[] = Array.isArray(data?.warnings) ? data.warnings : [];
+
+        if (errStr) {
+          errorCount++;
+          lines.push(`✗ ${toolName} ERROR — ${String(errStr).slice(0, 220)}`);
+        }
+        if (warnings.length > 0) {
+          warningCount += warnings.length;
+          const codes = warnings
+            .slice(0, 6)
+            .map(w => w?.code)
+            .filter(Boolean);
+          const firstMsg = warnings[0]?.message ?? '';
+          lines.push(
+            `⚠ ${toolName} ${warnings.length} warning(s) [${codes.join(', ')}] — first: ${String(firstMsg).slice(0, 140)}`,
+          );
+        }
+      }
+    }
+
+    if (errorCount === 0 && warningCount === 0) return null;
+
+    return [
+      `Parent agent finished one turn. Below is what went notably non-clean (successful calls omitted — focus on errors + warnings):`,
+      '',
+      ...lines,
+      '',
+      `Totals: ${errorCount} error${errorCount === 1 ? '' : 's'}, ${warningCount} warning${warningCount === 1 ? '' : 's'}.`,
+      '',
+      `Write retrospective notes via session_note for slots failures / gotchas / learnings only. Omit a slot if it has no real content (don't write empty placeholders). Aim to finish in 1-2 LLM turns.`,
+    ].join('\n');
+  }
+
+  /**
+   * Spawn a `memorize` child agent that writes backward-looking notes into the
+   * shared session-note store. Best-effort: any error here is swallowed so it
+   * never breaks the user-facing turn.
+   */
+  private async runMemoryExtractor(_iteration: number): Promise<void> {
+    let summary: string | null;
+    try {
+      summary = this.buildRetrospectiveSummary();
+    } catch (e: any) {
+      console.warn('[memoryExtractor] summary build failed:', e?.message);
+      return;
+    }
+    if (!summary) return;
+
+    try {
+      const agentType = resolveAgentType('memorize');
+
+      const parentConfig: AgentConfig = {
+        provider: this.options.provider,
+        tools: this.options.tools,
+        // Use live executors (so the session_note executor closure is the one
+        // currently registered on this runtime's dispatcher, bound to the
+        // shared SessionNoteStore).
+        toolExecutors: this.toolDispatcher.getExecutors(),
+        systemPrompt: this.options.systemPrompt || '',
+        behaviorConfig: this.behaviorConfig,
+        maxIterations: agentType.maxIterations,
+        ipcBridge: this.options.ipcBridge,
+        onRuntimeEvent: this.options.onRuntimeEvent,
+        contextWindow: this.options.contextWindow,
+        loopPolicy: this.options.loopPolicy,
+        // Share parent's scratchpad so child writes land in the parent's notes.
+        sessionNoteStore: this.sessionNoteStore,
+        // Hard-disable nested extraction — without this, the memorize child
+        // would spawn its own memorize grandchild and so on.
+        disableMemoryExtractor: true,
+      };
+
+      const childConfig = buildChildConfig(parentConfig, agentType);
+
+      this.emitRuntimeEvent({
+        type: 'memory_extractor_start',
+        phase: 'execution',
+        iteration: this.currentIteration,
+      } as any);
+
+      await executeSubtask(summary, childConfig, {
+        parentAbortSignal: this.runAbortController?.signal,
+        depth: 1,
+        maxDepth: 3,
+      });
+
+      this.emitRuntimeEvent({
+        type: 'memory_extractor_end',
+        phase: 'execution',
+        iteration: this.currentIteration,
+      } as any);
+    } catch (e: any) {
+      console.warn('[memoryExtractor] execution failed:', e?.message);
+    }
   }
 
   // ─── Runtime-bound tools ────────────────────────────────────
@@ -1465,6 +1619,14 @@ export class AgentRuntime {
           } catch (e: any) {
             console.warn('[AutoBubble] Failed (non-fatal):', e?.message);
           }
+        }
+
+        // Post-turn retrospective: spawn a memory-extractor child to write
+        // the backward-looking slots (failures/gotchas/learnings) the parent
+        // typically skips. Best-effort, awaited synchronously so notes are
+        // visible to the NEXT run() — small latency hit at turn end, no race.
+        if (!this.options.disableMemoryExtractor) {
+          await this.runMemoryExtractor(iteration);
         }
 
         // Turn end: summarize this turn, prepare for next

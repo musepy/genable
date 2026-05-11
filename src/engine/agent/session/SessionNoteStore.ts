@@ -16,10 +16,15 @@
  *     undefined and writes stay in memory.
  *
  * Well-known keys (soft hint — the LLM may use other names too):
+ *   Forward:
  *   - plan       — turn-opening intent: what we're about to do, how many steps
  *   - decisions  — locked choices: style picked, accent token, font scale, etc.
  *   - brand      — durable brand notes (synced from a project design.md if present)
- *   - todo       — carry-over: unfinished work, things to revisit next turn
+ *   - todo       — truly unfinished work for the next turn
+ *   Backward (turn-end retrospective):
+ *   - failures   — tool calls that failed this turn + recovery
+ *   - gotchas    — validator warnings deliberately skipped, magic numbers + rationale
+ *   - learnings  — DSL / Figma API surprises worth carrying forward
  */
 
 export interface SessionNoteUpdate {
@@ -30,7 +35,7 @@ export interface SessionNoteUpdate {
   ts: number;
 }
 
-export const WELL_KNOWN_NOTE_KEYS = ['plan', 'decisions', 'brand', 'todo'] as const;
+export const WELL_KNOWN_NOTE_KEYS = ['plan', 'decisions', 'brand', 'todo', 'failures', 'gotchas', 'learnings'] as const;
 export type WellKnownNoteKey = (typeof WELL_KNOWN_NOTE_KEYS)[number];
 
 export class SessionNoteStore {

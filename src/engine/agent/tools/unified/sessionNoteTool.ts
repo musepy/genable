@@ -18,32 +18,47 @@ import { ToolDefinition } from '../types';
 export const sessionNoteDefinition: ToolDefinition = {
   name: 'session_note',
   executionStrategy: 'sequential', // writes mutate shared state — keep ordered
-  description: `Read / write your own session scratchpad. Persists across turns within one design session ("New Design" resets it). Use to commit decisions and plans BEFORE acting, and update todos AFTER acting.
+  description: `Read / write your own session scratchpad. Persists across turns within one design session ("New Design" resets it). Notes are how state carries from this turn into the next — the next session loads them as context.
 
 Actions:
   action: "read"   → read({key}) returns the current value (empty string if unset)
   action: "write"  → write({key, value}) replaces or deletes (pass value:"" to delete)
   action: "list"   → list({}) returns [{key, chars}] for all existing notes
 
-Recommended keys (soft hint — feel free to add others):
+Slots — FORWARD-LOOKING (what we plan / commit to):
   - plan       — this turn's intent + step outline (write at turn start)
   - decisions  — locked choices: style picked + reason, accent token, font scale, hero treatment, etc. (write BEFORE jsx)
   - brand      — durable brand notes pulled from a project design.md (if user supplied one)
-  - todo       — carry-over: what's unfinished, what to revisit next turn (update at turn end)
+  - todo       — TRULY unfinished work for the next turn (omit if everything shipped)
 
-You may invent additional keys (e.g. \`learnings\`, \`risks\`) when useful.
+Slots — BACKWARD-LOOKING (what happened, write AT TURN END):
+  - failures   — tool calls that failed this turn + how you worked around them.
+                 Example: "jsx items='stretch' rejected (DSL valid: center|start|end|space-between|baseline); retried with 'center'."
+                 If a failure repeats a class you've seen before, name the class.
+  - gotchas    — validator warnings you noticed but chose not to fix + why.
+                 Example: "4 LOW_CONTRAST on nav links (2.5:1) — deliberate for ambient-grey style; revisit if user complains."
+                 Also: magic numbers / hand-tuned positions and what motivated them.
+                 Example: "Glow ellipses at (-180, 220) / (1060, 70) — placed half outside frame to bleed in."
+  - learnings  — surprises about this codebase / DSL / Figma API.
+                 Example: "radial-gradient(circle at X% Y%) rejected — DSL only takes the simple form. Same trap as CSS-prior bleed elsewhere."
 
 REQUIRED behavior:
-  - On the FIRST turn of a new session you MUST write at least \`decisions\` before any jsx.
-  - Before ending ANY turn you MUST read at least one key (catch up on prior notes) AND write at least one (record what changed).
-  - When jsx uses a color / font / size, that value should also appear in \`decisions\` — token traceability beats free-style invention.
+  - First turn: write at least \`decisions\` BEFORE any jsx (commit-before-act).
+  - Every turn end: write at least ONE of \`failures / gotchas / learnings\` if ANY of these happened this turn:
+      • a tool call returned an error
+      • a tool call returned warnings you chose not to fix
+      • you hand-tuned a coordinate / size / color away from a value the model would have picked
+      • you found a DSL behavior that surprised you
+    "All clean, no carry-over" is almost never accurate — at least one backward slot belongs.
+  - jsx that uses a color / font / size should round-trip through \`decisions\` (token traceability).
 
 Examples:
-  session_note({action: "write", key: "plan", value: "Build Quill AI hero only (per user prompt). 1) navbar, 2) hero split: copy left + product mockup right. ~25 tool calls budget."})
   session_note({action: "write", key: "decisions", value: "Style: fintech-dark.\\nAccent: #3B82F6 (style.accent — NOT indigo).\\nFont: Space Grotesk display / Inter body.\\nHero treatment: split (overrides anatomy VERTICAL — desktop convention).\\nH1 size: 32 (style.display)."})
+  session_note({action: "write", key: "failures", value: "jsx #6 align='stretch' rejected (DSL valid: center|start|end|space-between|baseline) — retried with 'center'. Same CSS-prior class as gradient: model has CSS values that DSL doesn't accept."})
+  session_note({action: "write", key: "gotchas", value: "8 LOW_CONTRAST warnings on nav links + secondary CTA (2.5:1 against dark bg). Left as-is — user prompt didn't require WCAG pass; flagging in case next iteration tightens contrast."})
+  session_note({action: "write", key: "learnings", value: "layoutPositioning='absolute' children render correctly inside auto-layout frame, but parent needs clipsContent=true to suppress overflow on big glow ellipses."})
   session_note({action: "read", key: "decisions"})
-  session_note({action: "list"})
-  session_note({action: "write", key: "todo", value: "MockAIBubble lost on first jsx — investigate absolute+hug-parent silent failure."})`,
+  session_note({action: "list"})`,
   parameters: {
     type: 'object',
     properties: {

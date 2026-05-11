@@ -28,14 +28,8 @@ const SPECS: ReaderSpec[] = [
   {
     category: 'style',
     oneLine:
-      'Load a visual style preset — color tokens, typography, shape, depth. Use when picking a named aesthetic from the menu before generating new design.',
+      'Load a visual style preset as INSPIRATION — color tokens, typography, shape, depth. Treat as a reference library, not a cage: pick one wholesale, mix elements, or invent your own. You are not restricted to the menu.',
     example: 'neon-cyber',
-  },
-  {
-    category: 'anatomy',
-    oneLine:
-      'Load a component anatomy reference — structural blueprint of a UI component (parts, slots, hierarchy). Use before building complex components.',
-    example: 'data-table',
   },
   {
     category: 'guideline',
@@ -71,14 +65,12 @@ function makeDef(spec: ReaderSpec): ToolDefinition {
 
 export const skillDefinition: ToolDefinition = makeDef(SPECS[0]);
 export const styleDefinition: ToolDefinition = makeDef(SPECS[1]);
-export const anatomyDefinition: ToolDefinition = makeDef(SPECS[2]);
-export const guidelineDefinition: ToolDefinition = makeDef(SPECS[3]);
-export const helpDefinition: ToolDefinition = makeDef(SPECS[4]);
+export const guidelineDefinition: ToolDefinition = makeDef(SPECS[2]);
+export const helpDefinition: ToolDefinition = makeDef(SPECS[3]);
 
 export const knowledgeReaders: ToolDefinition[] = [
   skillDefinition,
   styleDefinition,
-  anatomyDefinition,
   guidelineDefinition,
   helpDefinition,
 ];

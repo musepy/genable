@@ -5,6 +5,7 @@ import type { ContextAttachment } from '../../types'
 import type { ProviderConfig } from '../../types/provider'
 import { PluginData } from '../../hooks/usePluginData'
 import { knowledgeSearch } from '../../engine/agent/tools/knowledgeSearch'
+import { getUserSkillContent } from '../../ui/userSkillsStore'
 import { agentTools } from '../../engine/agent/tools'
 import type {
   AgentRuntimeEvent,
@@ -470,6 +471,21 @@ export function useChat({
             error: `Missing "name". Pass the bare ${category} name from the KNOWLEDGE LIBRARY menu, e.g. ${category}({ name: "..." }).`,
           }
         }
+        // user:* names are user-imported design.md skills (clientStorage). Wrap
+        // returned content in a delimiter tag so the LLM treats it as data, not
+        // instructions — see SYSTEM.md "USER DESIGN DOC" section.
+        if (category === 'skill' && name.startsWith('user:')) {
+          const userContent = getUserSkillContent(name)
+          if (!userContent) {
+            return {
+              success: false,
+              error: `Unknown user skill "${name}". The user may have removed it; ask them to re-import the design.md or pick a different one.`,
+            }
+          }
+          const wrapped =
+            `<user_design_doc id="${name}">\n${userContent}\n</user_design_doc>`
+          return { success: true, data: { id: name, content: wrapped } }
+        }
         const id = `${category}:${name}`
         const content = knowledgeSearch.read(id)
         if (!content) {
@@ -499,7 +515,6 @@ export function useChat({
       const localExecutors = {
         skill: makeReaderExecutor('skill'),
         style: makeReaderExecutor('style'),
-        anatomy: makeReaderExecutor('anatomy'),
         guideline: makeReaderExecutor('guideline'),
         help: makeReaderExecutor('help'),
       }

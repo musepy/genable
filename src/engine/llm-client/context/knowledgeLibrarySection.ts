@@ -40,7 +40,6 @@ const SECTIONS: SectionConfig[] = [
   { category: 'help',      heading: 'help ({ name }) — process and usage help',    showDescription: true  },
   { category: 'guideline', heading: 'guideline ({ name }) — page-type templates',  showDescription: true  },
   { category: 'style',     heading: 'style ({ name }) — visual presets',           showDescription: false },
-  { category: 'anatomy',   heading: 'anatomy ({ name }) — component blueprints',   showDescription: false },
 ];
 
 function stripPrefix(id: string): string {

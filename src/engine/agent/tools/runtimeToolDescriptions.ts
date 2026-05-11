@@ -109,12 +109,6 @@ export const runtimeToolDescriptions: RuntimeToolDescription[] = [
     repairHint: 'provide "name" — a bare style name from the KNOWLEDGE LIBRARY menu, e.g. style({ name: "neon-cyber" })',
   },
   {
-    tool: 'anatomy',
-    mode: 'EXECUTION',
-    required: [{ name: 'name', trim: true, check: 'required' }],
-    repairHint: 'provide "name" — a bare anatomy name from the KNOWLEDGE LIBRARY menu, e.g. anatomy({ name: "data-table" })',
-  },
-  {
     tool: 'guideline',
     mode: 'EXECUTION',
     required: [{ name: 'name', trim: true, check: 'required' }],

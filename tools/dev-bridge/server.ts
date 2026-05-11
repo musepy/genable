@@ -31,6 +31,7 @@ const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN || '';
 const TRIGGER_FILE = join(BRIDGE_DIR, 'prompt.json');
 const RESULT_DIR = join(BRIDGE_DIR, 'results');
 const SSE_DEBUG_DIR = join(BRIDGE_DIR, 'sse-debug');
+const SESSIONS_DIR = join(BRIDGE_DIR, 'sessions');
 const MAX_RESULTS = 5;
 
 // --- helpers ---
@@ -259,6 +260,32 @@ async function handleTriggerPost(req: IncomingMessage, res: ServerResponse) {
   json(res, 201, { ok: true, id: payload.id });
   console.log(`[trigger] new prompt: "${payload.prompt.slice(0, 80)}..."`);
 
+  // Persist input images for post-mortem visual diff (vision E2E).
+  // Plugin still reads images[] from TRIGGER_FILE; this is a side-channel snapshot.
+  if (Array.isArray(payload.images) && payload.images.length > 0) {
+    try {
+      const safeId = String(payload.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const imagesDir = join(RESULT_DIR, safeId, 'input-images');
+      await mkdir(imagesDir, { recursive: true });
+      let saved = 0;
+      for (let i = 0; i < payload.images.length; i++) {
+        const img = payload.images[i];
+        if (!img || typeof img.data !== 'string' || typeof img.mimeType !== 'string') continue;
+        const extRaw = img.mimeType.split('/')[1] || 'bin';
+        const ext = extRaw.replace(/[^a-z0-9]/gi, '').toLowerCase() || 'bin';
+        const baseName = (typeof img.name === 'string' && img.name ? img.name : `image-${i + 1}`)
+          .replace(/[^a-zA-Z0-9_.\-]/g, '_');
+        const finalName = baseName.toLowerCase().endsWith(`.${ext}`) ? baseName : `${baseName}.${ext}`;
+        await writeFile(join(imagesDir, finalName), Buffer.from(img.data, 'base64'));
+        saved++;
+      }
+      if (saved > 0) console.log(`[trigger] saved ${saved} input image(s) → ${imagesDir}`);
+    } catch (err) {
+      // Non-fatal — trigger still flows
+      console.error('[trigger] failed to persist input images:', err);
+    }
+  }
+
   // Wake up any long-polling plugin connections immediately
   notifyTriggerWaiters(payload);
 }
@@ -338,17 +365,33 @@ async function handleResultPost(req: IncomingMessage, res: ServerResponse) {
   json(res, 201, { ok: true, id, path: resultDir });
   console.log(`[result] saved to ${resultDir}`);
 
-  // Notify SSE stream clients that the run is done
-  sendSSE(rawId, 'done', { triggerId: rawId, durationMs: payload.durationMs, toolCalls: payload.toolCallSummary });
-  // Close all SSE connections for this trigger
-  const clients = streamClients.get(rawId);
-  if (clients) {
-    for (const c of clients) try { c.end(); } catch {}
-    streamClients.delete(rawId);
-  }
+  // Distinguish plugin's RESULT_TIMEOUT_MS placeholder from a real completion.
+  // Placeholder posts have status='timeout' and the agent is still running —
+  // a real result will POST again later and overwrite this file. SSE/long-poll
+  // clients must NOT be released on the placeholder, or they'd miss the real result.
+  const isTimeoutPlaceholder = payload.status === 'timeout';
 
-  // Notify any long-poll waiters
-  notifyWaiters(id, payload);
+  if (isTimeoutPlaceholder) {
+    // Soft signal: clients can show a "still running past 5min" hint but stay subscribed.
+    sendSSE(rawId, 'timeout-placeholder', {
+      triggerId: rawId,
+      durationMs: payload.durationMs,
+    });
+    console.log(`[result]   ↳ placeholder only — keeping SSE/long-poll open for real result`);
+  } else {
+    // Real completion (status 'idle' / 'interrupted' / etc.): release everyone.
+    sendSSE(rawId, 'done', {
+      triggerId: rawId,
+      durationMs: payload.durationMs,
+      toolCalls: payload.toolCallSummary,
+    });
+    const clients = streamClients.get(rawId);
+    if (clients) {
+      for (const c of clients) try { c.end(); } catch {}
+      streamClients.delete(rawId);
+    }
+    notifyWaiters(id, payload);
+  }
 
   // Auto-cleanup disabled — keep all results for post-test analysis
   // await cleanupOldResults();
@@ -642,6 +685,32 @@ const server = createServer(async (req, res) => {
       const id = path.slice('/result/'.length);
       const waitSec = Number(url.searchParams.get('wait')) || 0;
       await handleResultById(id, waitSec, res);
+    } else if (path === '/session-note' && method === 'POST') {
+      // Plugin mirrors session_note writes here so a human can `cat` the notes
+      // file directly. Each key gets one .md file under sessions/<sessionId>/.
+      // Empty value deletes the file.
+      if (!checkAuth(req, res)) return;
+      const body = await readBody(req);
+      const payload = JSON.parse(body.toString('utf-8'));
+      const rawSession = typeof payload.sessionId === 'string' ? payload.sessionId : '';
+      const rawKey = typeof payload.key === 'string' ? payload.key : '';
+      const value = typeof payload.value === 'string' ? payload.value : '';
+      const sessionId = rawSession.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const key = rawKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+      if (!sessionId || !key) {
+        json(res, 400, { error: 'session-note POST requires non-empty {sessionId, key}.' });
+        return;
+      }
+      const sessionDir = join(SESSIONS_DIR, sessionId);
+      await mkdir(sessionDir, { recursive: true });
+      const filePath = join(sessionDir, `${key}.md`);
+      if (value === '') {
+        try { await rm(filePath); } catch {}
+        json(res, 200, { ok: true, deleted: true, path: filePath });
+      } else {
+        await writeFile(filePath, value, 'utf-8');
+        json(res, 200, { ok: true, bytes: value.length, path: filePath });
+      }
     } else if (path === '/sse-log' && method === 'POST') {
       // Debug: provider posts raw SSE chunk batches for post-hoc analysis.
       // Active only when provider has DEBUG_SSE_CHUNKS=true (see dashscope.ts).

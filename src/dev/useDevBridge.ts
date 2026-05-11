@@ -35,7 +35,6 @@ interface DevBridgeCallbacks {
 
 interface DevBridgeQuestion {
   question: string
-  header?: string
   options: { label: string; description?: string }[]
   multiSelect?: boolean
 }
@@ -138,6 +137,7 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
 
   // Stream tool call events to bridge as they complete
   const lastCompletedCountRef = useRef<number>(0)
+  const lastSessionNoteScanRef = useRef<number>(0)
   useEffect(() => {
     if (!triggerIdRef.current) return
     const allToolCalls = state.history.flatMap(m => m.toolCalls || [])
@@ -160,6 +160,30 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
       }).catch(() => {})
     }
     lastCompletedCountRef.current = completed.length
+
+    // Mirror session_note writes to the bridge so a human can `cat` each key
+    // as a .md file under sessions/<sessionId>/. We piggyback on the history
+    // effect (which fires on every meaningful runtime tick) rather than adding
+    // a second effect — keeps the dependency surface minimal.
+    const buffer = state.eventBufferRef.current ?? []
+    for (let i = lastSessionNoteScanRef.current; i < buffer.length; i++) {
+      const ev = buffer[i] as AgentRuntimeEvent
+      if (ev.type !== 'session_note_update') continue
+      // Full value lives in the runtime; the event carries a 240-char preview.
+      // For the file mirror we only have the preview — acceptable for now since
+      // the agent context already holds the full text. Future work: thread full
+      // value through the event when length is small enough.
+      fetchBridge('/session-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: (ev as any).sessionId,
+          key: (ev as any).key,
+          value: (ev as any).value ?? '',
+        }),
+      }).catch(() => {})
+    }
+    lastSessionNoteScanRef.current = buffer.length
   }, [state.history])
 
   // Handle ask_user questions during bridge-initiated runs:

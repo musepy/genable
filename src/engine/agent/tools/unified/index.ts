@@ -23,6 +23,7 @@ import { getScreenshotDefinition } from './screenshotTool';
 import { askUserDefinition } from './askUser';
 import { subtaskDefinition } from './subtask';
 import { findReferencesDefinition } from './findReferencesTool';
+import { sessionNoteDefinition } from './sessionNoteTool';
 import { ToolDefinition } from '../types';
 
 /**
@@ -81,6 +82,8 @@ export const unifiedTools: ToolDefinition[] = [
   askUserDefinition,
   // Delegation
   subtaskDefinition,
+  // Session scratchpad (plan / decisions / brand / todo)
+  sessionNoteDefinition,
 ];
 
 /** All tool names — used for allowedToolNames in dispatcher. */

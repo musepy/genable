@@ -21,6 +21,8 @@ Load this skill ONLY if the prompt asks for a multi-section page or full screen.
 
 If the user named a card/widget but the content list inside is page-sized (hero + 3 sections + footer + CTA), treat as page.
 
+**Reference image attached?** If the user attached one or more screenshots/mockups as design intent, load `skill({name: 'vision-reference'})` BEFORE Phase 1 — that skill handles visual decode + self-diff and treats image-attached prompts as auto-SPECIFIC (skip Phase 2). It runs alongside this skill, not in place of it.
+
 ## Phase 1: Detect specificity (no tool calls — read the prompt)
 
 A prompt is **SPECIFIC** when it contains explicit signals — not when you "infer" from the product type alone. Use this rule:
@@ -35,52 +37,79 @@ A prompt is **SPECIFIC** when it contains explicit signals — not when you "inf
 
 The product type alone (landing / dashboard / login) is **never enough** — those names span too many possible designs.
 
-### SPECIFIC examples — skip Phase 2, go directly to Phase 3
+### SPECIFIC = enough info to proceed without basics — but STILL ask 1 differentiator question
 
-- "Design a SaaS landing page, B2B, with hero + 3 feature cards + pricing CTA, modern minimal" — audience + content + aesthetic ✓
-- "Create a dark-mode admin dashboard, sidebar nav, 4 KPI cards, line chart" — aesthetic + content ✓
-- "Login screen using neon-cyber style with email + password + social auth" — aesthetic + content ✓
+SPECIFIC means you can skip the 2-question audience/aesthetic basics. It does **NOT** mean you know exactly what the user wants — generic words like "minimal" or "modern" still span dozens of distinct directions. **Always ask ONE differentiator question** in Phase 2 to pin down taste (hero treatment, story tone, color temperament, etc. — see Phase 2 differentiator menu).
 
-### VAGUE examples — go to Phase 2
+VAGUE = missing audience or aesthetic entirely → ask the 2-question basics PLUS the differentiator (3 questions in one bundle).
 
-- "做一个 landing page" — only product type
-- "Design a dashboard" — only product type
-- "Create a portfolio in minimal style" — aesthetic only, content shape missing
-- "Build me a pricing page with 3 tiers" — content only, no aesthetic or audience
+### Examples
 
-## Phase 2: ONE multi-question ask_user (vague prompts only)
+| Prompt | Classification | Phase 2 asks |
+|---|---|---|
+| Names a product type only ("做一个 landing page", "Design a dashboard") | VAGUE | basics + differentiator |
+| Aesthetic only, content missing ("portfolio in minimal style") | VAGUE | basics + differentiator |
+| Content only, no aesthetic ("pricing page with 3 tiers") | VAGUE | basics + differentiator |
+| Has audience + aesthetic + content shape | SPECIFIC | differentiator only |
+| Has detailed color palette + section list + viewport size + style references | SPECIFIC-COMPLETE | skip Phase 2 entirely, go to Phase 3 |
 
-Make ONE `ask_user` call with **2 bundled questions** in the `questions` array — audience + aesthetic together. The user fills both at once in a single form. Do NOT split into two turns.
+## Phase 2: ONE bundled `ask_user` (basics + differentiator)
 
-Pick the right question pair for the product type:
+Make ONE `ask_user` call. VAGUE → 3 questions (audience + aesthetic + differentiator). SPECIFIC → 1 question (differentiator only). NEVER split into multiple turns.
 
-| Product type | Q1 (header / question / options) | Q2 (header / question / options) |
-|-------------|---------------------------------|---------------------------------|
-| Landing | Audience: Who is this for? — B2B SaaS / Consumer / Personal portfolio / Product launch | Aesthetic: Visual direction? — Minimal / Bold / Pastel / Surprise me |
-| Dashboard | Data type: What does it show? — Analytics / Admin tables / Monitoring / Personal | Aesthetic: Surface direction? — Light clean / Dark utility / Colorful / Surprise me |
-| Login / Auth | Context: Brand feel? — Consumer (warm) / Enterprise (clean) / Developer (terminal) | Aesthetic: arctic-minimal / corporate-blue-light / neon-cyber / Surprise me |
-| Form | Length: How long? — Short single-page / Multi-step wizard / Intake/application | Aesthetic: notion-zen / arctic-minimal / Bold / Surprise me |
-| Pricing | Tier shape: Display? — 3-tier card / Comparison table / Single-CTA simple | Aesthetic: corporate-blue-light / minimal / bold / Surprise me |
-| Portfolio | Owner: Whose work? — Designer / Developer / Photographer / Writer | Aesthetic: bold-editorial / arctic-minimal / cream-literary / Surprise me |
+### Basics menu (VAGUE only)
 
-### Example call (Landing)
+| Product type | Q1 — Audience | Q2 — Aesthetic |
+|-------------|---------------|---------------|
+| Landing | B2B SaaS / Consumer / Personal portfolio / Product launch | Minimal / Bold / Pastel / Surprise me |
+| Dashboard | Analytics / Admin tables / Monitoring / Personal | Light clean / Dark utility / Colorful / Surprise me |
+| Login / Auth | Consumer (warm) / Enterprise (clean) / Developer (terminal) | arctic-minimal / corporate-blue-light / neon-cyber / Surprise me |
+| Form | Short single-page / Multi-step wizard / Intake/application | notion-zen / arctic-minimal / Bold / Surprise me |
+| Pricing | 3-tier card / Comparison table / Single-CTA simple | corporate-blue-light / minimal / bold / Surprise me |
+| Portfolio | Designer / Developer / Photographer / Writer | bold-editorial / arctic-minimal / cream-literary / Surprise me |
 
+### Differentiator menu (always asked)
+
+This is what separates 5 generic landing pages from 5 distinct ones. Pick ONE differentiator question that fits the product type. Don't reuse the same one across runs — vary it.
+
+| Product type | Differentiator options (pick one question, give 4 distinct options) |
+|---|---|
+| Landing | **Hero treatment**: Big text only / Product screenshot / Abstract illustration / Live demo embed — OR — **Story tone**: Speed (we ship fast) / Trust (proven scale) / Novelty (something new) / Craft (we obsess over details) — OR — **Section depth**: 3-section essential / 5-section standard / 8+ section deep-narrative |
+| Dashboard | **Density**: Spacious overview / Information-dense / Mixed (KPI hero + dense tables) — OR — **Color load**: Mostly grayscale + 1 accent / Multi-color status semantic / Vibrant chart-first |
+| Login | **Brand presence**: Logo only / Logo + tagline / Logo + product hero on left half / Pure form |
+| Form | **Pace**: All visible at once / Sectioned with progress / Conversational one-question-per-screen |
+| Pricing | **Anchor strategy**: Cheapest first / Recommended-tier highlighted / Enterprise-anchored (right) |
+| Portfolio | **Index style**: Grid wall / Single-column case studies / Hero project + secondary grid |
+
+### Example calls
+
+**SPECIFIC** (skip basics, ask differentiator only):
 ```
 ask_user({ questions: [
-  { header: "Audience", question: "Who is this for?", options: [
-      { label: "B2B SaaS" },
-      { label: "Consumer" },
-      { label: "Personal portfolio" },
-      { label: "Product launch" }
-  ]},
-  { header: "Aesthetic", question: "What visual direction?", options: [
-      { label: "Minimal" },
-      { label: "Bold" },
-      { label: "Pastel" },
-      { label: "Surprise me" }
+  { header: "Hero treatment", question: "How should the hero feel?", options: [
+      { label: "Big text only — typography-driven" },
+      { label: "Product screenshot dominant" },
+      { label: "Abstract illustration / gradient" },
+      { label: "Live demo embed" }
   ]}
 ]})
 ```
+
+**VAGUE** (basics + differentiator, 3 questions in one form):
+```
+ask_user({ questions: [
+  { header: "Audience", question: "Who is this for?", options: [...] },
+  { header: "Aesthetic", question: "Visual direction?", options: [...] },
+  { header: "Story tone", question: "What feeling should land first?", options: [
+      { label: "Speed — we ship fast" },
+      { label: "Trust — proven at scale" },
+      { label: "Novelty — something new" },
+      { label: "Craft — obsessive details" }
+  ]}
+]})
+```
+
+**SPECIFIC-COMPLETE** (prompt already includes color palette + sections + style refs): skip Phase 2 entirely, go to Phase 3.
 
 ### Parse the response
 
@@ -98,42 +127,74 @@ The tool returns ONE of two shapes:
 
 ## Phase 3: Build
 
-### Step 1: Pick a style
+### Step 1: Sketch a style — reference the library, OR invent your own
 
-When the user picked from options, use this audience → style mapping:
+The style menu is **inspiration, not a cage**. You're free to:
+- Pick one preset wholesale and use its tokens
+- Mix elements from 1-2 presets (e.g. fintech-dark's surfaces + a custom accent)
+- Invent your own from the user's prompt (no `style({...})` call needed)
 
-| Audience answer | Recommended styles |
-|----------------|-------------------|
-| B2B SaaS / Enterprise / clean / corporate / Internal team | corporate-blue-light, arctic-minimal, swiss-grid |
-| Consumer / B2C / warm / Personal | warm-organic, cream-literary, candy-pastel |
-| Developer tool / terminal / dark | neon-cyber, fintech-dark |
-| Analytics / Admin / Monitoring data | slate-data, arctic-minimal, corporate-blue-light |
-| Designer / Editorial / Photographer | bold-editorial, swiss-grid, cream-literary |
-| Wellness / health / lifestyle | warm-organic, forest-calm, coral-commerce |
-| Finance / fintech / banking | corporate-blue-light, fintech-dark, slate-data |
+`style({ name })` is a quick way to see one approach's color palette + typography + shape system. Read 0, 1, or 2 — whatever serves the design. Do NOT load 3+ "to compare" — that's how outputs collapse to whichever one is least surprising.
 
-Pick exactly ONE style. If the user named a specific style ("neon-cyber"), use it directly without consulting the table.
+### Step 2: Commit decisions to your scratchpad — **REQUIRED before jsx**
 
-Call `style({ name: "<picked>" })` to load full tokens.
+Before generating, write your locked-in choices to the session scratchpad. This makes you commit explicitly (preventing "I read fintech-dark but used Tailwind indigo by reflex") and gives you a record to reference in later turns.
 
-### Step 2: Optional layout reference
+```
+session_note({action: "write", key: "decisions", value: "
+Style: <name or 'custom'>
+Source: <style preset / mix / invented>
+Accent: <hex> — reason
+Surface: bg-page <hex>, bg-card <hex>
+Text: primary <hex>, secondary <hex>
+Type: display <font, size>, body <font, size>
+Hero treatment: <split / vertical / big text / etc>
+Sections: <list — don't reuse the canonical navbar→hero→features→cta sequence by default>
+"})
+```
 
-Only for complex page types and only if the guideline exists in the menu:
+Also write your `plan`:
+```
+session_note({action: "write", key: "plan", value: "
+1. <step>
+2. <step>
+~<N> tool calls budget."})
+```
+
+If you're continuing an earlier turn, first `session_note({action: "read", key: "decisions"})` and `({action: "read", key: "todo"})` to load what's already committed — don't redecide what's already locked.
+
+### Step 3: Layout reference (read for ideas, not for copy-paste)
+
+Read the matching guideline if one exists. **Read it for the section menu and anti-patterns — DO NOT copy any XML skeleton verbatim.** The skeleton is a worst-case fallback when you have no other ideas; reusing it means every output looks identical.
+
 - Landing → `guideline({ name: "landing-page" })`
 - Dashboard → `guideline({ name: "dashboard" })`
 - Form → `guideline({ name: "form" })`
 
-If the menu has no matching guideline, skip — don't waste a call.
+### Step 4: Generate
 
-### Step 3: Generate
+ONE `jsx({ markup })` call. One root frame containing the entire page. NOT phased section-by-section. Use the colors / sizes / fonts you wrote into `decisions` — token traceability beats free-style invention.
 
-ONE `jsx({ markup })` call. One root frame containing the entire page. NOT phased section-by-section.
-
-### Step 4: Verify
+### Step 5: Verify
 
 `get_screenshot({ node: "<root-id>" })` — visual sanity check.
 
-### Step 5: Stop
+### Step 6: Update scratchpad before ending — **REQUIRED**
+
+Before producing your final text reply, update the scratchpad with anything carryable:
+
+```
+session_note({action: "write", key: "todo", value: "
+- <unfinished issue>
+- <something to revisit next turn>
+"})
+```
+
+If the screenshot revealed a clear issue you fixed in-turn, optionally update `decisions` with what changed. If nothing notable, write `todo` with "Hero shipped clean — no carry-over."
+
+The runtime enforces this — if you try to end the turn without touching `session_note` it'll inject a reminder and rerun.
+
+### Step 7: Stop
 
 Don't iterate unless the screenshot reveals a clear issue:
 - Broken layout (overlapping elements, content cut off)
@@ -144,18 +205,20 @@ Polish is the user's NEXT turn, not yours. Don't pre-emptively rebuild because y
 
 ## Anti-patterns
 
-- ❌ **Multiple `ask_user` calls in sequence** — bundle into one `questions` array. Each call is a turn the user waits.
-- ❌ **Counting dimensions** instead of matching signals — Phase 1 uses explicit "aesthetic word + content shape + audience" presence, not fuzzy counting.
-- ❌ **Asking a second time when freeText was vague** — default to sensible and ship. User iterates after seeing the result.
-- ❌ **Loading 3+ knowledge entries before generating** — pick max 2 (1 style + 0 or 1 guideline).
+- ❌ **Multiple `ask_user` calls in sequence** — bundle into one `questions` array.
+- ❌ **Skipping Phase 2 entirely** because prompt is "SPECIFIC" — SPECIFIC still asks a differentiator. Only SPECIFIC-COMPLETE skips Phase 2.
+- ❌ **Loading 3+ styles "to compare"** — read 0, 1, or 2. More than 2 is overhead, not insight.
+- ❌ **Reading a style and then ignoring its tokens** — if you load fintech-dark, your accent should be fintech-dark's accent unless you write a reason in `decisions` for picking another. Don't default to Tailwind indigo `#6366F1` just because the prompt says "AI".
+- ❌ **Skipping `session_note({action:"write", key:"decisions"})` before jsx** — the runtime will catch this and inject a reminder; doing it up front saves the round-trip.
+- ❌ **Copying guideline XML skeleton verbatim** — guideline is for section menu + anti-patterns, not template paste.
 - ❌ **Building incrementally** with multiple `jsx` calls when one self-contained markup works.
-- ❌ **Asking when the prompt is already specific** (per Phase 1 rule) — wastes a turn, signals you didn't read carefully.
-- ❌ **Adding decorative `<group>` containers** around root content — flatten decorations as siblings (jsx group bug, see test #4 fallout).
-- ❌ **Switching styles mid-build** (loaded style A, did jsx, then loaded style B and re-jsx) — picks happen ONCE in Step 1; if Step 4 reveals wrong style, that's a real issue worth fixing, but don't pre-doubt yourself.
+- ❌ **Adding decorative `<group>` containers** around root content — flatten decorations as siblings.
+- ❌ **Switching styles mid-build** — Step 2's commit-to-`decisions` happens BEFORE jsx, not after.
 
 ## Call budget
 
-- Vague path: ~5 calls (skill + ask_user + style + jsx + screenshot)
-- Specific path: ~4 calls (skill + style + jsx + screenshot)
-- +1 if guideline is loaded
-- Hard cap: 8 calls. If you exceed without `jsx` having fired, you're stuck in clarification or over-research — commit and build with what you have.
+- VAGUE path: ~6-8 calls (skill + ask_user + 0-2 style reads + session_note decisions + 1 guideline + jsx + screenshot + session_note todo)
+- SPECIFIC path: ~5-7 calls (skill + ask_user differentiator + 0-2 style reads + session_note decisions + 1 guideline + jsx + screenshot + session_note todo)
+- SPECIFIC-COMPLETE path: ~5 calls (skill + 0-1 style read + session_note decisions + 1 guideline + jsx + screenshot + session_note todo)
+- `session_note` calls are cheap (in-memory) — don't budget-optimize them away.
+- Soft cap: 12 calls before `jsx` fires. If you exceed, you're over-researching — commit and build.

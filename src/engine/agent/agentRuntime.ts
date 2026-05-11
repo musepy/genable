@@ -14,6 +14,7 @@ import { ToolDefinition, ToolExecutor } from './tools';
 import { AgentBehaviorConfig, resolveBehavior } from './agentBehaviorConfig';
 import { AgentLoopPolicy, resolveAgentLoopPolicy, ToolCallMode } from './agentLoopPolicy';
 import { HookRegistry, HookRunner, createBuiltinHooksWithState } from './hooks';
+import { createSessionNoteGuard } from './hooks/sessionNoteGuard';
 import type { HookRegistration, HookContext } from './hooks';
 import { AGENT_RUNTIME_CONSTANTS } from './constants';
 import { AgentRuntimeEvent } from '../../shared/protocol/agentRuntimeEvents';
@@ -26,6 +27,7 @@ import { OutputTooLongError } from '../llm-client/providers/shared/providerError
 import { ContextManager } from './context/contextManager';
 import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
 import { RyowStore, VARIABLE_RELATED_TOOLS } from './ryowStore';
+import { SessionNoteStore, WELL_KNOWN_NOTE_KEYS } from './session/SessionNoteStore';
 
 
 // ---------------------------------------------------------------------------
@@ -121,6 +123,27 @@ export class AgentRuntime {
    * empty store (no parent inheritance) per spec §8 #4.
    */
   private ryowStore: RyowStore = new RyowStore();
+  /**
+   * Session-scoped scratchpad. Created once per AgentRuntime instance; persists
+   * across turns within a session and is cleared on "New Design" (which spawns
+   * a fresh AgentRuntime). Per-turn touched/written tracking is reset at the
+   * top of run() so the turn-end hook can enforce read-or-write before final
+   * text.
+   */
+  private readonly sessionNoteStore: SessionNoteStore = new SessionNoteStore({
+    sessionId: `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    onUpdate: (update) => {
+      this.emitRuntimeEvent({
+        type: 'session_note_update',
+        phase: 'execution',
+        iteration: this.currentIteration,
+        sessionId: update.sessionId,
+        key: update.key,
+        value: update.value,
+        ts: update.ts,
+      });
+    },
+  });
   private designRootId: string | null = null;  // persists across turns for edit-turn links
   /** Monotonically increasing turn counter, paired with turn_start/turn_end events for external tooling. */
   private turnCounter = 0;
@@ -170,6 +193,10 @@ export class AgentRuntime {
       systemPrompt: options.systemPrompt || '',
       contextBudgetChars: Math.floor(contextWindowTokens * 0.7) * 4,
       provider: options.provider,
+      // Inline the agent's own session notes into the system prompt on every
+      // LLM call so the latest plan/decisions/todo are always visible to the
+      // model without us re-injecting messages each iteration.
+      systemAppendix: () => this.sessionNoteStore.renderForContext(),
     });
     this.llmCoordinator = new LLMGenerationCoordinator(
       options.provider,
@@ -194,7 +221,14 @@ export class AgentRuntime {
     } else {
       const { hooks, reset } = createBuiltinHooksWithState();
       this.hookRegistry.registerAll(hooks);
-      this.resetBuiltinState = reset;
+      // Session-note guard needs a closure over the store, so it's wired here
+      // (not inside createBuiltinHooksWithState which is store-agnostic).
+      const sessionGuard = createSessionNoteGuard({ getStore: () => this.sessionNoteStore });
+      this.hookRegistry.registerAll(sessionGuard.hooks);
+      this.resetBuiltinState = () => {
+        reset();
+        sessionGuard.reset();
+      };
     }
     this.hookRunner = new HookRunner(this.hookRegistry, (event) => this.emitRuntimeEvent(event as RuntimeEventPayload));
 
@@ -310,6 +344,42 @@ export class AgentRuntime {
    * subtask is NOT here — it's injected externally via mergeToolExecutors.
    */
   private registerRuntimeTools(): void {
+    if (this.allowedExecutionToolNames.has('session_note')) {
+      const sessionStore = this.sessionNoteStore;
+      this.toolDispatcher.mergeExecutors({
+        session_note: async (args: any) => {
+          const action = String(args?.action || '').toLowerCase();
+          if (action === 'read') {
+            const key = typeof args?.key === 'string' ? args.key.trim() : '';
+            if (!key) return { error: 'session_note read requires "key" string.' };
+            const value = sessionStore.read(key);
+            return { data: { key, value, exists: value.length > 0 } };
+          }
+          if (action === 'write') {
+            const key = typeof args?.key === 'string' ? args.key.trim() : '';
+            if (!key) return { error: 'session_note write requires "key" string.' };
+            const value = typeof args?.value === 'string' ? args.value : '';
+            sessionStore.write(key, value);
+            const wellKnown = (WELL_KNOWN_NOTE_KEYS as readonly string[]).includes(key);
+            return {
+              data: {
+                key,
+                chars: value.length,
+                deleted: value.length === 0,
+                wellKnown,
+                hint: wellKnown
+                  ? undefined
+                  : `Note: "${key}" is not in the recommended set (${WELL_KNOWN_NOTE_KEYS.join('/')}). That's fine if you have a reason — otherwise prefer the standard keys.`,
+              },
+            };
+          }
+          if (action === 'list') {
+            return { data: { entries: sessionStore.list() } };
+          }
+          return { error: 'session_note action must be "read", "write", or "list".' };
+        },
+      });
+    }
     if (this.allowedExecutionToolNames.has('ask_user')) {
       this.toolDispatcher.mergeExecutors({
         ask_user: async (args: any) => {
@@ -966,6 +1036,10 @@ export class AgentRuntime {
     // an empty store anyway because they construct a fresh AgentRuntime, so
     // this only clears the parent's store at the start of each turn.
     this.ryowStore.clear();
+    // Reset per-turn session-note access flags (the store itself persists
+    // across turns — only the "did we touch/write THIS turn?" bookkeeping
+    // resets, so the turn-end hook can enforce read+write per turn).
+    this.sessionNoteStore.resetTurnTracking();
 
     this.emitRuntimeEvent({
       type: 'turn_start',

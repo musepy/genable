@@ -32,6 +32,12 @@ export interface ContextManagerOptions {
   systemPrompt: string;
   contextBudgetChars: number;
   provider: LLMProvider;
+  /**
+   * Optional dynamic appendix appended to the static system prompt at every
+   * `assemblePrompt()`. Used by SessionNoteStore so the agent always sees its
+   * own latest scratchpad. Returns empty string when there is nothing to inject.
+   */
+  systemAppendix?: () => string;
 }
 
 const SUMMARY_MARKER = '__context_summary__';
@@ -59,6 +65,7 @@ export class ContextManager {
   private readonly systemPrompt: string;
   private readonly contextBudgetChars: number;
   private readonly provider: LLMProvider;
+  private readonly systemAppendix?: () => string;
   private messages: LLMMessage[] = [];
   private lastPromptTokens: number = 0;
 
@@ -66,6 +73,20 @@ export class ContextManager {
     this.systemPrompt = opts.systemPrompt;
     this.contextBudgetChars = opts.contextBudgetChars;
     this.provider = opts.provider;
+    this.systemAppendix = opts.systemAppendix;
+  }
+
+  /** System prompt with the dynamic appendix (if any) inlined. */
+  private resolveSystemPrompt(): string {
+    if (!this.systemAppendix) return this.systemPrompt;
+    let appendix = '';
+    try {
+      appendix = this.systemAppendix();
+    } catch (e) {
+      console.warn('[Context] systemAppendix threw:', (e as Error)?.message);
+    }
+    if (!appendix) return this.systemPrompt;
+    return `${this.systemPrompt}\n\n${appendix}`;
   }
 
   // ─── Public API ─────────────────────────────────────────────
@@ -82,7 +103,7 @@ export class ContextManager {
    */
   assemblePrompt(): { system: string; messages: LLMMessage[] } {
     this.compressTurnIfOverBudget();
-    return { system: this.systemPrompt, messages: this.messages.slice() };
+    return { system: this.resolveSystemPrompt(), messages: this.messages.slice() };
   }
 
   /** Whether no user turn has completed yet. */
@@ -156,11 +177,22 @@ export class ContextManager {
   // ─── Diagnostics ────────────────────────────────────────────
 
   getSystemPrompt(): string {
-    return this.systemPrompt;
+    return this.resolveSystemPrompt();
+  }
+
+  /** Appendix length contributed by systemAppendix (0 if absent or empty). */
+  private getAppendixChars(): number {
+    if (!this.systemAppendix) return 0;
+    try {
+      const appendix = this.systemAppendix();
+      return appendix ? appendix.length + 2 : 0; // +2 for the joining "\n\n"
+    } catch {
+      return 0;
+    }
   }
 
   estimateContextChars(): number {
-    let total = this.systemPrompt.length;
+    let total = this.systemPrompt.length + this.getAppendixChars();
     for (const msg of this.messages) total += this.estimateMessageChars(msg);
     return total;
   }
@@ -202,14 +234,19 @@ export class ContextManager {
       msgs.reduce((acc, m) => acc + this.estimateMessageChars(m), 0);
 
     const summaryChars = summaryMsg ? this.estimateMessageChars(summaryMsg) : 0;
+    const appendixChars = this.getAppendixChars();
+    const appendixPreview = appendixChars > 0 && this.systemAppendix ? this.systemAppendix() : '';
+    const sysChars = this.systemPrompt.length + appendixChars;
+    const sysPreview = includeStaticContent
+      ? (appendixPreview ? `${this.systemPrompt}\n\n${appendixPreview}` : this.systemPrompt)
+      : '(see iteration 1)';
 
     return {
       systemPrompt: {
-        chars: this.systemPrompt.length,
-        msgs: this.systemPrompt ? 1 : 0,
-        messages: this.systemPrompt
-          ? [{ id: 'sys_static', role: 'system', chars: this.systemPrompt.length,
-               preview: includeStaticContent ? this.systemPrompt : '(see iteration 1)' }]
+        chars: sysChars,
+        msgs: sysChars ? 1 : 0,
+        messages: sysChars
+          ? [{ id: 'sys_static', role: 'system', chars: sysChars, preview: sysPreview }]
           : [],
       },
       summary: {

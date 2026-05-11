@@ -212,7 +212,6 @@ export interface AgentRuntimeAskUserQuestionEvent extends AgentRuntimeBaseEvent 
   iteration: number;
   questions: Array<{
     question: string;
-    header?: string;
     options: { label: string; description?: string }[];
     multiSelect?: boolean;
   }>;
@@ -536,6 +535,17 @@ export interface AgentRuntimeLLMResponseEvent extends AgentRuntimeBaseEvent {
   errorMessage?: string;
 }
 
+export interface AgentRuntimeSessionNoteUpdateEvent extends AgentRuntimeBaseEvent {
+  type: 'session_note_update';
+  phase: AgentRuntimePhase;
+  iteration: number;
+  sessionId: string;
+  key: string;
+  /** Full note value (empty string = delete). Single string per write — fine to fan out as-is. */
+  value: string;
+  ts: number;
+}
+
 export type AgentRuntimeEvent =
   | AgentRuntimeIterationStartEvent
   | AgentRuntimeToolCallEvent
@@ -565,7 +575,8 @@ export type AgentRuntimeEvent =
   | AgentRuntimeRollbackSignalEvent
   | AgentRuntimeStaleVariableIdEvent
   | AgentRuntimeAmbiguousVariableReferenceEvent
-  | AgentRuntimeVariableNotFoundEvent;
+  | AgentRuntimeVariableNotFoundEvent
+  | AgentRuntimeSessionNoteUpdateEvent;
 
 export type AgentRuntimeEventType =
   | 'iteration_start'
@@ -596,5 +607,6 @@ export type AgentRuntimeEventType =
   | 'rollback_signal'
   | 'stale_variable_id'
   | 'ambiguous_variable_reference'
-  | 'variable_not_found';
+  | 'variable_not_found'
+  | 'session_note_update';
 

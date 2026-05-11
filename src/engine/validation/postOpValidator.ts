@@ -242,16 +242,21 @@ function validateFrameOverflow(frame: FrameNode): ValidationViolation[] {
     let childrenExtent = 0;
     const gap = (frame as any).itemSpacing || 0;
 
-    for (const child of frame.children) {
-      if (!('width' in child)) continue;
+    // Only flow children contribute to auto-layout extent — children with
+    // layoutPositioning='ABSOLUTE' are taken out of the flow by Figma, so
+    // including their size produces phantom CHILDREN_OVERFLOW reports.
+    const flowChildren = frame.children.filter(
+      c => 'width' in c && (c as any).layoutPositioning !== 'ABSOLUTE',
+    );
+    for (const child of flowChildren) {
       if (isHorizontal) {
-        childrenExtent += child.width;
+        childrenExtent += (child as any).width;
       } else {
-        childrenExtent += child.height;
+        childrenExtent += (child as any).height;
       }
     }
-    // Add gaps between children
-    childrenExtent += Math.max(0, frame.children.length - 1) * gap;
+    // Add gaps between flow children
+    childrenExtent += Math.max(0, flowChildren.length - 1) * gap;
 
     // Add padding
     const paddingStart = isHorizontal ? (frame.paddingLeft || 0) : (frame.paddingTop || 0);

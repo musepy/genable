@@ -149,6 +149,16 @@ export async function handleJsx(parameters: any): Promise<ToolResponse> {
         const centered = centerNodeInViewport({ ...vnode.props }, isText);
         if (centered.x !== undefined) vnode.props.x = centered.x;
         if (centered.y !== undefined) vnode.props.y = centered.y;
+      } else if (replaceId && oldNode) {
+        // replaceId is in-place semantics — preserve canvas position of the
+        // node being replaced unless the new markup explicitly overrides.
+        // No-op inside auto-layout parents (Figma recomputes x/y).
+        if (vnode.props.x === undefined && typeof (oldNode as any).x === 'number') {
+          vnode.props.x = (oldNode as any).x;
+        }
+        if (vnode.props.y === undefined && typeof (oldNode as any).y === 'number') {
+          vnode.props.y = (oldNode as any).y;
+        }
       }
 
       const result = await walkTree(vnode, parentNode, ctx);

@@ -28,7 +28,13 @@ Attributes (frame): layout, justify, items, wrap, w, h, minW, maxW, p, gap, bg, 
 Attributes (text): size, weight, lineHeight, font, fill, w (w="fill" for wrap), maxLines, textTruncation
 Effects: shadow="0,8,32,0,#0006" or shadow={shadow(0,8,32,0,'#0006')}; blur={10} for layer blur; bgblur={20} for frosted-glass/glassmorphism background blur. Multiple effects merge automatically.
 Decoration in auto-layout: floating orbs/blobs/decorative shapes inside a row/column parent need layoutPositioning="absolute" so they don't get stacked into the main-axis flow.
-Full-frame backgrounds: set the parent frame's bg directly (supports gradients via bg="linear-gradient(135deg, #A 0%, #B 100%)"). Don't add a separate <rect> backdrop.
+Full-frame backgrounds: set the parent frame's bg directly. Don't add a separate <rect> backdrop. Supported gradient strings (CSS-like subset, not full CSS):
+  - linear-gradient(<angle>deg, <#hex> <pos>%, ...)        e.g. "linear-gradient(135deg, #A 0%, #B 100%)"
+  - linear-gradient(to <direction>, <stops>)               directions: top/right/bottom/left and corners (e.g. "to bottom right")
+  - radial-gradient(<stops>)                               centered, ellipse-fill — no position/shape modifiers
+  - radial-gradient(circle, <stops>)                       centered, circle shape only
+  - conic-gradient(from <angle>deg, <stops>)
+  Unsupported (will be rejected): "circle at X% Y%", "ellipse at ...", "X% Y%" position syntax, named colors (red/blue/...), hsl(), and numeric stops without a percent sign.
 Text: <text size={24}>content here</text>
 Instance: <instance ref="Button" variant="Size=Large"/>
 Self-closing: <line w="fill" stroke="#E5E7EB"/> (use line for dividers/separators; rect/ellipse for SMALL pure decoration with no children — page-level backgrounds belong on the parent frame's bg)

@@ -19,7 +19,10 @@ import { emit, on } from '@create-figma-plugin/utilities'
 import type { ToolCallHandler, ToolResultHandler, SendFileInfoHandler } from '../types'
 
 // Support multiple ports: "3458" (default) or "3458,3459,3460" (multi-client)
-const WS_PORTS = (process.env.MCP_WS_PORTS || '3458')
+// Guarded for browser preview where `process` is undefined.
+const WS_PORTS = (
+  (typeof process !== 'undefined' && process.env && process.env.MCP_WS_PORTS) || '3458'
+)
   .split(',')
   .map(p => parseInt(p.trim(), 10))
   .filter(p => !isNaN(p) && p > 0)

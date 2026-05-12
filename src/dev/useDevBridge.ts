@@ -4,7 +4,7 @@ import { emit, on } from '@create-figma-plugin/utilities'
 import { ChatMessage } from '../types/chat'
 import { AgentRuntimeEvent } from '../shared/protocol/agentRuntimeEvents'
 import { generateLogDigest } from '../features/chat/logDigest'
-import type { DevBridgeExportHandler, DevBridgeExportResultHandler, ContextAttachment } from '../types'
+import type { DevBridgeExportHandler, DevBridgeExportResultHandler, ContextAttachment, SendFileInfoHandler } from '../types'
 
 const BRIDGE_URL = 'http://localhost:3456'
 const HEALTH_INTERVAL_MS = 10_000
@@ -131,6 +131,14 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
   // Non-null only during bridge-initiated runs
   const triggerIdRef = useRef<string | null>(null)
   const triggerStartTimeRef = useRef<number>(0)
+
+  // Plugin's own fileKey / fileName — appended to /trigger long-poll so the
+  // bridge can route a trigger with `targetFileKey` / `targetFileName` only to
+  // the matching plugin instance. fileKey may be a `draft_*` fallback when the
+  // file isn't synced; fileName ("genable_dev") is stable and human-readable.
+  // Empty string until SEND_FILE_INFO arrives (main thread emits on startup).
+  const fileKeyRef = useRef<string>('')
+  const fileNameRef = useRef<string>('')
 
   // Track previous runtimeState for transition detection
   const prevRuntimeStateRef = useRef<RunState>(state.runtimeState)
@@ -452,6 +460,18 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
     }, RESULT_TIMEOUT_MS)
   }
 
+  // Capture this plugin's fileKey + fileName from the main thread so the
+  // long-poll can identify itself to the bridge (enables targetFileKey /
+  // targetFileName routing for triggers).
+  useEffect(() => {
+    const cleanup = on<SendFileInfoHandler>('SEND_FILE_INFO', (data) => {
+      if (data?.fileKey) fileKeyRef.current = data.fileKey
+      if (data?.fileName) fileNameRef.current = data.fileName
+    })
+    emit('REQUEST_FILE_INFO' as any)
+    return cleanup
+  }, [])
+
   // Main lifecycle: health-check → long-poll loop
   useEffect(() => {
     let healthTimer: ReturnType<typeof setInterval> | null = null
@@ -471,8 +491,16 @@ export function useDevBridge(callbacks: DevBridgeCallbacks, state: DevBridgeStat
           continue
         }
 
-        // Long-poll: hangs until server has a trigger or timeout
-        const res = await fetchBridge(`/trigger?wait=${LONG_POLL_WAIT_SEC}`)
+        // Long-poll: hangs until server has a trigger or timeout. Send our
+        // fileKey AND fileName so the bridge can route by either — fileKey may
+        // be a `draft_*` fallback (non-stable across reloads) when the file
+        // isn't synced; fileName is stable and human-friendly.
+        const fk = fileKeyRef.current
+        const fn = fileNameRef.current
+        const qs = `wait=${LONG_POLL_WAIT_SEC}`
+          + (fk ? `&fileKey=${encodeURIComponent(fk)}` : '')
+          + (fn ? `&fileName=${encodeURIComponent(fn)}` : '')
+        const res = await fetchBridge(`/trigger?${qs}`)
         if (disposed) break
 
         if (!res) {

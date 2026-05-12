@@ -100,7 +100,9 @@ let activeTrigger: { id: string; claimedAt: number } | null = null;
 // --- long-poll waiters ---
 
 const resultWaiters = new Map<string, Array<(data: any) => void>>();
-const triggerWaiters: Array<(data: any) => void> = [];
+/** Each trigger waiter returns true if it accepted the trigger (fileKey-matched). */
+type TriggerWaiter = (data: any) => boolean;
+const triggerWaiters: TriggerWaiter[] = [];
 
 function notifyWaiters(id: string, data: any) {
   const waiters = resultWaiters.get(id);
@@ -110,9 +112,20 @@ function notifyWaiters(id: string, data: any) {
   }
 }
 
+/**
+ * Hand the trigger to the first waiter willing to claim it (fileKey match).
+ * Other waiters stay in the queue — either they're for a different fileKey or
+ * a different plugin will arrive. A targeted trigger with no eligible waiter
+ * sits on disk until a matching GET shows up.
+ */
 function notifyTriggerWaiters(data: any) {
-  const waiters = triggerWaiters.splice(0);
-  for (const resolve of waiters) resolve(data);
+  for (let i = 0; i < triggerWaiters.length; i++) {
+    const waiter = triggerWaiters[i];
+    if (waiter(data)) {
+      triggerWaiters.splice(i, 1);
+      return;
+    }
+  }
 }
 
 // --- auto-cleanup ---
@@ -180,7 +193,41 @@ async function handlePluginDisconnect(triggerId: string, claimedAt: number) {
   }
 }
 
-async function handleTriggerGet(waitSec: number, res: ServerResponse) {
+/**
+ * Returns true if this plugin (identified by its fileKey + fileName) is
+ * allowed to claim the trigger. A trigger with no `targetFileKey` and no
+ * `targetFileName` is a broadcast — any plugin may claim it. If either
+ * target field is set on the trigger, the polling plugin must match it on
+ * the same axis (fileKey-to-fileKey or fileName-to-fileName). fileName is
+ * the stable route to use for figma files lacking a real fileKey (drafts
+ * report `figma.fileKey === null`, falling back to per-launch `draft_*`).
+ */
+function triggerMatchesFileKey(
+  trigger: any,
+  requestedFileKey: string,
+  requestedFileName: string,
+): boolean {
+  const targetKey = typeof trigger?.targetFileKey === 'string' ? trigger.targetFileKey.trim() : '';
+  const targetName = typeof trigger?.targetFileName === 'string' ? trigger.targetFileName.trim() : '';
+  if (!targetKey && !targetName) return true; // broadcast — any plugin
+  if (targetKey) {
+    if (!requestedFileKey) return false;
+    if (targetKey !== requestedFileKey) return false;
+  }
+  if (targetName) {
+    if (!requestedFileName) return false;
+    if (targetName !== requestedFileName) return false;
+  }
+  return true;
+}
+
+async function handleTriggerGet(
+  waitSec: number,
+  requestedFileKey: string,
+  requestedFileName: string,
+  res: ServerResponse,
+) {
+  console.log(`[GET /trigger] fileKey="${requestedFileKey}" fileName="${requestedFileName}" wait=${waitSec}s`);
   // Disconnect detection: plugin is polling while a trigger should be executing
   if (activeTrigger) {
     const { id, claimedAt } = activeTrigger;
@@ -197,12 +244,17 @@ async function handleTriggerGet(waitSec: number, res: ServerResponse) {
 
   // Try immediate read first
   try {
-    const data = await readFile(TRIGGER_FILE, 'utf-8');
-    json(res, 200, JSON.parse(data));
-    return;
+    const raw = await readFile(TRIGGER_FILE, 'utf-8');
+    const trigger = JSON.parse(raw);
+    if (triggerMatchesFileKey(trigger, requestedFileKey, requestedFileName)) {
+      json(res, 200, trigger);
+      return;
+    }
+    // Pending trigger exists but isn't for this plugin — fall through to
+    // long-poll/204 so other plugins can claim it.
   } catch { /* no pending trigger */ }
 
-  // No trigger — if wait requested, long-poll until one arrives
+  // No trigger (or trigger targeted at another plugin) — if wait requested, long-poll
   if (waitSec > 0) {
     const timeoutMs = Math.min(waitSec, 60) * 1000; // cap at 60s
     let resolved = false;
@@ -211,30 +263,38 @@ async function handleTriggerGet(waitSec: number, res: ServerResponse) {
       if (resolved) return;
       // Re-check file before giving up (race window)
       try {
-        const data = await readFile(TRIGGER_FILE, 'utf-8');
-        resolved = true;
-        const idx = triggerWaiters.indexOf(resolve);
-        if (idx >= 0) triggerWaiters.splice(idx, 1);
-        json(res, 200, JSON.parse(data));
-        return;
+        const raw = await readFile(TRIGGER_FILE, 'utf-8');
+        const trigger = JSON.parse(raw);
+        if (triggerMatchesFileKey(trigger, requestedFileKey, requestedFileName)) {
+          resolved = true;
+          const idx = triggerWaiters.indexOf(waiter);
+          if (idx >= 0) triggerWaiters.splice(idx, 1);
+          json(res, 200, trigger);
+          return;
+        }
       } catch { /* still nothing */ }
 
       resolved = true;
-      const idx = triggerWaiters.indexOf(resolve);
+      const idx = triggerWaiters.indexOf(waiter);
       if (idx >= 0) triggerWaiters.splice(idx, 1);
       cors(res);
       res.writeHead(204);
       res.end();
     }, timeoutMs);
 
-    function resolve(data: any) {
-      if (resolved) return;
+    // Waiter is gated on fileKey: when notifyTriggerWaiters fires, each
+    // waiter inspects the trigger and either resolves (match) or stays
+    // pending (mismatch — another plugin claims, or we time out).
+    const waiter = (data: any) => {
+      if (resolved) return false;
+      if (!triggerMatchesFileKey(data, requestedFileKey)) return false;
       resolved = true;
       clearTimeout(timeout);
       json(res, 200, data);
-    }
+      return true;
+    };
 
-    triggerWaiters.push(resolve);
+    triggerWaiters.push(waiter);
   } else {
     cors(res);
     res.writeHead(204);
@@ -668,7 +728,9 @@ const server = createServer(async (req, res) => {
       json(res, 200, { status: 'ok', uptime: process.uptime() });
     } else if (path === '/trigger' && method === 'GET') {
       const waitSec = Number(url.searchParams.get('wait')) || 0;
-      await handleTriggerGet(waitSec, res);
+      const fileKey = (url.searchParams.get('fileKey') || '').trim();
+      const fileName = (url.searchParams.get('fileName') || '').trim();
+      await handleTriggerGet(waitSec, fileKey, fileName, res);
     } else if (path === '/trigger' && method === 'POST') {
       if (!checkAuth(req, res)) return;
       await handleTriggerPost(req, res);

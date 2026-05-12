@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.muse40007/genable-mcp",
+  "version": "0.1.1",
+  "description": "Write to Figma from any MCP client (Claude Code, Cursor). Complements the read-only official MCP.",
+  "repository": {
+    "url": "https://github.com/muse40007/figma-ai-generator-dogfood",
+    "source": "github",
+    "subfolder": "tools/mcp-server"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "genable-mcp",
+      "version": "0.1.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

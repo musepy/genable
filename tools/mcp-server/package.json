@@ -1,6 +1,7 @@
 {
   "name": "genable-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "mcpName": "io.github.muse40007/genable-mcp",
   "description": "Write-side MCP server for Figma — build, edit, restructure, and search Figma designs from Claude Code, Cursor, Cline, or any MCP client. Complements Figma's official MCP (which is read-only). 41 tools covering tree creation (JSX), variables/tokens, components, cross-page navigation, and visual verification.",
   "author": "musec <muse40007@gmail.com>",
   "bugs": {

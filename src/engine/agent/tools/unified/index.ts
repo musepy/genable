@@ -24,6 +24,7 @@ import { askUserDefinition } from './askUser';
 import { subtaskDefinition } from './subtask';
 import { findReferencesDefinition } from './findReferencesTool';
 import { sessionNoteDefinition } from './sessionNoteTool';
+import { toolSearchDefinition } from './toolSearchTool';
 import { ToolDefinition } from '../types';
 
 /**
@@ -84,6 +85,8 @@ export const unifiedTools: ToolDefinition[] = [
   subtaskDefinition,
   // Session scratchpad (plan / decisions / brand / todo)
   sessionNoteDefinition,
+  // Menu router — on-demand full description for low-frequency tools
+  toolSearchDefinition,
 ];
 
 /** All tool names — used for allowedToolNames in dispatcher. */

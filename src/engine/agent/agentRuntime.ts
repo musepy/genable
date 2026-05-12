@@ -22,12 +22,13 @@ import { LLMGenerationCoordinator } from './llmGenerationCoordinator';
 import { IdleAbortTimer } from './idleAbortTimer';
 import { ToolDispatcher } from './toolDispatcher';
 import { TOOL_NAMES } from './tools/unified';
+import { createToolSearchExecutor } from './tools/unified/toolSearchTool';
 import { clearOverflows } from './overflowStore';
 import { OutputTooLongError } from '../llm-client/providers/shared/providerErrors';
 import { ContextManager } from './context/contextManager';
 import { renderKnowledgeMenu } from '../llm-client/context/knowledgeLibrarySection';
 import { RyowStore, VARIABLE_RELATED_TOOLS } from './ryowStore';
-import { SessionNoteStore, WELL_KNOWN_NOTE_KEYS } from './session/SessionNoteStore';
+import { SessionNoteStore, WELL_KNOWN_NOTE_KEYS, isBackwardLookingNoteKey } from './session/SessionNoteStore';
 import { resolveAgentType } from './subtask/agentTypes';
 import { buildChildConfig, type AgentConfig } from './agentFactory';
 import { executeSubtask } from './subtask/executor';
@@ -217,10 +218,9 @@ export class AgentRuntime {
       systemPrompt: options.systemPrompt || '',
       contextBudgetChars: Math.floor(contextWindowTokens * 0.7) * 4,
       provider: options.provider,
-      // Inline the agent's own session notes into the system prompt on every
-      // LLM call so the latest plan/decisions/todo are always visible to the
-      // model without us re-injecting messages each iteration.
-      systemAppendix: () => this.sessionNoteStore.renderForContext(),
+      // Session notes are injected as a per-turn user-meta message instead of
+      // appended to the system prompt — keeps the system prompt KV-cache-stable
+      // across turns. See the renderForContext injection in run().
     });
     this.llmCoordinator = new LLMGenerationCoordinator(
       options.provider,
@@ -513,16 +513,39 @@ export class AgentRuntime {
             const key = typeof args?.key === 'string' ? args.key.trim() : '';
             if (!key) return { error: 'session_note write requires "key" string.' };
             const value = typeof args?.value === 'string' ? args.value : '';
-            sessionStore.write(key, value);
+
+            // Backward-looking slots (failures / gotchas / learnings) auto-merge
+            // prior content on write. Prevents silent overwrite when the agent
+            // forgets to read-before-write across turns. To replace fresh,
+            // delete first (value="") then write.
+            let effectiveValue = value;
+            let merged = false;
+            if (value !== '' && isBackwardLookingNoteKey(key)) {
+              const prior = sessionStore.read(key);
+              if (prior) {
+                // Heuristic: if the new value already quotes the prior's first
+                // line, agent has already incorporated it — don't double-merge.
+                const priorFirstLine = prior.split('\n')[0].trim();
+                if (priorFirstLine && !value.includes(priorFirstLine)) {
+                  effectiveValue = `${prior}\n\n---\n${value}`;
+                  merged = true;
+                }
+              }
+            }
+
+            sessionStore.write(key, effectiveValue);
             const wellKnown = (WELL_KNOWN_NOTE_KEYS as readonly string[]).includes(key);
             return {
               data: {
                 key,
-                chars: value.length,
-                deleted: value.length === 0,
+                chars: effectiveValue.length,
+                deleted: effectiveValue.length === 0,
+                merged,
                 wellKnown,
                 hint: wellKnown
-                  ? undefined
+                  ? (merged
+                      ? `Note: "${key}" is a backward-looking slot — prior content was preserved and your new value appended after a "---" divider. To replace fresh, delete first (write value="") then write.`
+                      : undefined)
                   : `Note: "${key}" is not in the recommended set (${WELL_KNOWN_NOTE_KEYS.join('/')}). That's fine if you have a reason — otherwise prefer the standard keys.`,
               },
             };
@@ -571,6 +594,13 @@ export class AgentRuntime {
           if (!hasAnswers && !hasFreeText) return { error: 'Question was canceled by user.' };
           return { data: response };
         },
+      });
+    }
+    if (this.allowedExecutionToolNames.has('tool_search')) {
+      // Snapshot the live tool list this runtime was configured with so
+      // tool_search returns exactly the schemas the LLM was given.
+      this.toolDispatcher.mergeExecutors({
+        tool_search: createToolSearchExecutor(this.options.tools || []),
       });
     }
   }
@@ -1221,6 +1251,21 @@ export class AgentRuntime {
         id: this.generateId('km'),
         role: 'user',
         content: `<system-reminder>\n${menu}\n</system-reminder>`,
+      });
+    }
+
+    // Inject session notes snapshot as a per-turn user-meta message — same
+    // rationale as the knowledge menu: keeps the static system prompt
+    // KV-cache-stable across turns, and puts the notes adjacent to the active
+    // user prompt for high attention recall. Previously rendered as a
+    // systemAppendix on ContextManager, which silently grew the system prompt
+    // by ~0–5K chars per turn and busted the prompt cache on every trigger.
+    const notesSnapshot = this.sessionNoteStore.renderForContext();
+    if (notesSnapshot && notesSnapshot.trim().length > 0) {
+      this.contextManager.addMessage({
+        id: this.generateId('sn'),
+        role: 'user',
+        content: `<system-reminder>\n${notesSnapshot}\n</system-reminder>`,
       });
     }
 

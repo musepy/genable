@@ -15,7 +15,7 @@
 
 import { ToolDefinition } from '../../agent/tools/types';
 import { SYSTEM } from '../../prompt/promptRegistry';
-import { serializeTools } from './toolSerializer';
+import { serializeToolsCategorized } from './toolSerializer';
 import { KNOWLEDGE_LIBRARY_SECTION } from './knowledgeLibrarySection';
 import { LOCALE_FULL_NAMES, type Locale } from '../../../ui/i18n';
 
@@ -95,9 +95,10 @@ Delegate directly — each subtask creates at canvas root:
 - Assembling pieces that subtasks already created — move_node or inspect from here; spawning another subtask to stitch would re-fetch context it already has`
     );
 
-    // 6. Tool definitions
+    // 6. Tool definitions — split into high-frequency (full description)
+    //    and menu (one-line summary). See toolSerializer.serializeToolsCategorized.
     if (tools.length > 0) {
-        parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, create designs, inspect results, and modify properties:\n\n' + serializeTools(tools));
+        parts.push('## AVAILABLE TOOLS\nUse these tools to gather knowledge, create designs, inspect results, and modify properties.\n\n' + serializeToolsCategorized(tools));
     } else {
         parts.push('## AVAILABLE TOOLS\nNo specific tools are available for this session.');
     }

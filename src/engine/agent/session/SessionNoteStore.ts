@@ -38,6 +38,19 @@ export interface SessionNoteUpdate {
 export const WELL_KNOWN_NOTE_KEYS = ['plan', 'decisions', 'brand', 'todo', 'failures', 'gotchas', 'learnings'] as const;
 export type WellKnownNoteKey = (typeof WELL_KNOWN_NOTE_KEYS)[number];
 
+/**
+ * Slots whose semantic is "things to carry forward across turns" — runtime
+ * auto-merges prior content on write so a forgetful agent can't silently
+ * wipe accumulated retrospective notes. To replace, delete first (write
+ * value="") then write fresh.
+ */
+export const BACKWARD_LOOKING_NOTE_KEYS = ['failures', 'gotchas', 'learnings'] as const;
+export type BackwardLookingNoteKey = (typeof BACKWARD_LOOKING_NOTE_KEYS)[number];
+
+export function isBackwardLookingNoteKey(key: string): boolean {
+  return (BACKWARD_LOOKING_NOTE_KEYS as readonly string[]).includes(key);
+}
+
 export class SessionNoteStore {
   private readonly notes = new Map<string, string>();
   private readonly sessionId: string;

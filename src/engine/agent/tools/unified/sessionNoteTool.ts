@@ -31,7 +31,7 @@ Slots — FORWARD-LOOKING (what we plan / commit to):
   - brand      — durable brand notes pulled from a project design.md (if user supplied one)
   - todo       — TRULY unfinished work for the next turn (omit if everything shipped)
 
-Slots — BACKWARD-LOOKING (what happened, write AT TURN END):
+Slots — BACKWARD-LOOKING (what happened, write AT TURN END — AUTO-MERGE on write):
   - failures   — tool calls that failed this turn + how you worked around them.
                  Example: "jsx items='stretch' rejected (DSL valid: center|start|end|space-between|baseline); retried with 'center'."
                  If a failure repeats a class you've seen before, name the class.
@@ -42,8 +42,11 @@ Slots — BACKWARD-LOOKING (what happened, write AT TURN END):
   - learnings  — surprises about this codebase / DSL / Figma API.
                  Example: "radial-gradient(circle at X% Y%) rejected — DSL only takes the simple form. Same trap as CSS-prior bleed elsewhere."
 
+BACKWARD-LOOKING slots auto-merge: writing to \`failures / gotchas / learnings\` appends to prior content after a "---" divider — your new value never silently overwrites accumulated retrospective notes. To replace fresh, first \`write({value: ""})\` to clear, then write again. The result \`data.merged=true\` flag confirms when merge happened.
+
 REQUIRED behavior:
   - First turn: write at least \`decisions\` BEFORE any jsx (commit-before-act).
+  - Subsequent turns: \`read\` \`decisions\` and \`learnings\` BEFORE any jsx — those slots survive across turns and your conversationHistory won't carry the full content reliably. Your turn's adjacent <system-reminder> snapshot also surfaces current notes, but explicit \`read\` proves you considered them.
   - Every turn end: write at least ONE of \`failures / gotchas / learnings\` if ANY of these happened this turn:
       • a tool call returned an error
       • a tool call returned warnings you chose not to fix

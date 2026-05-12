@@ -57,7 +57,7 @@ export interface AgentBehaviorConfig {
 // ============================================================
 
 export const DEFAULT_BEHAVIOR: AgentBehaviorConfig = {
-  thinkingLevel: 'minimal',
+  thinkingLevel: 'high',
   maxIterations: 80,
 };
 

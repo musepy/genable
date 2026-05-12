@@ -343,7 +343,8 @@ export class ToolDispatcher {
    *
    * Real safety nets that ARE in place:
    *   - User cancel (AgentRuntimeCanceledError, immediate)
-   *   - TOTAL_GENERATION_BUDGET_MS (5min, AgentRuntime aborts the LLM stream)
+   *   - LLM_STREAM_IDLE_TIMEOUT_MS (5min idle, AgentRuntime aborts the LLM stream
+   *     when no chunks arrive for that long; legitimately-slow thinking is fine)
    *   - IPC bridge deadlock backstop (ipcBridge.ts internal request timeout)
    */
   private async executeToolWithTimeout(tc: ToolCallBlock): Promise<any> {

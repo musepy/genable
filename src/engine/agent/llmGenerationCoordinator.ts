@@ -50,6 +50,12 @@ export interface LLMGenerationCoordinatorConfig {
   throwIfCanceled: (iteration?: number) => void;
   /** Called when the LLM starts producing output (text or thinking). */
   notifyIterationStart?: () => void;
+  /**
+   * Resets the per-call idle abort timer. Coordinator calls this on every
+   * streamed chunk (text + reasoning) to mark "stream is alive". AgentRuntime
+   * owns timer lifecycle and wires this in for the duration of each call.
+   */
+  kickIdleTimer?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +141,10 @@ export class LLMGenerationCoordinator {
             maxTokens: request.maxOutputTokens,
             abortSignal: abortController.signal,
             onProgress: providerCapabilities.supportsTextStreaming ? (chunk) => {
+              // Kick idle timer on EVERY chunk — independent of UI throttling.
+              // The stream is alive as long as bytes are arriving, even if we
+              // buffer them before emitting a text_delta event.
+              this.config.kickIdleTimer?.();
               this.config.notifyIterationStart?.();
               // Stream text chunks to UI for progressive "grow" effect
               if (chunk) {
@@ -157,6 +167,10 @@ export class LLMGenerationCoordinator {
               }
             } : undefined,
             onThinking: providerCapabilities.supportsReasoningStreaming ? (thought) => {
+              // Kick idle timer on EVERY reasoning chunk, even when the
+              // thought-text equals the last one or the throttle hasn't
+              // elapsed — the stream is still producing bytes.
+              this.config.kickIdleTimer?.();
               if (thought && thought !== this.lastThinkingText) {
                 this.config.notifyIterationStart?.();
                 const now = Date.now();

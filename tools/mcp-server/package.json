@@ -1,7 +1,11 @@
 {
   "name": "genable-mcp",
   "version": "0.1.0",
-  "description": "The write-side complement to Figma's official MCP. Build, edit, and search Figma nodes from any MCP client (Claude Code, Cursor, etc.) via the Genable plugin.",
+  "description": "Write-side MCP server for Figma — build, edit, restructure, and search Figma designs from Claude Code, Cursor, Cline, or any MCP client. Complements Figma's official MCP (which is read-only). 41 tools covering tree creation (JSX), variables/tokens, components, cross-page navigation, and visual verification.",
+  "author": "musec <muse40007@gmail.com>",
+  "bugs": {
+    "url": "https://github.com/muse40007/figma-ai-generator-dogfood/issues"
+  },
   "main": "dist/index.js",
   "bin": {
     "genable-mcp": "dist/index.js"
@@ -20,12 +24,28 @@
   },
   "keywords": [
     "figma",
-    "mcp",
-    "model-context-protocol",
+    "figma-mcp",
     "figma-plugin",
+    "figma-api",
+    "figma-write",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "ai",
+    "ai-agent",
+    "llm",
+    "claude",
     "claude-code",
+    "claude-desktop",
     "cursor",
+    "cline",
+    "design-system",
+    "design-tokens",
+    "design-automation",
+    "ui-generation",
+    "generative-ui",
+    "jsx",
+    "anthropic",
     "genable"
   ],
   "engines": {

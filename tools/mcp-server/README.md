@@ -1,23 +1,51 @@
 # genable-mcp
 
-**The write-side complement to Figma's official MCP.** Build, edit, and search Figma nodes from any MCP client (Claude Code, Cursor, etc.) via the Genable plugin.
+[![npm version](https://img.shields.io/npm/v/genable-mcp.svg)](https://www.npmjs.com/package/genable-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/genable-mcp.svg)](https://www.npmjs.com/package/genable-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP](https://img.shields.io/badge/MCP-server-blue)](https://modelcontextprotocol.io)
+
+**The write-side MCP server for Figma.** Build, edit, restructure, and search Figma designs from Claude Code, Cursor, Cline, or any MCP-compatible client.
+
+> Figma's official MCP is read-only — perfect for code generation. `genable-mcp` is the complement: **41 write-side tools** so an LLM can actually build and edit your designs.
 
 ## What this is
 
 Figma's official MCP is excellent for **reading** designs (`get_design_context`, code generation). But it's mostly read-only — there's no first-class way to write to the canvas, navigate across pages, or run plugin-API code from your MCP client.
 
-`genable-mcp` fills that gap. It exposes 39 tools focused on the **write** side:
+`genable-mcp` fills that gap. It exposes **41 tools** focused on the **write** side:
 
-- **Tree creation** — build complete subtrees with JSX-like markup (`jsx`)
+- **Tree creation** — build complete subtrees with JSX-like markup (`jsx`), vector primitives (`create_vector`)
 - **Property edits** — text, fills, strokes, layout, all auto-layout aware (`set_text`, `set_fill`, `set_layout`, `set_stroke`, `edit`)
 - **Variables / tokens** — collections, modes, bindings (`create_variable`, `bind_variable`, `set_variable_mode`, etc.)
 - **Components** — create, combine, expose props, instance (`create_component`, `add_component_prop`, `create_instance`)
 - **Cross-page navigation** — `switch_page` (officially the painful gap)
-- **Search & inspect** — `find_nodes`, `inspect`, `describe`, `find_references`
-- **Visual verification** — `get_screenshot`
-- **Escape hatch** — `js` for raw plugin API access (with sandbox-limit docs in the tool description)
+- **Search & inspect** — `find_nodes`, `inspect`, `describe`, `find_references`, `discover_props`
+- **Visual verification** — `get_screenshot` returns PNG as MCP image content for vision-capable models
+- **Curated knowledge** — design `skill` / `style` / `guideline` readers built into the plugin
+- **Agent ergonomics** — `session_note` scratchpad, `subtask` delegation, `ask_user` interactive pause
 
 We **recommend pairing** with Figma's official MCP. They cover read-for-codegen; we cover write-and-edit. The two MCPs together give an LLM full read+write access to a Figma file.
+
+## FAQ
+
+**Is this an alternative to Figma's official MCP?**
+No — it's a complement. Use both. Official MCP for "read this design → give me code". `genable-mcp` for "build / edit / restructure this design".
+
+**What MCP clients does it work with?**
+Any client that supports STDIO MCP servers: Claude Code, Claude Desktop, Cursor, Cline, Continue, Zed, and others.
+
+**Does it need a Figma plugin?**
+Yes. The plugin runs inside Figma desktop and is the only way to actually call `figma.*` API. `genable-mcp` is the bridge between your MCP client (outside Figma) and the plugin (inside Figma).
+
+**How is this different from "Figma to code" plugins?**
+Those plugins are one-shot exporters (Figma → React/Vue/HTML). `genable-mcp` is bidirectional and interactive — your AI agent can read, edit, verify visually, and iterate inside Figma.
+
+**Can it build a full design from a prompt?**
+Yes. The `jsx` tool accepts JSX-like markup and creates an entire subtree atomically. Pair with `bind_variable` for token-driven designs.
+
+**Is it free?**
+Yes. MIT license. The MCP server is free; the Genable plugin in Figma Community is free.
 
 ## How it works
 
@@ -97,6 +125,7 @@ Each tool's full description (parameters, examples, sandbox limits) is exposed v
 
 ### Tree creation
 - `jsx` — Build a complete subtree with JSX-like markup. Single-call atomicity.
+- `create_vector` — Create vector primitives from SVG path data.
 
 ### Read
 - `inspect` — Read a node with selectable property facets (layout, paint, typography, etc.).
@@ -126,7 +155,7 @@ Each tool's full description (parameters, examples, sandbox limits) is exposed v
 - `bind_variable` — Bind a variable to a node property.
 
 ### Knowledge readers
-- `skill`, `style`, `anatomy`, `guideline`, `help` — Curated design knowledge baked into the plugin.
+- `skill`, `style`, `guideline`, `help` — Curated design knowledge baked into the plugin.
 
 ### Page navigation
 - `switch_page` — Switch active page by ID or name. Returns the full page roster.
@@ -137,9 +166,10 @@ Each tool's full description (parameters, examples, sandbox limits) is exposed v
 ### Interaction
 - `ask_user` — Pause and ask the user a question (interactive client only).
 - `subtask` — Delegate a sub-prompt to a focused agent.
+- `session_note` — Scratchpad for the agent to record findings across a session.
 
-### Escape hatch
-- `js` — `[advanced]` Run JS in the plugin runtime. Full `figma.*` API access. Sandbox limits documented in the tool description (cross-page loading, frozen arrays, font requirements, etc.).
+### Plugin data
+- `read_plugin_data`, `write_plugin_data` — Persist key/value metadata on nodes via Figma's plugin-data API.
 
 ## Limitations
 

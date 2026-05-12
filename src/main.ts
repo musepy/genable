@@ -156,18 +156,18 @@ export default async function () {
   // ==========================================
   // Dogfooding: Figma to Code Serialization
   // ==========================================
-  on<SerializeSelectionHandler>('SERIALIZE_SELECTION', function () {
+  on<SerializeSelectionHandler>('SERIALIZE_SELECTION', async function () {
     try {
       const selection = figma.currentPage.selection;
       if (selection.length === 0) {
         emit<SendLogHandler>('SEND_LOG', { message: 'No selection to serialize', type: 'warn' });
         return;
       }
-      
+
       console.log('[Dogfood] Serializing selection...');
-      const serializedNodes = selection.map(node => NodeSerializer.serialize(node));
+      const serializedNodes = await Promise.all(selection.map(node => NodeSerializer.serialize(node)));
       const jsonString = JSON.stringify(serializedNodes, null, 2);
-      
+
       emit<import('./types').SendSerializedSelectionHandler>('SEND_SERIALIZED_SELECTION', { jsonString });
       emit<SendLogHandler>('SEND_LOG', { message: 'Selection serialized to DSL', type: 'success' });
     } catch (e: any) {

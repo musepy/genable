@@ -37,6 +37,10 @@ export interface PropertyDef {
   bindable?: 'FLOAT' | 'BOOLEAN' | 'STRING' | 'COLOR';
   /** Override for LLM-facing facet bucket. When omitted, consumers derive from role. Currently only boundVariables/explicitVariableModes → "variables". */
   facet?: string;
+  /** Async getter method name for properties that throw under documentAccess: dynamic-page
+   *  (e.g. 'getMainComponentAsync'). When set, readers MUST `await node[asyncGetter]()`
+   *  instead of the sync property — sync access raises a runtime error in that mode. */
+  asyncGetter?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -683,7 +687,7 @@ export const PROPERTY_REGISTRY: Record<string, PropertyDef[]> = {
   ],
   COMPONENT: [
     { key: 'type', valueType: 'object', readonly: true, role: 'structural', writable: false },
-    { key: 'instances', valueType: 'array', readonly: true, role: 'component', writable: false },
+    { key: 'instances', valueType: 'array', readonly: true, role: 'component', writable: false, asyncGetter: 'getInstancesAsync' },
     { key: 'detachedInfo', valueType: 'object', readonly: true, role: 'computed', writable: false },
     { key: 'layoutGrids', valueType: 'array', readonly: false, role: 'devresource', writable: true },
     { key: 'gridStyleId', valueType: 'string', readonly: false, role: 'style', writable: true },
@@ -925,7 +929,7 @@ export const PROPERTY_REGISTRY: Record<string, PropertyDef[]> = {
   ],
   INSTANCE: [
     { key: 'type', valueType: 'object', readonly: true, role: 'structural', writable: false },
-    { key: 'mainComponent', valueType: 'object', readonly: false, role: 'component', writable: true },
+    { key: 'mainComponent', valueType: 'object', readonly: false, role: 'component', writable: true, asyncGetter: 'getMainComponentAsync' },
     { key: 'componentProperties', valueType: 'object', readonly: true, role: 'component', writable: false },
     { key: 'scaleFactor', valueType: 'number', readonly: false, role: 'component', writable: true },
     { key: 'exposedInstances', valueType: 'array', readonly: true, role: 'component', writable: false },

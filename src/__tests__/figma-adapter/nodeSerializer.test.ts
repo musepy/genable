@@ -5,7 +5,7 @@ import { formatPaintForLLM } from '../../domain/property-specs';
 
 describe('NodeSerializer - Compression', () => {
 
-  it('should prune properties that match default values', () => {
+  it('should prune properties that match default values', async () => {
     const mockNode = {
       type: 'FRAME',
       name: 'Test Frame',
@@ -18,7 +18,7 @@ describe('NodeSerializer - Compression', () => {
       get: (key: string) => (mockNode as any)[key]
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(mockNode, { pruneDefaults: true });
+    const serialized = await NodeSerializer.serializeWithCompression(mockNode, { pruneDefaults: true });
 
     // Constants should be present
     expect(serialized.type).toBe(NODE_TYPES.FRAME);
@@ -30,7 +30,7 @@ describe('NodeSerializer - Compression', () => {
     expect(serialized.props.layoutMode).toBeUndefined();
   });
 
-  it('should preserve properties that differ from default values', () => {
+  it('should preserve properties that differ from default values', async () => {
     const mockNode = {
       type: 'FRAME',
       name: 'Modified Frame',
@@ -41,7 +41,7 @@ describe('NodeSerializer - Compression', () => {
       children: [],
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(mockNode, { pruneDefaults: true });
+    const serialized = await NodeSerializer.serializeWithCompression(mockNode, { pruneDefaults: true });
 
     expect(serialized.props.visible).toBe(false);
     expect(serialized.props.opacity).toBe(0.5);
@@ -49,13 +49,13 @@ describe('NodeSerializer - Compression', () => {
     expect(serialized.props.constraints).toEqual({ horizontal: 'MAX', vertical: 'MIN' });
   });
 
-  it('should respect maxDepth limit', () => {
+  it('should respect maxDepth limit', async () => {
     const subChild = { type: 'TEXT', name: 'SubChild', visible: true, characters: 'Hello', children: [] };
     const child = { type: 'FRAME', name: 'Child', visible: true, children: [subChild] };
     const root = { type: 'FRAME', name: 'Root', visible: true, children: [child] };
 
     // depth 0: Root, depth 1: Child, depth 2: SubChild
-    const serialized = NodeSerializer.serializeWithCompression(root, { maxDepth: 1 });
+    const serialized = await NodeSerializer.serializeWithCompression(root, { maxDepth: 1 });
 
     expect(serialized.name).toBeUndefined(); // NodeLayer doesn't have name at root, it's in props
     expect(serialized.props.name).toBe('Root');
@@ -65,7 +65,7 @@ describe('NodeSerializer - Compression', () => {
     expect(serialized.children?.[0].children).toBeUndefined();
   });
 
-  it('should prune empty arrays', () => {
+  it('should prune empty arrays', async () => {
     const mockNode = {
       type: 'FRAME',
       name: 'Test',
@@ -73,7 +73,7 @@ describe('NodeSerializer - Compression', () => {
       children: []
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(mockNode, { pruneDefaults: true });
+    const serialized = await NodeSerializer.serializeWithCompression(mockNode, { pruneDefaults: true });
     expect(serialized.props.fills).toBeUndefined();
   });
 });
@@ -84,7 +84,7 @@ describe('NodeSerializer - Compression', () => {
 
 describe('NodeSerializer - Facets', () => {
 
-  it('default (no facets) on a FRAME+TEXT tree matches legacy visual-role output', () => {
+  it('default (no facets) on a FRAME+TEXT tree matches legacy visual-role output', async () => {
     const textChild = {
       id: '2:1', type: 'TEXT', name: 'Label', visible: true,
       characters: 'Hello', fontSize: 14, fontName: { family: 'Inter', style: 'Regular' },
@@ -101,7 +101,7 @@ describe('NodeSerializer - Facets', () => {
       children: [textChild],
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(root, { pruneDefaults: true });
+    const serialized = await NodeSerializer.serializeWithCompression(root, { pruneDefaults: true });
 
     // No facets → boundVariables + explicitVariableModes NOT surfaced (legacy behaviour).
     expect((serialized.props as any).boundVariables).toBeUndefined();
@@ -114,7 +114,7 @@ describe('NodeSerializer - Facets', () => {
     expect(serialized.children?.[0].props.name).toBe('Label');
   });
 
-  it("facets:['variables'] surfaces node.boundVariables with VARIABLE_ALIAS intact", () => {
+  it("facets:['variables'] surfaces node.boundVariables with VARIABLE_ALIAS intact", async () => {
     const node = {
       id: '1:1', type: 'FRAME', name: 'Token-bound',
       paddingLeft: 16,
@@ -122,7 +122,7 @@ describe('NodeSerializer - Facets', () => {
       children: [],
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(node, {
+    const serialized = await NodeSerializer.serializeWithCompression(node, {
       pruneDefaults: true,
       facets: new Set(['variables']),
     });
@@ -132,14 +132,14 @@ describe('NodeSerializer - Facets', () => {
     });
   });
 
-  it("facets:['variables'] surfaces node.explicitVariableModes", () => {
+  it("facets:['variables'] surfaces node.explicitVariableModes", async () => {
     const node = {
       id: '1:1', type: 'FRAME', name: 'Modes',
       explicitVariableModes: { 'VariableCollectionId:1:1': '1:0' },
       children: [],
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(node, {
+    const serialized = await NodeSerializer.serializeWithCompression(node, {
       pruneDefaults: true,
       facets: new Set(['variables']),
     });
@@ -149,7 +149,7 @@ describe('NodeSerializer - Facets', () => {
     });
   });
 
-  it("facets:['variables'] does NOT emit non-variable props like fills or layout", () => {
+  it("facets:['variables'] does NOT emit non-variable props like fills or layout", async () => {
     const node = {
       id: '1:1', type: 'FRAME', name: 'Mixed',
       layoutMode: 'VERTICAL',
@@ -159,7 +159,7 @@ describe('NodeSerializer - Facets', () => {
       children: [],
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(node, {
+    const serialized = await NodeSerializer.serializeWithCompression(node, {
       pruneDefaults: true,
       facets: new Set(['variables']),
     });
@@ -170,7 +170,7 @@ describe('NodeSerializer - Facets', () => {
     expect((serialized.props as any).gap).toBeUndefined();
   });
 
-  it("facets:['paint'] preserves Paint.boundVariables.color via formatPaintForLLM", () => {
+  it("facets:['paint'] preserves Paint.boundVariables.color via formatPaintForLLM", async () => {
     // Direct test of the formatter — the stripper lived here pre-Phase-3.
     const paintWithBinding = {
       type: 'SOLID',
@@ -191,7 +191,7 @@ describe('NodeSerializer - Facets', () => {
       fills: [paintWithBinding],
       children: [],
     } as any;
-    const serialized = NodeSerializer.serializeWithCompression(node, {
+    const serialized = await NodeSerializer.serializeWithCompression(node, {
       pruneDefaults: true,
       facets: new Set(['paint']),
     });
@@ -200,7 +200,7 @@ describe('NodeSerializer - Facets', () => {
     expect(fills[0].boundVariables?.color).toEqual({ type: 'VARIABLE_ALIAS', id: 'VariableID:1:5' });
   });
 
-  it("facets:['all'] returns layout props AND boundVariables together", () => {
+  it("facets:['all'] returns layout props AND boundVariables together", async () => {
     const node = {
       id: '1:1', type: 'FRAME', name: 'Both',
       layoutMode: 'HORIZONTAL',
@@ -211,7 +211,7 @@ describe('NodeSerializer - Facets', () => {
       children: [],
     } as any;
 
-    const serialized = NodeSerializer.serializeWithCompression(node, {
+    const serialized = await NodeSerializer.serializeWithCompression(node, {
       pruneDefaults: true,
       facets: new Set(['all']),
     });

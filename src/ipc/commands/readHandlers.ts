@@ -90,7 +90,7 @@ export async function handleTree(parameters: any): Promise<ToolResponse> {
   }
 
   const treeNode = resolved.node;
-  const treeSerialized = NodeSerializer.serializeWithCompression(treeNode, {
+  const treeSerialized = await NodeSerializer.serializeWithCompression(treeNode, {
     maxDepth: treeDepth,
     pruneDefaults: true,
   });

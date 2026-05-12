@@ -56,8 +56,11 @@ export class NodeSerializer {
     /**
      * Convert a Figma node and its visible children into a NodeLayer tree.
      * Default version (no compression) for full pipeline use.
+     *
+     * Async because `extractFigmaNodeData` may need to call async Figma getters
+     * (e.g. `getMainComponentAsync`) under `documentAccess: dynamic-page` mode.
      */
-    static serialize(node: SceneNode): NodeLayer {
+    static async serialize(node: SceneNode): Promise<NodeLayer> {
         return this.serializeWithCompression(node, { pruneDefaults: false });
     }
 
@@ -70,12 +73,12 @@ export class NodeSerializer {
      * - maxTotalNodes: global node count limit (default: Infinity)
      * - facets: optional facet filter — see SerializationOptions.facets
      */
-    static serializeWithCompression(
+    static async serializeWithCompression(
         node: SceneNode,
         options: SerializationOptions = {},
         currentDepth: number = 0,
         state?: SerializationState
-    ): NodeLayer {
+    ): Promise<NodeLayer> {
         const { maxDepth = Infinity, pruneDefaults = true, maxChildrenPerLevel = Infinity, maxTotalNodes = Infinity, facets } = options;
 
         // Initialize shared state on first call
@@ -100,7 +103,7 @@ export class NodeSerializer {
         const props: Record<string, any> = {};
         const facetKeyList = facets ? this.buildFacetExtractionKeys(node.type, facets) : undefined;
         const allowedKeys = facetKeyList ? new Set(facetKeyList) : undefined;
-        const nodeData = extractFigmaNodeData(node, facetKeyList);
+        const nodeData = await extractFigmaNodeData(node, facetKeyList);
 
         for (const [figmaKey, rawValue] of Object.entries(nodeData)) {
             if (allowedKeys && !IDENTITY_KEYS.has(figmaKey) && !allowedKeys.has(figmaKey)) continue;
@@ -191,12 +194,15 @@ export class NodeSerializer {
                     const fullChildren = visibleChildren.slice(0, maxChildrenPerLevel);
                     const skeletonChildren = visibleChildren.slice(maxChildrenPerLevel);
 
-                    layer.children = fullChildren.map(child =>
-                        // Stop recursing if global budget exhausted
-                        state!.nodeCount >= state!.maxTotalNodes
+                    // Sequential await — recursive calls share state.nodeCount and
+                    // must observe each other's increments in order.
+                    layer.children = [];
+                    for (const child of fullChildren) {
+                        const childLayer = state!.nodeCount >= state!.maxTotalNodes
                             ? this.createSkeleton(child)
-                            : this.serializeWithCompression(child, options, currentDepth + 1, state)
-                    );
+                            : await this.serializeWithCompression(child, options, currentDepth + 1, state);
+                        layer.children.push(childLayer);
+                    }
 
                     // Append skeletons for excess children
                     if (skeletonChildren.length > 0) {

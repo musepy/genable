@@ -88,12 +88,12 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
 
   if (facets) {
     tracer.enter('readHandler()', 'readHandlers.ts');
-    result = buildDetailResult(resolved, depth, facets);
+    result = await buildDetailResult(resolved, depth, facets);
     tracer.exit();
   } else {
     // no facets → today's skeleton path (byte-identical)
     tracer.enter('readHandler()', 'readHandlers.ts');
-    result = buildTreeResult(resolved, depth);
+    result = await buildTreeResult(resolved, depth);
     tracer.exit();
   }
 
@@ -103,19 +103,20 @@ export async function handleInspect(parameters: any): Promise<ToolResponse> {
 
 // ── Tree (skeleton) — default when no facets are requested ──
 
-function buildTreeResult(
+async function buildTreeResult(
   resolved: Extract<Awaited<ReturnType<typeof resolvePathToNode>>, { ok: true }>,
   depth: number,
-): ToolResponse {
+): Promise<ToolResponse> {
   if (resolved.isPage) {
     const page = resolved.page;
-    const children = page.children.map((child: SceneNode) => {
-      const serialized = NodeSerializer.serializeWithCompression(child, {
+    // Each top-level child gets its own SerializationState — independent, so Promise.all is safe.
+    const children = await Promise.all(page.children.map(async (child: SceneNode) => {
+      const serialized = await NodeSerializer.serializeWithCompression(child, {
         maxDepth: depth,
         pruneDefaults: true,
       });
       return JsonNodeSerializer.serialize(serialized, { maxDepth: depth, skeleton: true });
-    });
+    }));
 
     return {
       data: {
@@ -127,7 +128,7 @@ function buildTreeResult(
   }
 
   const node = resolved.node;
-  const serialized = NodeSerializer.serializeWithCompression(node, {
+  const serialized = await NodeSerializer.serializeWithCompression(node, {
     maxDepth: depth,
     pruneDefaults: true,
   });
@@ -138,11 +139,11 @@ function buildTreeResult(
 
 // ── Detail — facet-filtered full properties ──
 
-function buildDetailResult(
+async function buildDetailResult(
   resolved: Extract<Awaited<ReturnType<typeof resolvePathToNode>>, { ok: true }>,
   depth: number,
   facets: Set<string>,
-): ToolResponse {
+): Promise<ToolResponse> {
   if (resolved.isPage) {
     const page = resolved.page;
     const topLevel = page.children.map((n: SceneNode) => {
@@ -159,7 +160,7 @@ function buildDetailResult(
   }
 
   const node = resolved.node;
-  const serialized = NodeSerializer.serializeWithCompression(node, {
+  const serialized = await NodeSerializer.serializeWithCompression(node, {
     maxDepth: depth,
     pruneDefaults: true,
     facets,

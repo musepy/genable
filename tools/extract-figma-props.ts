@@ -124,6 +124,18 @@ const FACET_OVERRIDE: Record<string, string> = {
 //   stays honest about what `writable` means (= can be targeted by a generic setter).
 const FORCE_NOT_WRITABLE = new Set(['width', 'height', 'boundVariables', 'explicitVariableModes']);
 
+// Properties whose sync getter throws under Figma's `documentAccess: dynamic-page` mode —
+// readers MUST go through the async variant (e.g. node.getMainComponentAsync()).
+// The map value is the async method name used for extraction.
+//
+// Found via runtime errors like `in get_mainComponent: Cannot call with documentAccess:
+// dynamic-page. Use node.getMainComponentAsync instead.` Add new entries here when a
+// similar error appears for a different property.
+const ASYNC_PROPS: Record<string, string> = {
+  mainComponent: 'getMainComponentAsync',
+  instances: 'getInstancesAsync',
+};
+
 const ROLE_MAP: Record<string, Role> = {
   // ── Structural ──
   id: 'structural', type: 'structural', name: 'structural',
@@ -243,6 +255,9 @@ interface ExtractedProp {
   writable: boolean;
   bindable?: BindableType;
   facet?: string;
+  /** Async getter method name (e.g. 'getMainComponentAsync') for properties that throw
+   *  under documentAccess: dynamic-page mode. Readers must `await node[asyncMethod]()`. */
+  asyncGetter?: string;
 }
 
 // Accumulated across all node types — flushed at end of generate()
@@ -352,6 +367,7 @@ function extractProperties(checker: ts.TypeChecker, interfaceName: string, sourc
     const entry: ExtractedProp = { key: name, valueType, readonly: isReadonly, role: role || 'appearance', writable };
     if (bindable !== undefined) entry.bindable = bindable;
     if (facet !== undefined) entry.facet = facet;
+    if (ASYNC_PROPS[name] !== undefined) entry.asyncGetter = ASYNC_PROPS[name];
     props.push(entry);
   }
 
@@ -408,7 +424,8 @@ function generate(check: boolean): void {
       const base = `key: '${p.key}', valueType: '${p.valueType}', readonly: ${p.readonly}, role: '${p.role}', writable: ${p.writable}`;
       const bindablePart = p.bindable !== undefined ? `, bindable: '${p.bindable}'` : '';
       const facetPart = p.facet !== undefined ? `, facet: '${p.facet}'` : '';
-      section1Lines.push(`    { ${base}${bindablePart}${facetPart} },`);
+      const asyncPart = p.asyncGetter !== undefined ? `, asyncGetter: '${p.asyncGetter}'` : '';
+      section1Lines.push(`    { ${base}${bindablePart}${facetPart}${asyncPart} },`);
     }
     section1Lines.push('  ],');
   }
@@ -464,6 +481,10 @@ function generate(check: boolean): void {
     "  bindable?: 'FLOAT' | 'BOOLEAN' | 'STRING' | 'COLOR';",
     '  /** Override for LLM-facing facet bucket. When omitted, consumers derive from role. Currently only boundVariables/explicitVariableModes → "variables". */',
     '  facet?: string;',
+    '  /** Async getter method name for properties that throw under documentAccess: dynamic-page',
+    "   *  (e.g. 'getMainComponentAsync'). When set, readers MUST `await node[asyncGetter]()`",
+    '   *  instead of the sync property — sync access raises a runtime error in that mode. */',
+    '  asyncGetter?: string;',
     '}',
     '',
     '// ═══════════════════════════════════════════════════════════════',

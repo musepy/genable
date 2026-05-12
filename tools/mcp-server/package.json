@@ -1,11 +1,11 @@
 {
   "name": "genable-mcp",
-  "version": "0.1.1",
-  "mcpName": "io.github.muse40007/genable-mcp",
+  "version": "0.1.2",
+  "mcpName": "io.github.musepy/genable-mcp",
   "description": "Write-side MCP server for Figma — build, edit, restructure, and search Figma designs from Claude Code, Cursor, Cline, or any MCP client. Complements Figma's official MCP (which is read-only). 41 tools covering tree creation (JSX), variables/tokens, components, cross-page navigation, and visual verification.",
-  "author": "musec <muse40007@gmail.com>",
+  "author": "musepy <muse40007@gmail.com> (https://github.com/musepy)",
   "bugs": {
-    "url": "https://github.com/muse40007/figma-ai-generator-dogfood/issues"
+    "url": "https://github.com/musepy/genable/issues"
   },
   "main": "dist/index.js",
   "bin": {
@@ -65,10 +65,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "homepage": "https://github.com/muse40007/figma-ai-generator-dogfood#readme",
+  "homepage": "https://github.com/musepy/genable/tree/main/tools/mcp-server#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/muse40007/figma-ai-generator-dogfood.git",
+    "url": "git+https://github.com/musepy/genable.git",
     "directory": "tools/mcp-server"
   },
   "license": "MIT"

@@ -1,11 +1,11 @@
 /**
  * @file ProviderRow.tsx
  * @description One row in the Settings provider list. Click row to set active;
- * hover reveals a gear button that opens the edit form. Mirrors the layout
- * of tools/ui-preview/settings-ab-v2-protocol.html §2.
+ * hover reveals a chevron-right that opens the edit form. Layout settled in
+ * tools/ui-preview/settings-refactor-ab.html v3.
  */
 import { h } from 'preact';
-import { Settings as Gear } from 'lucide-preact';
+import { ChevronRight } from 'lucide-preact';
 import type { ProviderConfig } from '../../types/provider';
 
 interface Props {
@@ -15,24 +15,17 @@ interface Props {
   onEdit: () => void;
 }
 
-/** Strip protocol scheme + trailing path noise for a compact baseURL display. */
 function compactBaseURL(baseURL: string): string {
   return baseURL.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
-const PROTOCOL_LABEL: Record<ProviderConfig['protocol'], string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  gemini: 'Gemini',
-};
-
 export function ProviderRow({ config, isActive, onSelect, onEdit }: Props) {
-  const meta = `${compactBaseURL(config.baseURL)}${config.modelId ? ` · ${config.modelId}` : ''}`;
+  const host = compactBaseURL(config.baseURL);
+  const model = config.modelId;
 
   const handleRowClick = (e: h.JSX.TargetedEvent<HTMLDivElement>) => {
-    // Don't toggle active when clicking the gear
     const target = e.target as HTMLElement;
-    if (target.closest('.gear')) return;
+    if (target.closest('.row-chevron')) return;
     onSelect();
   };
 
@@ -52,22 +45,22 @@ export function ProviderRow({ config, isActive, onSelect, onEdit }: Props) {
     >
       <div className="radio" aria-hidden="true" />
       <div className="provider-row-body">
-        <div className="provider-row-top">
-          <span className="provider-row-name" title={config.name}>{config.name}</span>
-          <span className={`protocol-tag ${config.protocol}`}>{PROTOCOL_LABEL[config.protocol]}</span>
+        <div className="provider-row-name" title={config.name}>{config.name}</div>
+        <div className="provider-row-meta">
+          <span className="provider-row-meta-host">{host}</span>
+          {model && <span className="provider-row-meta-model">{model}</span>}
         </div>
-        <div className="provider-row-meta" title={meta}>{meta}</div>
       </div>
       <button
         type="button"
-        className="gear"
+        className="row-chevron"
         aria-label={`Edit ${config.name}`}
         onClick={(e) => {
           e.stopPropagation();
           onEdit();
         }}
       >
-        <Gear size={12} strokeWidth={1.6} />
+        <ChevronRight size={16} strokeWidth={1.5} />
       </button>
     </div>
   );

@@ -1,95 +1,135 @@
+/**
+ * @file OnboardingView.tsx
+ * @description V2 onboarding — paste an API key, auto-detect a preset by key
+ * prefix, probe via VALIDATE_PROVIDER, and create a ProviderConfig on success.
+ *
+ * This replaces the legacy version's setApiKey/setProviderName/onFetchModels
+ * call chain with a single addProvider + validateProvider hand-off.
+ */
 import { h, Fragment } from 'preact';
-import { useState, useRef, useEffect } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { tokens } from '../design-system/tokens';
 import { grid } from '../design-system/tokens/layout';
 import { useTranslations } from '../i18n';
+import { PROVIDER_PRESETS, findPresetById } from '../../config/providerPresets';
+import type { ProviderConfig, ProviderPreset, ProviderProbeResult } from '../../types/provider';
 
-type ProviderName = 'gemini' | 'openrouter' | 'dashscope' | 'claude';
 type OnboardStep = 'idle' | 'connecting' | 'error';
 
-/** Detect provider from API key prefix */
-function detectProvider(key: string): { provider: ProviderName; label: string } | null {
+/**
+ * Detect a preset from an API key prefix. Falls back to OpenAI-protocol presets
+ * when no recognizable prefix matches (most generic OpenAI-compat services use
+ * `sk-…`). Returns undefined for keys we can't even guess at.
+ */
+function detectPreset(key: string): ProviderPreset | undefined {
   const k = key.trim();
-  if (k.startsWith('AIzaSy')) return { provider: 'gemini', label: 'Google Gemini' };
-  if (k.startsWith('sk-or-v1-')) return { provider: 'openrouter', label: 'OpenRouter' };
-  if (k.startsWith('sk-ant-')) return { provider: 'claude', label: 'Anthropic Claude' };
-  if (k.length > 10) return { provider: 'dashscope', label: 'OpenAI Compatible' }; // fallback
-  return null;
+  if (!k) return undefined;
+
+  if (k.startsWith('AIzaSy')) return findPresetById('gemini-aistudio');
+  if (k.startsWith('sk-or-v1-')) return findPresetById('openrouter');
+  if (k.startsWith('sk-ant-')) return findPresetById('anthropic');
+  if (k.startsWith('sk-deepseek-')) return findPresetById('deepseek');
+  if (k.length > 10) {
+    // Heuristic: most "sk-…" custom keys ride OpenAI protocol. Default to OpenAI preset.
+    return findPresetById('openai');
+  }
+  return undefined;
 }
 
-/** Mask API key for display */
 function maskKey(key: string): string {
   if (key.length <= 10) return key;
   return key.slice(0, 10) + '••••••••';
 }
 
 interface OnboardingViewProps {
-  apiKey: string;
-  setApiKey: (key: string) => void;
-  providerName: ProviderName;
-  setProviderName: (name: ProviderName) => void;
-  onComplete: (apiKey: string) => void;
-  onFetchModels: (apiKey: string) => Promise<void>;
-  isLoading?: boolean;
-  error?: string | null;
+  /** Add a fully-validated provider, returning its new id. */
+  addProvider: (cfg: Omit<ProviderConfig, 'id'>) => string;
+  /** Probe a provider config; returns the probe result. */
+  validateProvider: (cfg: ProviderConfig) => Promise<ProviderProbeResult>;
+  /** Open Settings (for users who want manual config). */
+  onOpenSettings: () => void;
 }
 
 export function OnboardingView({
-  apiKey,
-  setApiKey,
-  providerName,
-  setProviderName,
-  onComplete,
-  onFetchModels,
-  isLoading = false,
-  error,
+  addProvider,
+  validateProvider,
+  onOpenSettings,
 }: OnboardingViewProps) {
   const t = useTranslations();
+  const [apiKey, setApiKey] = useState('');
   const [step, setStep] = useState<OnboardStep>('idle');
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [detectedLabel, setDetectedLabel] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [detectedPreset, setDetectedPreset] = useState<ProviderPreset | undefined>(undefined);
   const [maskedKey, setMaskedKey] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus input on mount
+  // Auto-focus on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
-  // Reset error when typing
+  // Reset error on typing
   useEffect(() => {
     if (step === 'error') {
       setStep('idle');
-      setLocalError(null);
+      setErrorMessage(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
 
   const handleSubmit = async () => {
     const key = apiKey.trim();
     if (!key) return;
 
-    const detected = detectProvider(key);
-    if (detected) {
-      setProviderName(detected.provider);
-      setDetectedLabel(detected.label);
-    }
+    const preset = detectPreset(key);
+    setDetectedPreset(preset);
     setMaskedKey(maskKey(key));
     setStep('connecting');
-    setLocalError(null);
+    setErrorMessage(null);
+
+    if (!preset) {
+      setStep('error');
+      setErrorMessage('Unrecognized key format. Use Settings to configure manually.');
+      return;
+    }
+
+    const cfgForProbe: ProviderConfig = {
+      id: 'pending',
+      name: preset.name,
+      protocol: preset.protocol,
+      baseURL: preset.baseURL,
+      apiKey: key,
+      modelId: preset.defaultModel,
+      presetId: preset.id,
+      headers: preset.headers,
+    };
 
     try {
-      await onFetchModels(key);
-      onComplete(key);
-    } catch (e) {
+      const result = await validateProvider(cfgForProbe);
+      if (result.kind === 'ok' || result.kind === 'credits-error') {
+        // Save even on credits-error (key is good); user can fund later.
+        const { id: _ignored, ...rest } = cfgForProbe;
+        addProvider(rest);
+        // The hook will flip hasConfig and the parent re-routes to ChatFeature.
+        return;
+      }
       setStep('error');
-      setLocalError(e instanceof Error ? e.message : 'Failed to connect');
+      setErrorMessage(
+        result.kind === 'auth-error' ? 'Invalid API key.'
+        : result.kind === 'not-found' ? 'Endpoint unreachable. Try Settings.'
+        : result.kind === 'rate-limited' ? 'Rate limited. Try again shortly.'
+        : result.kind === 'network-error' ? 'Network error. Check your connection.'
+        : `HTTP ${result.status}: ${result.message}`,
+      );
+    } catch (e: any) {
+      setStep('error');
+      setErrorMessage(e?.message || 'Failed to connect');
     }
   };
 
-  const displayError = error || localError;
   const showKey = step === 'connecting' || step === 'error';
   const showInput = step === 'idle' || step === 'error';
-  const pad = grid.blockPad; // 10px — text padding inside body
+  const pad = grid.blockPad;
 
   return (
     <div style={{
@@ -98,21 +138,18 @@ export function OnboardingView({
       height: '100%',
       background: 'var(--color-background)',
     }}>
-      {/* Spacer — pushes body to bottom */}
       <div style={{ flex: 1 }} />
 
-      {/* Body — all content as one block, min-height locks position */}
       <div style={{
         flexShrink: 0,
         padding: `0 ${grid.scrollPad}px ${grid.scrollPad}px`,
         minHeight: 300,
       }}>
-        {/* Title */}
         <div style={{
           paddingLeft: pad,
           fontSize: 32,
           fontWeight: 400,
-          fontFamily: "var(--typography-font-family-emphasis)",
+          fontFamily: 'var(--typography-font-family-emphasis)',
           color: 'var(--gray-12)',
           lineHeight: 1.05,
           letterSpacing: '-0.4px',
@@ -120,7 +157,6 @@ export function OnboardingView({
           {t.buildSomething}<br />{t.great}
         </div>
 
-        {/* Subtitle — Stored as default, state-aware feedback for connecting/error */}
         <div style={{
           paddingLeft: pad,
           fontSize: tokens.fontSize[1],
@@ -134,18 +170,18 @@ export function OnboardingView({
           )}
           {step === 'error' && (
             <Fragment>
-              <span style={{ color: 'var(--error-11)' }}>{t.invalidKey}</span>{' '}
+              <span style={{ color: 'var(--error-11)' }}>{errorMessage || t.invalidKey}</span>{' '}
               <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--accent-11)', textDecoration: 'none' }}
-              >{t.getNewOne}</a>
+                href="#"
+                onClick={(e) => { e.preventDefault(); onOpenSettings(); }}
+                style={{ color: 'var(--accent-11)', textDecoration: 'none', cursor: 'pointer' }}
+              >
+                Open Settings
+              </a>
             </Fragment>
           )}
         </div>
 
-        {/* Key display — shown after paste */}
         {showKey && (
           <div style={{
             display: 'flex',
@@ -171,12 +207,11 @@ export function OnboardingView({
               marginLeft: 'auto',
               flexShrink: 0,
             }}>
-              {step === 'error' ? t.failed : detectedLabel || t.detecting}
+              {step === 'error' ? t.failed : detectedPreset?.name || t.detecting}
             </span>
           </div>
         )}
 
-        {/* Input — shown in idle and error states */}
         {showInput && (
           <div style={{ marginTop: tokens.space[4] }}>
             <div style={{
@@ -184,7 +219,7 @@ export function OnboardingView({
               borderRadius: 'var(--radius-4)',
               boxShadow: step === 'error'
                 ? '0 0 0 1px rgba(233,61,130,0.2)'
-                : `0 0 0 1px var(--gray-a4)`,
+                : '0 0 0 1px var(--gray-a4)',
             }}>
               <input
                 ref={inputRef}
@@ -212,7 +247,7 @@ export function OnboardingView({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={!apiKey.trim() || isLoading}
+                disabled={!apiKey.trim()}
                 className={`icon-btn ${apiKey.trim() ? 'submit-btn-active' : 'submit-btn-disabled'}`}
                 style={{
                   position: 'absolute',
@@ -226,6 +261,21 @@ export function OnboardingView({
                   <path d="M12 19V5M5 12l7-7 7 7" />
                 </svg>
               </button>
+            </div>
+            <div style={{
+              marginTop: tokens.space[2],
+              paddingLeft: pad,
+              fontSize: 10,
+              color: 'var(--gray-a11)',
+            }}>
+              Or{' '}
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onOpenSettings(); }}
+                style={{ color: 'var(--gray-12)', textDecoration: 'underline', cursor: 'pointer' }}
+              >
+                configure manually in Settings
+              </a>
             </div>
           </div>
         )}

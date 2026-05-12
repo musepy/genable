@@ -207,10 +207,40 @@ export class GeminiProtocolProvider implements LLMProvider {
     const accumulator = new ResponseAccumulator();
     let streamAborted = false;
 
+    // Debug-only: dump raw Gemini response part shapes to dev bridge for
+    // post-hoc analysis of thinking-leak cases. Best-effort POST; ignored
+    // when bridge is unreachable (production).
+    const debugRunId = `gemini-parts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     try {
       const { aborted } = await consumeStream(
         stream,
         (response: any) => {
+          try {
+            const parts = response?.candidates?.[0]?.content?.parts || [];
+            if (parts.length > 0) {
+              const summary = parts.map((p: any) => ({
+                keys: Object.keys(p),
+                hasText: typeof p.text === 'string',
+                textLen: typeof p.text === 'string' ? p.text.length : 0,
+                textPreview: typeof p.text === 'string' ? p.text.slice(0, 120) : null,
+                thought: p.thought,
+                thought_type: typeof p.thought,
+                hasThoughtSignature: !!(p.thoughtSignature || p.thought_signature),
+                thoughtSignatureLen: (p.thoughtSignature || p.thought_signature || '').length,
+                functionCallName: p.functionCall?.name,
+              }));
+              fetch('http://localhost:3456/sse-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  runId: debugRunId,
+                  chunks: [{ ts: Date.now(), parts: summary }],
+                }),
+              }).catch(() => { /* bridge offline — ignore */ });
+            }
+          } catch { /* never let debug logging break the stream */ }
+
           const mapped = this.mapToLLMResponse(response);
           if (mapped.text) onProgress?.(mapped.text);
           if (mapped.thoughts) onThinking?.(mapped.thoughts);

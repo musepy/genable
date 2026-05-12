@@ -184,7 +184,11 @@ export function buildGeminiGenerationConfig(opts: {
     if (isGemini3) {
       let apiLevel = thinkingLevel.toUpperCase();
       if (apiLevel === 'MINIMAL') apiLevel = 'LOW';
-      config.thinkingConfig = { thinkingLevel: apiLevel };
+      // Without includeThoughts, Gemini 3 leaks thought summaries as plain
+      // text parts (observed: "0:thought\n..." prefix), which fall through
+      // to the text branch in mapGeminiPartsToLLMResponse instead of being
+      // routed to the thoughts channel.
+      config.thinkingConfig = { thinkingLevel: apiLevel, includeThoughts: true };
     } else {
       const budgetMap: Record<string, number> = { minimal: 1024, low: 4096, medium: 10240, high: 16384 };
       config.thinkingConfig = { includeThoughts: true, thinkingBudget: budgetMap[thinkingLevel] ?? 4096 };

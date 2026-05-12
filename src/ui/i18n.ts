@@ -72,7 +72,7 @@ const en = {
   closeSettings: 'Close Settings',
 
   // Input
-  placeholder: 'Describe your task, mention @context, or use /commands...',
+  placeholder: 'Describe your design, or click + to add context.',
   emptyStateHint: 'Pick a suggestion below or describe your design',
 
   // Onboarding
@@ -172,7 +172,7 @@ const zh: Translations = {
   closeSettings: '关闭设置',
 
   // Input
-  placeholder: '描述你的任务，使用 @上下文 或 /命令...',
+  placeholder: '描述你想要的设计，或点 + 添加上下文。',
   emptyStateHint: '选择下方建议或描述你的设计',
 
   // Onboarding
@@ -270,7 +270,7 @@ const fr: Translations = {
   closeSettings: 'Fermer',
 
   // Input
-  placeholder: 'Decrivez votre tache, mentionnez @contexte ou utilisez /commandes...',
+  placeholder: 'Decrivez votre design, ou cliquez sur + pour ajouter du contexte.',
   emptyStateHint: 'Choisissez une suggestion ou decrivez votre design',
 
   // Onboarding

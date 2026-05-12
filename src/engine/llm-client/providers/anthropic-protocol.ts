@@ -100,6 +100,22 @@ function resolveMaxOutput(modelId: string, requested?: number): number {
   return requested != null ? Math.min(requested, cap) : cap;
 }
 
+/**
+ * thinkingLevel → budget_tokens for Claude extended thinking.
+ * `minimal` disables thinking; other levels target a fixed budget. The actual
+ * budget is further clamped at request time so it stays strictly below
+ * max_tokens (Anthropic rejects budget >= max_tokens).
+ */
+const THINKING_BUDGET: Record<string, number> = {
+  minimal: 0,
+  low: 1024,
+  medium: 4096,
+  high: 16384,
+};
+
+/** Reserve enough non-thinking output capacity so tool calls / text still fit. */
+const THINKING_OUTPUT_RESERVE = 4096;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
 // ─────────────────────────────────────────────────────────────────────────────
@@ -154,16 +170,34 @@ export class AnthropicProtocolProvider implements LLMProvider {
   // ── Request building ───────────────────────────────────────────────────────
 
   private buildRequestBody(options: LLMGenerateOptions): Record<string, any> {
-    const { messages, tools, temperature, maxTokens, toolConfig } = options;
+    const { messages, tools, temperature, maxTokens, thinkingLevel, toolConfig } = options;
+
+    const resolvedMax = resolveMaxOutput(this.config.modelId!, maxTokens);
 
     const body: Record<string, any> = {
       model: this.config.modelId,
-      max_tokens: resolveMaxOutput(this.config.modelId!, maxTokens),
+      max_tokens: resolvedMax,
       messages: mapMessagesToAnthropic(messages),
     };
 
     if (options.system) body.system = options.system;
-    if (temperature !== undefined) body.temperature = temperature;
+
+    // Extended thinking. budget_tokens MUST be strictly < max_tokens, so we
+    // clamp against the resolved cap minus a reserve for non-thinking output.
+    // When thinking is enabled, Anthropic requires temperature=1 (other values
+    // are rejected) — this overrides any caller-provided temperature.
+    const requestedBudget = thinkingLevel ? (THINKING_BUDGET[thinkingLevel] ?? 0) : 0;
+    const maxBudget = resolvedMax - THINKING_OUTPUT_RESERVE;
+    const budget = requestedBudget > 0 && maxBudget > 0
+      ? Math.min(requestedBudget, maxBudget)
+      : 0;
+
+    if (budget > 0) {
+      body.thinking = { type: 'enabled', budget_tokens: budget };
+      body.temperature = 1;
+    } else if (temperature !== undefined) {
+      body.temperature = temperature;
+    }
 
     if (tools && tools.length > 0) {
       body.tools = tools.map((t) => ({

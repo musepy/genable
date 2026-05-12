@@ -10,7 +10,7 @@
  * vendor-specific HTTP/auth layer.
  */
 
-import type { LLMMessage, LLMResponse, ToolCallBlock, ImageBlock } from '../types';
+import type { LLMMessage, LLMResponse, ToolCallBlock, ImageBlock, ContentBlock, ThinkingBlock } from '../types';
 import { normalizeFinishReason } from '../types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -68,6 +68,15 @@ export function mapMessagesToAnthropic(messages: LLMMessage[]): any[] {
 
       if (Array.isArray(m.content)) {
         for (const block of m.content) {
+          if (block.type === 'thinking') {
+            // Claude requires thinking blocks to come first in assistant content
+            // and to carry the original `signature` echoed back verbatim. Blocks
+            // without a signature (e.g. synthesized from a non-Claude provider's
+            // history) are dropped — Claude would reject the turn otherwise.
+            if (block.signature) {
+              content.push({ type: 'thinking', thinking: block.text, signature: block.signature });
+            }
+          }
           if (block.type === 'text') {
             content.push({ type: 'text', text: block.text });
           }
@@ -152,24 +161,38 @@ export function mapMessagesToAnthropic(messages: LLMMessage[]): any[] {
  */
 export function mapAnthropicToLLMResponse(data: any): LLMResponse {
   const textParts: string[] = [];
+  const thoughtParts: string[] = [];
   const toolCalls: ToolCallBlock[] = [];
+  const fullBlocks: ContentBlock[] = [];
 
   for (const block of data.content || []) {
-    if (block.type === 'text') {
+    if (block.type === 'thinking') {
+      // Claude extended-thinking block. `thinking` holds the chain-of-thought
+      // text; `signature` is an opaque token Claude requires us to echo back
+      // verbatim on subsequent assistant turns (see mapMessagesToAnthropic).
+      const text = block.thinking || '';
+      thoughtParts.push(text);
+      fullBlocks.push({ type: 'thinking', text, signature: block.signature });
+    } else if (block.type === 'text') {
       textParts.push(block.text);
+      fullBlocks.push({ type: 'text', text: block.text });
     } else if (block.type === 'tool_use') {
-      toolCalls.push({
+      const tc: ToolCallBlock = {
         type: 'tool_call' as const,
         id: block.id,
         name: block.name,
         input: block.input,
-      });
+      };
+      toolCalls.push(tc);
+      fullBlocks.push(tc);
     }
   }
 
   return {
     text: textParts.join(''),
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    thoughts: thoughtParts.length > 0 ? thoughtParts.join('') : undefined,
+    fullBlocks: fullBlocks.length > 0 ? fullBlocks : undefined,
     finishReason: normalizeFinishReason(data.stop_reason),
     usage: data.usage ? {
       promptTokens: data.usage.input_tokens || 0,

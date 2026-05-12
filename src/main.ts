@@ -29,6 +29,11 @@ import { serializeCurrentPage } from './dev/nodeTreeSerializer';
 import { handleToolCall } from './ipc/handlers/toolCallHandler';
 import { handleLoadSettings, handleSaveSettings, handleResetSettings } from './ipc/handlers/settingsHandler';
 import { handleValidateProvider } from './ipc/handlers/validateProviderHandler';
+import {
+  handleLoadUserSkills,
+  handleSaveUserSkill,
+  handleDeleteUserSkill,
+} from './ipc/handlers/userSkillsHandler';
 
 export default async function () {
   console.log('[Genable] Plugin started');
@@ -134,6 +139,13 @@ export default async function () {
   on<import('./types').ResetSettingsHandler>('RESET_SETTINGS', handleResetSettings);
 
   on<import('./types').ValidateProviderHandler>('VALIDATE_PROVIDER', handleValidateProvider);
+
+  // ==========================================
+  // Level 4: User Skills (design.md library)
+  // ==========================================
+  on<import('./types').LoadUserSkillsHandler>('LOAD_USER_SKILLS', handleLoadUserSkills);
+  on<import('./types').SaveUserSkillHandler>('SAVE_USER_SKILL', handleSaveUserSkill);
+  on<import('./types').DeleteUserSkillHandler>('DELETE_USER_SKILL', handleDeleteUserSkill);
 
   on<CloseHandler>('CLOSE', function () {
     figma.closePlugin()

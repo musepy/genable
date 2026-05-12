@@ -358,3 +358,35 @@ export interface ReferenceContext {
   };
   children?: ReferenceContext[];
 }
+
+// ── User-imported skills (design.md library, persisted in clientStorage) ──
+export interface UserSkillSummary {
+  id: string;          // stable id, e.g. "user:my-heritage-2026-05-10-x7k2"
+  name: string;        // display name shown in popover
+  createdAt: number;   // epoch ms
+  source: 'imported' | 'canvas';
+}
+
+export interface UserSkillRecord extends UserSkillSummary {
+  content: string;     // raw markdown (YAML frontmatter + prose)
+}
+
+export interface LoadUserSkillsHandler extends EventHandler {
+  name: 'LOAD_USER_SKILLS';
+  handler: () => void;
+}
+
+export interface UserSkillsLoadedHandler extends EventHandler {
+  name: 'USER_SKILLS_LOADED';
+  handler: (data: { skills: UserSkillRecord[] }) => void;
+}
+
+export interface SaveUserSkillHandler extends EventHandler {
+  name: 'SAVE_USER_SKILL';
+  handler: (data: { name: string; content: string; source: 'imported' | 'canvas' }) => void;
+}
+
+export interface DeleteUserSkillHandler extends EventHandler {
+  name: 'DELETE_USER_SKILL';
+  handler: (data: { id: string }) => void;
+}

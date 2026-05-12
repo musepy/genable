@@ -7,11 +7,13 @@
  */
 
 import { h } from 'preact';
-import { Layers, Plus, Wand2 } from 'lucide-preact';
+import { useRef } from 'preact/hooks';
+import { FileText, Layers, Plus, Upload, Wand2, X } from 'lucide-preact';
 import { tokens } from '../design-system/tokens';
 import { useTranslations } from '../i18n';
 import knowledgeIndex from '../../generated/knowledge-index.json';
 import { usePopover } from '../hooks/usePopover';
+import { addUserSkill, deleteUserSkill, useUserSkills } from '../userSkillsStore';
 
 interface ActionPopoverProps {
   onSerializeSelection: () => void;
@@ -54,13 +56,31 @@ const rowLabelStyle: h.JSX.CSSProperties = {
 export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }: ActionPopoverProps) {
   const t = useTranslations();
   const { isOpen, ref, close, toggle, popoverClass } = usePopover();
+  const userSkills = useUserSkills();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAction = (action: () => void) => {
     action();
     close();
   };
 
-  const showSkills = !!onInsertSkill && availableSkills.length > 0;
+  const handleFilePick = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = String(reader.result ?? '');
+      // Strip ".md" extension for display name; user can edit later (future).
+      const baseName = file.name.replace(/\.(md|markdown)$/i, '') || file.name;
+      addUserSkill(baseName, content, 'imported');
+    };
+    reader.readAsText(file);
+    target.value = ''; // allow re-importing the same filename later
+  };
+
+  const showBuiltinSkills = !!onInsertSkill && availableSkills.length > 0;
+  const showUserSkills = !!onInsertSkill;
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -101,7 +121,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
               <span style={rowLabelStyle}>{t.copySelectionJson}</span>
             </div>
 
-            {showSkills && (
+            {showBuiltinSkills && (
               <div style={{
                 height: 1,
                 background: 'var(--gray-a4)',
@@ -109,7 +129,7 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
               }} />
             )}
 
-            {showSkills && availableSkills.map(skill => (
+            {showBuiltinSkills && availableSkills.map(skill => (
               <div
                 key={skill.id}
                 className="popover-item"
@@ -120,9 +140,70 @@ export function ActionPopover({ onSerializeSelection, onInsertSkill, disabled }:
                 <span style={rowLabelStyle}>{skill.name}</span>
               </div>
             ))}
+
+            {showUserSkills && (
+              <div style={{
+                height: 1,
+                background: 'var(--gray-a4)',
+                margin: '4px 8px',
+              }} />
+            )}
+
+            {showUserSkills && userSkills.map(skill => (
+              <div
+                key={skill.id}
+                className="popover-item"
+                role="button"
+                onClick={() => handleAction(() => onInsertSkill!(skill.id))}
+                style={{ position: 'relative' }}
+              >
+                <FileText size={14} strokeWidth={1.5} style={rowIconStyle} />
+                <span style={rowLabelStyle}>{skill.name}</span>
+                <button
+                  aria-label={`Remove ${skill.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteUserSkill(skill.id);
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 2,
+                    cursor: 'pointer',
+                    color: tokens.colors.textSecondary,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <X size={12} strokeWidth={1.5} />
+                </button>
+              </div>
+            ))}
+
+            {showUserSkills && (
+              <div
+                className="popover-item"
+                role="button"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={14} strokeWidth={1.5} style={rowIconStyle} />
+                <span style={{ ...rowLabelStyle, color: tokens.colors.textSecondary }}>
+                  Add design.md…
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,text/markdown,text/plain"
+        style={{ display: 'none' }}
+        onChange={handleFilePick}
+      />
     </div>
   );
 }

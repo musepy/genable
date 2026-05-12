@@ -77,6 +77,20 @@ Genable returns a real, editable Figma frame you can drop straight into a design
 
 ---
 
+## For developers — MCP server
+
+Want to drive Genable from **Claude Code, Cursor, or Cline** instead of the Figma UI? Use [`genable-mcp`](https://www.npmjs.com/package/genable-mcp) — the same engine, exposed as a write-side MCP server. Pairs with Figma's official read-only MCP for full read+write.
+
+```json
+"mcpServers": {
+  "genable": { "command": "npx", "args": ["-y", "genable-mcp"] }
+}
+```
+
+41 tools for building and editing Figma designs from any MCP client — JSX tree creation, variables/tokens, components, cross-page navigation, visual verification. **[Full docs on npm →](https://www.npmjs.com/package/genable-mcp)**
+
+---
+
 ## Sponsor
 
 Genable is built and maintained by one developer, in the open. If it saves you time or replaces a paid tool, please consider sponsoring:

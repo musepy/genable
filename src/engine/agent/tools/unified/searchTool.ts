@@ -10,7 +10,7 @@ import { ToolDefinition } from '../types';
 export const findNodesDefinition: ToolDefinition = {
   name: 'find_nodes',
   executionStrategy: 'parallel',
-  description: `Search nodes by name or type.
+  description: `Search nodes by name or type. Scoped to the current page — call switch_page first if your target lives on a different page.
 
 Examples:
   find_nodes({query: "Button"})
@@ -61,10 +61,31 @@ export const replacePropsDefinition: ToolDefinition = {
   name: 'replace_props',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Batch search-and-replace property values in a subtree.
+  description: `Bulk find-and-replace property values across a subtree (target node + all descendants). Destructive batch mutation — no preview, no undo across many nodes. Returns per-rule match counts.
+
+Use when:
+- Theming pass: change every #FFF fill to #000 across a screen
+- Token migration: bump every fontSize from 14 to 16
+- Normalizing values left inconsistent by earlier passes
+- The alternative is N targeted single-node calls (set_text / set_fill / edit)
+
+Returns: { data: { replacements: [{ rule: 0, matched: 12 }, { rule: 1, matched: 0 }] } }
+
+Parameters beyond schema:
+- \`node\` is the subtree root; search recurses into all descendants (depth-first).
+- Each rule's \`from\` is an EXACT-match string (no substring, no regex). For typed props (fontSize, opacity), pass values as strings — the executor coerces.
+- Zero matches do NOT error — they return matched: 0. Sanity-check with discover_props first if you're unsure values exist.
+
+Skip when:
+- Updating a single known node — use set_text / set_fill / set_stroke / set_layout for type-aware single-intent edits, or edit for generic.
+- Values are variable-bound (tokens) — replace_props bypasses bindings; use bind_variable to swap the token instead.
+- You need partial / fuzzy match — replace_props is exact-only; you'll need find_nodes + a loop.
 
 Examples:
+  // single rule, white -> black
   replace_props({node: "1:2", rules: [{prop: "fillColor", from: "#FFF", to: "#000"}]})
+
+  // batch theme update — both rules applied in one pass
   replace_props({node: "1:2", rules: [
     {prop: "fillColor", from: "#FFF", to: "#000"},
     {prop: "fontSize", from: "14", to: "16"}

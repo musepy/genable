@@ -123,11 +123,26 @@ export const createInstanceDefinition: ToolDefinition = {
   name: 'create_instance',
   executionStrategy: 'sequential',
   mutates: true,
-  description: `Create an instance of a component.
+  description: `Create an instance of an existing component. Mutates the canvas — appends a new InstanceNode as the last child of \`parent\` (or the active page root if omitted). The instance is LINKED to the component master, so future component edits propagate. Returns the new instance's nodeId.
+
+Use when:
+- Spawning runtime copies of a Component master (buttons, list items, cards)
+- Reusing a design-system component in a fresh layout
+- Programmatic instantiation outside a jsx() tree-build
+
+Returns: { data: { id: "5:42", name: "Button", componentId: "1:2" } }
+
+Parameters beyond schema:
+- \`node\` must be a Component node (not Frame, Text, or another Instance). Discover IDs with find_nodes({ type: "COMPONENT" }).
+- \`parent\` optional. If parent is auto-layout, the instance enters the flow and inherits sizing rules. If omitted, the instance is placed at the active page root with detached position — may overlap existing content; set explicit position with edit afterwards.
+
+Skip when:
+- Duplicating a non-component node — instance creation will fail; use clone_node instead.
+- Building a subtree from scratch — use jsx with <instance ref="ComponentName"/> for atomic single-call construction.
 
 Examples:
-  create_instance({node: "1:2"})
-  create_instance({node: "1:2", parent: "1:4"})`,
+  create_instance({node: "1:2"})                    // at page root
+  create_instance({node: "1:2", parent: "1:4"})     // inside frame 1:4`,
   parameters: {
     type: 'object',
     properties: {

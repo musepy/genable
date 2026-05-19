@@ -2,6 +2,14 @@
 
 ## genable-mcp (npm)
 
+### 0.2.0 — 2026-05-19
+
+**Marketplace plugin connectivity unlocked + tool surface +1.** Companion plugin release moves `ws://localhost:3458` from `devAllowedDomains` to `allowedDomains` so users of the published Figma Community plugin (not just dev installs) can reach this MCP server. Older plugin versions (pre-May-2026 marketplace builds) cannot connect — Figma's CSP blocks the localhost WS.
+
+New tool surface: 42 (was 41). `add_component_prop` now supports VARIANT and SLOT property types in addition to TEXT/BOOLEAN/INSTANCE_SWAP, with `variantOptions`, `description`, and `preferredValues` parameters.
+
+> ⚠️ Users on `0.1.x` should upgrade. The wire protocol is unchanged, but the tool list is a strict superset, so `0.1.x` clients will silently miss VARIANT/SLOT capability. All `0.1.x` versions are deprecated on npm.
+
 ### 0.1.3 — 2026-05-12
 
 **Tool description quality.** Rewrote `create_instance` and `replace_props` descriptions following the Tool Definition Quality template (Use when / Returns / Skip when / Parameters beyond schema). Both tools now disclose mutation semantics, return shapes, parent auto-layout interaction, exact-match vs substring behavior, and concrete alternatives (`clone_node`, single-intent setters).

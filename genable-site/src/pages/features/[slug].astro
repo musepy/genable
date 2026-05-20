@@ -1,0 +1,190 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+export function getStaticPaths() {
+  return [
+    {
+      params: { slug: 'components' },
+      props: {
+        eyebrow: 'COMPONENTS',
+        title: 'Whole component sets, in one prompt.',
+        intro: 'A button is rarely just a button — it has variants, sizes, states, disabled forms. Drawing each by hand is busywork. Genable takes one detailed prompt and lays out the entire system, with every variant typed, sized, aligned, and ready to publish to your library.',
+        promptExample: 'A primary button system: solid, outline, ghost variants × sm/md/lg sizes × default/hover/disabled states. Inter, 8pt grid, 10px radius. Brand color is #2A6FDB.',
+        what: [
+          'Component frames with auto-layout and proper paddings',
+          'Variant matrix with named properties (Variant=Solid|Outline|Ghost, Size=sm|md|lg, State=…)',
+          'States built as separate variants (no manual hover/focus styling)',
+          'Icon slots set up as Boolean/Instance Swap props',
+          'Component descriptions written for the assets panel',
+        ],
+        proof: 'Buttons, form fields, cards, alerts, modals, navigation patterns, breadcrumbs, badges — anything with structural variants.',
+        next: { label: 'See pages →', href: '/features/pages' },
+      },
+    },
+    {
+      params: { slug: 'pages' },
+      props: {
+        eyebrow: 'PAGES',
+        title: 'Hero to footer, laid out.',
+        intro: 'A landing page is not one node — it\'s sections. Hero, social proof, features, pricing, FAQ, footer. Each with its own internal layout, hierarchy, and rhythm. Genable produces them as sections, not a flat slab of nodes you have to detangle.',
+        promptExample: 'Marketing landing page: hero with two CTAs, logo cloud, 3-up feature grid, pricing table with three tiers (highlight middle), FAQ accordion, footer with 4 link columns. Dark theme, accent #2A6FDB.',
+        what: [
+          'Each section is its own auto-layout frame, vertically stacked',
+          'Section headings, subheads, supporting copy — placeholder copy that reads as English',
+          'Pricing tables with structured rows (feature lists), not free-floating text',
+          'FAQ as a real component (collapsed/expanded variants)',
+          'Footer with proper column alignment',
+        ],
+        proof: 'Marketing landing pages, product pages, pricing, FAQ, blog index, login/signup, settings pages, dashboards.',
+        next: { label: 'See variables →', href: '/features/variables' },
+      },
+    },
+    {
+      params: { slug: 'variables' },
+      props: {
+        eyebrow: 'VARIABLES',
+        title: 'Bound, not pasted.',
+        intro: 'Every color, every spacing value, every type style — bound to a Figma variable with light and dark modes. No more "search and replace #2A6FDB" when you change the brand color. Change the variable; everything updates.',
+        promptExample: 'Set up brand variables: primary (#2A6FDB light / #4A8FFF dark), text (default, muted, micro), surface (bg, surface, elevated), and a 4/8/12/16/24/32 spacing scale. Bind every color and padding in the design to these variables.',
+        what: [
+          'Color/Typography/Spacing variables created in proper collections',
+          'Light + Dark modes set up with sensible inversions',
+          'Every fill, stroke, and number bound — no hex codes left',
+          'Variable aliases for semantic naming (e.g., text/default → color/ink/100)',
+          'Mode switching tested (toggle once, whole design recolors)',
+        ],
+        proof: 'Real design systems use variables. Genable seeds them so you don\'t have to retrofit.',
+        next: { label: 'See variants →', href: '/features/variants' },
+      },
+    },
+    {
+      params: { slug: 'variants' },
+      props: {
+        eyebrow: 'VARIANTS',
+        title: 'Light, dark, brand — generated together.',
+        intro: 'Designing one mode then "doing the dark mode later" is how dark mode never ships. Genable generates the variant matrix in one go, so light/dark/brand are evaluated together — and switchable in one click.',
+        promptExample: 'Generate the same dashboard in three variants: Light (white/#0A0A0A), Dark (#0A0A0A/#FAFAFA), Brand (accent-tinted). Wire variant prop to a top-level Mode boolean.',
+        what: [
+          'Component variants with proper Mode property',
+          'Color variables that switch on mode, not duplicated styles',
+          'Typography weight/size kept consistent across modes',
+          'Brand variant uses tinted surfaces, not just inverted colors',
+          'Switchable by toggling a single component property',
+        ],
+        proof: 'Components, pages, full design systems — all variant-aware, all switchable.',
+        next: { label: 'See design system →', href: '/features/system' },
+      },
+    },
+    {
+      params: { slug: 'system' },
+      props: {
+        eyebrow: 'DESIGN SYSTEM',
+        title: 'Canvas organized. Library scaffolded.',
+        intro: 'Real design files have structure: pages organized by intent (Marketing / App / Components), frames named, sections used to group content. Genable does this organizing as it builds, so you inherit a tidy file instead of cleaning one up. And if you keep a DESIGN.md, Genable reads it before generating — so output stays on system.',
+        promptExample: 'Bootstrap a design system: pages for Foundations / Components / Patterns / Templates. In Foundations: color, typography, spacing, elevation. In Components: a starter set of buttons, inputs, cards, alerts, navigation. Use Sections to group.',
+        what: [
+          'Pages organized by intent — not "Page 1, Page 2"',
+          'Sections group related frames (e.g., "Buttons", "Inputs")',
+          'Frames named meaningfully (BlogCard / md, not "Frame 47")',
+          'Component documentation in the description field',
+          'Reads DESIGN.md (if present) so output respects your color tokens, type scale, and component conventions',
+          'Cover page set up with thumbnail, ready to publish to a Team library',
+        ],
+        proof: 'Internal design systems, client design system kickoffs, public Figma Community templates. Pairs with the open DESIGN.md format from Google Labs / Stitch as a portable bridge to coding agents.',
+        next: { label: 'See speed →', href: '/features/speed' },
+        designMd: true,
+      },
+    },
+    {
+      params: { slug: 'speed' },
+      props: {
+        eyebrow: 'SPEED',
+        title: 'Half a day, in seconds.',
+        intro: 'A typical "AI design" tool takes 60-90 seconds to produce a flat mock you can\'t edit. Genable averages 8 seconds for ~40 fully editable Figma layers. The speed isn\'t the headline — what you do with the saved time is.',
+        promptExample: 'Same prompt, three rounds: (1) the page, (2) variables added, (3) dark mode variant. Each round under 10 seconds.',
+        what: [
+          'Sub-10 second generation for typical components',
+          'Sub-30 seconds for full pages with 40+ layers',
+          'Streamed output — see layers appear as the model decides',
+          'Iteration is free — keep talking, keep refining',
+          'Works at any complexity (more detail = more layers, not slower)',
+        ],
+        proof: 'Speed compounds when you can iterate. 5 rounds in a minute beats 1 perfect prompt.',
+        next: { label: 'Back to features →', href: '/features' },
+      },
+    },
+  ];
+}
+
+const { eyebrow, title, intro, promptExample, what, proof, next, designMd } = Astro.props;
+---
+
+<Layout title={`${title} — Genable`} description={intro}>
+  <section>
+    <div class="container" style="max-width: 880px;">
+      <a href="/features" style="display: inline-block; margin-bottom: 24px; color: var(--muted); font-size: 14px;">← All features</a>
+      <span class="eyebrow">{eyebrow}</span>
+      <h1 style="margin-top: 16px;">{title}</h1>
+      <p class="lead muted" style="margin-top: 28px;">{intro}</p>
+    </div>
+  </section>
+
+  <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
+    <div class="container row-2">
+      <div>
+        <span class="eyebrow">A DETAILED PROMPT</span>
+        <h2 style="margin-top: 16px; font-size: clamp(28px, 3.5vw, 40px);">{promptExample}</h2>
+      </div>
+      <div>
+        <span class="eyebrow">WHAT GENABLE PRODUCES</span>
+        <ul class="what">
+          {what.map((item: string) => <li>{item}</li>)}
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid var(--hair-soft);">
+    <div class="container">
+      <span class="eyebrow">USE FOR</span>
+      <p class="lead" style="margin-top: 16px; max-width: 720px;">{proof}</p>
+
+      {designMd && (
+        <div class="design-md-box">
+          <span class="eyebrow" style="color: var(--accent);">DESIGN.MD INTEGRATION</span>
+          <h3 style="margin-top: 12px;">Pair with an open design-system spec.</h3>
+          <p class="muted" style="margin-top: 8px; max-width: 720px;">
+            DESIGN.md is the open markdown format from Google Labs / Stitch — YAML token front-matter plus prose conventions, readable by any AI agent. Drop one in your project and Genable applies it to every generation.
+          </p>
+          <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <a class="btn btn-ghost" href="https://github.com/google-labs-code/design.md" target="_blank" rel="noreferrer">design.md spec ↗</a>
+            <a class="btn btn-ghost" href="https://github.com/VoltAgent/awesome-design-md" target="_blank" rel="noreferrer">Example DESIGN.md files ↗</a>
+            <a class="btn btn-ghost" href="https://stitch.withgoogle.com/docs/design-md/format/" target="_blank" rel="noreferrer">Format reference ↗</a>
+          </div>
+        </div>
+      )}
+
+      <div style="margin-top: 56px; display: flex; gap: 14px; flex-wrap: wrap;">
+        <a class="btn btn-primary" href="/quickstart">Try it →</a>
+        <a class="btn btn-ghost" href={next.href}>{next.label}</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .what { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 14px; }
+  .what li {
+    padding-left: 24px; position: relative; font-size: 17px; line-height: 1.55; color: var(--ink-2);
+  }
+  .what li::before {
+    content: '✓'; color: var(--accent); font-weight: 800; position: absolute; left: 0; top: 0;
+  }
+  .design-md-box {
+    margin-top: 56px; padding: 32px;
+    border-radius: var(--r-lg);
+    background: linear-gradient(135deg, rgba(42,111,219,0.06), rgba(42,111,219,0.02));
+    border: 1px solid rgba(42,111,219,0.16);
+  }
+  .design-md-box h3 { font-size: 24px; }
+</style>

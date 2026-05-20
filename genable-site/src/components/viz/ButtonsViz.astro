@@ -1,0 +1,33 @@
+---
+// Button system viz — primary / secondary / outline / ghost + sizes
+---
+
+<div class="btns">
+  <div class="row">
+    <span class="b accent">Primary</span>
+    <span class="b solid">Secondary</span>
+    <span class="b outline">Outline</span>
+    <span class="b ghost">Ghost</span>
+  </div>
+  <div class="row">
+    <span class="b accent sm">sm</span>
+    <span class="b solid sm">sm</span>
+    <span class="b outline sm">sm</span>
+    <span class="b ghost sm dis">disabled</span>
+  </div>
+</div>
+
+<style>
+  .btns { display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .b {
+    padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .b.sm { padding: 6px 10px; font-size: 11px; }
+  .b.accent  { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .b.solid   { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .b.outline { background: transparent; color: var(--ink); border-color: rgba(10,10,10,0.20); }
+  .b.ghost   { background: rgba(10,10,10,0.05); color: var(--ink-2); }
+  .b.dis     { opacity: 0.4; }
+</style>

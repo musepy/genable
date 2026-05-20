@@ -1,0 +1,61 @@
+---
+// Sections gallery — hero/stat/cta tile mosaic
+---
+
+<div class="grid">
+  <div class="t hero">
+    <span class="lab">HERO</span>
+    <strong>Ship<br/>design faster</strong>
+    <div class="cta">
+      <span class="pill solid">Start</span>
+      <span class="pill ghost">Demo</span>
+    </div>
+  </div>
+  <div class="t stat">
+    <span class="lab">STAT</span>
+    <strong>2.4M</strong>
+    <span class="sub">MAU</span>
+  </div>
+  <div class="t cta">
+    <span class="lab">CTA</span>
+    <strong>Try free</strong>
+    <span class="bar"></span>
+  </div>
+  <div class="t feat">
+    <span class="lab">FEATURE</span>
+    <strong>Realtime</strong>
+    <div class="dots"><i class="dot a"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+  </div>
+  <div class="t quote">
+    <span class="lab">QUOTE</span>
+    <em>"Saved me two days"</em>
+  </div>
+</div>
+
+<style>
+  .grid {
+    display: grid; gap: 6px;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .t { padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 4px;
+       background: #fff; border: 1px solid var(--hair); font-size: 11px; }
+  .t .lab { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.18em; opacity: 0.55; font-weight: 700; }
+  .t.hero { grid-row: span 2; }
+  .t.hero strong { font-size: 14px; line-height: 1.1; }
+  .t.stat { background: var(--ink); color: #fff; border-color: transparent; }
+  .t.stat strong { font-size: 18px; letter-spacing: -0.02em; }
+  .t.stat .sub { font-size: 9px; opacity: 0.6; }
+  .t.cta { background: var(--accent); color: #fff; border-color: transparent; }
+  .t.cta strong { font-size: 12px; }
+  .t.cta .bar { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.4); width: 60%; }
+  .t.feat strong { font-size: 11px; }
+  .t.quote em { font-size: 10px; line-height: 1.35; font-style: italic; }
+  .pill { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; }
+  .pill.solid { background: var(--accent); color: #fff; }
+  .pill.ghost { background: rgba(10,10,10,0.06); color: var(--ink-2); }
+  .cta { display: flex; gap: 4px; margin-top: auto; }
+  .dots { display: flex; gap: 2px; margin-top: auto; }
+  .dot { width: 9px; height: 9px; border-radius: 999px; background: rgba(10,10,10,0.12); border: 1.5px solid #fff; display: inline-block; }
+  .dot.a { background: var(--accent); }
+</style>

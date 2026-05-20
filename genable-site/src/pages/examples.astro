@@ -1,0 +1,181 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const playgroundPrompts = [
+  {
+    tier: 'STARTER',
+    label: 'Sign-in screen',
+    prompt: 'A sign-in page, dark, orange accent. Inter, 8pt grid. Email + password fields with focus state. Sign-in button + "Forgot password" link + secondary "Sign up" CTA. Bind colors to brand tokens.',
+    layers: 18,
+  },
+  {
+    tier: 'STARTER',
+    label: 'Pricing card',
+    prompt: 'Pricing card with three tiers (Free / Pro / Team). Highlight Pro with accent border + "Most popular" badge. Each tier: name, price, 5 feature bullets, CTA. Inter, 12px radius.',
+    layers: 32,
+  },
+  {
+    tier: 'INTERMEDIATE',
+    label: 'Dashboard with sparkline',
+    prompt: 'Treasury dashboard, dark theme. NAV hero card ($1.284B + 12.4% delta) with a sparkline chart bound to brand/primary. 4-row holdings table with hot-state row highlight. 7D / 30D / YTD time toggle. Light + Dark mode variants generated together.',
+    layers: 67,
+  },
+  {
+    tier: 'INTERMEDIATE',
+    label: 'Mobile home screen',
+    prompt: 'Wellness app home screen, 375×812. Tuesday header. Glass-card step counter (8,420 / 10k, 84% progress bar). Two tiles below: sleep + calories burned. Bottom tabbar with 4 icons, first one active in accent color.',
+    layers: 36,
+  },
+  {
+    tier: 'ADVANCED',
+    label: 'Marketing landing — full',
+    prompt: 'B2B SaaS marketing landing: hero with two CTAs, logo cloud, 3-up feature grid with icons, pricing (3 tiers, highlight Pro), FAQ accordion, footer with 4 link columns. Light + Dark variants. Use brand variables (primary, text/default, surface). Inter, 8pt grid.',
+    layers: 92,
+  },
+  {
+    tier: 'ADVANCED',
+    label: 'Design system bootstrap',
+    prompt: 'Bootstrap a design system. Pages: Foundations (color/type/space tokens), Components (buttons, inputs, cards, alerts, navigation, breadcrumbs), Patterns (forms, lists, modals), Templates (login, dashboard, settings). Use Sections to group. Component descriptions in the assets panel.',
+    layers: 220,
+  },
+];
+---
+
+<Layout title="Examples — Genable" description="What detailed prompts produce — six representative generations across difficulty tiers.">
+  <section>
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">EXAMPLES</span>
+      <h1 style="margin-top: 16px;">What detailed prompts produce.</h1>
+      <p class="lead muted" style="margin-top: 24px;">
+        Six representative generations across difficulty tiers. Copy any prompt and paste it into your own Figma file — Genable handles the rest.
+      </p>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid var(--hair-soft);">
+    <div class="container">
+      <div class="section-head" style="margin-bottom: 40px;">
+        <span class="eyebrow">PROMPT LIBRARY</span>
+        <h2 style="margin-top: 16px;">Six prompts, three tiers.</h2>
+      </div>
+
+      <div class="gallery">
+        {playgroundPrompts.map(ex => (
+          <article class="example">
+            <div class="ex-head">
+              <span class={`tier tier-${ex.tier.toLowerCase()}`}>{ex.tier}</span>
+              <span class="muted" style="font-size: 13px;">{ex.layers} layers · ~ 8s</span>
+            </div>
+            <h3>{ex.label}</h3>
+            <blockquote>{ex.prompt}</blockquote>
+            <div class="copy-hint">Click → copy prompt to clipboard</div>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <div class="section-head">
+        <span class="eyebrow">DESIGN.MD COMPATIBLE</span>
+        <h2 style="margin-top: 16px;">Drop a DESIGN.md and Genable follows it.</h2>
+        <p class="lead muted" style="margin-top: 16px;">
+          DESIGN.md is the open format from Google Labs / Stitch for describing a design system to AI agents. Drop one in your project; Genable reads color tokens, typography, spacing, and component patterns from it before generating — every output stays on system.
+        </p>
+      </div>
+
+      <div style="margin-top: 24px; display: flex; gap: 14px; flex-wrap: wrap;">
+        <a class="btn btn-ghost" href="https://github.com/google-labs-code/design.md" target="_blank" rel="noreferrer">design.md spec ↗</a>
+        <a class="btn btn-ghost" href="https://github.com/VoltAgent/awesome-design-md" target="_blank" rel="noreferrer">Example DESIGN.md files ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="text-align: center;">
+      <h2>Want your generation here?</h2>
+      <p class="lead muted" style="margin: 16px auto 32px; max-width: 560px;">
+        Open a PR with your prompt + result and we'll add it. Submissions live at <code>/examples</code> as a community gallery.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="/quickstart">Try it →</a>
+        <a class="btn btn-ghost" href="https://github.com/musepy/genable/discussions" target="_blank" rel="noreferrer">Submit your example ↗</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .play-cta {
+    margin-top: 32px;
+    display: flex; align-items: flex-start; gap: 18px;
+    padding: 24px; border-radius: var(--r-lg);
+    background: var(--surface); border: 1px solid var(--hair);
+    color: inherit;
+    box-shadow: 0 24px 48px -28px rgba(10,10,10,0.18);
+    transition: transform 0.12s ease, box-shadow 0.18s ease;
+  }
+  .play-cta:hover { transform: translateY(-2px); box-shadow: 0 32px 56px -32px rgba(10,10,10,0.28); color: inherit; }
+  .figma-mark {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--bg-deep);
+    display: grid; place-items: center;
+    flex: none;
+  }
+  .play-cta-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .play-cta-eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .play-cta-body strong { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .play-cta-desc { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+  .gallery {
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  }
+  .example {
+    padding: 28px; border-radius: var(--r-lg);
+    background: var(--surface); border: 1px solid var(--hair);
+    box-shadow: 0 20px 40px -28px rgba(10,10,10,0.18);
+    display: flex; flex-direction: column; gap: 12px;
+    transition: border-color 0.12s ease;
+    cursor: pointer;
+  }
+  .example:hover { border-color: var(--accent); }
+  .ex-head { display: flex; justify-content: space-between; align-items: center; }
+  .example h3 { font-size: 22px; }
+  .tier {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; font-weight: 700;
+    padding: 4px 8px; border-radius: 4px;
+  }
+  .tier-starter { background: var(--ok-soft); color: var(--ok); }
+  .tier-intermediate { background: rgba(42,111,219,0.12); color: var(--accent); }
+  .tier-advanced { background: var(--ink); color: #fff; }
+  .example blockquote {
+    margin: 0; padding: 16px;
+    background: var(--bg-deep); border-radius: 10px;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
+    color: var(--ink-2);
+  }
+  .copy-hint { font-size: 12px; color: var(--micro); font-family: var(--font-mono); letter-spacing: 0.04em; }
+</style>
+
+<script>
+  // Click an example card to copy the prompt
+  document.querySelectorAll<HTMLElement>('.example').forEach((card) => {
+    card.addEventListener('click', () => {
+      const text = card.querySelector('blockquote')?.textContent ?? '';
+      navigator.clipboard.writeText(text).then(() => {
+        const hint = card.querySelector<HTMLElement>('.copy-hint');
+        if (hint) {
+          const original = hint.textContent;
+          hint.textContent = 'Copied to clipboard ✓';
+          hint.style.color = 'var(--ok)';
+          setTimeout(() => {
+            hint.textContent = original;
+            hint.style.color = '';
+          }, 1500);
+        }
+      });
+    });
+  });
+</script>

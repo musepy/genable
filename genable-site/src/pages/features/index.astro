@@ -1,0 +1,112 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import BentoCard from '../../components/BentoCard.astro';
+import ButtonsViz from '../../components/viz/ButtonsViz.astro';
+import PagesViz from '../../components/viz/PagesViz.astro';
+import VariablesViz from '../../components/viz/VariablesViz.astro';
+import VariantsViz from '../../components/viz/VariantsViz.astro';
+import SystemViz from '../../components/viz/SystemViz.astro';
+import SpeedViz from '../../components/viz/SpeedViz.astro';
+---
+
+<Layout title="Features — Genable" description="Six things Genable takes off your plate: components, pages, variables, variants, design system, speed.">
+  <section>
+    <div class="container">
+      <span class="eyebrow">FEATURES</span>
+      <h1 style="margin-top: 16px; max-width: 900px;">Six things Genable takes off your plate.</h1>
+      <p class="lead muted" style="margin-top: 24px;">
+        Each capability has its own page with a detailed prompt example, a checklist of what Genable produces, and — for design system — DESIGN.md integration. Click any card.
+      </p>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid var(--hair-soft);">
+    <div class="container">
+      <div class="bento">
+        <BentoCard mono="ONE PROMPT → A SET" title="Components" desc="Whole button systems, form sets, card libraries — every variant typed, sized and aligned." href="/features/components">
+          <ButtonsViz />
+        </BentoCard>
+        <BentoCard mono="HERO TO FOOTER" title="Pages" desc="Hero, pricing, features, FAQ — laid out as sections, not a flat slab of nodes." href="/features/pages">
+          <PagesViz />
+        </BentoCard>
+        <BentoCard mono="TOKENS · MODES" title="Variables" desc="Color, typography, spacing — bound to variables with light/dark modes, not pasted hexes." href="/features/variables">
+          <VariablesViz />
+        </BentoCard>
+        <BentoCard mono="LIGHT · DARK · BRAND" title="Variants" desc="Mode switches and brand color themes — generated together, swap with one click." href="/features/variants">
+          <VariantsViz />
+        </BentoCard>
+        <BentoCard mono="DESIGN.MD COMPATIBLE" title="Design system" desc="Library scaffolded. Frames named, sectioned. Reads DESIGN.md for portable system specs." href="/features/system">
+          <SystemViz />
+        </BentoCard>
+        <BentoCard mono="42 LAYERS · 8 SECONDS" title="Speed" desc="What used to take half a day, in seconds — without losing the layer structure." dark href="/features/speed">
+          <SpeedViz />
+        </BentoCard>
+      </div>
+    </div>
+  </section>
+
+  <!-- Get started / Browse prompts -->
+  <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
+    <div class="container">
+      <div class="row-2">
+        <div>
+          <span class="eyebrow">LEARN BY DOING</span>
+          <h2 style="margin-top: 16px;">Install the plugin, paste a prompt.</h2>
+          <p class="lead muted" style="margin-top: 20px;">
+            Install Genable from Figma Community in one click. Open it in any file, paste any prompt below, and watch Genable build it as real Figma layers.
+          </p>
+          <div style="margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <a class="btn btn-primary" href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">
+              <span class="figma-mark-sm">
+                <svg width="14" height="22" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE"/>
+                  <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83"/>
+                  <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262"/>
+                  <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E"/>
+                  <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF"/>
+                </svg>
+              </span>
+              Install from Figma Community
+            </a>
+            <a class="btn btn-ghost" href="/examples">Browse the prompt library</a>
+          </div>
+        </div>
+        <div class="playground-art">
+          <div class="frame frame-1"><span class="lab">MOBILE</span><span class="dim">375 × 812</span></div>
+          <div class="frame frame-2"><span class="lab">DASHBOARD</span><span class="dim">1200 × 800</span></div>
+          <div class="frame frame-3"><span class="lab">LANDING</span><span class="dim">1440 × 900</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .figma-mark-sm {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: rgba(255,255,255,0.10);
+    display: inline-grid; place-items: center;
+    margin-right: 4px;
+  }
+
+  .playground-art {
+    position: relative; height: 360px;
+  }
+  .playground-art .frame {
+    position: absolute;
+    background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r);
+    padding: 14px;
+    box-shadow: 0 16px 32px -24px rgba(10,10,10,0.18);
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .playground-art .lab {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em;
+    color: var(--micro); font-weight: 700; text-transform: uppercase;
+  }
+  .playground-art .dim {
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); font-weight: 500;
+  }
+  .frame-1 { width: 120px; height: 240px; left: 0; top: 60px; transform: rotate(-3deg); }
+  .frame-2 { width: 280px; height: 180px; left: 90px; top: 140px; transform: rotate(1deg); z-index: 2; }
+  .frame-3 { width: 280px; height: 180px; right: 0; top: 0; transform: rotate(-2deg); }
+</style>

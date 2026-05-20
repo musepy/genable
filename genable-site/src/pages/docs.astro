@@ -1,0 +1,124 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Docs — Genable" description="How Genable works: agent loop, tool dispatcher, multi-model, BYO API key, prompt patterns.">
+  <section>
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">DOCS</span>
+      <h1 style="margin-top: 16px;">How it works.</h1>
+      <p class="lead muted" style="margin-top: 24px;">
+        Genable is an agent, not a wrapper around one LLM call. It plans, acts on Figma's scene graph through typed tools, verifies, and iterates. This page covers the parts you'd want to know to use it well.
+      </p>
+    </div>
+  </section>
+
+  <section style="border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <h2>The agent loop</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        Each user turn is one <code>run()</code>. The model proposes tool calls; the tool dispatcher executes them against Figma; results return to the model; it decides what to do next. A text-only response ends the turn.
+      </p>
+
+      <div class="loop-diagram" style="margin-top: 32px;">
+        <div class="node">Prompt</div>
+        <span class="arrow">→</span>
+        <div class="node">LLM</div>
+        <span class="arrow">→</span>
+        <div class="node">Tool dispatcher</div>
+        <span class="arrow">→</span>
+        <div class="node">Figma scene graph</div>
+      </div>
+      <p class="muted" style="margin-top: 16px; font-size: 14px;">
+        Sessions reset only on "New Design". Within a session, every turn keeps full context (with lazy compression at turn boundary). Intra-turn tool results are never compressed.
+      </p>
+
+      <h2 style="margin-top: 64px;">Multi-model</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        Genable supports several providers. Pick per task — Claude for complex layouts, Gemini for cost-sensitive iteration, Kimi for Chinese-first prompts.
+      </p>
+
+      <table class="models-table">
+        <thead><tr><th>Provider</th><th>Models</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td>Google</td><td>Gemini 2.5 Pro / Flash</td><td>Cost, multimodal</td></tr>
+          <tr><td>Anthropic</td><td>Claude Opus / Sonnet / Haiku</td><td>Complex layouts, agentic</td></tr>
+          <tr><td>Moonshot</td><td>Kimi K2.5</td><td>Chinese prompts, OpenAI protocol</td></tr>
+          <tr><td>DashScope</td><td>Qwen via Anthropic-compat endpoint</td><td>CN region access</td></tr>
+          <tr><td>OpenRouter</td><td>100+ models</td><td>Single key, route per task</td></tr>
+        </tbody>
+      </table>
+
+      <h2 style="margin-top: 64px;">Detailed prompt patterns</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        We don't optimize for prompt brevity. The plugin handles the manual labor either way — but more detail produces better results.
+      </p>
+
+      <div class="patterns">
+        <div class="pat">
+          <h3>Specify the variant matrix up front</h3>
+          <p class="muted">Don't ask for "a button" then later for "the dark version". Ask for the matrix in one prompt:</p>
+          <blockquote>"…solid / outline / ghost × sm/md/lg × default/hover/disabled. Wire as named properties: Variant, Size, State."</blockquote>
+        </div>
+
+        <div class="pat">
+          <h3>Bind colors to variables explicitly</h3>
+          <p class="muted">Variables won't be created unless you ask. Mention what to bind:</p>
+          <blockquote>"Brand variables: primary, text/default, text/muted, surface, surface/elevated. Light + dark modes. Bind every fill and stroke."</blockquote>
+        </div>
+
+        <div class="pat">
+          <h3>Use units, not vibes</h3>
+          <p class="muted">"Spacious" is ambiguous. "8pt grid, 24px section padding, 16px card padding" is not.</p>
+          <blockquote>"8pt grid. 24/32/48 spacing scale. 10px radius for inputs, 14px for cards."</blockquote>
+        </div>
+
+        <div class="pat">
+          <h3>Name the page sections</h3>
+          <p class="muted">"A landing page" gets the average; naming the sections gets your landing page.</p>
+          <blockquote>"Sections: hero (two CTAs), logo cloud, 3-up features, pricing (3 tiers, highlight Pro), FAQ, footer."</blockquote>
+        </div>
+      </div>
+
+      <h2 style="margin-top: 64px;">BYO API key — the privacy story</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        Keys live in <code>localStorage</code> only. The plugin talks directly to your provider's API from your browser. Genable has no servers, no proxy, no analytics on your prompts. The cost of this convenience is that you bring the key.
+      </p>
+
+      <div style="margin-top: 64px; padding: 32px; border-radius: var(--r-lg); background: var(--bg-deep);">
+        <strong style="font-size: 18px;">Want to contribute, file a bug, or read the source?</strong>
+        <p class="muted" style="margin-top: 8px; margin-bottom: 16px;">
+          Genable is MIT-licensed and developed in the open.
+        </p>
+        <a class="btn btn-primary" href="https://github.com/musepy/genable" target="_blank" rel="noreferrer">GitHub →</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  h2 { font-size: 36px; }
+  h3 { font-size: 22px; margin-bottom: 8px; }
+
+  .loop-diagram {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    background: var(--bg-deep); padding: 24px; border-radius: var(--r-lg);
+  }
+  .node {
+    padding: 12px 18px; border-radius: 10px; background: var(--surface);
+    border: 1px solid var(--hair); font-weight: 600; font-size: 15px;
+  }
+  .arrow { color: var(--muted); font-size: 18px; }
+
+  .models-table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 15px; }
+  .models-table th, .models-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--hair-soft); }
+  .models-table th { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--micro); font-weight: 700; }
+
+  .patterns { display: flex; flex-direction: column; gap: 32px; margin-top: 32px; }
+  .pat { padding: 24px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 var(--r) var(--r) 0; }
+  .pat blockquote {
+    margin: 12px 0 0; padding: 14px 18px; border-radius: 10px;
+    background: var(--bg-deep); font-family: var(--font-mono); font-size: 14px;
+    color: var(--ink-2); line-height: 1.55;
+  }
+</style>

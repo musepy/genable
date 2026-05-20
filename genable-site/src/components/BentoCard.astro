@@ -1,0 +1,28 @@
+---
+interface Props {
+  mono: string;
+  title: string;
+  desc: string;
+  dark?: boolean;
+  href?: string;
+}
+const { mono, title, desc, dark = false, href } = Astro.props;
+const Wrapper = href ? 'a' : 'article';
+---
+
+<Wrapper class:list={['bento-card', dark && 'dark']} href={href}>
+  <span class="eyebrow" style={dark ? 'color: rgba(255,255,255,0.55)' : ''}>{mono}</span>
+  <div class="title">{title}</div>
+  <div class="desc">{desc}</div>
+  <div class="viz">
+    <slot />
+  </div>
+</Wrapper>
+
+<style>
+  a.bento-card { color: inherit; text-decoration: none; }
+  a.bento-card:hover { color: inherit; }
+  a.bento-card .title { transition: color 0.12s ease; }
+  a.bento-card:hover .title { color: var(--accent); }
+  a.bento-card.dark:hover .title { color: var(--accent); }
+</style>

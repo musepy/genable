@@ -1,0 +1,305 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Quickstart — Genable" description="Two ways to use Genable: as a Figma plugin (designers) or as an MCP server (any MCP-compatible editor or agent). BYO API key required.">
+  <section>
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">QUICKSTART</span>
+      <h1 style="margin-top: 16px;">Pick your surface.</h1>
+      <p class="lead muted" style="margin-top: 24px;">
+        Genable runs in two places. Use the <strong>Figma plugin</strong> if you live in Figma, or wire the <strong>MCP server</strong> into any MCP-compatible editor or agent if you live in your terminal. Both paths share the same engine — and both need an LLM API key (you bring your own).
+      </p>
+
+      <!-- API key heads-up — the unavoidable prerequisite -->
+      <div class="byo-callout">
+        <div class="byo-icon">!</div>
+        <div>
+          <strong>You'll need a model API key before either path works.</strong>
+          <p>Genable has no servers — your prompts go directly from the plugin/MCP to the model provider you choose. <a href="#api-key">Pick one here ↓</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PATH 1: Figma plugin -->
+  <section id="plugin" style="border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">PATH 1 · FOR DESIGNERS</span>
+      <h2 style="margin-top: 16px;">Open in Figma.</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        The shortest path: install the plugin from Figma Community in one click.
+      </p>
+
+      <a class="figma-cta" href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">
+        <span class="figma-mark">
+          <svg width="20" height="30" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE"/>
+            <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83"/>
+            <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262"/>
+            <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E"/>
+            <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF"/>
+          </svg>
+        </span>
+        <span class="figma-cta-body">
+          <span class="figma-cta-eyebrow">Open in</span>
+          <strong>Figma Community</strong>
+        </span>
+        <span style="color: var(--muted);">→</span>
+      </a>
+
+    </div>
+  </section>
+
+  <!-- PATH 2: MCP -->
+  <section id="mcp" style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">PATH 2 · FOR AI EDITORS &amp; AGENTS</span>
+      <h2 style="margin-top: 16px;">Wire into your editor.</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        <strong>genable-mcp</strong> is a Model Context Protocol server — any client that speaks MCP can read & write your Figma file through it (e.g. Claude Code, Cursor, Cline, Continue, Zed, custom agents). It pairs cleanly with the official Figma MCP — they cover read, we cover write.
+      </p>
+
+      <div class="ver-callout">
+        <div class="ver-icon">✓</div>
+        <div>
+          <strong>Version requirements (May 2026)</strong>
+          <p>Plugin: install or refresh from Figma Community — the marketplace build now whitelists <code>ws://localhost:3458</code>. Older installs (pre-May 2026) can't reach the MCP server; just re-open from Community to update.</p>
+          <p>MCP: <code>npx -y genable-mcp</code> pulls <strong>0.2.0+</strong> (42 tools). All <code>0.1.x</code> versions are deprecated.</p>
+        </div>
+      </div>
+
+      <ol class="mcp-steps">
+        <li>
+          <div class="num">1</div>
+          <div class="body">
+            <h3>Install the Figma plugin first</h3>
+            <p class="muted">The MCP server is a relay — it talks to the plugin running inside Figma Desktop. Install once from <a href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">Figma Community</a>, open it, and it auto-connects to <code>localhost:3458</code>.</p>
+          </div>
+        </li>
+
+        <li>
+          <div class="num">2</div>
+          <div class="body">
+            <h3>Add <code>genable-mcp</code> to your MCP client</h3>
+            <p class="muted">Drop this into your client's MCP config — same shape works everywhere. For Claude Code: <code>.mcp.json</code> (project) or <code>~/.claude.json</code> (global). Other clients use their own config path; the JSON shape is identical.</p>
+            <pre style="margin-top: 12px;">{`{
+  "mcpServers": {
+    "genable": {
+      "command": "npx",
+      "args": ["-y", "genable-mcp"]
+    }
+  }
+}`}</pre>
+          </div>
+        </li>
+
+        <li>
+          <div class="num">3</div>
+          <div class="body">
+            <h3>(Recommended) Pair with Figma's official MCP</h3>
+            <p class="muted">Figma's official MCP is excellent at <em>reading</em> designs. Genable is the write side. Together they cover end-to-end "code ↔ Figma" round-trips.</p>
+            <pre style="margin-top: 12px;">{`{
+  "mcpServers": {
+    "figma":   { /* official, read-side */ },
+    "genable": { "command": "npx", "args": ["-y", "genable-mcp"] }
+  }
+}`}</pre>
+          </div>
+        </li>
+
+        <li>
+          <div class="num">4</div>
+          <div class="body">
+            <h3>Verify</h3>
+            <p class="muted">In your MCP client, ask: <em>"List the pages in my current Figma file."</em> If the plugin is open, you'll see the page roster.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- API KEY -->
+  <section id="api-key" style="border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">REQUIRED · BYO API KEY</span>
+      <h2 style="margin-top: 16px;">Pick a model provider.</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        Genable has no servers and no built-in credits. You bring your own LLM API key — your prompts go directly from the plugin/MCP to your provider. Keys are stored in <code>localStorage</code> only (in the plugin) or via env var (for the MCP).
+      </p>
+
+      <div class="provider-grid">
+        {[
+          { name: 'OpenRouter', url: 'https://openrouter.ai/keys', note: 'OpenAI protocol — broadest model coverage with one key', recommended: true },
+          { name: 'Moonshot (Kimi K2.5)', url: 'https://platform.moonshot.cn/', note: 'OpenAI protocol' },
+          { name: 'Anthropic (Claude)', url: 'https://console.anthropic.com/', note: 'Best for complex layouts' },
+          { name: 'DashScope (Qwen)', url: 'https://dashscope.console.aliyun.com/', note: 'Anthropic-compatible · CN region' },
+          { name: 'Google (Gemini)', url: 'https://aistudio.google.com/apikey', note: 'Single-vendor; native multimodal' },
+        ].map(p => (
+          <a href={p.url} target="_blank" rel="noreferrer" class="provider">
+            <div class="provider-name">
+              {p.name}
+              {p.recommended && <span class="rec-tag">RECOMMENDED</span>}
+            </div>
+            <div class="provider-note">{p.note}</div>
+            <div class="provider-arrow">Get key ↗</div>
+          </a>
+        ))}
+      </div>
+
+      <p class="muted" style="margin-top: 28px; font-size: 14px;">
+        <strong>Cost is yours, not ours.</strong> A typical generation costs $0.01–$0.10 depending on model + complexity. Pick OpenRouter to switch models per task without juggling keys.
+      </p>
+    </div>
+  </section>
+
+  <!-- First prompt -->
+  <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <span class="eyebrow">FIRST PROMPT</span>
+      <h2 style="margin-top: 16px;">Describe what you need.</h2>
+      <p class="lead muted" style="margin-top: 16px;">
+        Detail helps. The more specific the prompt, the better the result.
+      </p>
+
+      <div class="prompt-examples">
+        <div class="ex">
+          <span class="eyebrow">SIMPLE</span>
+          <p>A primary button with disabled state</p>
+        </div>
+        <div class="ex">
+          <span class="eyebrow">DETAILED</span>
+          <p>A primary button system: solid, outline, ghost variants × sm/md/lg sizes × default/hover/disabled states. Inter, 8pt grid, 10px radius. Brand color #2A6FDB. Wire variant matrix as named properties.</p>
+        </div>
+        <div class="ex">
+          <span class="eyebrow">FULL PAGE</span>
+          <p>Marketing landing: hero with two CTAs, logo cloud, 3-up feature grid, pricing with three tiers (highlight middle), FAQ accordion, footer. Dark theme. Use brand variables. Generate Light + Dark variants together.</p>
+        </div>
+      </div>
+
+      <p class="muted" style="margin-top: 24px;">
+        Iterate by chatting. <em>"Add a sparkline to the NAV card. Bind the line color to brand/primary."</em> Each follow-up keeps the file state and refines from there.
+      </p>
+    </div>
+  </section>
+
+  <!-- Next steps -->
+  <section style="border-top: 1px solid var(--hair-soft);">
+    <div class="container" style="max-width: 880px;">
+      <div style="padding: 32px; border-radius: var(--r-lg); background: var(--bg-deep); display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 280px;">
+          <strong style="display: block; font-size: 18px;">Ready to go deeper?</strong>
+          <span class="muted" style="font-size: 15px;">The docs cover the agent loop, multi-model setup, and detailed prompt patterns. Examples shows what real prompts produce.</span>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <a class="btn btn-primary" href="/docs">Open docs</a>
+          <a class="btn btn-ghost" href="/examples">See examples</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  /* BYO callout */
+  .byo-callout {
+    margin-top: 32px;
+    padding: 20px 24px; border-radius: var(--r);
+    background: #FFF7E6; border: 1px solid #F0D898;
+    display: flex; gap: 16px; align-items: flex-start;
+  }
+
+  /* Version requirements callout */
+  .ver-callout {
+    margin-top: 28px;
+    padding: 18px 22px; border-radius: var(--r);
+    background: #ECFDF5; border: 1px solid #A7F3D0;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .ver-icon {
+    width: 26px; height: 26px; border-radius: 999px;
+    background: #059669; color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 14px;
+    flex: none;
+  }
+  .ver-callout strong { font-size: 15px; }
+  .ver-callout p { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .ver-callout p + p { margin-top: 6px; }
+  .ver-callout code { font-size: 12.5px; }
+  .byo-icon {
+    width: 28px; height: 28px; border-radius: 999px;
+    background: #C68A1E; color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 16px;
+    flex: none;
+  }
+  .byo-callout strong { font-size: 16px; }
+  .byo-callout p { margin-top: 4px; font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+  .byo-callout a { color: var(--accent); font-weight: 600; }
+
+  /* Figma CTA */
+  .figma-cta {
+    margin-top: 32px;
+    display: inline-flex; align-items: center; gap: 18px;
+    padding: 16px 24px; border-radius: var(--r);
+    background: var(--ink); color: #fff;
+    font-family: var(--font-display);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    box-shadow: 0 12px 24px -16px rgba(0,0,0,0.4);
+  }
+  .figma-cta:hover { transform: translateY(-1px); box-shadow: 0 18px 32px -18px rgba(0,0,0,0.5); color: #fff; }
+  .figma-mark {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: rgba(255,255,255,0.10);
+    display: grid; place-items: center;
+  }
+  .figma-cta-body { display: flex; flex-direction: column; gap: 2px; }
+  .figma-cta-eyebrow { font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 700; }
+  .figma-cta-body strong { font-size: 18px; font-weight: 700; }
+
+  /* MCP steps */
+  .mcp-steps { list-style: none; padding: 0; margin: 32px 0 0; display: flex; flex-direction: column; gap: 36px; }
+  .mcp-steps li { display: flex; gap: 24px; align-items: flex-start; }
+  .mcp-steps .num {
+    width: 36px; height: 36px; border-radius: 999px;
+    background: var(--ink); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 16px;
+    flex: none;
+  }
+  .mcp-steps h3 { font-size: 22px; margin-bottom: 6px; }
+  .mcp-steps .body { flex: 1; min-width: 0; }
+  .mcp-steps p { line-height: 1.6; }
+  .mcp-steps pre { font-size: 13px; }
+
+  /* Provider grid */
+  .provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 28px; }
+  .provider {
+    padding: 18px 20px; border-radius: var(--r);
+    background: var(--surface); border: 1px solid var(--hair);
+    color: inherit;
+    display: flex; flex-direction: column; gap: 6px;
+    transition: border-color 0.12s ease, transform 0.12s ease;
+  }
+  .provider:hover { border-color: var(--accent); transform: translateY(-1px); color: inherit; }
+  .provider-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .rec-tag {
+    font-size: 9px; font-family: var(--font-mono); letter-spacing: 0.16em;
+    background: var(--accent); color: #fff;
+    padding: 2px 6px; border-radius: 3px; font-weight: 700;
+  }
+  .provider-note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .provider-arrow { font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 6px; }
+
+  /* Prompt examples */
+  .prompt-examples { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+  .ex {
+    padding: 18px 20px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--hair);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .ex .eyebrow { font-size: 11px; }
+  .ex p { font-size: 16px; line-height: 1.55; color: var(--ink); }
+
+  pre { font-size: 13px; }
+
+  h2 { font-size: clamp(32px, 4vw, 48px); }
+</style>

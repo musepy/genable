@@ -1,0 +1,32 @@
+---
+const themes = [
+  { name: 'Light', cls: 'light' },
+  { name: 'Dark',  cls: 'dark' },
+  { name: 'Brand', cls: 'brand' },
+];
+---
+
+<div class="row">
+  {themes.map(t => (
+    <div class={`t t-${t.cls}`}>
+      <span class="lab">{t.name}</span>
+      <strong>Aa Bb</strong>
+      <span class="btn">Action</span>
+    </div>
+  ))}
+</div>
+
+<style>
+  .row { display: flex; gap: 6px; }
+  .t { flex: 1; padding: 10px; border-radius: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .t .lab { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.18em; opacity: 0.55; font-weight: 700; text-transform: uppercase; }
+  .t strong { font-size: 13px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+  .t .btn { padding: 4px 8px; border-radius: 6px; font-size: 9px; font-weight: 700; text-align: center; }
+
+  .t-light { background: #fff; color: var(--ink); border: 1px solid var(--hair); }
+  .t-light .btn { background: var(--ink); color: #fff; }
+  .t-dark { background: var(--ink); color: #fff; }
+  .t-dark .btn { background: var(--accent); color: #fff; }
+  .t-brand { background: var(--accent); color: #fff; }
+  .t-brand .btn { background: #fff; color: var(--accent); }
+</style>

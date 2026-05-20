@@ -1,0 +1,29 @@
+---
+const tree = [
+  { d: 0, label: '▾ Marketing', kind: 'page' as const },
+  { d: 1, label: 'Hero' },
+  { d: 1, label: 'Features', sel: true },
+  { d: 1, label: 'Pricing' },
+  { d: 0, label: '▾ App', kind: 'page' as const },
+  { d: 1, label: 'Dashboard' },
+  { d: 1, label: 'Settings' },
+];
+---
+
+<div class="tree">
+  {tree.map(row => (
+    <div
+      class:list={['row', row.kind && `kind-${row.kind}`, row.sel && 'sel']}
+      style={`padding-left: ${row.d * 14 + 8}px`}
+    >
+      {row.label}
+    </div>
+  ))}
+</div>
+
+<style>
+  .tree { display: flex; flex-direction: column; gap: 1px; font-family: var(--font-mono); font-size: 11px; }
+  .row { padding: 2px 8px; color: var(--ink-2); border-radius: 3px; border-left: 2px solid transparent; }
+  .row.kind-page { color: var(--ink); font-weight: 700; }
+  .row.sel { background: rgba(42,111,219,0.08); border-left-color: var(--accent); }
+</style>

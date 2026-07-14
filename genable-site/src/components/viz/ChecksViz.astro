@@ -1,0 +1,47 @@
+<div class="checks" aria-hidden="true">
+  <div class="check-row">
+    <span class="step">01</span>
+    <span class="label">STRUCTURE</span>
+    <span class="state">READ</span>
+  </div>
+  <div class="check-row">
+    <span class="step">02</span>
+    <span class="label">SCREENSHOT</span>
+    <span class="state">SEE</span>
+  </div>
+  <div class="check-row active">
+    <span class="step">03</span>
+    <span class="label">REFINE</span>
+    <span class="state">WRITE</span>
+  </div>
+</div>
+
+<style>
+  .checks {
+    display: grid;
+    gap: 7px;
+  }
+  .check-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 29px;
+    padding: 0 10px;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 7px;
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.56);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+  .check-row.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: #fff;
+  }
+  .step { color: var(--accent); }
+  .state { font-size: 8px; }
+</style>

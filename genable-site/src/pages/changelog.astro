@@ -3,6 +3,19 @@ import Layout from '../layouts/Layout.astro';
 
 const releases = [
   {
+    label: 'Figma 29',
+    version: '29',
+    date: '2026-07-14',
+    title: 'A stronger loop and a more deliberate design direction',
+    notes: [
+      'Better brief interpretation, visual-direction guidance, and JSX generation for more intentional, less preset-like results',
+      'Stronger tool discovery and routing across editable Figma layers',
+      'One-call variable-system creation for collections, modes, primitives, and semantic aliases',
+      'Improved write verification, idempotent reuse, failure rollback, and focused follow-up edits',
+      'Clearer Plugin + MCP setup with refreshed Community visuals',
+    ],
+  },
+  {
     version: '1.5.0',
     date: '2026-05-19',
     title: 'Local MCP unlocked from the marketplace',
@@ -72,7 +85,7 @@ const releases = [
       <span class="eyebrow">CHANGELOG</span>
       <h1 style="margin-top: 16px;">What's shipped.</h1>
       <p class="lead muted" style="margin-top: 24px;">
-        See the <a href="https://github.com/musepy/genable/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">full CHANGELOG.md</a> for granular notes.
+        See <a href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">Figma Version history</a> for plugin releases and the <a href="https://github.com/musepy/genable/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">package CHANGELOG.md</a> for MCP releases. Tool counts below are historical snapshots; the schema reported by your installed package is authoritative.
       </p>
     </div>
   </section>
@@ -83,7 +96,7 @@ const releases = [
         {releases.map(r => (
           <article class="release">
             <div class="meta">
-              <span class="version">v{r.version}</span>
+              <span class="version">{'label' in r ? r.label : `v${r.version}`}</span>
               <span class="muted" style="font-size: 13px;">{r.date}</span>
             </div>
             <h2>{r.title}</h2>

@@ -3,7 +3,7 @@ const path = Astro.url.pathname;
 const is = (p: string) => path === p || path.startsWith(p + '/');
 ---
 
-<nav class="topnav">
+<nav class="topnav" aria-label="Primary navigation">
   <div class="topnav-inner">
     <a class="brand" href="/">
       <span class="gmark">G</span>
@@ -52,4 +52,9 @@ const is = (p: string) => path === p || path.startsWith(p + '/');
     box-shadow: 0 12px 22px -12px rgba(0, 0, 0, 0.55);
   }
   .nav-cta:hover .arrow { transform: translateX(2px); }
+  @media (max-width: 760px) {
+    .links { gap: 0 !important; }
+    .links > a:not(.nav-cta) { display: none; }
+    .nav-cta { padding: 9px 15px; }
+  }
 </style>

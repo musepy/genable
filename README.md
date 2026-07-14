@@ -4,122 +4,152 @@
 
 # Genable
 
-**Hand off the design busywork.**
-Detailed prompt in. Fully editable Figma layers out — components typed, variables bound, variants generated, pages laid out.
+**Use your model. Keep the design.**
 
-[![Install on Figma](https://img.shields.io/badge/Install-Figma_Community-black?style=for-the-badge&logo=figma)](https://www.figma.com/community/plugin/1583731690321161934/genable-ai-ui-design-generator-prompt-to-ui-dashboard-landing-page-mobile-app)
+Turn a detailed brief into native, editable Figma structure you can inspect and refine.
+
+[![Install on Figma](https://img.shields.io/badge/Install-Figma_Community-black?style=for-the-badge&logo=figma)](https://www.figma.com/community/plugin/1583731690321161934)
+[![Website](https://img.shields.io/badge/Website-genable.pages.dev-3B6FD4?style=for-the-badge)](https://genable.pages.dev)
 [![npm: genable-mcp](https://img.shields.io/npm/v/genable-mcp?style=for-the-badge&logo=npm&label=genable-mcp)](https://www.npmjs.com/package/genable-mcp)
 [![Sponsor](https://img.shields.io/badge/Sponsor-Patreon-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/c/musec)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](./LICENSE)
 
-<img src="./assets/cover.png" alt="Skip the busywork. Keep the design." width="100%" />
+<img src="./assets/cover.png" alt="Use your model. Keep the design." width="100%" />
 
 </div>
 
 ---
 
-## Why Genable
+## A design agent with a canvas to act on
 
-Most AI design tools ship a flat image or a templated mock. Genable is **agentic** — it plans, executes against Figma's scene graph through typed tools, and verifies its work. The output is real, editable Figma layers, not screenshots.
+Genable runs an agent loop against Figma's scene graph through typed design
+operations. It can plan a composition, build native structure, inspect the
+result, and continue refining it in context.
 
-- **Real layers** — Frames with Auto Layout, real Text, real Components — not flattened images.
-- **Variables, not pasted hex** — Color, typography, and spacing bound to variables with light and dark modes.
-- **Variants together** — Light, dark, and brand-color themes generated in one pass, switchable in a click.
-- **Whole pages** — Hero, pricing, features, FAQ laid out as proper sections — not a slab of nodes.
-- **Detailed prompts welcome** — We don't sell prompt brevity. The more specific you are, the better the result.
+- **Plan the direction** — Make audience, content, hierarchy, brand, mood,
+  typography, density, and rhythm part of the brief.
+- **Build native structure** — Create and edit frames, Auto Layout, vectors,
+  text, components, variables, and pages instead of returning one flat image.
+- **Check the work** — Inspect structure, read back writes, and use screenshots
+  for visual verification when useful.
+- **Keep refining** — Continue the conversation with the current canvas in
+  context; every generated layer remains available to edit in Figma.
 
----
-
-## What you can hand off
-
-<img src="./assets/screenshot-1.png" alt="Six things Genable takes off your plate" width="100%" />
-
----
-
-## Three steps
-
-<img src="./assets/screenshot-2.png" alt="From describing to designing — three steps" width="100%" />
+<img src="./assets/screenshot-1.png" alt="Genable plans, builds, and checks" width="100%" />
 
 ---
 
-## Two surfaces, one engine
+## A visual direction, not a preset shell
 
-Use Genable as a **Figma plugin** (designers) or as the **`genable-mcp`** MCP server (Claude Code, Cursor, Cline, Continue, Zed, or any MCP-compatible agent). Same engine, same 41 tools.
+Generic output often begins with a generic brief. Genable's design guidance
+pushes the model to treat composition, hierarchy, typography, density, rhythm,
+surfaces, and data presentation as connected decisions—not as a card grid with
+a new accent color.
 
-### Install the plugin
+No tool can guarantee taste. The model, source material, and judgment still
+matter. Genable keeps intent explicit and the result inspectable so refinement
+stays inside the workflow.
 
-**[Install from Figma Community →](https://www.figma.com/community/plugin/1583731690321161934/genable-ai-ui-design-generator-prompt-to-ui-dashboard-landing-page-mobile-app)**
+<img src="./assets/screenshot-3.png" alt="A visual direction, not a preset shell" width="100%" />
 
-1. Open Figma.
-2. Run `Plugins → Genable`.
-3. Paste an API key in Settings (any of the protocols below).
-4. Type a detailed prompt. Hit generate.
+---
 
-### Install the MCP server
+## Choose the model that fits the brief
 
-For agent-driven workflows. Pair with the official Figma MCP for full read + write.
+The Figma plugin supports provider presets and configurable compatible
+endpoints across three protocol families. It validates the provider before the
+first run and lets you switch models later without hard-coding this page to a
+specific model version.
+
+| Protocol | Typical connections |
+|---|---|
+| **OpenAI-compatible** | OpenAI, OpenRouter, Moonshot, DeepSeek, DashScope, compatible endpoints |
+| **Anthropic-compatible** | Anthropic and compatible endpoints |
+| **Gemini** | Google AI Studio |
+
+Provider credentials are stored in Figma client storage. Requests go to the
+endpoint you configure; some presets can use a relay when browser-network
+constraints require it. Provider billing and limits still apply.
+
+---
+
+## One engine, two ways into Figma
+
+<img src="./assets/screenshot-2.png" alt="Use Genable through the Figma plugin or an MCP client" width="100%" />
+
+### Inside Figma: the plugin
+
+1. [Install Genable from Figma Community](https://www.figma.com/community/plugin/1583731690321161934).
+2. Add a supported provider or compatible endpoint in Settings.
+3. Describe the design in detail, then inspect and refine the native layers in
+   conversation.
+
+### From an MCP client: `genable-mcp`
+
+Use the model already configured in a STDIO MCP client. `genable-mcp` provides
+a local, plugin-backed bridge for creating, editing, inspecting, and visually
+verifying Figma designs; it does not require a second model API key inside
+Genable.
 
 ```json
 {
   "mcpServers": {
-    "genable": { "command": "npx", "args": ["-y", "genable-mcp"] }
+    "genable": {
+      "command": "npx",
+      "args": ["-y", "genable-mcp"]
+    }
   }
 }
 ```
 
-41 tools — JSX tree creation, variables, components, cross-page navigation, visual verification. **[Full docs on npm →](https://www.npmjs.com/package/genable-mcp)**
+Keep the Genable plugin running in Figma desktop, then ask your client to list
+the pages in the current file. See the [current package docs](https://www.npmjs.com/package/genable-mcp)
+for client-specific setup and the live tool schema.
 
 ---
 
-## Bring your own model
+## Example briefs
 
-Genable speaks three protocols natively. Pick whichever you have keys for — keys stay on your device.
+Detail gives the model a real direction to work with. Adapt one of these to your
+product rather than treating it as a guaranteed output recipe:
 
-| Protocol | Examples | Get a key |
-|---|---|---|
-| **Google Gemini** | Gemini 2.5 Pro / Flash | [aistudio.google.com](https://aistudio.google.com) |
-| **Anthropic Claude** | Claude 4.7 Sonnet / Opus | [console.anthropic.com](https://console.anthropic.com) |
-| **OpenAI-compatible** | OpenRouter, DashScope (Qwen), Kimi K2.5, custom endpoints | varies |
-
-Switch models any time from the Settings panel.
-
----
-
-## Examples
-
-Detail helps. Try prompts like:
-
-- *"SaaS pricing page — 3 tiers, monthly/annual toggle, featured Pro plan, dark mode, brand color bound to variables."*
-- *"Analytics dashboard — sidebar, KPI grid with sparklines, a hot-state table row, dark + light variants, bound to brand tokens."*
-- *"Mobile onboarding — 3 screens with progress dots, illustrations, brand color blue (#4F90EE)."*
-- *"Landing page hero — headline + subline + dual CTA + code preview card, Inter typography, 8pt spacing scale."*
-
-Genable returns a real, editable Figma frame you can drop straight into a design system.
+- *“SaaS pricing page — three tiers, monthly/annual toggle, featured Pro plan,
+  dark mode, and brand color bound to variables.”*
+- *“Analytics dashboard — sidebar, KPI grid with sparklines, compact holdings
+  table, dark and light modes, and a calm editorial hierarchy.”*
+- *“Mobile onboarding — three screens with progress, illustration direction,
+  named type scale, spacing rhythm, and one clear primary action.”*
+- *“Landing hero — audience and value proposition first, dual CTA, code preview,
+  Inter typography, and an 8pt spacing scale.”*
 
 ---
 
 ## Sponsor
 
-Genable is built and maintained by one developer, in the open. If it saves you time or replaces a paid tool, please consider sponsoring:
+Genable is maintained by one developer. Sponsorship supports development time,
+real-model evaluation, and ongoing plugin and MCP improvements.
 
-**[💖 Sponsor on Patreon](https://www.patreon.com/c/musec)**
-
-Sponsorship pays for development time, model API quotas during testing, and ongoing improvements.
+**[Sponsor on Patreon →](https://www.patreon.com/c/musec)**
 
 ---
 
 ## License
 
-[MIT](./LICENSE) — free for personal and commercial use.
+The material in this public repository and the `genable-mcp` package are
+MIT-licensed. The Figma Community plugin is free; model-provider usage may be
+billed separately.
 
 ---
 
 <div align="center">
 <sub>
-<a href="https://www.figma.com/community/plugin/1583731690321161934/genable-ai-ui-design-generator-prompt-to-ui-dashboard-landing-page-mobile-app">Figma plugin</a>
- · 
+<a href="https://www.figma.com/community/plugin/1583731690321161934">Figma plugin</a>
+ ·
 <a href="https://www.npmjs.com/package/genable-mcp">MCP server</a>
- · 
+ ·
+<a href="https://genable.pages.dev">Website</a>
+ ·
+<a href="https://github.com/musepy/genable">Public project page</a>
+ ·
 <a href="https://www.patreon.com/c/musec">Sponsor</a>
 </sub>
 </div>

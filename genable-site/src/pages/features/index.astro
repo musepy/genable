@@ -6,16 +6,16 @@ import PagesViz from '../../components/viz/PagesViz.astro';
 import VariablesViz from '../../components/viz/VariablesViz.astro';
 import VariantsViz from '../../components/viz/VariantsViz.astro';
 import SystemViz from '../../components/viz/SystemViz.astro';
-import SpeedViz from '../../components/viz/SpeedViz.astro';
+import ChecksViz from '../../components/viz/ChecksViz.astro';
 ---
 
-<Layout title="Features — Genable" description="Six things Genable takes off your plate: components, pages, variables, variants, design system, speed.">
+<Layout title="Features — Genable" description="Plan a visual direction, build native Figma structure, then inspect and refine the result.">
   <section>
     <div class="container">
       <span class="eyebrow">FEATURES</span>
-      <h1 style="margin-top: 16px; max-width: 900px;">Six things Genable takes off your plate.</h1>
+      <h1 style="margin-top: 16px; max-width: 900px;">Plan the direction. Build the system. Check the result.</h1>
       <p class="lead muted" style="margin-top: 24px;">
-        Each capability has its own page with a detailed prompt example, a checklist of what Genable produces, and — for design system — DESIGN.md integration. Click any card.
+        Genable starts from a detailed brief, works through native Figma operations, and gives the model ways to inspect what it made. These six areas show where that loop is useful.
       </p>
     </div>
   </section>
@@ -23,23 +23,23 @@ import SpeedViz from '../../components/viz/SpeedViz.astro';
   <section style="border-top: 1px solid var(--hair-soft);">
     <div class="container">
       <div class="bento">
-        <BentoCard mono="ONE PROMPT → A SET" title="Components" desc="Whole button systems, form sets, card libraries — every variant typed, sized and aligned." href="/features/components">
-          <ButtonsViz />
-        </BentoCard>
-        <BentoCard mono="HERO TO FOOTER" title="Pages" desc="Hero, pricing, features, FAQ — laid out as sections, not a flat slab of nodes." href="/features/pages">
+        <BentoCard mono="PLAN · BRIEF TO HIERARCHY" title="Visual direction" desc="Audience, content, brand, and mood shape hierarchy and density before the canvas work begins." href="/features/pages">
           <PagesViz />
         </BentoCard>
-        <BentoCard mono="TOKENS · MODES" title="Variables" desc="Color, typography, spacing — bound to variables with light/dark modes, not pasted hexes." href="/features/variables">
+        <BentoCard mono="BUILD · NATIVE STRUCTURE" title="Components" desc="Create component frames, properties, states, and Auto Layout as editable Figma structure." href="/features/components">
+          <ButtonsViz />
+        </BentoCard>
+        <BentoCard mono="BUILD · TOKENS + MODES" title="Variables" desc="Create collections and modes, then bind supported properties instead of scattering values." href="/features/variables">
           <VariablesViz />
         </BentoCard>
-        <BentoCard mono="LIGHT · DARK · BRAND" title="Variants" desc="Mode switches and brand color themes — generated together, swap with one click." href="/features/variants">
+        <BentoCard mono="BUILD · RELATED STATES" title="Variants" desc="Lay out related modes, states, and sizes together so their differences remain explicit." href="/features/variants">
           <VariantsViz />
         </BentoCard>
-        <BentoCard mono="DESIGN.MD COMPATIBLE" title="Design system" desc="Library scaffolded. Frames named, sectioned. Reads DESIGN.md for portable system specs." href="/features/system">
+        <BentoCard mono="BUILD · REUSABLE CONTEXT" title="Design system" desc="Organize pages and sections, or import a design.md to give the agent reusable direction." href="/features/system">
           <SystemViz />
         </BentoCard>
-        <BentoCard mono="42 LAYERS · 8 SECONDS" title="Speed" desc="What used to take half a day, in seconds — without losing the layer structure." dark href="/features/speed">
-          <SpeedViz />
+        <BentoCard mono="CHECK · READ + SEE + REFINE" title="Check &amp; refine" desc="Inspect structure, capture a screenshot, and continue editing in the current session." dark href="/features/checks">
+          <ChecksViz />
         </BentoCard>
       </div>
     </div>
@@ -51,9 +51,9 @@ import SpeedViz from '../../components/viz/SpeedViz.astro';
       <div class="row-2">
         <div>
           <span class="eyebrow">LEARN BY DOING</span>
-          <h2 style="margin-top: 16px;">Install the plugin, paste a prompt.</h2>
+          <h2 style="margin-top: 16px;">Choose the surface that fits your work.</h2>
           <p class="lead muted" style="margin-top: 20px;">
-            Install Genable from Figma Community in one click. Open it in any file, paste any prompt below, and watch Genable build it as real Figma layers.
+            Work conversationally inside Figma with the plugin, or give a STDIO MCP client a local path to the same typed Figma operations.
           </p>
           <div style="margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap;">
             <a class="btn btn-primary" href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">
@@ -68,7 +68,7 @@ import SpeedViz from '../../components/viz/SpeedViz.astro';
               </span>
               Install from Figma Community
             </a>
-            <a class="btn btn-ghost" href="/examples">Browse the prompt library</a>
+            <a class="btn btn-ghost" href="/quickstart#mcp">Set up the MCP path</a>
           </div>
         </div>
         <div class="playground-art">
@@ -109,4 +109,10 @@ import SpeedViz from '../../components/viz/SpeedViz.astro';
   .frame-1 { width: 120px; height: 240px; left: 0; top: 60px; transform: rotate(-3deg); }
   .frame-2 { width: 280px; height: 180px; left: 90px; top: 140px; transform: rotate(1deg); z-index: 2; }
   .frame-3 { width: 280px; height: 180px; right: 0; top: 0; transform: rotate(-2deg); }
+
+  @media (max-width: 600px) {
+    .frame-1 { width: 34%; }
+    .frame-2 { width: 76%; left: 12%; }
+    .frame-3 { width: 76%; }
+  }
 </style>

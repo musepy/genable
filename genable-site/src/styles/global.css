@@ -19,9 +19,9 @@
   --hair-soft: rgba(10, 10, 10, 0.06);
 
   /* Brand */
-  --accent: #2A6FDB;
-  --accent-soft: #E6EFFC;
-  --accent-ink: #1F4FA0;
+  --accent: #3B6FD4;
+  --accent-soft: #E8EEFB;
+  --accent-ink: #254F9C;
 
   /* Status */
   --ok: #1F8A5B;
@@ -64,6 +64,7 @@ img { max-width: 100%; display: block; }
 
 a { color: inherit; text-decoration: none; }
 a:hover { color: var(--accent); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 ::selection { background: var(--accent); color: #fff; }
 
@@ -173,6 +174,11 @@ footer.site .row {
 footer.site h4 { font-size: 13px; font-family: var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--micro); margin-bottom: 12px; }
 footer.site ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 footer.site a { color: var(--ink-2); }
+footer.site .footer-bottom {
+  margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--hair-soft);
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  color: var(--micro); font-size: 13px;
+}
 
 /* Bento grid */
 .bento {
@@ -249,3 +255,16 @@ code { font-family: var(--font-mono); font-size: 0.95em; }
 
 .muted { color: var(--muted); }
 .micro { color: var(--micro); }
+
+@media (max-width: 600px) {
+  footer.site .footer-bottom { align-items: flex-start; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

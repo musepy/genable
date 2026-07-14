@@ -1,407 +1,380 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import BentoCard from '../components/BentoCard.astro';
-import ButtonsViz from '../components/viz/ButtonsViz.astro';
-import PagesViz from '../components/viz/PagesViz.astro';
-import VariablesViz from '../components/viz/VariablesViz.astro';
-import VariantsViz from '../components/viz/VariantsViz.astro';
-import SystemViz from '../components/viz/SystemViz.astro';
-import SpeedViz from '../components/viz/SpeedViz.astro';
+
+const figmaCommunity = 'https://www.figma.com/community/plugin/1583731690321161934';
 ---
 
 <Layout>
-  <!-- Hero -->
   <section class="hero">
-    <div class="container">
-      <span class="eyebrow">FIGMA · AI DESIGN COMPANION</span>
-      <h1>
-        Skip the busywork.
-        <br />
-        <span class="stanza-accent">Keep the design.</span>
-      </h1>
-      <p class="lead">
-        Components, pages, variables, variants — generated, themed, and laid out.
-        Bring a detailed prompt; Genable handles the manual labor and returns
-        <strong>fully editable Figma layers</strong>.
-      </p>
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">FIGMA · AI DESIGN AGENT</span>
+        <h1>
+          Use your model.
+          <br />
+          <span class="stanza-accent">Keep the design.</span>
+        </h1>
+        <p class="lead">
+          Bring the model you trust into Figma. Genable turns a detailed brief
+          into <strong>native, editable structure</strong> you can inspect and refine.
+        </p>
 
-      <!-- Dual-entry: pick the surface that fits your workflow -->
-      <div class="entries">
-        <a class="entry" href="/quickstart#plugin">
-          <div class="entry-icon">
-            <!-- Figma logo -->
-            <svg width="22" height="22" viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="#1ABCFE"/>
-              <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z" fill="#0ACF83"/>
-              <path d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z" fill="#FF7262"/>
-              <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z" fill="#F24E1E"/>
-              <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z" fill="#A259FF"/>
-            </svg>
-          </div>
-          <div class="entry-body">
-            <span class="entry-eyebrow">FOR DESIGNERS</span>
-            <strong>Open in Figma</strong>
-            <span class="entry-desc">Install the plugin from Figma Community</span>
-          </div>
-          <span class="entry-arrow">→</span>
-        </a>
+        <div class="entries" aria-label="Get started with Genable">
+          <a class="entry" href={figmaCommunity} target="_blank" rel="noreferrer">
+            <span class="entry-index">01</span>
+            <span class="entry-body">
+              <span class="entry-eyebrow">INSIDE FIGMA</span>
+              <strong>Install the plugin</strong>
+              <span>Connect a supported provider and refine in conversation.</span>
+            </span>
+            <span class="entry-arrow" aria-hidden="true">↗</span>
+          </a>
 
-        <a class="entry" href="/quickstart#mcp">
-          <div class="entry-icon mcp">
-            <span>MCP</span>
-          </div>
-          <div class="entry-body">
-            <span class="entry-eyebrow">FOR AI EDITORS &amp; AGENTS</span>
-            <strong>Add to any MCP client</strong>
-            <span class="entry-desc"><code>npx -y genable-mcp</code></span>
-          </div>
-          <span class="entry-arrow">→</span>
-        </a>
+          <a class="entry entry-dark" href="/quickstart#mcp">
+            <span class="entry-index">02</span>
+            <span class="entry-body">
+              <span class="entry-eyebrow">FROM AN MCP CLIENT</span>
+              <strong>Connect genable-mcp</strong>
+              <span>Your client supplies the model; Genable supplies the path into Figma.</span>
+            </span>
+            <span class="entry-arrow" aria-hidden="true">→</span>
+          </a>
+        </div>
+
+        <div class="proof">
+          <span class="chip">Genable is free · Provider usage applies</span>
+          <span class="chip dark">Plugin · Local MCP bridge</span>
+        </div>
       </div>
 
-      <div class="proof">
-        <span class="chip ok"><i class="dot"></i> Free · Open Source · MIT</span>
-        <span class="chip">BYO API key required — pick any provider</span>
-      </div>
+      <aside class="brief-sheet" aria-label="Example design brief">
+        <div class="sheet-head">
+          <span class="eyebrow">BRIEF / 01</span>
+          <span class="sheet-status"><i></i> READY</span>
+        </div>
+        <p class="sheet-prompt">
+          A calm analytics dashboard for finance teams. Lead with portfolio
+          health, keep tables compact, and bind the color system to variables.
+        </p>
+        <dl>
+          <div><dt>Audience</dt><dd>Finance teams</dd></div>
+          <div><dt>Direction</dt><dd>Calm · exact · editorial</dd></div>
+          <div><dt>Density</dt><dd>Compact data · generous margins</dd></div>
+          <div><dt>Output</dt><dd>Native Figma structure</dd></div>
+        </dl>
+        <div class="sheet-foot">
+          <span>BRIEF</span><i></i><span>PLAN</span><i></i><span>CANVAS</span>
+        </div>
+      </aside>
     </div>
   </section>
 
-  <!-- Bento -->
-  <section class="bento-section">
+  <section class="loop-section">
     <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">WHAT GENABLE TAKES OFF YOUR PLATE</span>
-        <h2>The tedious parts, automated.</h2>
+      <div class="section-head section-head-light">
+        <span class="eyebrow">THE AGENT LOOP</span>
+        <h2>Plans. Builds. Checks.</h2>
+        <p class="lead">
+          A brief becomes a visual direction, then native structure, then a result
+          Genable can inspect before the next move.
+        </p>
+      </div>
+
+      <ol class="loop-list">
+        <li>
+          <span class="loop-num">01</span>
+          <div>
+            <span class="eyebrow">PLAN · COMPOSITION</span>
+            <h3>Make the direction explicit.</h3>
+          </div>
+          <p>Audience and content shape hierarchy. Brand and mood guide type, rhythm, surfaces, and data presentation.</p>
+          <div class="loop-tags"><span>Hierarchy</span><span>Visual system</span></div>
+        </li>
+        <li>
+          <span class="loop-num">02</span>
+          <div>
+            <span class="eyebrow">BUILD · STRUCTURE</span>
+            <h3>Act on the Figma canvas.</h3>
+          </div>
+          <p>Typed design operations create and edit frames, Auto Layout, vectors, components, variables, and pages.</p>
+          <div class="loop-tags"><span>Native layers</span><span>Reusable parts</span></div>
+        </li>
+        <li>
+          <span class="loop-num">03</span>
+          <div>
+            <span class="eyebrow">CHECK · REFINE</span>
+            <h3>Look again, then continue.</h3>
+          </div>
+          <p>Inspect structure, read back writes, review screenshots when useful, and make the next change with the current design in context.</p>
+          <div class="loop-tags"><span>Inspect</span><span>Screenshot</span></div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="direction-section">
+    <div class="container direction-grid">
+      <div class="direction-copy">
+        <span class="eyebrow">VISUAL DIRECTION</span>
+        <h2>
+          A visual direction.
+          <span>Not a preset shell.</span>
+        </h2>
         <p class="lead muted">
-          Six things you used to do by hand, now done for you — without losing the layer structure or your design intent.
+          Generic outputs often begin with generic briefs. Genable makes
+          audience, hierarchy, typography, density, rhythm, and brand mood part
+          of the task—not just the accent color.
+        </p>
+        <p class="direction-note">
+          The model and brief still matter. Genable keeps intent visible and the
+          result editable so refinement stays part of the loop.
         </p>
       </div>
 
-      <div class="bento">
-        <BentoCard mono="ONE PROMPT → A SET" title="Components" desc="Whole button systems, form sets, card libraries — every variant typed, sized and aligned." href="/features/components">
-          <ButtonsViz />
-        </BentoCard>
-
-        <BentoCard mono="HERO TO FOOTER" title="Pages" desc="Hero, pricing, features, FAQ — laid out as sections, not a flat slab of nodes." href="/features/pages">
-          <PagesViz />
-        </BentoCard>
-
-        <BentoCard mono="TOKENS · MODES" title="Variables" desc="Color, typography, spacing — bound to variables with light/dark modes, not pasted hexes." href="/features/variables">
-          <VariablesViz />
-        </BentoCard>
-
-        <BentoCard mono="LIGHT · DARK · BRAND" title="Variants" desc="Mode switches and brand color themes — generated together, swap with one click." href="/features/variants">
-          <VariantsViz />
-        </BentoCard>
-
-        <BentoCard mono="CANVAS ORGANIZED" title="Design system" desc="Library scaffolded. Frames named, sectioned, and arranged on the page — not a pile." href="/features/system">
-          <SystemViz />
-        </BentoCard>
-
-        <BentoCard mono="42 LAYERS · 8 SECONDS" title="Speed" desc="What used to take half a day, in seconds — without losing the layer structure." dark>
-          <SpeedViz />
-        </BentoCard>
+      <div class="direction-ledger" aria-label="Design direction dimensions">
+        <div><span class="eyebrow">BRIEF</span><strong>Audience · Content</strong><i>01</i></div>
+        <div><span class="eyebrow">DIRECTION</span><strong>Brand · Mood</strong><i>02</i></div>
+        <div><span class="eyebrow">HIERARCHY</span><strong>Type · Density · Rhythm</strong><i>03</i></div>
+        <div class="ledger-output"><span class="eyebrow">OUTPUT</span><strong>Native Figma structure</strong><i>04</i></div>
       </div>
     </div>
   </section>
 
-  <!-- Flow -->
-  <section id="how" class="flow-section">
+  <section class="models-section">
     <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">THREE STEPS</span>
-        <h2>From describing to designing.</h2>
-      </div>
-
-      <div class="flow">
-        <div class="step s1">
-          <div class="step-head">
-            <span class="eyebrow">STEP 1</span>
-            <span class="num">1</span>
-          </div>
-          <h3>Describe what you need</h3>
-          <p class="muted">Page, style, fonts, colors, components. Be as specific as you like — detail helps.</p>
-          <div class="example">
-            <span class="eyebrow" style="font-size: 11px;">YOU</span>
-            <p>A sign-in page, dark, orange accent. Inter, 8pt grid. Bind colors to brand tokens<i class="cur"></i></p>
-          </div>
-        </div>
-
-        <div class="step s2">
-          <div class="step-head">
-            <span class="eyebrow" style="color: rgba(255,255,255,0.55);">STEP 2</span>
-            <span class="num">2</span>
-          </div>
-          <h3>Genable builds it</h3>
-          <p class="muted">Components, variables, variants, layout — generated together, on the canvas.</p>
-          <div class="example dark-ex">
-            <div class="row" style="display:flex; justify-content: space-between; margin-bottom: 12px;">
-              <span class="eyebrow" style="color: rgba(255,255,255,0.55); font-size: 10px;">GENERATING</span>
-              <span class="eyebrow" style="color: var(--accent); font-size: 10px;">04:12</span>
-            </div>
-            <div class="bar"><span style="width:100%"></span></div>
-            <div class="bar"><span style="width:88%"></span></div>
-            <div class="bar"><span style="width:62%"></span></div>
-            <div class="bar"><span style="width:32%"></span></div>
-          </div>
-        </div>
-
-        <div class="step s3">
-          <div class="step-head">
-            <span class="eyebrow" style="color: rgba(255,255,255,0.85);">STEP 3</span>
-            <span class="num">3</span>
-          </div>
-          <h3>Edit anything</h3>
-          <p style="color: rgba(255,255,255,0.92);">Real Figma layers, not images. Change one, or describe a tweak and Genable redoes the layout.</p>
-          <div class="example layers">
-            <span class="eyebrow" style="color: rgba(255,255,255,0.85); font-size: 10px;">LAYERS · 24</span>
-            <div class="ln">▾ Login</div>
-            <div class="ln pad">T Heading</div>
-            <div class="ln pad sel">◇ Form</div>
-            <div class="ln pad">⊙ Primary</div>
-            <div class="ln pad">T Sign-up link</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Detailed prompts welcome -->
-  <section class="dpw">
-    <div class="container row-2">
-      <div>
-        <span class="eyebrow">DETAILED PROMPTS WELCOME</span>
-        <h2 style="margin-top: 16px;">The more you tell it, the better it gets.</h2>
-        <p class="lead muted" style="margin-top: 20px;">
-          Genable is not a wrapper around "describe in 5 words". Bring fonts, grid units, color tokens, component variants, layout intent — every detail you give shapes the result. The plugin handles the manual labor; you stay in control of the craft.
-        </p>
-      </div>
-      <div class="prompt-card">
-        <div class="prompt-head">
-          <span class="eyebrow">YOU · PROMPT</span>
-          <span class="dots"><i></i><i></i><i></i></span>
-        </div>
-        <div class="prompt-body">
-          A fund monthly report: dark theme, NAV hero card with sparkline, holdings table with hot-state row, light/dark variants — bind colors to brand tokens<i class="cur"></i>
-        </div>
-        <div class="prompt-foot">
-          <div class="chips">
-            <span class="chip">@ Theme</span>
-            <span class="chip">@ Font</span>
-          </div>
-          <span class="btn-mock">Generate →</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Multi-model -->
-  <section class="models">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">MULTI-MODEL · BYO API KEY</span>
-        <h2>Use whichever model you trust.</h2>
+      <div class="models-intro">
+        <span class="eyebrow">MODELS · SUPPORTED PROTOCOLS</span>
+        <h2>Choose the model that fits the brief.</h2>
         <p class="lead muted">
-          Plug in your own key. Keys live in <code>localStorage</code> only — they never reach our servers, because there are no servers.
+          The plugin can connect to supported presets or a compatible endpoint.
+          Genable validates the provider before the first run and keeps model
+          choice in your hands.
         </p>
       </div>
-
-      <div class="models-grid">
-        {[
-          { name: '100+ models, single key', vendor: 'OpenRouter', note: 'OpenAI protocol — broadest coverage' },
-          { name: 'Kimi K2.5', vendor: 'Moonshot', note: 'OpenAI protocol' },
-          { name: 'Claude Opus / Sonnet / Haiku', vendor: 'Anthropic', note: 'Best for complex layouts' },
-          { name: 'Qwen via Anthropic-compatible', vendor: 'DashScope', note: 'Region-friendly in CN' },
-          { name: 'Gemini 2.5 Pro / Flash', vendor: 'Google', note: 'Multimodal; only Google supports' },
-        ].map(m => (
-          <div class="model">
-            <span class="eyebrow">{m.vendor}</span>
-            <strong>{m.name}</strong>
-            <span class="muted">{m.note}</span>
-          </div>
-        ))}
+      <div class="protocols">
+        <article>
+          <span class="protocol-mark">O</span>
+          <div><span class="eyebrow">OPENAI PROTOCOL</span><h3>OpenAI-compatible</h3><p>Use a supported preset or configure a compatible endpoint and model.</p></div>
+        </article>
+        <article>
+          <span class="protocol-mark">A</span>
+          <div><span class="eyebrow">ANTHROPIC PROTOCOL</span><h3>Anthropic-compatible</h3><p>Connect a native or compatible endpoint and choose a model available to your account.</p></div>
+        </article>
+        <article>
+          <span class="protocol-mark">G</span>
+          <div><span class="eyebrow">GEMINI PROTOCOL</span><h3>Google AI Studio</h3><p>Use Genable's Gemini adapter and select from the models available to your provider.</p></div>
+        </article>
       </div>
     </div>
   </section>
 
-  <!-- FAQ -->
+  <section class="surfaces-section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">TWO SURFACES · ONE ENGINE</span>
+        <h2>Meet Genable where you work.</h2>
+      </div>
+
+      <div class="surfaces">
+        <article class="surface surface-plugin">
+          <div class="surface-top"><span class="eyebrow">INSIDE FIGMA</span><span class="surface-no">01</span></div>
+          <h3>Plugin</h3>
+          <p>Add a provider and API key, describe the brief, then continue refining native layers in conversation.</p>
+          <div class="surface-flow"><span>BRIEF</span><i>→</i><span>PLAN</span><i>→</i><span>FIGMA</span></div>
+          <div class="surface-links">
+            <a href={figmaCommunity} target="_blank" rel="noreferrer">Install from Figma Community ↗</a>
+            <a href="/quickstart#plugin">Plugin setup →</a>
+          </div>
+        </article>
+
+        <article class="surface surface-mcp">
+          <div class="surface-top"><span class="eyebrow">FROM YOUR MCP CLIENT</span><span class="surface-no">02</span></div>
+          <h3>genable-mcp</h3>
+          <p>Use the model already configured in a STDIO MCP client. A local bridge relays typed design operations to the Genable plugin.</p>
+          <div class="surface-flow"><span>MCP CLIENT</span><i>→</i><span>LOCAL BRIDGE</span><i>→</i><span>FIGMA</span></div>
+          <div class="surface-links">
+            <a href="/quickstart#mcp">Set up genable-mcp →</a>
+            <a href="https://www.npmjs.com/package/genable-mcp" target="_blank" rel="noreferrer">View npm package ↗</a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
   <section class="faq">
-    <div class="container">
+    <div class="container faq-grid">
       <div class="section-head">
-        <span class="eyebrow">FAQ</span>
-        <h2>Common questions.</h2>
+        <span class="eyebrow">CLEAR CLAIMS</span>
+        <h2>What Genable is—and is not.</h2>
       </div>
-
       <div class="qs">
-        <details>
-          <summary>Is this free? Is the source code open?</summary>
-          <p>
-            Free, yes — and both surfaces are open source under MIT. The npm server (<a href="https://www.npmjs.com/package/genable-mcp" target="_blank" rel="noreferrer">genable-mcp</a>) and project showcase (<a href="https://github.com/musepy/genable" target="_blank" rel="noreferrer">musepy/genable</a>) are public. You bring your own LLM API key and pay the provider directly; Genable itself never charges and has no servers to charge from.
-          </p>
+        <details open>
+          <summary>Does Genable guarantee “AI-slop-free” design?</summary>
+          <p>No tool can guarantee taste. Genable addresses generic output by making the brief and visual direction explicit, keeping output native and inspectable, and supporting continued refinement. The model, source material, and judgment still matter.</p>
         </details>
         <details>
-          <summary>Why "BYO API key" instead of a credit-based subscription?</summary>
-          <p>Two reasons. First, you control cost and model choice — no markup. Second, your prompts and outputs stay between you and your provider. We never see them because we don't run servers.</p>
+          <summary>Is Genable free?</summary>
+          <p>The Figma plugin is free, and the <a href="https://www.npmjs.com/package/genable-mcp" target="_blank" rel="noreferrer">MCP package</a> is MIT-licensed. Your model provider or MCP client may apply its own billing and limits.</p>
         </details>
         <details>
-          <summary>How is this different from "prompt-to-UI" tools?</summary>
-          <p>Most prompt-to-UI tools wrap a single LLM call and emit a flattened image or template. Genable runs an agent loop: it plans, executes against Figma's scene graph through typed tools, verifies, and iterates. The output is fully editable Figma — auto-layout, bound variables, switchable variants — every layer is yours to change.</p>
+          <summary>Where do provider credentials and requests go?</summary>
+          <p>The plugin stores provider credentials in Figma client storage. Requests go to the endpoint you configure; some presets can use a relay when browser-network constraints require it. The MCP path receives model access from your client and connects to Figma through a local bridge.</p>
         </details>
         <details>
-          <summary>Will short prompts work?</summary>
-          <p>They will, but detailed prompts produce better results. Bring fonts, grid sizes, color tokens, component variants — Genable uses every detail you give. We never optimize for prompt brevity; we optimize for offloading the manual labor.</p>
-        </details>
-        <details>
-          <summary>Does it touch existing files?</summary>
-          <p>Only when you ask. By default Genable creates new frames. You can also point it at existing components and ask it to extend, restyle, or generate variants.</p>
+          <summary>What makes the output editable?</summary>
+          <p>Genable operates on Figma's scene graph through typed tools. It can create and modify native frames, Auto Layout, vectors, text, components, variables, and pages instead of returning a single flattened image.</p>
         </details>
       </div>
     </div>
   </section>
 
-  <!-- CTA -->
   <section class="cta-section">
-    <div class="container" style="text-align: center;">
-      <h2>Hand off the busywork.</h2>
-      <p class="lead muted" style="margin: 16px auto 32px;">Free. Open source. Install in 30 seconds.</p>
+    <div class="container cta-inner">
+      <span class="eyebrow">START WITH A REAL BRIEF</span>
+      <h2>Bring your model into Figma.</h2>
+      <p class="lead">Use the plugin in Figma, or connect the same canvas to your MCP workflow.</p>
       <div class="cta">
-        <a class="btn btn-primary" href="/quickstart">Install plugin</a>
-        <a class="btn btn-ghost" href="https://github.com/musepy/genable" target="_blank" rel="noreferrer">GitHub ↗</a>
+        <a class="btn btn-primary" href={figmaCommunity} target="_blank" rel="noreferrer">Install the plugin ↗</a>
+        <a class="btn btn-ghost" href="/quickstart#mcp">Set up genable-mcp →</a>
       </div>
     </div>
   </section>
 </Layout>
 
 <style>
-  .hero { padding-top: 80px; padding-bottom: 96px; }
-  .hero .eyebrow { display: inline-block; margin-bottom: 24px; }
-  .hero h1 { margin-bottom: 28px; }
-  .hero .lead { margin-bottom: 36px; }
-  .cta { display: flex; gap: 14px; flex-wrap: wrap; }
+  .hero { padding-top: clamp(72px, 8vw, 120px); padding-bottom: clamp(80px, 10vw, 148px); }
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr); gap: clamp(48px, 7vw, 100px); align-items: end; }
+  .hero-copy > .eyebrow { display: inline-block; margin-bottom: 26px; }
+  .hero h1 { font-size: clamp(58px, 7.3vw, 112px); }
+  .hero .lead { margin-top: 30px; }
+  .hero .lead strong { color: var(--ink); }
 
-  /* Dual entry — Plugin / MCP */
-  .entries {
-    display: grid; gap: 14px;
-    grid-template-columns: 1fr 1fr;
-    max-width: 880px;
-    margin-bottom: 32px;
-  }
-  @media (max-width: 720px) { .entries { grid-template-columns: 1fr; } }
-  .entry {
-    display: flex; align-items: center; gap: 18px;
-    padding: 18px 22px; border-radius: var(--r-lg);
-    background: var(--surface); border: 1px solid var(--hair);
-    color: inherit; transition: transform 0.12s ease, box-shadow 0.18s ease, border-color 0.12s ease;
-    box-shadow: 0 12px 24px -20px rgba(10,10,10,0.18);
-  }
-  .entry:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 24px 40px -24px rgba(10,10,10,0.22);
-    border-color: rgba(10,10,10,0.18);
-    color: inherit;
-  }
-  .entry-icon {
-    width: 44px; height: 44px; border-radius: 10px;
-    background: var(--bg-deep);
-    display: grid; place-items: center; flex: none;
-  }
-  .entry-icon.mcp {
-    background: var(--ink); color: #fff;
-    font-family: var(--font-mono); font-weight: 800; font-size: 11px; letter-spacing: 0.06em;
-  }
-  .entry-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-  .entry-eyebrow {
-    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--micro); font-weight: 700;
-  }
-  .entry-body strong { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
-  .entry-desc { font-size: 14px; color: var(--muted); }
-  .entry-desc code { font-size: 13px; background: var(--bg-deep); padding: 1px 6px; border-radius: 4px; }
-  .entry-arrow { color: var(--muted); font-size: 18px; }
-  .entry:hover .entry-arrow { color: var(--accent); }
+  .entries { display: grid; gap: 10px; max-width: 760px; margin-top: 40px; }
+  .entry { display: grid; grid-template-columns: 42px 1fr auto; gap: 18px; align-items: center; padding: 17px 20px; border-top: 1px solid var(--hair); background: var(--surface); color: var(--ink); transition: transform 0.16s ease, border-color 0.16s ease; }
+  .entry:last-child { border-bottom: 1px solid var(--hair); }
+  .entry:hover { transform: translateX(4px); color: inherit; border-color: var(--ink); }
+  .entry-dark { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .entry-dark:hover { color: #fff; }
+  .entry-index { font-family: var(--font-mono); font-size: 11px; color: var(--micro); }
+  .entry-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .entry-eyebrow { font: 600 10px/1.4 var(--font-mono); letter-spacing: 0.18em; color: var(--micro); }
+  .entry-body strong { font-size: 18px; letter-spacing: -0.015em; }
+  .entry-body > span:last-child { color: var(--muted); font-size: 14px; line-height: 1.45; }
+  .entry-dark .entry-body > span:last-child { color: rgba(255,255,255,0.64); }
+  .entry-arrow { font-size: 18px; color: var(--accent); }
+  .proof { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 
-  .proof {
-    margin-top: 12px;
-    display: flex; gap: 12px; flex-wrap: wrap;
-  }
-  .chip .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--ok); }
+  .brief-sheet { align-self: end; padding: 28px; background: var(--accent-soft); border-top: 3px solid var(--accent); border-bottom: 1px solid rgba(59,111,212,0.28); transform: rotate(1.25deg); box-shadow: 18px 24px 44px -36px rgba(10,10,10,0.42); }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 1px solid rgba(59,111,212,0.22); }
+  .sheet-status { font: 700 10px/1 var(--font-mono); letter-spacing: 0.14em; color: var(--accent-ink); display: inline-flex; align-items: center; gap: 7px; }
+  .sheet-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .sheet-prompt { margin: 28px 0; font-size: clamp(20px, 2vw, 26px); line-height: 1.38; font-weight: 700; letter-spacing: -0.025em; }
+  .brief-sheet dl { margin: 0; }
+  .brief-sheet dl div { display: grid; grid-template-columns: 100px 1fr; gap: 14px; padding: 10px 0; border-top: 1px solid rgba(59,111,212,0.16); }
+  .brief-sheet dt { font: 600 10px/1.5 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
+  .brief-sheet dd { margin: 0; font-size: 14px; font-weight: 600; }
+  .sheet-foot { display: flex; align-items: center; gap: 8px; margin-top: 24px; font: 700 10px/1 var(--font-mono); letter-spacing: 0.12em; color: var(--accent-ink); }
+  .sheet-foot i { height: 1px; flex: 1; background: var(--accent); opacity: 0.45; }
 
-  .section-head { margin-bottom: 56px; max-width: 720px; }
-  .section-head .eyebrow { display: inline-block; margin-bottom: 16px; }
-  .section-head h2 { margin-bottom: 20px; }
+  .section-head { max-width: 820px; margin-bottom: 56px; }
+  .section-head > .eyebrow, .models-intro > .eyebrow { display: inline-block; margin-bottom: 18px; }
+  .section-head h2, .models-intro h2 { margin-bottom: 22px; }
 
-  /* Flow custom */
-  .step-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-  .flow .step .example {
-    margin-top: auto;
-    padding: 16px; border-radius: var(--r);
-    background: rgba(255,255,255,0.7);
-    border: 1px solid var(--hair);
-    font-size: 14px; line-height: 1.55;
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .flow .s1 .example { background: #FBF8F2; }
-  .flow .s2 .example.dark-ex { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.10); display: flex; flex-direction: column; gap: 8px; }
-  .flow .s3 .example { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.24); }
-  .flow .s2 .bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.10); overflow: hidden; }
-  .flow .s2 .bar span { display: block; height: 100%; background: var(--accent); }
-  .flow .layers { font-family: var(--font-mono); font-size: 13px; }
-  .flow .layers .ln { color: #fff; }
-  .flow .layers .ln.pad { padding-left: 12px; }
-  .flow .layers .ln.sel { background: rgba(255,255,255,0.22); border-radius: 4px; padding: 2px 12px; }
-  .cur {
-    display: inline-block; width: 2px; height: 14px;
-    background: var(--accent); margin-left: 3px; vertical-align: -2px;
-    animation: cur 1s steps(2) infinite;
-  }
-  @keyframes cur { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .loop-section { background: var(--ink); color: #fff; }
+  .section-head-light .eyebrow, .loop-list .eyebrow { color: #8fb1ef; }
+  .section-head-light .lead { color: rgba(255,255,255,0.68); }
+  .loop-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid rgba(255,255,255,0.18); }
+  .loop-list li { display: grid; grid-template-columns: 64px minmax(220px, 0.8fr) minmax(300px, 1fr) auto; gap: 28px; align-items: center; padding: 32px 0; border-bottom: 1px solid rgba(255,255,255,0.18); }
+  .loop-num { font: 500 13px/1 var(--font-mono); color: rgba(255,255,255,0.36); }
+  .loop-list h3 { margin-top: 7px; font-size: clamp(25px, 3vw, 38px); }
+  .loop-list p { color: rgba(255,255,255,0.65); font-size: 16px; line-height: 1.55; max-width: 560px; }
+  .loop-tags { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .loop-tags span { padding: 6px 9px; border: 1px solid rgba(255,255,255,0.18); font: 600 10px/1 var(--font-mono); color: rgba(255,255,255,0.74); }
 
-  /* Detailed prompts welcome */
-  .dpw { background: var(--bg-deep); }
-  .prompt-card {
-    background: #fff; border: 1px solid var(--hair); border-radius: var(--r-lg);
-    padding: 28px;
-    box-shadow: 0 24px 48px -28px rgba(10,10,10,0.18);
-    transform: rotate(-1deg);
-  }
-  .prompt-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .prompt-head .dots { display: flex; gap: 4px; }
-  .prompt-head .dots i { width: 6px; height: 6px; border-radius: 999px; background: rgba(10,10,10,0.18); display: inline-block; }
-  .prompt-body { font-size: 22px; color: var(--ink); line-height: 1.5; font-weight: 500; }
-  .prompt-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
-  .prompt-foot .chips { display: flex; gap: 8px; }
-  .btn-mock { padding: 10px 18px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 14px; font-weight: 600; }
+  .direction-section { overflow: hidden; }
+  .direction-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(440px, 1.1fr); gap: clamp(52px, 8vw, 116px); align-items: center; }
+  .direction-copy > .eyebrow { display: inline-block; margin-bottom: 18px; }
+  .direction-copy h2 span { display: block; margin-top: 6px; color: var(--accent); font-family: var(--font-serif); font-style: italic; font-weight: 600; letter-spacing: -0.045em; }
+  .direction-copy .lead { margin-top: 28px; }
+  .direction-note { max-width: 620px; margin-top: 22px; padding-left: 16px; border-left: 2px solid var(--accent); color: var(--ink-2); font-size: 15px; }
+  .direction-ledger { border-top: 2px solid var(--ink); transform: rotate(-1deg); }
+  .direction-ledger > div { position: relative; display: grid; grid-template-columns: 130px 1fr 32px; align-items: center; gap: 20px; padding: 25px 20px; border-bottom: 1px solid var(--hair); }
+  .direction-ledger strong { font-size: clamp(19px, 2vw, 28px); letter-spacing: -0.025em; }
+  .direction-ledger i { font: normal 500 11px/1 var(--font-mono); color: var(--micro); text-align: right; }
+  .direction-ledger .ledger-output { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .direction-ledger .ledger-output .eyebrow, .direction-ledger .ledger-output i { color: rgba(255,255,255,0.72); }
 
-  /* Models */
-  .models-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-  }
-  .model {
-    padding: 24px; border-radius: var(--r);
-    background: var(--surface); border: 1px solid var(--hair);
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .model strong { font-size: 17px; }
+  .models-section { background: var(--bg-deep); }
+  .models-intro { max-width: 820px; margin-bottom: 54px; }
+  .protocols { border-top: 1px solid var(--hair); }
+  .protocols article { display: grid; grid-template-columns: 76px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--hair); align-items: start; }
+  .protocol-mark { width: 48px; height: 48px; display: grid; place-items: center; background: var(--ink); color: #fff; font: 800 18px/1 var(--font-mono); }
+  .protocols .eyebrow { font-size: 10px; }
+  .protocols h3 { margin: 5px 0 7px; }
+  .protocols p { color: var(--muted); max-width: 680px; }
 
-  /* FAQ */
-  .qs { display: flex; flex-direction: column; gap: 4px; max-width: 800px; }
-  details {
-    border-bottom: 1px solid var(--hair-soft);
-    padding: 20px 0;
-  }
-  details summary {
-    list-style: none; cursor: pointer;
-    font-size: 19px; font-weight: 600;
-    display: flex; justify-content: space-between; align-items: center;
-  }
+  .surfaces { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .surface { min-height: 470px; padding: clamp(28px, 4vw, 48px); display: flex; flex-direction: column; border: 1px solid var(--hair); }
+  .surface-mcp { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .surface-top { display: flex; align-items: center; justify-content: space-between; }
+  .surface-no { font: 500 12px/1 var(--font-mono); color: var(--micro); }
+  .surface h3 { margin-top: 36px; font-size: clamp(42px, 5vw, 72px); }
+  .surface > p { max-width: 540px; margin-top: 18px; color: var(--muted); font-size: 18px; line-height: 1.55; }
+  .surface-mcp .eyebrow, .surface-mcp .surface-no { color: rgba(255,255,255,0.46); }
+  .surface-mcp > p { color: rgba(255,255,255,0.68); }
+  .surface-flow { display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 18px 0; font: 700 10px/1 var(--font-mono); letter-spacing: 0.08em; }
+  .surface-flow span { flex: 1; padding: 12px 8px; border: 1px solid var(--hair); text-align: center; }
+  .surface-flow i { font-style: normal; color: var(--accent); }
+  .surface-mcp .surface-flow span { border-color: rgba(255,255,255,0.18); }
+  .surface-links { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; font-size: 14px; font-weight: 700; }
+  .surface-mcp .surface-links a { color: #fff; }
+  .surface-mcp .surface-links a:hover { color: #8fb1ef; }
+
+  .faq-grid { display: grid; grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr); gap: clamp(48px, 8vw, 112px); align-items: start; }
+  .qs { border-top: 1px solid var(--hair); }
+  details { padding: 22px 0; border-bottom: 1px solid var(--hair); }
+  details summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; gap: 18px; font-size: 19px; font-weight: 700; }
   details summary::-webkit-details-marker { display: none; }
-  details summary::after {
-    content: '+'; font-size: 24px; color: var(--muted); transition: transform 0.2s ease;
-  }
-  details[open] summary::after { transform: rotate(45deg); }
-  details p { margin-top: 14px; color: var(--ink-2); line-height: 1.6; max-width: 720px; }
+  details summary::after { content: '+'; color: var(--accent); font-size: 22px; font-weight: 500; }
+  details[open] summary::after { content: '−'; }
+  details p { margin-top: 15px; color: var(--muted); line-height: 1.65; max-width: 760px; }
+  details a { text-decoration: underline; text-underline-offset: 3px; }
 
-  .cta-section { background: var(--bg-deep); }
-  .cta-section .cta { justify-content: center; }
+  .cta-section { background: var(--accent); color: #fff; }
+  .cta-inner { text-align: center; }
+  .cta-inner .eyebrow { color: rgba(255,255,255,0.72); }
+  .cta-inner h2 { margin-top: 18px; }
+  .cta-inner .lead { margin: 18px auto 32px; color: rgba(255,255,255,0.82); }
+  .cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+  .cta .btn-ghost { color: #fff; border-color: rgba(255,255,255,0.52); }
+  .cta .btn-ghost:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+  @media (max-width: 960px) {
+    .hero-grid, .direction-grid, .faq-grid { grid-template-columns: 1fr; }
+    .brief-sheet { max-width: 620px; transform: none; }
+    .loop-list li { grid-template-columns: 46px 1fr; }
+    .loop-list li > p, .loop-tags { grid-column: 2; }
+    .loop-tags { justify-content: flex-start; }
+    .surfaces { grid-template-columns: 1fr; }
+    .surface { min-height: 420px; }
+  }
+
+  @media (max-width: 620px) {
+    .hero h1 { font-size: clamp(50px, 15vw, 72px); }
+    .entry { grid-template-columns: 28px 1fr auto; gap: 12px; padding: 16px 14px; }
+    .entry-body > span:last-child { font-size: 13px; }
+    .brief-sheet { padding: 22px; }
+    .brief-sheet dl div { grid-template-columns: 86px 1fr; }
+    .loop-list li { grid-template-columns: 1fr; gap: 14px; }
+    .loop-list li > p, .loop-tags { grid-column: 1; }
+    .loop-num { padding-top: 4px; }
+    .direction-grid { gap: 44px; }
+    .direction-ledger > div { grid-template-columns: 1fr 24px; gap: 8px; padding: 20px 14px; }
+    .direction-ledger .eyebrow { grid-column: 1 / -1; }
+    .protocols article { grid-template-columns: 54px 1fr; gap: 14px; }
+    .protocol-mark { width: 42px; height: 42px; }
+    .surface { min-height: auto; padding: 26px 20px; }
+    .surface-flow { margin-top: 48px; gap: 4px; font-size: 8px; letter-spacing: 0.03em; }
+    .surface-flow span { padding: 10px 4px; }
+  }
 </style>

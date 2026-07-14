@@ -2,21 +2,20 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="Quickstart — Genable" description="Two ways to use Genable: as a Figma plugin (designers) or as an MCP server (any MCP-compatible editor or agent). BYO API key required.">
+<Layout title="Quickstart — Genable" description="Use Genable inside Figma with a connected model provider, or from a STDIO MCP client through the local bridge.">
   <section>
     <div class="container" style="max-width: 880px;">
       <span class="eyebrow">QUICKSTART</span>
       <h1 style="margin-top: 16px;">Pick your surface.</h1>
       <p class="lead muted" style="margin-top: 24px;">
-        Genable runs in two places. Use the <strong>Figma plugin</strong> if you live in Figma, or wire the <strong>MCP server</strong> into any MCP-compatible editor or agent if you live in your terminal. Both paths share the same engine — and both need an LLM API key (you bring your own).
+        Use the <strong>Figma plugin</strong> for a conversational workflow inside the canvas, or connect <strong>genable-mcp</strong> to a STDIO-capable client for typed Figma operations from your editor or terminal.
       </p>
 
-      <!-- API key heads-up — the unavoidable prerequisite -->
-      <div class="byo-callout">
-        <div class="byo-icon">!</div>
+      <div class="surface-callout">
+        <div class="surface-icon">↔</div>
         <div>
-          <strong>You'll need a model API key before either path works.</strong>
-          <p>Genable has no servers — your prompts go directly from the plugin/MCP to the model provider you choose. <a href="#api-key">Pick one here ↓</a></p>
+          <strong>The two paths use models differently.</strong>
+          <p>The plugin asks you to <a href="#provider">connect a provider ↓</a>. On the MCP path, your client supplies its already-configured model; no model API key is required inside the Genable plugin.</p>
         </div>
       </div>
     </div>
@@ -28,7 +27,7 @@ import Layout from '../layouts/Layout.astro';
       <span class="eyebrow">PATH 1 · FOR DESIGNERS</span>
       <h2 style="margin-top: 16px;">Open in Figma.</h2>
       <p class="lead muted" style="margin-top: 16px;">
-        The shortest path: install the plugin from Figma Community in one click.
+        Install the plugin from Figma Community, connect a provider in Settings, and start with a detailed brief. The agent can plan, build, inspect, and refine native layers in the current session.
       </p>
 
       <a class="figma-cta" href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">
@@ -57,15 +56,14 @@ import Layout from '../layouts/Layout.astro';
       <span class="eyebrow">PATH 2 · FOR AI EDITORS &amp; AGENTS</span>
       <h2 style="margin-top: 16px;">Wire into your editor.</h2>
       <p class="lead muted" style="margin-top: 16px;">
-        <strong>genable-mcp</strong> is a Model Context Protocol server — any client that speaks MCP can read & write your Figma file through it (e.g. Claude Code, Cursor, Cline, Continue, Zed, custom agents). It pairs cleanly with the official Figma MCP — they cover read, we cover write.
+        <strong>genable-mcp</strong> exposes Genable's typed design operations to STDIO MCP clients. Your client supplies the model; the local server relays tool calls over WebSocket to the Genable plugin running inside Figma Desktop.
       </p>
 
-      <div class="ver-callout">
-        <div class="ver-icon">✓</div>
+      <div class="requirements-callout">
+        <div class="requirements-icon">✓</div>
         <div>
-          <strong>Version requirements (May 2026)</strong>
-          <p>Plugin: install or refresh from Figma Community — the marketplace build now whitelists <code>ws://localhost:3458</code>. Older installs (pre-May 2026) can't reach the MCP server; just re-open from Community to update.</p>
-          <p>MCP: <code>npx -y genable-mcp</code> pulls <strong>0.2.0+</strong> (42 tools). All <code>0.1.x</code> versions are deprecated.</p>
+          <strong>Both local halves need to be running.</strong>
+          <p>Open the current Community plugin in Figma Desktop, then let your MCP client start <code>npx -y genable-mcp</code>. The live MCP schema shown by your client is the source of truth for available tools.</p>
         </div>
       </div>
 
@@ -73,8 +71,8 @@ import Layout from '../layouts/Layout.astro';
         <li>
           <div class="num">1</div>
           <div class="body">
-            <h3>Install the Figma plugin first</h3>
-            <p class="muted">The MCP server is a relay — it talks to the plugin running inside Figma Desktop. Install once from <a href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">Figma Community</a>, open it, and it auto-connects to <code>localhost:3458</code>.</p>
+            <h3>Open the Genable plugin in Figma Desktop</h3>
+            <p class="muted">Install the current build from <a href="https://www.figma.com/community/plugin/1583731690321161934" target="_blank" rel="noreferrer">Figma Community</a> and open it in the file you want to work on. The plugin connects to the local relay at <code>localhost:3458</code>.</p>
           </div>
         </li>
 
@@ -82,7 +80,7 @@ import Layout from '../layouts/Layout.astro';
           <div class="num">2</div>
           <div class="body">
             <h3>Add <code>genable-mcp</code> to your MCP client</h3>
-            <p class="muted">Drop this into your client's MCP config — same shape works everywhere. For Claude Code: <code>.mcp.json</code> (project) or <code>~/.claude.json</code> (global). Other clients use their own config path; the JSON shape is identical.</p>
+            <p class="muted">Configure a STDIO server that runs <code>npx -y genable-mcp</code>. The example below works for Claude Code in <code>.mcp.json</code> (project) or <code>~/.claude.json</code> (global); use your client's documented config location and wrapper shape elsewhere.</p>
             <pre style="margin-top: 12px;">{`{
   "mcpServers": {
     "genable": {
@@ -97,50 +95,41 @@ import Layout from '../layouts/Layout.astro';
         <li>
           <div class="num">3</div>
           <div class="body">
-            <h3>(Recommended) Pair with Figma's official MCP</h3>
-            <p class="muted">Figma's official MCP is excellent at <em>reading</em> designs. Genable is the write side. Together they cover end-to-end "code ↔ Figma" round-trips.</p>
-            <pre style="margin-top: 12px;">{`{
-  "mcpServers": {
-    "figma":   { /* official, read-side */ },
-    "genable": { "command": "npx", "args": ["-y", "genable-mcp"] }
-  }
-}`}</pre>
+            <h3>Verify the local path</h3>
+            <p class="muted">In your MCP client, ask: <em>"List the pages in my current Figma file."</em> If the plugin is open and the relay is connected, the client should return the page roster.</p>
           </div>
         </li>
 
         <li>
           <div class="num">4</div>
           <div class="body">
-            <h3>Verify</h3>
-            <p class="muted">In your MCP client, ask: <em>"List the pages in my current Figma file."</em> If the plugin is open, you'll see the page roster.</p>
+            <h3>Optionally configure Figma's official MCP too</h3>
+            <p class="muted">Figma's <a href="https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Figma-MCP-server" target="_blank" rel="noreferrer">official remote MCP server</a> and <code>genable-mcp</code> can both read and write through different tool surfaces. Official write-to-canvas is a remote-server capability. You can configure either one or both; when both are available, name the intended server in ambiguous requests.</p>
           </div>
         </li>
       </ol>
     </div>
   </section>
 
-  <!-- API KEY -->
-  <section id="api-key" style="border-top: 1px solid var(--hair-soft);">
+  <!-- Plugin provider -->
+  <section id="provider" style="border-top: 1px solid var(--hair-soft);">
     <div class="container" style="max-width: 880px;">
-      <span class="eyebrow">REQUIRED · BYO API KEY</span>
-      <h2 style="margin-top: 16px;">Pick a model provider.</h2>
+      <span class="eyebrow">PLUGIN PATH · CONNECT A PROVIDER</span>
+      <h2 style="margin-top: 16px;">Use the model endpoint you trust.</h2>
       <p class="lead muted" style="margin-top: 16px;">
-        Genable has no servers and no built-in credits. You bring your own LLM API key — your prompts go directly from the plugin/MCP to your provider. Keys are stored in <code>localStorage</code> only (in the plugin) or via env var (for the MCP).
+        In the plugin, add a provider connection, choose a model ID, and enter that provider's API key. Provider configurations are stored through Figma <code>clientStorage</code>. Requests go to the endpoint you configure; some presets can use a relay when browser-network constraints require it. The endpoint's data practices and billing apply.
       </p>
 
       <div class="provider-grid">
         {[
-          { name: 'OpenRouter', url: 'https://openrouter.ai/keys', note: 'OpenAI protocol — broadest model coverage with one key', recommended: true },
-          { name: 'Moonshot (Kimi K2.5)', url: 'https://platform.moonshot.cn/', note: 'OpenAI protocol' },
-          { name: 'Anthropic (Claude)', url: 'https://console.anthropic.com/', note: 'Best for complex layouts' },
-          { name: 'DashScope (Qwen)', url: 'https://dashscope.console.aliyun.com/', note: 'Anthropic-compatible · CN region' },
-          { name: 'Google (Gemini)', url: 'https://aistudio.google.com/apikey', note: 'Single-vendor; native multimodal' },
+          { name: 'OpenRouter', url: 'https://openrouter.ai/keys', note: 'OpenAI-compatible routing endpoint' },
+          { name: 'Moonshot', url: 'https://platform.moonshot.cn/', note: 'OpenAI-compatible endpoint' },
+          { name: 'Anthropic', url: 'https://console.anthropic.com/', note: 'Anthropic protocol' },
+          { name: 'DashScope', url: 'https://bailian.console.aliyun.com/', note: 'OpenAI- or Anthropic-compatible endpoint' },
+          { name: 'Google', url: 'https://aistudio.google.com/apikey', note: 'Gemini protocol' },
         ].map(p => (
           <a href={p.url} target="_blank" rel="noreferrer" class="provider">
-            <div class="provider-name">
-              {p.name}
-              {p.recommended && <span class="rec-tag">RECOMMENDED</span>}
-            </div>
+            <div class="provider-name">{p.name}</div>
             <div class="provider-note">{p.note}</div>
             <div class="provider-arrow">Get key ↗</div>
           </a>
@@ -148,7 +137,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
 
       <p class="muted" style="margin-top: 28px; font-size: 14px;">
-        <strong>Cost is yours, not ours.</strong> A typical generation costs $0.01–$0.10 depending on model + complexity. Pick OpenRouter to switch models per task without juggling keys.
+        You can also add a custom endpoint using an OpenAI-compatible, Anthropic-compatible, or Gemini connection. The MCP path does not use these plugin provider settings; its model and billing stay with the MCP client.
       </p>
     </div>
   </section>
@@ -157,28 +146,28 @@ import Layout from '../layouts/Layout.astro';
   <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
     <div class="container" style="max-width: 880px;">
       <span class="eyebrow">FIRST PROMPT</span>
-      <h2 style="margin-top: 16px;">Describe what you need.</h2>
+      <h2 style="margin-top: 16px;">Give the agent a design brief.</h2>
       <p class="lead muted" style="margin-top: 16px;">
-        Detail helps. The more specific the prompt, the better the result.
+        Include the audience, content, visual direction, hierarchy, and structural constraints that matter. Specific input gives the agent a clearer basis for planning and checking its work.
       </p>
 
       <div class="prompt-examples">
         <div class="ex">
           <span class="eyebrow">SIMPLE</span>
-          <p>A primary button with disabled state</p>
+          <p>A primary button with a disabled state, using our existing brand variable.</p>
         </div>
         <div class="ex">
           <span class="eyebrow">DETAILED</span>
-          <p>A primary button system: solid, outline, ghost variants × sm/md/lg sizes × default/hover/disabled states. Inter, 8pt grid, 10px radius. Brand color #2A6FDB. Wire variant matrix as named properties.</p>
+          <p>A primary button system: solid, outline, and ghost × small, medium, and large × default, hover, and disabled. Use Auto Layout, a restrained radius, and our existing brand/primary variable. Wire the matrix as named Variant, Size, and State properties.</p>
         </div>
         <div class="ex">
           <span class="eyebrow">FULL PAGE</span>
-          <p>Marketing landing: hero with two CTAs, logo cloud, 3-up feature grid, pricing with three tiers (highlight middle), FAQ accordion, footer. Dark theme. Use brand variables. Generate Light + Dark variants together.</p>
+          <p>A launch page for operations leads comparing field tools. Calm, editorial, high information clarity. One clear hero, evidence, workflow, pricing, FAQ, and footer. Use native Auto Layout sections and existing semantic variables. Inspect the hierarchy and capture a screenshot before refining.</p>
         </div>
       </div>
 
       <p class="muted" style="margin-top: 24px;">
-        Iterate by chatting. <em>"Add a sparkline to the NAV card. Bind the line color to brand/primary."</em> Each follow-up keeps the file state and refines from there.
+        Iterate by chatting. <em>"Add a sparkline to the NAV card. Bind the line color to brand/primary."</em> Follow-ups continue from the current session and edit the existing Figma structure.
       </p>
     </div>
   </section>
@@ -189,7 +178,7 @@ import Layout from '../layouts/Layout.astro';
       <div style="padding: 32px; border-radius: var(--r-lg); background: var(--bg-deep); display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
         <div style="flex: 1; min-width: 280px;">
           <strong style="display: block; font-size: 18px;">Ready to go deeper?</strong>
-          <span class="muted" style="font-size: 15px;">The docs cover the agent loop, multi-model setup, and detailed prompt patterns. Examples shows what real prompts produce.</span>
+          <span class="muted" style="font-size: 15px;">The docs cover the agent loop, multi-model setup, and detailed prompt patterns. Examples collects briefs you can adapt and refine.</span>
         </div>
         <div style="display: flex; gap: 12px;">
           <a class="btn btn-primary" href="/docs">Open docs</a>
@@ -201,40 +190,41 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <style>
-  /* BYO callout */
-  .byo-callout {
+  /* Surface model-path callout */
+  .surface-callout {
     margin-top: 32px;
     padding: 20px 24px; border-radius: var(--r);
-    background: #FFF7E6; border: 1px solid #F0D898;
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
     display: flex; gap: 16px; align-items: flex-start;
   }
 
-  /* Version requirements callout */
-  .ver-callout {
+  /* Local connection requirements */
+  .requirements-callout {
     margin-top: 28px;
     padding: 18px 22px; border-radius: var(--r);
     background: #ECFDF5; border: 1px solid #A7F3D0;
     display: flex; gap: 14px; align-items: flex-start;
   }
-  .ver-icon {
+  .requirements-icon {
     width: 26px; height: 26px; border-radius: 999px;
     background: #059669; color: #fff;
     display: grid; place-items: center; font-weight: 800; font-size: 14px;
     flex: none;
   }
-  .ver-callout strong { font-size: 15px; }
-  .ver-callout p { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
-  .ver-callout p + p { margin-top: 6px; }
-  .ver-callout code { font-size: 12.5px; }
-  .byo-icon {
+  .requirements-callout strong { font-size: 15px; }
+  .requirements-callout p { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .requirements-callout p + p { margin-top: 6px; }
+  .requirements-callout code { font-size: 12.5px; }
+  .surface-icon {
     width: 28px; height: 28px; border-radius: 999px;
-    background: #C68A1E; color: #fff;
+    background: var(--accent); color: #fff;
     display: grid; place-items: center; font-weight: 800; font-size: 16px;
     flex: none;
   }
-  .byo-callout strong { font-size: 16px; }
-  .byo-callout p { margin-top: 4px; font-size: 14px; color: var(--ink-2); line-height: 1.55; }
-  .byo-callout a { color: var(--accent); font-weight: 600; }
+  .surface-callout strong { font-size: 16px; }
+  .surface-callout p { margin-top: 4px; font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+  .surface-callout a { color: var(--accent); font-weight: 600; }
 
   /* Figma CTA */
   .figma-cta {
@@ -281,11 +271,6 @@ import Layout from '../layouts/Layout.astro';
   }
   .provider:hover { border-color: var(--accent); transform: translateY(-1px); color: inherit; }
   .provider-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .rec-tag {
-    font-size: 9px; font-family: var(--font-mono); letter-spacing: 0.16em;
-    background: var(--accent); color: #fff;
-    padding: 2px 6px; border-radius: 3px; font-weight: 700;
-  }
   .provider-note { font-size: 13px; color: var(--muted); line-height: 1.5; }
   .provider-arrow { font-size: 13px; font-weight: 600; color: var(--accent); margin-top: 6px; }
 

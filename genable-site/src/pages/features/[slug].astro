@@ -4,38 +4,38 @@ import Layout from '../../layouts/Layout.astro';
 export function getStaticPaths() {
   return [
     {
-      params: { slug: 'components' },
+      params: { slug: 'pages' },
       props: {
-        eyebrow: 'COMPONENTS',
-        title: 'Whole component sets, in one prompt.',
-        intro: 'A button is rarely just a button — it has variants, sizes, states, disabled forms. Drawing each by hand is busywork. Genable takes one detailed prompt and lays out the entire system, with every variant typed, sized, aligned, and ready to publish to your library.',
-        promptExample: 'A primary button system: solid, outline, ghost variants × sm/md/lg sizes × default/hover/disabled states. Inter, 8pt grid, 10px radius. Brand color is #2A6FDB.',
+        eyebrow: 'VISUAL DIRECTION',
+        title: 'Start from the brief, not a preset shell.',
+        intro: 'A useful page direction begins with who it is for, what it needs to communicate, and how it should feel. Give Genable that context and the agent can turn it into hierarchy, density, section rhythm, and native Figma structure.',
+        promptExample: 'A launch page for a field-operations app. Audience: operations leads comparing tools. Tone: calm, editorial, high information clarity. One clear hero, evidence, workflow, pricing, FAQ. Use a restrained blue accent, strong type contrast, and native Auto Layout sections.',
         what: [
-          'Component frames with auto-layout and proper paddings',
-          'Variant matrix with named properties (Variant=Solid|Outline|Ghost, Size=sm|md|lg, State=…)',
-          'States built as separate variants (no manual hover/focus styling)',
-          'Icon slots set up as Boolean/Instance Swap props',
-          'Component descriptions written for the assets panel',
+          'Plan a focal point and content sequence from the brief',
+          'Create separate, named frames for the requested sections',
+          'Use nested Auto Layout instead of a single flat composition',
+          'Carry brand, mood, type, and density constraints into the build',
+          'Inspect the resulting structure and continue refining it',
         ],
-        proof: 'Buttons, form fields, cards, alerts, modals, navigation patterns, breadcrumbs, badges — anything with structural variants.',
-        next: { label: 'See pages →', href: '/features/pages' },
+        fit: 'Marketing pages, product flows, dashboards, settings, and other compositions where hierarchy matters as much as the individual nodes.',
+        next: { label: 'See native components →', href: '/features/components' },
       },
     },
     {
-      params: { slug: 'pages' },
+      params: { slug: 'components' },
       props: {
-        eyebrow: 'PAGES',
-        title: 'Hero to footer, laid out.',
-        intro: 'A landing page is not one node — it\'s sections. Hero, social proof, features, pricing, FAQ, footer. Each with its own internal layout, hierarchy, and rhythm. Genable produces them as sections, not a flat slab of nodes you have to detangle.',
-        promptExample: 'Marketing landing page: hero with two CTAs, logo cloud, 3-up feature grid, pricing table with three tiers (highlight middle), FAQ accordion, footer with 4 link columns. Dark theme, accent #2A6FDB.',
+        eyebrow: 'NATIVE COMPONENTS',
+        title: 'Build component sets as editable Figma structure.',
+        intro: 'A detailed component brief can describe variants, sizes, states, content, and layout behavior together. Genable works through Figma operations, so the result remains a set of nodes and component properties you can inspect and edit.',
+        promptExample: 'A primary button system: solid, outline, and ghost × small, medium, and large × default, hover, and disabled. Use Auto Layout, named Variant / Size / State properties, an optional icon slot, and our existing brand/primary variable.',
         what: [
-          'Each section is its own auto-layout frame, vertically stacked',
-          'Section headings, subheads, supporting copy — placeholder copy that reads as English',
-          'Pricing tables with structured rows (feature lists), not free-floating text',
-          'FAQ as a real component (collapsed/expanded variants)',
-          'Footer with proper column alignment',
+          'Create component frames with Auto Layout',
+          'Combine related components into a named variant set',
+          'Add component properties and instance-swap or Boolean slots when requested',
+          'Apply text, fills, strokes, spacing, and sizing through typed edits',
+          'Read the created structure back before the next refinement',
         ],
-        proof: 'Marketing landing pages, product pages, pricing, FAQ, blog index, login/signup, settings pages, dashboards.',
+        fit: 'Buttons, fields, cards, alerts, navigation, and other patterns whose states and properties need to stay explicit.',
         next: { label: 'See variables →', href: '/features/variables' },
       },
     },
@@ -43,17 +43,17 @@ export function getStaticPaths() {
       params: { slug: 'variables' },
       props: {
         eyebrow: 'VARIABLES',
-        title: 'Bound, not pasted.',
-        intro: 'Every color, every spacing value, every type style — bound to a Figma variable with light and dark modes. No more "search and replace #2A6FDB" when you change the brand color. Change the variable; everything updates.',
-        promptExample: 'Set up brand variables: primary (#2A6FDB light / #4A8FFF dark), text (default, muted, micro), surface (bg, surface, elevated), and a 4/8/12/16/24/32 spacing scale. Bind every color and padding in the design to these variables.',
+        title: 'Express tokens as variables, not scattered values.',
+        intro: 'When the brief calls for a token system, Genable can create collections, add modes, set values, and bind supported Figma properties. The variable model stays visible in the file, where you can review names, scopes, and bindings.',
+        promptExample: 'Create a Brand collection with light and dark modes. Add semantic color variables for text, surface, border, and accent plus a 4 / 8 / 12 / 16 / 24 / 32 spacing scale. Bind supported fills, strokes, gaps, and paddings to those variables.',
         what: [
-          'Color/Typography/Spacing variables created in proper collections',
-          'Light + Dark modes set up with sensible inversions',
-          'Every fill, stroke, and number bound — no hex codes left',
-          'Variable aliases for semantic naming (e.g., text/default → color/ink/100)',
-          'Mode switching tested (toggle once, whole design recolors)',
+          'Create variable collections and modes',
+          'Add color, number, string, or Boolean variables where the system needs them',
+          'Bind variables to supported node properties',
+          'Use aliases when the requested semantic structure calls for them',
+          'Inspect collections and bindings after the write',
         ],
-        proof: 'Real design systems use variables. Genable seeds them so you don\'t have to retrofit.',
+        fit: 'Brand tokens, light and dark modes, spacing scales, semantic color systems, and designs that need inspectable values.',
         next: { label: 'See variants →', href: '/features/variants' },
       },
     },
@@ -61,17 +61,17 @@ export function getStaticPaths() {
       params: { slug: 'variants' },
       props: {
         eyebrow: 'VARIANTS',
-        title: 'Light, dark, brand — generated together.',
-        intro: 'Designing one mode then "doing the dark mode later" is how dark mode never ships. Genable generates the variant matrix in one go, so light/dark/brand are evaluated together — and switchable in one click.',
-        promptExample: 'Generate the same dashboard in three variants: Light (white/#0A0A0A), Dark (#0A0A0A/#FAFAFA), Brand (accent-tinted). Wire variant prop to a top-level Mode boolean.',
+        title: 'Build related states together.',
+        intro: 'States are easier to compare when their differences are explicit. Ask for the matrix up front and Genable can create the related components, combine them, and expose named properties in the same canvas workflow.',
+        promptExample: 'Create a notification card set with Tone=Info|Success|Warning and Density=Comfortable|Compact. Keep the content structure consistent, expose a dismiss Boolean, and use the existing semantic color variables.',
         what: [
-          'Component variants with proper Mode property',
-          'Color variables that switch on mode, not duplicated styles',
-          'Typography weight/size kept consistent across modes',
-          'Brand variant uses tinted surfaces, not just inverted colors',
-          'Switchable by toggling a single component property',
+          'Create related components from one variant brief',
+          'Combine components into a variant set',
+          'Add named variant and component properties',
+          'Keep shared structure visible across states',
+          'Inspect the set and revise individual states in context',
         ],
-        proof: 'Components, pages, full design systems — all variant-aware, all switchable.',
+        fit: 'Component states, sizes, densities, tones, and other related forms that benefit from a visible matrix.',
         next: { label: 'See design system →', href: '/features/system' },
       },
     },
@@ -79,44 +79,44 @@ export function getStaticPaths() {
       params: { slug: 'system' },
       props: {
         eyebrow: 'DESIGN SYSTEM',
-        title: 'Canvas organized. Library scaffolded.',
-        intro: 'Real design files have structure: pages organized by intent (Marketing / App / Components), frames named, sections used to group content. Genable does this organizing as it builds, so you inherit a tidy file instead of cleaning one up. And if you keep a DESIGN.md, Genable reads it before generating — so output stays on system.',
-        promptExample: 'Bootstrap a design system: pages for Foundations / Components / Patterns / Templates. In Foundations: color, typography, spacing, elevation. In Components: a starter set of buttons, inputs, cards, alerts, navigation. Use Sections to group.',
+        title: 'Bring reusable design direction into the session.',
+        intro: 'Genable can organize Figma pages and sections as it builds. You can also import a design.md into the plugin\'s skill library and attach it to a chat turn, so the same documented tokens and conventions can guide more than one prompt.',
+        promptExample: 'Use the attached Product UI design.md. Create pages for Foundations / Components / Patterns. In Foundations, show the documented color, typography, and spacing tokens. Group each component family in a named Section and follow the naming rules from the document.',
         what: [
-          'Pages organized by intent — not "Page 1, Page 2"',
-          'Sections group related frames (e.g., "Buttons", "Inputs")',
-          'Frames named meaningfully (BlogCard / md, not "Frame 47")',
-          'Component documentation in the description field',
-          'Reads DESIGN.md (if present) so output respects your color tokens, type scale, and component conventions',
-          'Cover page set up with thumbnail, ready to publish to a Team library',
+          'Create and switch between named Figma pages',
+          'Group related work in Sections and named frames',
+          'Create variables, components, and examples in the same file',
+          'Import design.md files as user-managed skills',
+          'Attach the relevant design document when a prompt needs that context',
+          'Inspect naming and structure before continuing',
         ],
-        proof: 'Internal design systems, client design system kickoffs, public Figma Community templates. Pairs with the open DESIGN.md format from Google Labs / Stitch as a portable bridge to coding agents.',
-        next: { label: 'See speed →', href: '/features/speed' },
+        fit: 'Design-system foundations, component-library starts, client handoffs, and any workflow that benefits from documented constraints.',
+        next: { label: 'See checks →', href: '/features/checks' },
         designMd: true,
       },
     },
     {
-      params: { slug: 'speed' },
+      params: { slug: 'checks' },
       props: {
-        eyebrow: 'SPEED',
-        title: 'Half a day, in seconds.',
-        intro: 'A typical "AI design" tool takes 60-90 seconds to produce a flat mock you can\'t edit. Genable averages 8 seconds for ~40 fully editable Figma layers. The speed isn\'t the headline — what you do with the saved time is.',
-        promptExample: 'Same prompt, three rounds: (1) the page, (2) variables added, (3) dark mode variant. Each round under 10 seconds.',
+        eyebrow: 'CHECK & REFINE',
+        title: 'Inspect the structure. See the result. Continue.',
+        intro: 'Generation is one part of the loop. Genable can read node properties, search the tree, capture a canvas screenshot, and apply follow-up edits while the current session still has the design context.',
+        promptExample: 'Build the settings page, then inspect its frame hierarchy and variable bindings. Capture a screenshot, check the visual emphasis and spacing, and correct the issues you find without replacing unrelated nodes.',
         what: [
-          'Sub-10 second generation for typical components',
-          'Sub-30 seconds for full pages with 40+ layers',
-          'Streamed output — see layers appear as the model decides',
-          'Iteration is free — keep talking, keep refining',
-          'Works at any complexity (more detail = more layers, not slower)',
+          'Search and inspect created nodes',
+          'Read selected properties and variable bindings',
+          'Capture a screenshot for visual review',
+          'Apply focused edits to the existing structure',
+          'Continue the conversation from the current session context',
         ],
-        proof: 'Speed compounds when you can iterate. 5 rounds in a minute beats 1 perfect prompt.',
+        fit: 'Any design where editable output, structural checks, and visual iteration matter more than a one-shot image.',
         next: { label: 'Back to features →', href: '/features' },
       },
     },
   ];
 }
 
-const { eyebrow, title, intro, promptExample, what, proof, next, designMd } = Astro.props;
+const { eyebrow, title, intro, promptExample, what, fit, next, designMd } = Astro.props;
 ---
 
 <Layout title={`${title} — Genable`} description={intro}>
@@ -132,11 +132,11 @@ const { eyebrow, title, intro, promptExample, what, proof, next, designMd } = As
   <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
     <div class="container row-2">
       <div>
-        <span class="eyebrow">A DETAILED PROMPT</span>
+        <span class="eyebrow">AN EXAMPLE BRIEF</span>
         <h2 style="margin-top: 16px; font-size: clamp(28px, 3.5vw, 40px);">{promptExample}</h2>
       </div>
       <div>
-        <span class="eyebrow">WHAT GENABLE PRODUCES</span>
+        <span class="eyebrow">WHAT THE AGENT CAN DO</span>
         <ul class="what">
           {what.map((item: string) => <li>{item}</li>)}
         </ul>
@@ -146,20 +146,19 @@ const { eyebrow, title, intro, promptExample, what, proof, next, designMd } = As
 
   <section style="border-top: 1px solid var(--hair-soft);">
     <div class="container">
-      <span class="eyebrow">USE FOR</span>
-      <p class="lead" style="margin-top: 16px; max-width: 720px;">{proof}</p>
+      <span class="eyebrow">GOOD FIT</span>
+      <p class="lead" style="margin-top: 16px; max-width: 720px;">{fit}</p>
 
       {designMd && (
         <div class="design-md-box">
-          <span class="eyebrow" style="color: var(--accent);">DESIGN.MD INTEGRATION</span>
-          <h3 style="margin-top: 12px;">Pair with an open design-system spec.</h3>
+          <span class="eyebrow" style="color: var(--accent);">USER-IMPORTED DESIGN CONTEXT</span>
+          <h3 style="margin-top: 12px;">Import a design.md into the skill library.</h3>
           <p class="muted" style="margin-top: 8px; max-width: 720px;">
-            DESIGN.md is the open markdown format from Google Labs / Stitch — YAML token front-matter plus prose conventions, readable by any AI agent. Drop one in your project and Genable applies it to every generation.
+            Add the document in Genable, then attach it to the chat turn that should use it. This keeps the design direction explicit and user-managed; importing a file does not silently apply it to every generation.
           </p>
           <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-            <a class="btn btn-ghost" href="https://github.com/google-labs-code/design.md" target="_blank" rel="noreferrer">design.md spec ↗</a>
-            <a class="btn btn-ghost" href="https://github.com/VoltAgent/awesome-design-md" target="_blank" rel="noreferrer">Example DESIGN.md files ↗</a>
-            <a class="btn btn-ghost" href="https://stitch.withgoogle.com/docs/design-md/format/" target="_blank" rel="noreferrer">Format reference ↗</a>
+            <a class="btn btn-ghost" href="/docs">Read the Genable docs →</a>
+            <a class="btn btn-ghost" href="/examples">Adapt an example brief →</a>
           </div>
         </div>
       )}
@@ -183,8 +182,8 @@ const { eyebrow, title, intro, promptExample, what, proof, next, designMd } = As
   .design-md-box {
     margin-top: 56px; padding: 32px;
     border-radius: var(--r-lg);
-    background: linear-gradient(135deg, rgba(42,111,219,0.06), rgba(42,111,219,0.02));
-    border: 1px solid rgba(42,111,219,0.16);
+    background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   }
   .design-md-box h3 { font-size: 24px; }
 </style>

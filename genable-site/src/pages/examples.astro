@@ -6,48 +6,42 @@ const playgroundPrompts = [
     tier: 'STARTER',
     label: 'Sign-in screen',
     prompt: 'A sign-in page, dark, orange accent. Inter, 8pt grid. Email + password fields with focus state. Sign-in button + "Forgot password" link + secondary "Sign up" CTA. Bind colors to brand tokens.',
-    layers: 18,
   },
   {
     tier: 'STARTER',
     label: 'Pricing card',
     prompt: 'Pricing card with three tiers (Free / Pro / Team). Highlight Pro with accent border + "Most popular" badge. Each tier: name, price, 5 feature bullets, CTA. Inter, 12px radius.',
-    layers: 32,
   },
   {
     tier: 'INTERMEDIATE',
     label: 'Dashboard with sparkline',
     prompt: 'Treasury dashboard, dark theme. NAV hero card ($1.284B + 12.4% delta) with a sparkline chart bound to brand/primary. 4-row holdings table with hot-state row highlight. 7D / 30D / YTD time toggle. Light + Dark mode variants generated together.',
-    layers: 67,
   },
   {
     tier: 'INTERMEDIATE',
     label: 'Mobile home screen',
     prompt: 'Wellness app home screen, 375×812. Tuesday header. Glass-card step counter (8,420 / 10k, 84% progress bar). Two tiles below: sleep + calories burned. Bottom tabbar with 4 icons, first one active in accent color.',
-    layers: 36,
   },
   {
     tier: 'ADVANCED',
     label: 'Marketing landing — full',
     prompt: 'B2B SaaS marketing landing: hero with two CTAs, logo cloud, 3-up feature grid with icons, pricing (3 tiers, highlight Pro), FAQ accordion, footer with 4 link columns. Light + Dark variants. Use brand variables (primary, text/default, surface). Inter, 8pt grid.',
-    layers: 92,
   },
   {
     tier: 'ADVANCED',
     label: 'Design system bootstrap',
     prompt: 'Bootstrap a design system. Pages: Foundations (color/type/space tokens), Components (buttons, inputs, cards, alerts, navigation, breadcrumbs), Patterns (forms, lists, modals), Templates (login, dashboard, settings). Use Sections to group. Component descriptions in the assets panel.',
-    layers: 220,
   },
 ];
 ---
 
-<Layout title="Examples — Genable" description="What detailed prompts produce — six representative generations across difficulty tiers.">
+<Layout title="Example briefs — Genable" description="Six detailed UI briefs to adapt, run, inspect, and refine with Genable.">
   <section>
     <div class="container" style="max-width: 880px;">
       <span class="eyebrow">EXAMPLES</span>
-      <h1 style="margin-top: 16px;">What detailed prompts produce.</h1>
+      <h1 style="margin-top: 16px;">Briefs worth starting from.</h1>
       <p class="lead muted" style="margin-top: 24px;">
-        Six representative generations across difficulty tiers. Copy any prompt and paste it into your own Figma file — Genable handles the rest.
+        Six detailed starting points across difficulty tiers. Adapt one to your product, run it with your model, then inspect and refine the result.
       </p>
     </div>
   </section>
@@ -64,7 +58,7 @@ const playgroundPrompts = [
           <article class="example">
             <div class="ex-head">
               <span class={`tier tier-${ex.tier.toLowerCase()}`}>{ex.tier}</span>
-              <span class="muted" style="font-size: 13px;">{ex.layers} layers · ~ 8s</span>
+              <span class="muted" style="font-size: 13px;">Copy · adapt · refine</span>
             </div>
             <h3>{ex.label}</h3>
             <blockquote>{ex.prompt}</blockquote>
@@ -78,16 +72,15 @@ const playgroundPrompts = [
   <section style="background: var(--bg-deep); border-top: 1px solid var(--hair-soft);">
     <div class="container" style="max-width: 880px;">
       <div class="section-head">
-        <span class="eyebrow">DESIGN.MD COMPATIBLE</span>
-        <h2 style="margin-top: 16px;">Drop a DESIGN.md and Genable follows it.</h2>
+        <span class="eyebrow">DESIGN GUIDANCE</span>
+        <h2 style="margin-top: 16px;">Give the model your system, not just a prompt.</h2>
         <p class="lead muted" style="margin-top: 16px;">
-          DESIGN.md is the open format from Google Labs / Stitch for describing a design system to AI agents. Drop one in your project; Genable reads color tokens, typography, spacing, and component patterns from it before generating — every output stays on system.
+          Add reusable guidance for color tokens, typography, spacing, component patterns, and visual principles. Genable can include that context in the agent loop so the model has fewer reasons to fall back to generic defaults.
         </p>
       </div>
 
       <div style="margin-top: 24px; display: flex; gap: 14px; flex-wrap: wrap;">
-        <a class="btn btn-ghost" href="https://github.com/google-labs-code/design.md" target="_blank" rel="noreferrer">design.md spec ↗</a>
-        <a class="btn btn-ghost" href="https://github.com/VoltAgent/awesome-design-md" target="_blank" rel="noreferrer">Example DESIGN.md files ↗</a>
+        <a class="btn btn-ghost" href="/docs">Read the guidance docs →</a>
       </div>
     </div>
   </section>
@@ -100,7 +93,7 @@ const playgroundPrompts = [
       </p>
       <div class="cta">
         <a class="btn btn-primary" href="/quickstart">Try it →</a>
-        <a class="btn btn-ghost" href="https://github.com/musepy/genable/discussions" target="_blank" rel="noreferrer">Submit your example ↗</a>
+        <a class="btn btn-ghost" href="https://github.com/musepy/genable/issues/new" target="_blank" rel="noreferrer">Submit your example ↗</a>
       </div>
     </div>
   </section>
@@ -148,7 +141,7 @@ const playgroundPrompts = [
     padding: 4px 8px; border-radius: 4px;
   }
   .tier-starter { background: var(--ok-soft); color: var(--ok); }
-  .tier-intermediate { background: rgba(42,111,219,0.12); color: var(--accent); }
+  .tier-intermediate { background: rgba(59,111,212,0.12); color: var(--accent); }
   .tier-advanced { background: var(--ink); color: #fff; }
   .example blockquote {
     margin: 0; padding: 16px;

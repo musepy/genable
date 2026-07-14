@@ -1,10 +1,12 @@
 # genable-site
 
-Marketing/docs site for Genable. Astro static site, deploys to Vercel/Netlify/anywhere.
+Canonical Astro source for the Genable marketing and docs site.
 
 ## Status
 
-**Initial bootstrap.** Pages are written, design tokens match the Figma cover redesign, all visualizations render in HTML/CSS. Iterate from here.
+The site builds as static HTML/CSS and is published at
+[genable.pages.dev](https://genable.pages.dev) through the Cloudflare Pages
+project `genable`.
 
 ## Run
 
@@ -23,60 +25,64 @@ src/
   components/
     Topnav.astro
     Footer.astro
-    BentoCard.astro          — bento grid cell (used by index + features index)
+    BentoCard.astro          — capability grid cell (used by features index)
     viz/
       ButtonsViz.astro       — Components viz (button system)
       PagesViz.astro         — Pages viz (sections mosaic)
       VariablesViz.astro     — Variables viz (token list + modes)
       VariantsViz.astro      — Variants viz (light/dark/brand)
       SystemViz.astro        — Design system viz (page tree)
-      SpeedViz.astro         — Speed viz (8s + bar chart)
+      ChecksViz.astro        — Inspect / screenshot / refine viz
   pages/
-    index.astro              — / Hero + Bento + Flow + Detailed-prompt + Models + FAQ + CTA
+    index.astro              — / Hero + Agent loop + Direction + Models + Surfaces + FAQ
     quickstart.astro         — /quickstart
     docs.astro               — /docs
     examples.astro           — /examples
     changelog.astro          — /changelog
-    features/index.astro     — /features (grid of 6)
-    features/[slug].astro    — /features/components etc. (one per capability)
+    features/index.astro     — /features (Plan / Build / Check overview)
+    features/[slug].astro    — /features/pages, /components, /checks, etc.
   styles/global.css          — design tokens + base styles
 ```
 
 ## Design tokens
 
-Mirrors the cover-design palette in `genable-cover-design/project/covers-en.jsx` so cover and site share a brand:
+The live site tokens are defined in `src/styles/global.css`. Keep that file and the editable cover source in `../genable-cover-design/project/covers-en.jsx` synchronized when the brand palette or typography changes.
 
-- `--bg #FAFAFA` / `--bg-deep #F2F2F0` / `--surface #FFFFFF`
-- `--ink #0A0A0A` / `--ink-2 #262626` / `--muted #6B6B6B` / `--micro #9A9A9A`
-- `--accent #2A6FDB` (mono palette)
-- `--font-display Inter` / `--font-mono JetBrains Mono` / `--font-serif Newsreader`
+## Messaging principles
 
-## Messaging principles (DO NOT VIOLATE)
-
-- **Sell convenience, not brevity.** Never frame Genable as "one sentence" or "in seconds because of brevity." Detailed prompts are explicitly welcome and produce better results.
-- **Hand off the busywork.** The verbs we use: hand off, automate, offload, build, theme, expand. Avoid: just describe, tell it once, fewer turns.
-- **Six capabilities, equal weight:** Components / Pages / Variables / Variants / Design system / Speed. They are the bento taxonomy across cover, README, site.
+- **Plan / Build / Check.** Start with brief-led visual direction, build native Figma structure, then inspect and refine.
+- **Editable output.** Describe frames, Auto Layout, variables, components, pages, and screenshots as Figma operations — never as a flattened mock.
+- **Keep the surfaces distinct.** The plugin uses a provider the user connects. The MCP path uses the model configured in the STDIO client and relays typed operations through the local bridge.
+- **Detailed briefs welcome.** Ask for audience, content, brand, mood, hierarchy, and structural constraints. Do not sell prompt brevity.
+- **Claims need evidence.** Do not publish speed, cost, tool-count, fixed model-version, or absolute privacy claims unless the supporting measurement and scope ship with the copy.
 
 ## Deploy
 
-Vercel (recommended):
+Cloudflare Pages is connected to `musepy/genable` with these production
+settings:
+
+- Production branch: `main`
+- Root directory: `genable-site`
+- Build command: `npm run build`
+- Build output directory: `dist`
+
+Every push to `main` creates a production deployment. Pull requests receive
+preview deployments. Build locally before pushing:
+
 ```bash
-# Install the Vercel CLI then:
-vercel
+npm ci
+npm run build
 ```
 
-Netlify:
-```bash
-# In netlify dashboard: connect repo, set base = genable-site, build = npm run build, publish = dist
-```
-
-Or any static host — `npm run build` outputs plain HTML/CSS/JS in `dist/`.
+If a production deployment is bad, revert its source commit and push the
+revert. For an urgent hosting-only rollback, select the previous successful
+deployment in Cloudflare Pages and choose **Rollback to this deployment**.
 
 ## Open work
 
-- Replace placeholder GitHub link `https://github.com/anthropics/genable` once the public repo is named
 - Add real screenshots / demo Loom to /examples (currently text-only gallery)
 - Add OG images per page (use the cover designs as templates)
 - Wire `/changelog` to pull from the root `CHANGELOG.md` instead of duplicating
+- Register and bind a custom domain if `genable.design` is acquired
 - Add a `/blog` if/when there are posts to publish
 - Add Chinese site (`/zh/*`) if marketing in CN — copy is already prepared in `covers.jsx`
